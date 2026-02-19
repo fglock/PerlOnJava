@@ -162,6 +162,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
     // Runtime eval counter for generating unique filenames when $^P is set
     private static int runtimeEvalCounter = 1;
+
+    /**
+     * Gets the next eval sequence number and generates a filename.
+     * Used by both baseline compiler and interpreter for consistent naming.
+     *
+     * @return Filename like "(eval 1)", "(eval 2)", etc.
+     */
+    public static synchronized String getNextEvalFilename() {
+        return "(eval " + runtimeEvalCounter++ + ")";
+    }
+
     // Method object representing the compiled subroutine
     public MethodHandle methodHandle;
     public boolean isStatic;
@@ -327,9 +338,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Override the filename with a runtime-generated eval number when debugging
         String actualFileName = evalCompilerOptions.fileName;
         if (isDebugging) {
-            synchronized (RuntimeCode.class) {
-                actualFileName = "(eval " + runtimeEvalCounter++ + ")";
-            }
+            actualFileName = getNextEvalFilename();
         }
         
         // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
@@ -551,12 +560,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Stores source lines in the symbol table for debugger support when $^P flags are set.
      *
+     * <p>This method is used by both the baseline compiler and the interpreter to save
+     * eval source code for debugging when $^P flags require it.
+     *
      * @param evalString The source code string to store
      * @param filename   The filename (e.g., "(eval 1)")
      * @param ast        The AST to check for subroutine definitions (may be null on compilation failure)
      * @param tokens     Lexer tokens for #line directive processing
      */
-    private static void storeSourceLines(String evalString, String filename, Node ast, List<LexerToken> tokens) {
+    public static void storeSourceLines(String evalString, String filename, Node ast, List<LexerToken> tokens) {
         // Check $^P for debugger flags
         int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
         // 0x02 (2): Line-by-line debugging (also saves source like 0x400)
@@ -691,6 +703,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         InterpretedCode interpretedCode = null;
         RuntimeList result;
 
+        // Declare these outside try block so they're accessible in finally block for debugger support
+        Node ast = null;
+        List<LexerToken> tokens = null;
+
         // Save dynamic variable level to restore after eval
         int dynamicVarLevel = DynamicVariableManager.getLocalLevel();
 
@@ -732,12 +748,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (!entry.decl().equals("our")) {
                         Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
                         if (runtimeValue != null) {
-                            OperatorNode ast = entry.ast();
-                            if (ast != null) {
-                                if (ast.id == 0) {
-                                    ast.id = EmitterMethodCreator.classCounter++;
+                            OperatorNode operatorAst = entry.ast();
+                            if (operatorAst != null) {
+                                if (operatorAst.id == 0) {
+                                    operatorAst.id = EmitterMethodCreator.classCounter++;
                                 }
-                                String packageName = PersistentVariable.beginPackage(ast.id);
+                                String packageName = PersistentVariable.beginPackage(operatorAst.id);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
 
@@ -757,7 +773,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
-                List<LexerToken> tokens = lexer.tokenize();
+                tokens = lexer.tokenize();
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
@@ -773,7 +789,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.unitcheckBlocks);
 
                 Parser parser = new Parser(evalCtx, tokens);
-                Node ast = parser.parse();
+                ast = parser.parse();
 
                 // Run UNITCHECK blocks
                 runUnitcheckBlocks(evalCtx.unitcheckBlocks);
@@ -919,6 +935,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } finally {
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
+
+            // Store source lines in debugger symbol table if $^P flags are set
+            // Do this on both success and failure paths when flags require retention
+            // ast and tokens may be null if parsing failed early, but storeSourceLines handles that
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            if (debugFlags != 0 && tokens != null) {
+                String evalFilename = getNextEvalFilename();
+                storeSourceLines(code.toString(), evalFilename, ast, tokens);
+            }
 
             // Clean up ThreadLocal
             evalRuntimeContext.remove();

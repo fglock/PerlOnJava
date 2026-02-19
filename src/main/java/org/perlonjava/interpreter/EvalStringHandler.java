@@ -164,6 +164,15 @@ public class EvalStringHandler {
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
 
+            // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
+            // This implements Perl's eval source retention feature for debugging
+            // Generate eval filename and store lines in @{"_<(eval N)"}
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            if (debugFlags != 0) {
+                String evalFilename = RuntimeCode.getNextEvalFilename();
+                RuntimeCode.storeSourceLines(perlCode, evalFilename, ast, tokens);
+            }
+
             // Step 5: Attach captured variables to eval'd code
             if (capturedVars.length > 0) {
                 evalCode = evalCode.withCapturedVars(capturedVars);
@@ -233,6 +242,13 @@ public class EvalStringHandler {
                 sourceLine
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+
+            // Store source lines in debugger symbol table if $^P flags are set
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            if (debugFlags != 0) {
+                String evalFilename = RuntimeCode.getNextEvalFilename();
+                RuntimeCode.storeSourceLines(perlCode, evalFilename, ast, tokens);
+            }
 
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
