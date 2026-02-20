@@ -2597,6 +2597,29 @@ public class CompileOperator {
             bytecodeCompiler.emitInt(bytecodeCompiler.currentCallContext);
 
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("tie") || op.equals("untie") || op.equals("tied")) {
+            // tie($var, $classname, @args) or untie($var) or tied($var)
+            // Compile all arguments as a list
+            if (node.operand != null) {
+                node.operand.accept(bytecodeCompiler);
+                int argsReg = bytecodeCompiler.lastResultReg;
+
+                int rd = bytecodeCompiler.allocateRegister();
+                short opcode = switch (op) {
+                    case "tie" -> Opcodes.TIE;
+                    case "untie" -> Opcodes.UNTIE;
+                    case "tied" -> Opcodes.TIED;
+                    default -> throw new IllegalStateException("Unexpected operator: " + op);
+                };
+                bytecodeCompiler.emitWithToken(opcode, node.getIndex());
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(argsReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                bytecodeCompiler.throwCompilerException(op + " requires arguments");
+            }
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
