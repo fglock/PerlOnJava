@@ -2636,6 +2636,84 @@ public class CompileOperator {
             bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("getpgrp")) {
+            // getpgrp($pid) - returns process group
+            // Format: GETPGRP rd pidReg
+            if (node.operand != null) {
+                node.operand.accept(bytecodeCompiler);
+                int pidReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emitWithToken(Opcodes.GETPGRP, node.getIndex());
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(pidReg);
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                bytecodeCompiler.throwCompilerException("getpgrp requires an argument");
+            }
+        } else if (op.equals("setpgrp")) {
+            // setpgrp($pid, $pgrp) - sets process group
+            // Format: SETPGRP pidReg pgrpReg
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.size() >= 2) {
+                    list.elements.get(0).accept(bytecodeCompiler);
+                    int pidReg = bytecodeCompiler.lastResultReg;
+                    list.elements.get(1).accept(bytecodeCompiler);
+                    int pgrpReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emitWithToken(Opcodes.SETPGRP, node.getIndex());
+                    bytecodeCompiler.emitReg(pidReg);
+                    bytecodeCompiler.emitReg(pgrpReg);
+                    bytecodeCompiler.lastResultReg = -1; // No return value
+                } else {
+                    bytecodeCompiler.throwCompilerException("setpgrp requires two arguments");
+                }
+            } else {
+                bytecodeCompiler.throwCompilerException("setpgrp requires two arguments");
+            }
+        } else if (op.equals("getpriority")) {
+            // getpriority($which, $who) - returns process priority
+            // Format: GETPRIORITY rd whichReg whoReg
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.size() >= 2) {
+                    list.elements.get(0).accept(bytecodeCompiler);
+                    int whichReg = bytecodeCompiler.lastResultReg;
+                    list.elements.get(1).accept(bytecodeCompiler);
+                    int whoReg = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emitWithToken(Opcodes.GETPRIORITY, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(whichReg);
+                    bytecodeCompiler.emitReg(whoReg);
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    bytecodeCompiler.throwCompilerException("getpriority requires two arguments");
+                }
+            } else {
+                bytecodeCompiler.throwCompilerException("getpriority requires two arguments");
+            }
+        } else if (op.equals("atan2")) {
+            // atan2($y, $x) - returns arctangent of y/x
+            // Format: ATAN2 rd rs1 rs2
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.size() >= 2) {
+                    list.elements.get(0).accept(bytecodeCompiler);
+                    int rs1 = bytecodeCompiler.lastResultReg;
+                    list.elements.get(1).accept(bytecodeCompiler);
+                    int rs2 = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emitWithToken(Opcodes.ATAN2, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(rs1);
+                    bytecodeCompiler.emitReg(rs2);
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
+                }
+            } else {
+                bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
+            }
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
