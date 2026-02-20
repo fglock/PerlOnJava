@@ -376,6 +376,37 @@ public class CompileOperator {
                 } else {
                     bytecodeCompiler.throwCompilerException("Invalid operand for increment/decrement operator");
                 }
+            } else if (node.operand instanceof BinaryOperatorNode) {
+                // Handle array/hash element increment: $x[0]++, $x{key}++, $_[0]++
+                BinaryOperatorNode binOp = (BinaryOperatorNode) node.operand;
+
+                // Compile the lvalue (array/hash element access)
+                // This will generate code to get the element reference
+                node.operand.accept(bytecodeCompiler);
+                int elementReg = bytecodeCompiler.lastResultReg;
+
+                // Apply increment/decrement to the element
+                if (isPostfix) {
+                    // Postfix: returns old value before modifying
+                    int resultReg = bytecodeCompiler.allocateRegister();
+                    if (isIncrement) {
+                        bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
+                    } else {
+                        bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
+                    }
+                    bytecodeCompiler.emitReg(resultReg);  // Destination for old value
+                    bytecodeCompiler.emitReg(elementReg);  // Element to modify
+                    bytecodeCompiler.lastResultReg = resultReg;
+                } else {
+                    // Prefix: returns new value after modifying
+                    if (isIncrement) {
+                        bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
+                    } else {
+                        bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
+                    }
+                    bytecodeCompiler.emitReg(elementReg);
+                    bytecodeCompiler.lastResultReg = elementReg;
+                }
             } else {
                 bytecodeCompiler.throwCompilerException("Increment/decrement operator requires operand");
             }
