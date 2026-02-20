@@ -1326,12 +1326,25 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.DEREF: {
-                        // Dereference: rd = rs (dereferencing depends on context)
-                        // For now, just copy the reference - proper dereferencing
-                        // is context-dependent and handled by specific operators
+                        // Dereference: rd = $$rs (scalar reference dereference)
+                        // Can receive RuntimeScalar or RuntimeList
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rd] = registers[rs];
+                        RuntimeBase value = registers[rs];
+
+                        // Only dereference if it's a RuntimeScalar with REFERENCE type
+                        if (value instanceof RuntimeScalar) {
+                            RuntimeScalar scalar = (RuntimeScalar) value;
+                            if (scalar.type == RuntimeScalarType.REFERENCE) {
+                                registers[rd] = scalar.scalarDeref();
+                            } else {
+                                // Non-reference scalar, just copy
+                                registers[rd] = value;
+                            }
+                        } else {
+                            // RuntimeList or other types, pass through
+                            registers[rd] = value;
+                        }
                         break;
                     }
 
@@ -1806,24 +1819,33 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LOAD_SYMBOLIC_SCALAR: {
                         // Load via symbolic reference: rd = GlobalVariable.getGlobalVariable(nameReg.toString()).get()
+                        // OR dereference if nameReg contains a scalar reference
                         // Format: LOAD_SYMBOLIC_SCALAR rd nameReg
                         int rd = bytecode[pc++];
                         int nameReg = bytecode[pc++];
 
-                        // Get the variable name from the name register
+                        // Get the value from the name register
                         RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
-                        String varName = nameScalar.toString();
 
-                        // Normalize the variable name to include package prefix if needed
-                        // This is important for ${label:var} cases where "colon" becomes "main::colon"
-                        String normalizedName = org.perlonjava.runtime.NameNormalizer.normalizeVariableName(
-                            varName,
-                            "main"  // Use main package as default for symbolic references
-                        );
+                        // Check if it's a scalar reference - if so, dereference it
+                        if (nameScalar.type == RuntimeScalarType.REFERENCE) {
+                            // This is ${\ref} - dereference the reference
+                            registers[rd] = nameScalar.scalarDeref();
+                        } else {
+                            // This is ${"varname"} - symbolic reference to variable
+                            String varName = nameScalar.toString();
 
-                        // Get the global variable and load its value
-                        RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
-                        registers[rd] = globalVar;
+                            // Normalize the variable name to include package prefix if needed
+                            // This is important for ${label:var} cases where "colon" becomes "main::colon"
+                            String normalizedName = org.perlonjava.runtime.NameNormalizer.normalizeVariableName(
+                                varName,
+                                "main"  // Use main package as default for symbolic references
+                            );
+
+                            // Get the global variable and load its value
+                            RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
+                            registers[rd] = globalVar;
+                        }
                         break;
                     }
 
@@ -1929,6 +1951,15 @@ public class BytecodeInterpreter {
                 throw (PerlDieException) e;
             }
 
+            // Check if we're running inside an eval STRING context
+            // (sourceName starts with "(eval " when code is from eval STRING)
+            // In this case, don't wrap the exception - let the outer eval handler catch it
+            boolean insideEvalString = code.sourceName != null && code.sourceName.startsWith("(eval ");
+            if (insideEvalString) {
+                // Re-throw as-is - will be caught by EvalStringHandler.evalString()
+                throw e;
+            }
+
             // Wrap other exceptions with interpreter context including bytecode context
             String errorMessage = formatInterpreterError(code, pc, e);
             throw new RuntimeException(errorMessage, e);
@@ -2027,7 +2058,21 @@ public class BytecodeInterpreter {
             case Opcodes.DEREF: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
-                registers[rd] = registers[rs];
+                RuntimeBase value = registers[rs];
+
+                // Only dereference if it's a RuntimeScalar with REFERENCE type
+                if (value instanceof RuntimeScalar) {
+                    RuntimeScalar scalar = (RuntimeScalar) value;
+                    if (scalar.type == RuntimeScalarType.REFERENCE) {
+                        registers[rd] = scalar.scalarDeref();
+                    } else {
+                        // Non-reference scalar, just copy
+                        registers[rd] = value;
+                    }
+                } else {
+                    // RuntimeList or other types, pass through
+                    registers[rd] = value;
+                }
                 return pc;
             }
 
