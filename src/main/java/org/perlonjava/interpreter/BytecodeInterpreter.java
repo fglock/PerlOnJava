@@ -1929,6 +1929,15 @@ public class BytecodeInterpreter {
                 throw (PerlDieException) e;
             }
 
+            // Check if we're running inside an eval STRING context
+            // (sourceName starts with "(eval " when code is from eval STRING)
+            // In this case, don't wrap the exception - let the outer eval handler catch it
+            boolean insideEvalString = code.sourceName != null && code.sourceName.startsWith("(eval ");
+            if (insideEvalString) {
+                // Re-throw as-is - will be caught by EvalStringHandler.evalString()
+                throw e;
+            }
+
             // Wrap other exceptions with interpreter context including bytecode context
             String errorMessage = formatInterpreterError(code, pc, e);
             throw new RuntimeException(errorMessage, e);
