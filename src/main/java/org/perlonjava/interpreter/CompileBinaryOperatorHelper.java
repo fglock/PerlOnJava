@@ -255,7 +255,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs2);       // List register
                 bytecodeCompiler.emitReg(rs1);       // Closure register
-                bytecodeCompiler.emit(RuntimeContextType.LIST);  // Grep uses list context
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);  // Use current context
             }
             case "sort" -> {
                 // Sort operator: sort { block } list

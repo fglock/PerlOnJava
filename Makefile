@@ -24,9 +24,9 @@ endif
 # Development build - forces recompilation (use during active development)
 dev: wrapper
 ifeq ($(OS),Windows_NT)
-	gradlew.bat clean compileJava installDist
+	gradlew.bat clean compileJava shadowJar installDist
 else
-	./gradlew clean compileJava installDist
+	./gradlew clean compileJava shadowJar installDist
 endif
 
 # Default test target - fast unit tests using perl_test_runner.pl
