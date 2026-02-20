@@ -256,7 +256,7 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseAndAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        RuntimeScalar result = BitwiseOperators.bitwiseAndBinary(
+        RuntimeScalar result = BitwiseOperators.bitwiseAnd(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
         );
