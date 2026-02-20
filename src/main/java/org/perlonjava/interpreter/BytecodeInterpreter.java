@@ -1327,10 +1327,24 @@ public class BytecodeInterpreter {
 
                     case Opcodes.DEREF: {
                         // Dereference: rd = $$rs (scalar reference dereference)
+                        // Can receive RuntimeScalar or RuntimeList
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        RuntimeScalar ref = (RuntimeScalar) registers[rs];
-                        registers[rd] = ref.scalarDeref();
+                        RuntimeBase value = registers[rs];
+
+                        // Only dereference if it's a RuntimeScalar with REFERENCE type
+                        if (value instanceof RuntimeScalar) {
+                            RuntimeScalar scalar = (RuntimeScalar) value;
+                            if (scalar.type == RuntimeScalarType.REFERENCE) {
+                                registers[rd] = scalar.scalarDeref();
+                            } else {
+                                // Non-reference scalar, just copy
+                                registers[rd] = value;
+                            }
+                        } else {
+                            // RuntimeList or other types, pass through
+                            registers[rd] = value;
+                        }
                         break;
                     }
 
@@ -2044,8 +2058,21 @@ public class BytecodeInterpreter {
             case Opcodes.DEREF: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
-                RuntimeScalar ref = (RuntimeScalar) registers[rs];
-                registers[rd] = ref.scalarDeref();
+                RuntimeBase value = registers[rs];
+
+                // Only dereference if it's a RuntimeScalar with REFERENCE type
+                if (value instanceof RuntimeScalar) {
+                    RuntimeScalar scalar = (RuntimeScalar) value;
+                    if (scalar.type == RuntimeScalarType.REFERENCE) {
+                        registers[rd] = scalar.scalarDeref();
+                    } else {
+                        // Non-reference scalar, just copy
+                        registers[rd] = value;
+                    }
+                } else {
+                    // RuntimeList or other types, pass through
+                    registers[rd] = value;
+                }
                 return pc;
             }
 
