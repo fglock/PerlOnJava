@@ -265,147 +265,46 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
-            // Pre/post increment/decrement
+            // Pre/post increment/decrement - recursive approach with fast path optimization
             boolean isPostfix = op.endsWith("postfix");
             boolean isIncrement = op.startsWith("++");
 
-            if (node.operand instanceof IdentifierNode) {
-                String varName = ((IdentifierNode) node.operand).name;
-
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    int varReg = bytecodeCompiler.getVariableRegister(varName);
-
-                    // Use optimized autoincrement/decrement opcodes
-                    if (isPostfix) {
-                        // Postfix: returns old value before modifying
-                        // Need TWO registers: one for result (old value), one for variable
-                        int resultReg = bytecodeCompiler.allocateRegister();
-                        if (isIncrement) {
-                            bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                        } else {
-                            bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                        }
-                        bytecodeCompiler.emitReg(resultReg);  // Destination for old value
-                        bytecodeCompiler.emitReg(varReg);     // Variable to modify in-place
-                        bytecodeCompiler.lastResultReg = resultReg;
-                    } else {
-                        // Prefix: returns new value after modifying
-                        if (isIncrement) {
-                            bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                        } else {
-                            bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                        }
-                        bytecodeCompiler.emitReg(varReg);
-                        bytecodeCompiler.lastResultReg = varReg;
-                    }
-                } else {
-                    bytecodeCompiler.throwCompilerException("Increment/decrement of non-lexical variable not yet supported");
-                }
-            } else if (node.operand instanceof OperatorNode) {
-                // Handle $x++
-                OperatorNode innerOp = (OperatorNode) node.operand;
-                if (innerOp.operator.equals("$") && innerOp.operand instanceof IdentifierNode) {
-                    String varName = "$" + ((IdentifierNode) innerOp.operand).name;
-
+            if (node.operand != null) {
+                // Fast path: simple lexical variable (most common case)
+                if (node.operand instanceof IdentifierNode) {
+                    String varName = ((IdentifierNode) node.operand).name;
                     if (bytecodeCompiler.hasVariable(varName)) {
                         int varReg = bytecodeCompiler.getVariableRegister(varName);
-
-                        // Use optimized autoincrement/decrement opcodes
                         if (isPostfix) {
-                            // Postfix: returns old value before modifying
-                            // Need TWO registers: one for result (old value), one for variable
                             int resultReg = bytecodeCompiler.allocateRegister();
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                            }
-                            bytecodeCompiler.emitReg(resultReg);  // Destination for old value
-                            bytecodeCompiler.emitReg(varReg);     // Variable to modify in-place
+                            bytecodeCompiler.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+                            bytecodeCompiler.emitReg(resultReg);
+                            bytecodeCompiler.emitReg(varReg);
                             bytecodeCompiler.lastResultReg = resultReg;
                         } else {
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                            }
+                            bytecodeCompiler.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
                             bytecodeCompiler.emitReg(varReg);
                             bytecodeCompiler.lastResultReg = varReg;
                         }
-                    } else {
-                        // Global variable increment/decrement
-                        // Normalize global variable name (remove sigil, add package)
-                        String bareVarName = varName.substring(1);  // Remove "$"
-                        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, bytecodeCompiler.getCurrentPackage());
-                        int nameIdx = bytecodeCompiler.addToStringPool(normalizedName);
-
-                        // Load global variable
-                        int globalReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                        bytecodeCompiler.emitReg(globalReg);
-                        bytecodeCompiler.emit(nameIdx);
-
-                        // Apply increment/decrement
-                        if (isPostfix) {
-                            // Postfix: returns old value before modifying
-                            // Need TWO registers: one for result (old value), one for variable
-                            int resultReg = bytecodeCompiler.allocateRegister();
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                            }
-                            bytecodeCompiler.emitReg(resultReg);   // Destination for old value
-                            bytecodeCompiler.emitReg(globalReg);   // Variable to modify in-place
-                            bytecodeCompiler.lastResultReg = resultReg;
-                        } else {
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                            }
-                            bytecodeCompiler.emitReg(globalReg);
-                            bytecodeCompiler.lastResultReg = globalReg;
-                        }
-
-                        // NOTE: Do NOT store back to global variable!
-                        // The POST/PRE_AUTO* opcodes modify the global variable directly
-                        // and return the appropriate value (old for postfix, new for prefix).
-                        // Storing back would overwrite the modification with the return value.
+                        return;
                     }
-                } else {
-                    bytecodeCompiler.throwCompilerException("Invalid operand for increment/decrement operator");
                 }
-            } else if (node.operand instanceof BinaryOperatorNode) {
-                // Handle array/hash element increment: $x[0]++, $x{key}++, $_[0]++
-                BinaryOperatorNode binOp = (BinaryOperatorNode) node.operand;
 
-                // Compile the lvalue (array/hash element access)
-                // This will generate code to get the element reference
+                // General case: recursively compile the lvalue
+                // Handles: $x++, $x[0]++, $x{key}++, $_[0]++, $obj->{field}++, etc.
                 node.operand.accept(bytecodeCompiler);
-                int elementReg = bytecodeCompiler.lastResultReg;
+                int operandReg = bytecodeCompiler.lastResultReg;
 
-                // Apply increment/decrement to the element
                 if (isPostfix) {
-                    // Postfix: returns old value before modifying
                     int resultReg = bytecodeCompiler.allocateRegister();
-                    if (isIncrement) {
-                        bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                    } else {
-                        bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                    }
-                    bytecodeCompiler.emitReg(resultReg);  // Destination for old value
-                    bytecodeCompiler.emitReg(elementReg);  // Element to modify
+                    bytecodeCompiler.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+                    bytecodeCompiler.emitReg(resultReg);
+                    bytecodeCompiler.emitReg(operandReg);
                     bytecodeCompiler.lastResultReg = resultReg;
                 } else {
-                    // Prefix: returns new value after modifying
-                    if (isIncrement) {
-                        bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                    } else {
-                        bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                    }
-                    bytecodeCompiler.emitReg(elementReg);
-                    bytecodeCompiler.lastResultReg = elementReg;
+                    bytecodeCompiler.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
+                    bytecodeCompiler.emitReg(operandReg);
+                    bytecodeCompiler.lastResultReg = operandReg;
                 }
             } else {
                 bytecodeCompiler.throwCompilerException("Increment/decrement operator requires operand");
