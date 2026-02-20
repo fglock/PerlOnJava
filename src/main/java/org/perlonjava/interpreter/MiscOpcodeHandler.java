@@ -39,10 +39,14 @@ public class MiscOpcodeHandler {
             case Opcodes.SYSTEM -> SystemOperator.system(args, false, ctx);
             case Opcodes.CALLER -> RuntimeCode.caller(args, ctx);
             case Opcodes.EACH -> {
+                // EACH needs the container directly, not wrapped in a list
+                // The argsReg should contain a list with one element (the container)
                 if (!args.elements.isEmpty()) {
-                    yield args.elements.get(0).each(ctx);
+                    RuntimeBase container = args.elements.get(0);
+                    // Call each on the container
+                    yield container.each(ctx);
                 } else {
-                    yield new RuntimeScalar();
+                    throw new RuntimeException("each requires a hash or array argument");
                 }
             }
             case Opcodes.PACK -> Pack.pack(args);

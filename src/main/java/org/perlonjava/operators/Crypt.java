@@ -38,10 +38,14 @@ public class Crypt {
 
         assertNoWideCharacters(plaintext, "crypt");
 
-        // Ensure salt is at least 2 characters long
-        if (salt.length() < 2) {
+        // Pad or truncate salt to exactly 2 characters
+        if (salt.isEmpty()) {
             salt = generateSalt();
+        } else if (salt.length() == 1) {
+            // Pad single character salt with '.' (Perl-compatible behavior)
+            salt = salt + ".";
         } else {
+            // Use first 2 characters
             salt = salt.substring(0, 2);
         }
 
