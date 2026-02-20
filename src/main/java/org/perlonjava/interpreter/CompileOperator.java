@@ -2620,6 +2620,13 @@ public class CompileOperator {
             } else {
                 bytecodeCompiler.throwCompilerException(op + " requires arguments");
             }
+        } else if (op.equals("getppid")) {
+            // getppid() - returns parent process ID
+            // Format: GETPPID rd
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex());
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.lastResultReg = rd;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
