@@ -2644,25 +2644,84 @@ public class CompileOperator {
             } else {
                 bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
             }
+        } else if (op.equals("each")) {
+            // each %hash or each @array - needs the container itself, not flattened
+            // Format: OPCODE rd argsReg ctx
+
+            if (node.operand == null) {
+                bytecodeCompiler.throwCompilerException("each requires an argument");
+            }
+
+            int containerReg;
+            // Check if operand is a hash/array variable dereference (% or @)
+            if (node.operand instanceof OperatorNode) {
+                OperatorNode opNode = (OperatorNode) node.operand;
+                String varOp = opNode.operator;
+                if ((varOp.equals("%") || varOp.equals("@")) && opNode.operand instanceof IdentifierNode) {
+                    // Direct hash/array variable: %h or @a
+                    // Load the variable container directly
+                    IdentifierNode varName = (IdentifierNode) opNode.operand;
+                    String fullVarName = varOp + varName.name;
+
+                    if (bytecodeCompiler.hasVariable(fullVarName)) {
+                        containerReg = bytecodeCompiler.getVariableRegister(fullVarName);
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Variable " + fullVarName + " not found");
+                        return; // unreachable
+                    }
+                } else {
+                    // Complex expression - compile normally
+                    node.operand.accept(bytecodeCompiler);
+                    containerReg = bytecodeCompiler.lastResultReg;
+                }
+            } else {
+                // Not an operator node - compile normally
+                node.operand.accept(bytecodeCompiler);
+                containerReg = bytecodeCompiler.lastResultReg;
+            }
+
+            // Wrap container in a list for the handler
+            int argsReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
+            bytecodeCompiler.emitReg(argsReg);
+            bytecodeCompiler.emitReg(containerReg);
+
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emitWithToken(Opcodes.EACH, node.getIndex());
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(argsReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
                    op.equals("rename") || op.equals("link") || op.equals("readlink") ||
                    op.equals("umask") || op.equals("system") || op.equals("pack") ||
                    op.equals("vec") || op.equals("crypt") || op.equals("localtime") ||
                    op.equals("gmtime") || op.equals("caller") || op.equals("fileno") ||
-                   op.equals("getc") || op.equals("qx") || op.equals("each")) {
+                   op.equals("getc") || op.equals("qx")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
+            // argsReg must be a RuntimeList
 
             int argsReg;
             if (node.operand != null) {
+                // Save current context and evaluate operand in list context
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 node.operand.accept(bytecodeCompiler);
-                argsReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.currentCallContext = savedContext;
+
+                int operandReg = bytecodeCompiler.lastResultReg;
+
+                // Ensure the result is a list
+                argsReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
+                bytecodeCompiler.emitReg(argsReg);
+                bytecodeCompiler.emitReg(operandReg);
             } else {
                 // No operand - create empty list
-                int emptyListReg = bytecodeCompiler.allocateRegister();
+                argsReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(emptyListReg);
-                argsReg = emptyListReg;
+                bytecodeCompiler.emitReg(argsReg);
             }
 
             int rd = bytecodeCompiler.allocateRegister();
