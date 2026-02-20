@@ -1887,6 +1887,51 @@ public class BytecodeInterpreter {
                         pc = OpcodeHandlerExtended.executeSubstrVar(bytecode, pc, registers);
                         break;
 
+                    case Opcodes.TIE: {
+                        // tie($var, $classname, @args): rd = TieOperators.tie(ctx, argsListReg)
+                        // Format: TIE rd argsListReg context
+                        int rd = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeList tieArgs = (RuntimeList) registers[argsReg];
+                        RuntimeScalar result = org.perlonjava.operators.TieOperators.tie(
+                            ctx,
+                            tieArgs.elements.toArray(new RuntimeBase[0])
+                        );
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.UNTIE: {
+                        // untie($var): rd = TieOperators.untie(ctx, argsListReg)
+                        // Format: UNTIE rd argsListReg context
+                        int rd = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeList untieArgs = (RuntimeList) registers[argsReg];
+                        RuntimeScalar result = org.perlonjava.operators.TieOperators.untie(
+                            ctx,
+                            untieArgs.elements.toArray(new RuntimeBase[0])
+                        );
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.TIED: {
+                        // tied($var): rd = TieOperators.tied(ctx, argsListReg)
+                        // Format: TIED rd argsListReg context
+                        int rd = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeList tiedArgs = (RuntimeList) registers[argsReg];
+                        RuntimeScalar result = org.perlonjava.operators.TieOperators.tied(
+                            ctx,
+                            tiedArgs.elements.toArray(new RuntimeBase[0])
+                        );
+                        registers[rd] = result;
+                        break;
+                    }
+
                     // GENERATED_HANDLERS_END
 
                     default:
