@@ -63,6 +63,15 @@ public class CompileOperator {
                 Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
                 boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
 
+                // Check if there's a version associated with this package and set $Package::VERSION
+                String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
+                if (version != null) {
+                    // Set $PackageName::VERSION at compile time using GlobalVariable
+                    String versionVarName = packageName + "::VERSION";
+                    org.perlonjava.runtime.GlobalVariable.getGlobalVariable(versionVarName)
+                            .set(new org.perlonjava.runtime.RuntimeScalar(version));
+                }
+
                 // Update the current package/class in symbol table
                 // This tracks package name, isClass flag, and version
                 bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
@@ -256,116 +265,46 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
-            // Pre/post increment/decrement
+            // Pre/post increment/decrement - recursive approach with fast path optimization
             boolean isPostfix = op.endsWith("postfix");
             boolean isIncrement = op.startsWith("++");
 
-            if (node.operand instanceof IdentifierNode) {
-                String varName = ((IdentifierNode) node.operand).name;
-
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    int varReg = bytecodeCompiler.getVariableRegister(varName);
-
-                    // Use optimized autoincrement/decrement opcodes
-                    if (isPostfix) {
-                        // Postfix: returns old value before modifying
-                        // Need TWO registers: one for result (old value), one for variable
-                        int resultReg = bytecodeCompiler.allocateRegister();
-                        if (isIncrement) {
-                            bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                        } else {
-                            bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                        }
-                        bytecodeCompiler.emitReg(resultReg);  // Destination for old value
-                        bytecodeCompiler.emitReg(varReg);     // Variable to modify in-place
-                        bytecodeCompiler.lastResultReg = resultReg;
-                    } else {
-                        // Prefix: returns new value after modifying
-                        if (isIncrement) {
-                            bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                        } else {
-                            bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                        }
-                        bytecodeCompiler.emitReg(varReg);
-                        bytecodeCompiler.lastResultReg = varReg;
-                    }
-                } else {
-                    bytecodeCompiler.throwCompilerException("Increment/decrement of non-lexical variable not yet supported");
-                }
-            } else if (node.operand instanceof OperatorNode) {
-                // Handle $x++
-                OperatorNode innerOp = (OperatorNode) node.operand;
-                if (innerOp.operator.equals("$") && innerOp.operand instanceof IdentifierNode) {
-                    String varName = "$" + ((IdentifierNode) innerOp.operand).name;
-
+            if (node.operand != null) {
+                // Fast path: simple lexical variable (most common case)
+                if (node.operand instanceof IdentifierNode) {
+                    String varName = ((IdentifierNode) node.operand).name;
                     if (bytecodeCompiler.hasVariable(varName)) {
                         int varReg = bytecodeCompiler.getVariableRegister(varName);
-
-                        // Use optimized autoincrement/decrement opcodes
                         if (isPostfix) {
-                            // Postfix: returns old value before modifying
-                            // Need TWO registers: one for result (old value), one for variable
                             int resultReg = bytecodeCompiler.allocateRegister();
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                            }
-                            bytecodeCompiler.emitReg(resultReg);  // Destination for old value
-                            bytecodeCompiler.emitReg(varReg);     // Variable to modify in-place
+                            bytecodeCompiler.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+                            bytecodeCompiler.emitReg(resultReg);
+                            bytecodeCompiler.emitReg(varReg);
                             bytecodeCompiler.lastResultReg = resultReg;
                         } else {
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                            }
+                            bytecodeCompiler.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
                             bytecodeCompiler.emitReg(varReg);
                             bytecodeCompiler.lastResultReg = varReg;
                         }
-                    } else {
-                        // Global variable increment/decrement
-                        // Normalize global variable name (remove sigil, add package)
-                        String bareVarName = varName.substring(1);  // Remove "$"
-                        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, bytecodeCompiler.getCurrentPackage());
-                        int nameIdx = bytecodeCompiler.addToStringPool(normalizedName);
-
-                        // Load global variable
-                        int globalReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                        bytecodeCompiler.emitReg(globalReg);
-                        bytecodeCompiler.emit(nameIdx);
-
-                        // Apply increment/decrement
-                        if (isPostfix) {
-                            // Postfix: returns old value before modifying
-                            // Need TWO registers: one for result (old value), one for variable
-                            int resultReg = bytecodeCompiler.allocateRegister();
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.POST_AUTODECREMENT);
-                            }
-                            bytecodeCompiler.emitReg(resultReg);   // Destination for old value
-                            bytecodeCompiler.emitReg(globalReg);   // Variable to modify in-place
-                            bytecodeCompiler.lastResultReg = resultReg;
-                        } else {
-                            if (isIncrement) {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTOINCREMENT);
-                            } else {
-                                bytecodeCompiler.emit(Opcodes.PRE_AUTODECREMENT);
-                            }
-                            bytecodeCompiler.emitReg(globalReg);
-                            bytecodeCompiler.lastResultReg = globalReg;
-                        }
-
-                        // NOTE: Do NOT store back to global variable!
-                        // The POST/PRE_AUTO* opcodes modify the global variable directly
-                        // and return the appropriate value (old for postfix, new for prefix).
-                        // Storing back would overwrite the modification with the return value.
+                        return;
                     }
+                }
+
+                // General case: recursively compile the lvalue
+                // Handles: $x++, $x[0]++, $x{key}++, $_[0]++, $obj->{field}++, etc.
+                node.operand.accept(bytecodeCompiler);
+                int operandReg = bytecodeCompiler.lastResultReg;
+
+                if (isPostfix) {
+                    int resultReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+                    bytecodeCompiler.emitReg(resultReg);
+                    bytecodeCompiler.emitReg(operandReg);
+                    bytecodeCompiler.lastResultReg = resultReg;
                 } else {
-                    bytecodeCompiler.throwCompilerException("Invalid operand for increment/decrement operator");
+                    bytecodeCompiler.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
+                    bytecodeCompiler.emitReg(operandReg);
+                    bytecodeCompiler.lastResultReg = operandReg;
                 }
             } else {
                 bytecodeCompiler.throwCompilerException("Increment/decrement operator requires operand");
@@ -2619,6 +2558,91 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             } else {
                 bytecodeCompiler.throwCompilerException(op + " requires arguments");
+            }
+        } else if (op.equals("getppid")) {
+            // getppid() - returns parent process ID
+            // Format: GETPPID rd
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex());
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("getpgrp")) {
+            // getpgrp($pid) - returns process group
+            // Format: GETPGRP rd pidReg
+            if (node.operand != null) {
+                node.operand.accept(bytecodeCompiler);
+                int pidReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emitWithToken(Opcodes.GETPGRP, node.getIndex());
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(pidReg);
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                bytecodeCompiler.throwCompilerException("getpgrp requires an argument");
+            }
+        } else if (op.equals("setpgrp")) {
+            // setpgrp($pid, $pgrp) - sets process group
+            // Format: SETPGRP pidReg pgrpReg
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.size() >= 2) {
+                    list.elements.get(0).accept(bytecodeCompiler);
+                    int pidReg = bytecodeCompiler.lastResultReg;
+                    list.elements.get(1).accept(bytecodeCompiler);
+                    int pgrpReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emitWithToken(Opcodes.SETPGRP, node.getIndex());
+                    bytecodeCompiler.emitReg(pidReg);
+                    bytecodeCompiler.emitReg(pgrpReg);
+                    bytecodeCompiler.lastResultReg = -1; // No return value
+                } else {
+                    bytecodeCompiler.throwCompilerException("setpgrp requires two arguments");
+                }
+            } else {
+                bytecodeCompiler.throwCompilerException("setpgrp requires two arguments");
+            }
+        } else if (op.equals("getpriority")) {
+            // getpriority($which, $who) - returns process priority
+            // Format: GETPRIORITY rd whichReg whoReg
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.size() >= 2) {
+                    list.elements.get(0).accept(bytecodeCompiler);
+                    int whichReg = bytecodeCompiler.lastResultReg;
+                    list.elements.get(1).accept(bytecodeCompiler);
+                    int whoReg = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emitWithToken(Opcodes.GETPRIORITY, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(whichReg);
+                    bytecodeCompiler.emitReg(whoReg);
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    bytecodeCompiler.throwCompilerException("getpriority requires two arguments");
+                }
+            } else {
+                bytecodeCompiler.throwCompilerException("getpriority requires two arguments");
+            }
+        } else if (op.equals("atan2")) {
+            // atan2($y, $x) - returns arctangent of y/x
+            // Format: ATAN2 rd rs1 rs2
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.size() >= 2) {
+                    list.elements.get(0).accept(bytecodeCompiler);
+                    int rs1 = bytecodeCompiler.lastResultReg;
+                    list.elements.get(1).accept(bytecodeCompiler);
+                    int rs2 = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emitWithToken(Opcodes.ATAN2, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(rs1);
+                    bytecodeCompiler.emitReg(rs2);
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
+                }
+            } else {
+                bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
             }
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
