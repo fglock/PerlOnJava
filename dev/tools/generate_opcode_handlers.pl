@@ -8,7 +8,7 @@ my $operator_handler_file = 'src/main/java/org/perlonjava/operators/OperatorHand
 my $opcodes_file = 'src/main/java/org/perlonjava/interpreter/Opcodes.java';
 my $bytecode_interpreter_file = 'src/main/java/org/perlonjava/interpreter/BytecodeInterpreter.java';
 my $interpreted_code_file = 'src/main/java/org/perlonjava/interpreter/InterpretedCode.java';
-my $bytecode_compiler_file = 'src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java';
+my $bytecode_compiler_file = 'src/main/java/org/perlonjava/interpreter/CompileOperator.java';  # Changed from BytecodeCompiler.java
 my $output_dir = 'src/main/java/org/perlonjava/interpreter';
 
 # Read existing opcodes and LASTOP from Opcodes.java

@@ -1496,8 +1496,14 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("keys requires a hash argument");
             }
 
-            // Compile the hash operand
-            node.operand.accept(bytecodeCompiler);
+            // Compile the hash operand in LIST context (to avoid scalar conversion)
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+            try {
+                node.operand.accept(bytecodeCompiler);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedContext;
+            }
             int hashReg = bytecodeCompiler.lastResultReg;
 
             // Emit HASH_KEYS
@@ -1505,6 +1511,45 @@ public class CompileOperator {
             bytecodeCompiler.emit(Opcodes.HASH_KEYS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(hashReg);
+
+            // keys() returns a list in list context, scalar count in scalar context
+            // The RuntimeHash.keys() method returns a RuntimeList
+            // In scalar context, convert to scalar (count)
+            if (savedContext == RuntimeContextType.SCALAR) {
+                int scalarReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                bytecodeCompiler.emitReg(scalarReg);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.lastResultReg = scalarReg;
+            } else {
+                bytecodeCompiler.lastResultReg = rd;
+            }
+        } else if (op.equals("chop")) {
+            // chop $x - remove last character, modifies argument in place
+            // operand: ListNode containing scalar variable reference
+            if (node.operand == null) {
+                bytecodeCompiler.throwCompilerException("chop requires an argument");
+            }
+
+            // Extract the actual operand from ListNode if needed
+            Node actualOperand = node.operand;
+            if (actualOperand instanceof ListNode) {
+                ListNode list = (ListNode) actualOperand;
+                if (list.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("chop requires an argument");
+                }
+                actualOperand = list.elements.get(0);
+            }
+
+            // Compile the operand (should be an lvalue)
+            actualOperand.accept(bytecodeCompiler);
+            int scalarReg = bytecodeCompiler.lastResultReg;
+
+            // Call chopScalar and store result back
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.CHOP);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(scalarReg);
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("values")) {
@@ -1514,8 +1559,14 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("values requires a hash argument");
             }
 
-            // Compile the hash operand
-            node.operand.accept(bytecodeCompiler);
+            // Compile the hash operand in LIST context (to avoid scalar conversion)
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+            try {
+                node.operand.accept(bytecodeCompiler);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedContext;
+            }
             int hashReg = bytecodeCompiler.lastResultReg;
 
             // Emit HASH_VALUES
@@ -1524,7 +1575,18 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(hashReg);
 
-            bytecodeCompiler.lastResultReg = rd;
+            // values() returns a list in list context, scalar count in scalar context
+            // The RuntimeHash.values() method returns a RuntimeList
+            // In scalar context, convert to scalar (count)
+            if (savedContext == RuntimeContextType.SCALAR) {
+                int scalarReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                bytecodeCompiler.emitReg(scalarReg);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.lastResultReg = scalarReg;
+            } else {
+                bytecodeCompiler.lastResultReg = rd;
+            }
         } else if (op.equals("$#")) {
             // $#array - get last index of array (size - 1)
             // operand: array variable (OperatorNode("@" ...) or IdentifierNode)
@@ -1668,8 +1730,8 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("matchRegex")) {
-            // m/pattern/flags - create a regex and return it (for use with =~)
-            // operand: ListNode containing pattern string and flags string
+            // m/pattern/flags - create a regex and optionally match against a string
+            // operand: ListNode containing pattern, flags, and optionally string (from =~ binding)
             if (node.operand == null || !(node.operand instanceof ListNode)) {
                 bytecodeCompiler.throwCompilerException("matchRegex requires pattern and flags");
             }
@@ -1688,11 +1750,126 @@ public class CompileOperator {
             int flagsReg = bytecodeCompiler.lastResultReg;
 
             // Create quoted regex using QUOTE_REGEX opcode
-            int rd = bytecodeCompiler.allocateRegister();
+            int regexReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(regexReg);
             bytecodeCompiler.emitReg(patternReg);
             bytecodeCompiler.emitReg(flagsReg);
+
+            // Check if a string was provided (from =~ binding)
+            if (args.elements.size() > 2) {
+                // String provided - perform the match
+                args.elements.get(2).accept(bytecodeCompiler);
+                int stringReg = bytecodeCompiler.lastResultReg;
+
+                // Call MATCH_REGEX to perform the match
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(stringReg);
+                bytecodeCompiler.emitReg(regexReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                // No string provided - just return the regex object
+                bytecodeCompiler.lastResultReg = regexReg;
+            }
+        } else if (op.equals("replaceRegex")) {
+            // s/pattern/replacement/flags - regex substitution
+            // operand: ListNode containing [pattern, replacement, flags] or [pattern, replacement, flags, string]
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                bytecodeCompiler.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
+            }
+
+            ListNode args = (ListNode) node.operand;
+            if (args.elements.size() < 3) {
+                bytecodeCompiler.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
+            }
+
+            // Compile pattern
+            args.elements.get(0).accept(bytecodeCompiler);
+            int patternReg = bytecodeCompiler.lastResultReg;
+
+            // Compile replacement
+            args.elements.get(1).accept(bytecodeCompiler);
+            int replacementReg = bytecodeCompiler.lastResultReg;
+
+            // Compile flags
+            args.elements.get(2).accept(bytecodeCompiler);
+            int flagsReg = bytecodeCompiler.lastResultReg;
+
+            // Create replacement regex using GET_REPLACEMENT_REGEX opcode
+            int regexReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.GET_REPLACEMENT_REGEX);
+            bytecodeCompiler.emitReg(regexReg);
+            bytecodeCompiler.emitReg(patternReg);
+            bytecodeCompiler.emitReg(replacementReg);
+            bytecodeCompiler.emitReg(flagsReg);
+
+            // Get the string to operate on (element 3 if provided, else $_)
+            int stringReg;
+            if (args.elements.size() > 3) {
+                // String provided in operand list (from =~ binding)
+                args.elements.get(3).accept(bytecodeCompiler);
+                stringReg = bytecodeCompiler.lastResultReg;
+            } else {
+                // Use $_ as default
+                String varName = "$_";
+                if (bytecodeCompiler.hasVariable(varName)) {
+                    stringReg = bytecodeCompiler.getVariableRegister(varName);
+                } else {
+                    stringReg = bytecodeCompiler.allocateRegister();
+                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
+                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    bytecodeCompiler.emitReg(stringReg);
+                    bytecodeCompiler.emit(nameIdx);
+                }
+            }
+
+            // Apply the regex match (which handles replacement)
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(stringReg);
+            bytecodeCompiler.emitReg(regexReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+            bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("substr")) {
+            // substr($string, $offset, $length, $replacement)
+            // operand is a ListNode with 2-4 elements
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                bytecodeCompiler.throwCompilerException("substr requires arguments");
+            }
+
+            ListNode args = (ListNode) node.operand;
+            if (args.elements.size() < 2) {
+                bytecodeCompiler.throwCompilerException("substr requires at least 2 arguments");
+            }
+
+            // Compile arguments
+            java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+            for (Node arg : args.elements) {
+                arg.accept(bytecodeCompiler);
+                argRegs.add(bytecodeCompiler.lastResultReg);
+            }
+
+            // Create list with arguments: CREATE_LIST rd count [regs...]
+            int argsListReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+            bytecodeCompiler.emitReg(argsListReg);
+            bytecodeCompiler.emit(argRegs.size());  // emit count
+            for (int argReg : argRegs) {
+                bytecodeCompiler.emitReg(argReg);
+            }
+
+            // Call SUBSTR_VAR opcode
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.SUBSTR_VAR);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(argsListReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chomp")) {
@@ -1773,6 +1950,43 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(2);  // Register 2 contains the calling context
 
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("sprintf")) {
+            // sprintf($format, @args) - SprintfOperator.sprintf
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("sprintf requires a format argument");
+                }
+
+                // First argument is the format string
+                list.elements.get(0).accept(bytecodeCompiler);
+                int formatReg = bytecodeCompiler.lastResultReg;
+
+                // Compile remaining arguments and collect their registers
+                java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+                for (int i = 1; i < list.elements.size(); i++) {
+                    list.elements.get(i).accept(bytecodeCompiler);
+                    argRegs.add(bytecodeCompiler.lastResultReg);
+                }
+
+                // Create a RuntimeList with the arguments
+                int listReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(listReg);
+                for (int argReg : argRegs) {
+                    bytecodeCompiler.emitReg(argReg);
+                }
+
+                // Call sprintf with format and arg list
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.SPRINTF);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(formatReg);
+                bytecodeCompiler.emitReg(listReg);
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                bytecodeCompiler.throwCompilerException("sprintf requires arguments");
+            }
             // GENERATED_OPERATORS_START
         } else if (op.equals("int")) {
             // int($x) - MathOperators.integer

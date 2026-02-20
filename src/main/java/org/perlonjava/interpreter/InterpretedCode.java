@@ -714,6 +714,30 @@ public class InterpretedCode extends RuntimeCode {
                     int keyReg = bytecode[pc++];
                     sb.append("GLOB_SLOT_GET r").append(rd).append(" = r").append(globReg2).append("{r").append(keyReg).append("}\n");
                     break;
+                case Opcodes.SPRINTF:
+                    rd = bytecode[pc++];
+                    int formatReg = bytecode[pc++];
+                    int argsListReg = bytecode[pc++];
+                    sb.append("SPRINTF r").append(rd).append(" = sprintf(r").append(formatReg).append(", r").append(argsListReg).append(")\n");
+                    break;
+                case Opcodes.CHOP:
+                    rd = bytecode[pc++];
+                    int scalarReg = bytecode[pc++];
+                    sb.append("CHOP r").append(rd).append(" = chop(r").append(scalarReg).append(")\n");
+                    break;
+                case Opcodes.GET_REPLACEMENT_REGEX:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];  // pattern
+                    rs2 = bytecode[pc++];  // replacement
+                    int rs3 = bytecode[pc++];  // flags
+                    sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(")\n");
+                    break;
+                case Opcodes.SUBSTR_VAR:
+                    rd = bytecode[pc++];
+                    int substrArgsReg = bytecode[pc++];
+                    int substrCtx = bytecode[pc++];
+                    sb.append("SUBSTR_VAR r").append(rd).append(" = substr(r").append(substrArgsReg).append(", ctx=").append(substrCtx).append(")\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
