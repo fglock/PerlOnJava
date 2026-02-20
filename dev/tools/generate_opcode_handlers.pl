@@ -568,19 +568,19 @@ sub update_bytecode_compiler {
             push @content, "            if (node.operand instanceof ListNode) {\n";
             push @content, "                ListNode list = (ListNode) node.operand;\n";
             push @content, "                if (!list.elements.isEmpty()) {\n";
-            push @content, "                    list.elements.get(0).accept(this);\n";
+            push @content, "                    list.elements.get(0).accept(bytecodeCompiler);\n";
             push @content, "                } else {\n";
-            push @content, "                    throwCompilerException(\"$op_name requires an argument\");\n";
+            push @content, "                    bytecodeCompiler.throwCompilerException(\"$op_name requires an argument\");\n";
             push @content, "                }\n";
             push @content, "            } else {\n";
-            push @content, "                node.operand.accept(this);\n";
+            push @content, "                node.operand.accept(bytecodeCompiler);\n";
             push @content, "            }\n";
-            push @content, "            int argReg = lastResultReg;\n";
-            push @content, "            int rd = allocateRegister();\n";
-            push @content, "            emit(Opcodes.$opcode_name);\n";
-            push @content, "            emitReg(rd);\n";
-            push @content, "            emitReg(argReg);\n";
-            push @content, "            lastResultReg = rd;\n";
+            push @content, "            int argReg = bytecodeCompiler.lastResultReg;\n";
+            push @content, "            int rd = bytecodeCompiler.allocateRegister();\n";
+            push @content, "            bytecodeCompiler.emit(Opcodes.$opcode_name);\n";
+            push @content, "            bytecodeCompiler.emitReg(rd);\n";
+            push @content, "            bytecodeCompiler.emitReg(argReg);\n";
+            push @content, "            bytecodeCompiler.lastResultReg = rd;\n";
         }
     }
 
