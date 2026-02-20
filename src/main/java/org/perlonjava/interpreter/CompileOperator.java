@@ -2644,6 +2644,55 @@ public class CompileOperator {
             } else {
                 bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
             }
+        } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
+                   op.equals("rename") || op.equals("link") || op.equals("readlink") ||
+                   op.equals("umask") || op.equals("system") || op.equals("pack") ||
+                   op.equals("vec") || op.equals("crypt") || op.equals("localtime") ||
+                   op.equals("gmtime") || op.equals("caller") || op.equals("fileno") ||
+                   op.equals("getc") || op.equals("qx") || op.equals("each")) {
+            // Generic handler for operators that take arguments and call runtime methods
+            // Format: OPCODE rd argsReg ctx
+
+            int argsReg;
+            if (node.operand != null) {
+                node.operand.accept(bytecodeCompiler);
+                argsReg = bytecodeCompiler.lastResultReg;
+            } else {
+                // No operand - create empty list
+                int emptyListReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(emptyListReg);
+                argsReg = emptyListReg;
+            }
+
+            int rd = bytecodeCompiler.allocateRegister();
+            short opcode = switch (op) {
+                case "chmod" -> Opcodes.CHMOD;
+                case "unlink" -> Opcodes.UNLINK;
+                case "utime" -> Opcodes.UTIME;
+                case "rename" -> Opcodes.RENAME;
+                case "link" -> Opcodes.LINK;
+                case "readlink" -> Opcodes.READLINK;
+                case "umask" -> Opcodes.UMASK;
+                case "getc" -> Opcodes.GETC;
+                case "fileno" -> Opcodes.FILENO;
+                case "qx" -> Opcodes.QX;
+                case "system" -> Opcodes.SYSTEM;
+                case "caller" -> Opcodes.CALLER;
+                case "each" -> Opcodes.EACH;
+                case "pack" -> Opcodes.PACK;
+                case "vec" -> Opcodes.VEC;
+                case "localtime" -> Opcodes.LOCALTIME;
+                case "gmtime" -> Opcodes.GMTIME;
+                case "crypt" -> Opcodes.CRYPT;
+                default -> throw new IllegalStateException("Unexpected operator: " + op);
+            };
+
+            bytecodeCompiler.emitWithToken(opcode, node.getIndex());
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(argsReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+            bytecodeCompiler.lastResultReg = rd;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
