@@ -63,6 +63,15 @@ public class CompileOperator {
                 Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
                 boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
 
+                // Check if there's a version associated with this package and set $Package::VERSION
+                String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
+                if (version != null) {
+                    // Set $PackageName::VERSION at compile time using GlobalVariable
+                    String versionVarName = packageName + "::VERSION";
+                    org.perlonjava.runtime.GlobalVariable.getGlobalVariable(versionVarName)
+                            .set(new org.perlonjava.runtime.RuntimeScalar(version));
+                }
+
                 // Update the current package/class in symbol table
                 // This tracks package name, isClass flag, and version
                 bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
