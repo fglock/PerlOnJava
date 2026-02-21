@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.mro.InheritanceResolver;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -72,7 +74,7 @@ public class NameNormalizer {
         // This avoids circular dependency because findMethodInHierarchy uses
         // normalizeVariableName (not getBlessId)
         try {
-            RuntimeScalar method = org.perlonjava.mro.InheritanceResolver.findMethodInHierarchy(
+            RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
                 "((", className, null, 0);
             return method != null;
         } catch (Exception e) {

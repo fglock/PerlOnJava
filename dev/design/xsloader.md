@@ -34,7 +34,7 @@ XSLoader::load('MyModule', $VERSION);
 We could implement a similar pattern with a lightweight loader for common cases:
 
 ```java:src/main/java/org/perlonjava/perlmodule/JavaXSLoader.java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -119,10 +119,10 @@ public class JavaXSLoader extends PerlModuleBase {
     private static String getJavaClassName(String perlModule) {
         // This mapping could be loaded from a properties file generated at build time
         switch (perlModule) {
-            case "Cwd": return "org.perlonjava.perlmodule.Cwd";
-            case "File::Basename": return "org.perlonjava.perlmodule.FileBasename";
-            case "Data::Dumper": return "org.perlonjava.perlmodule.DataDumper";
-            case "DBI": return "org.perlonjava.perlmodule.DBI";
+            case "Cwd": return "org.perlonjava.runtime.perlmodule.Cwd";
+            case "File::Basename": return "org.perlonjava.runtime.perlmodule.FileBasename";
+            case "Data::Dumper": return "org.perlonjava.runtime.perlmodule.DataDumper";
+            case "DBI": return "org.perlonjava.runtime.perlmodule.DBI";
             // ... etc
             default: return null;
         }
@@ -175,7 +175,7 @@ public class GenerateXSLoaderMappings {
         Properties mappings = new Properties();
         
         // Scan for modules
-        Reflections reflections = new Reflections("org.perlonjava.perlmodule");
+        Reflections reflections = new Reflections("org.perlonjava.runtime.perlmodule");
         Set<Class<? extends InitializableModule>> modules = 
             reflections.getSubTypesOf(InitializableModule.class);
         

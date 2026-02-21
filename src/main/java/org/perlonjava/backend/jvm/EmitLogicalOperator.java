@@ -3,10 +3,10 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.BinaryOperatorNode;
-import org.perlonjava.astnode.OperatorNode;
-import org.perlonjava.astnode.TernaryOperatorNode;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.TernaryOperatorNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
@@ -66,7 +66,7 @@ public class EmitLogicalOperator {
      * @param emitterVisitor The visitor used for code emission.
      * @param operandNode    The operand node to emit.
      */
-    private static void emitFlipFlopOperand(EmitterVisitor emitterVisitor, org.perlonjava.astnode.Node operandNode) {
+    private static void emitFlipFlopOperand(EmitterVisitor emitterVisitor, Node operandNode) {
         // Special handling: if operand is a quoteRegex node, emit a match operation
         if (operandNode instanceof OperatorNode opNode && "quoteRegex".equals(opNode.operator)) {
             // Emit a match operation against $_
@@ -166,7 +166,7 @@ public class EmitLogicalOperator {
         OperatorNode declaration = FindDeclarationVisitor.findOperator(node.right, "my");
 
         String savedOperator = null;
-        org.perlonjava.astnode.Node savedOperand = null;
+        Node savedOperand = null;
         boolean rewritten = false;
         try {
             if (declaration != null && declaration.operand instanceof OperatorNode operatorNode) {

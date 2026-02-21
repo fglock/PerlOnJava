@@ -1,7 +1,7 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.NumberNode;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;

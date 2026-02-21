@@ -3,18 +3,19 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
-import org.perlonjava.perlmodule.Warnings;
+import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
-import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
 
 /**
  * Bytecode emitter for Perl variable operations.
@@ -84,7 +85,7 @@ public class EmitVariable {
             return false;
         }
         char c = name.charAt(0);
-        return c > 127 && !ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_UTF8);
+        return c > 127 && !ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
     }
 
     private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {

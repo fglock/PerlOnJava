@@ -1,6 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.*;
 

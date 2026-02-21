@@ -1,8 +1,8 @@
 package org.perlonjava.frontend.analysis;
 
-import org.perlonjava.astnode.*;
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.backend.jvm.astrefactor.LargeNodeRefactorer;
+import org.perlonjava.frontend.astnode.*;
 
 /**
  * BytecodeSizeEstimator provides accurate bytecode size estimation for PerlOnJava methods.

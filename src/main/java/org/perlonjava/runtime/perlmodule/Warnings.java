@@ -1,0 +1,146 @@
+package org.perlonjava.runtime.perlmodule;
+
+import org.perlonjava.runtime.runtimetypes.*;
+
+/**
+ * The Warnings class provides functionalities similar to the Perl warnings module.
+ */
+public class Warnings extends PerlModuleBase {
+
+    public static final WarningFlags warningManager = new WarningFlags();
+
+    /**
+     * Constructor for Warnings.
+     * Initializes the module with the name "warnings".
+     */
+    public Warnings() {
+        super("warnings", false);
+    }
+
+    /**
+     * Static initializer to set up the Warnings module.
+     */
+    public static void initialize() {
+        Warnings warnings = new Warnings();
+        try {
+            warnings.registerMethod("enabled", ";$");
+            warnings.registerMethod("import", "useWarnings", ";$");
+            warnings.registerMethod("unimport", "noWarnings", ";$");
+            warnings.registerMethod("warn", "warn", "$;$");
+            warnings.registerMethod("warnif", "warnIf", "$;$");
+        } catch (NoSuchMethodException e) {
+            System.err.println("Warning: Missing Warnings method: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Enables a warning category.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList useWarnings(RuntimeArray args, int ctx) {
+        // If no arguments, enable all warnings (use warnings;)
+        if (args.size() == 1) {
+            warningManager.initializeEnabledWarnings();
+            return new RuntimeScalar().getList();
+        }
+
+        for (int i = 1; i < args.size(); i++) {
+            String category = args.get(i).toString();
+            if (category.startsWith("-")) {
+                category = category.substring(1);
+                if (!warningExists(category)) {
+                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+                }
+                warningManager.disableWarning(category.substring(1));
+            } else {
+                if (!warningExists(category)) {
+                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+                }
+                warningManager.enableWarning(category);
+            }
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Disables a warning category.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList noWarnings(RuntimeArray args, int ctx) {
+        for (int i = 1; i < args.size(); i++) {
+            String category = args.get(i).toString();
+            if (!warningExists(category)) {
+                throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+            }
+            warningManager.disableWarning(category);
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Checks if a warning category exists.
+     *
+     * @param category The name of the warning category to check.
+     * @return True if the warning category exists, false otherwise.
+     */
+    public static boolean warningExists(String category) {
+        return WarningFlags.getWarningList().contains(category);
+    }
+
+    /**
+     * Checks if a warning is enabled.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing a boolean value.
+     */
+    public static RuntimeList enabled(RuntimeArray args, int ctx) {
+        if (args.size() < 1 || args.size() > 2) {
+            throw new IllegalStateException("Bad number of arguments for warnings::enabled()");
+        }
+        String category = args.get(0).toString();
+        boolean isEnabled = warningManager.isWarningEnabled(category);
+        return new RuntimeScalar(isEnabled).getList();
+    }
+
+    /**
+     * Issues a warning.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList warn(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalStateException("Bad number of arguments for warn()");
+        }
+        String message = args.get(0).toString();
+        System.err.println("Warning: " + message);
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Issues a warning if the category is enabled.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList warnIf(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalStateException("Bad number of arguments for warnIf()");
+        }
+        String category = args.size() > 1 ? args.get(0).toString() : "all";
+        String message = args.get(args.size() - 1).toString();
+        if (warningManager.isWarningEnabled(category)) {
+            System.err.println("Warning: " + message);
+        }
+        return new RuntimeScalar().getList();
+    }
+}

@@ -4,7 +4,7 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
-import org.perlonjava.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.nio.charset.StandardCharsets;

@@ -142,7 +142,7 @@ The `jperl` launcher script honors the `JPERL_OPTS` environment variable:
 
 ```bash
 # From jperl script:
-java ${JPERL_OPTS} -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.Main "$@"
+java ${JPERL_OPTS} -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.app.cli.Main "$@"
 ```
 
 ### Common Patterns

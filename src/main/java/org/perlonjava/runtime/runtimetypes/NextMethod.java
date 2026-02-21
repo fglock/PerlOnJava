@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.List;
 

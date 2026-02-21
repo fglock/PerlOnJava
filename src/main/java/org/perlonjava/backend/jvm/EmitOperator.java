@@ -2,19 +2,19 @@ package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
-import org.perlonjava.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeDescriptorConstants;
-import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 /**
  * The EmitOperator class is responsible for handling various operators

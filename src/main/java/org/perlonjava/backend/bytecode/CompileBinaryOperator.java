@@ -1,6 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class CompileBinaryOperator {

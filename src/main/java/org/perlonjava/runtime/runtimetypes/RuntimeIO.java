@@ -8,9 +8,9 @@ package org.perlonjava.runtime.runtimetypes;
     Implementing modes for read/write (+<, +>) operations.
  */
 
-import org.perlonjava.io.*;
+import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.perlmodule.Warnings;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.operators.IOOperator;
 
 import java.io.File;
@@ -385,9 +385,9 @@ public class RuntimeIO extends RuntimeScalar {
             if (">>".equals(mode) || "+>>".equals(mode)) {
                 RuntimeScalar size = fh.ioHandle.tell();
                 fh.ioHandle.seek(size.getLong()); // Move to end for appending
-                if (fh.ioHandle instanceof org.perlonjava.io.CustomFileChannel cfc) {
+                if (fh.ioHandle instanceof CustomFileChannel cfc) {
                     cfc.setAppendMode(true);
-                } else if (fh.ioHandle instanceof org.perlonjava.io.LayeredIOHandle layered && layered.getDelegate() instanceof org.perlonjava.io.CustomFileChannel cfc) {
+                } else if (fh.ioHandle instanceof LayeredIOHandle layered && layered.getDelegate() instanceof CustomFileChannel cfc) {
                     cfc.setAppendMode(true);
                 }
             }
@@ -1123,8 +1123,8 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar containing packed sockaddr_in structure, or undef if not a socket
      */
     public RuntimeScalar getsockname() {
-        if (ioHandle instanceof org.perlonjava.io.SocketIO) {
-            return ((org.perlonjava.io.SocketIO) ioHandle).getsockname();
+        if (ioHandle instanceof SocketIO) {
+            return ((SocketIO) ioHandle).getsockname();
         }
         return scalarUndef;
     }
@@ -1136,8 +1136,8 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar containing packed sockaddr_in structure, or undef if not a socket
      */
     public RuntimeScalar getpeername() {
-        if (ioHandle instanceof org.perlonjava.io.SocketIO) {
-            return ((org.perlonjava.io.SocketIO) ioHandle).getpeername();
+        if (ioHandle instanceof SocketIO) {
+            return ((SocketIO) ioHandle).getpeername();
         }
         return scalarUndef;
     }

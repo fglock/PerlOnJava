@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.CompilerOptions;
-import org.perlonjava.io.ClosedIOHandle;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.operators.Readline;
 
 import java.io.IOException;

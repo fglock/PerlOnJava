@@ -1,8 +1,8 @@
 package org.perlonjava.frontend.analysis;
 
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.*;
 import org.perlonjava.backend.jvm.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.HashMap;

@@ -1,6 +1,6 @@
 package org.perlonjava.frontend.analysis;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 
 import java.util.Set;
 

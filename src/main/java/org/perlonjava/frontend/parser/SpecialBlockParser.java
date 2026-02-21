@@ -1,13 +1,13 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.CompilerOptions;
-import org.perlonjava.astnode.*;
+import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
-import org.perlonjava.symbols.ScopedSymbolTable;
-import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;

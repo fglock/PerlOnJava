@@ -35,19 +35,19 @@ Java implementations replace Perl XS modules. They extend `PerlModuleBase` and a
 
 XSLoader maps Perl module names to Java class names:
 
-- **Perl module**: `DBI` → **Java class**: `org.perlonjava.perlmodule.Dbi`
-- **Perl module**: `Text::CSV` → **Java class**: `org.perlonjava.perlmodule.Text_CSV`
-- **Perl module**: `My::Module` → **Java class**: `org.perlonjava.perlmodule.My_Module`
+- **Perl module**: `DBI` → **Java class**: `org.perlonjava.runtime.perlmodule.Dbi`
+- **Perl module**: `Text::CSV` → **Java class**: `org.perlonjava.runtime.perlmodule.Text_CSV`
+- **Perl module**: `My::Module` → **Java class**: `org.perlonjava.runtime.perlmodule.My_Module`
 
 Rules:
-- Package: Always `org.perlonjava.perlmodule`
+- Package: Always `org.perlonjava.runtime.perlmodule`
 - Class name: Perl module name with `::` replaced by `_`
 - First letter capitalized (Java convention)
 
 ### Basic Structure
 
 ```java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 public class Dbi extends PerlModuleBase {
     public Dbi() {
@@ -197,7 +197,7 @@ sub do {
 ```
 
 When `XSLoader::load('DBI')` is called:
-1. XSLoader looks for the Java class `org.perlonjava.perlmodule.Dbi`
+1. XSLoader looks for the Java class `org.perlonjava.runtime.perlmodule.Dbi`
 2. Calls the static `initialize()` method
 3. Registers all methods defined in the Java class
 
@@ -260,7 +260,7 @@ public class Dbi extends PerlModuleBase {
 
 **Key points:**
 - DBI.pm calls `XSLoader::load('DBI')` to load the Java implementation
-- Java class is in `org.perlonjava.perlmodule.Dbi` (naming convention)
+- Java class is in `org.perlonjava.runtime.perlmodule.Dbi` (naming convention)
 - `initialize()` method registers all Java-implemented methods
 - Pure Perl methods (like `do()`) can call Java methods (like `prepare()`, `execute()`)
 

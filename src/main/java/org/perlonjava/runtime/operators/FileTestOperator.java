@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -10,7 +10,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
-import org.perlonjava.perlmodule.Warnings;
+import org.perlonjava.runtime.perlmodule.Warnings;
 
 import java.io.IOException;
 import java.nio.file.Files;

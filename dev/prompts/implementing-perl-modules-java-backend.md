@@ -84,7 +84,7 @@ our @EXPORT_OK = qw(
 ```perl
 # Load Java backend FIRST
 require XSLoader;
-XSLoader::load('HashUtil');  # Loads org.perlonjava.perlmodule.HashUtil
+XSLoader::load('HashUtil');  # Loads org.perlonjava.runtime.perlmodule.HashUtil
 
 # THEN set up exports
 require Exporter;
@@ -115,7 +115,7 @@ public static void initialize() {
 ### Java Backend (HashUtil.java)
 
 ```java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 public class HashUtil extends PerlModuleBase {
 

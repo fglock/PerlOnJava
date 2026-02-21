@@ -4,8 +4,8 @@ import com.sun.jna.LastErrorException;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.Wincon;
-import org.perlonjava.nativ.NativeUtils;
-import org.perlonjava.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.NativeUtils;
+import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 

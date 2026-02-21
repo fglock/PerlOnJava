@@ -95,14 +95,11 @@ src/test/resources/
 │   ├── hash.t
 │   ├── regex/
 │   └── ...
-├── Benchmark/         # Module tests (slower)
-│   └── Benchmark.t
-├── cpan/              # CPAN module tests
-├── dist/              # Distribution tests
-└── lib/               # Library tests
 ```
 
 ### Test Categories
+
+(Work in progress)
 
 | Category | Location | Speed | Purpose |
 |----------|----------|-------|---------|

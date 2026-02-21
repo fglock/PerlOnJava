@@ -1,6 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.nativ.NativeUtils;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;

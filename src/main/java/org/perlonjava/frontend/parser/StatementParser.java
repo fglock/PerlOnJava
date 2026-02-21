@@ -1,15 +1,15 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.Configuration;
-import org.perlonjava.astnode.*;
+import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
 import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
-import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.VersionHelper;
-import org.perlonjava.perlmodule.Universal;
+import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -22,9 +22,9 @@ import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.StringParser.parseVstring;
-import static org.perlonjava.perlmodule.Feature.featureManager;
-import static org.perlonjava.perlmodule.Strict.useStrict;
-import static org.perlonjava.perlmodule.Warnings.useWarnings;
+import static org.perlonjava.runtime.perlmodule.Feature.featureManager;
+import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
+import static org.perlonjava.runtime.perlmodule.Warnings.useWarnings;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.packageExistsCache;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 

@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import com.sun.jna.Platform;
-import org.perlonjava.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;

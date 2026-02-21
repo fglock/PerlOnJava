@@ -2,11 +2,11 @@ package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.BinaryOperatorNode;
-import org.perlonjava.astnode.IdentifierNode;
-import org.perlonjava.astnode.ListNode;
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.ListNode;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.runtime.runtimetypes.ControlFlowType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;

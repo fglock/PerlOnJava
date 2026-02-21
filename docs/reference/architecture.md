@@ -27,20 +27,19 @@ This document describes the internal architecture and compilation pipeline.
 /
 ├── src/
 │   ├── main/
-│   │   └── perl/
+│   │   ├── perl/
 │   │   │   └── lib/
 │   │   │       └── Perl modules (strict.pm, etc)
 │   │   └── java/
 │   │       └── org/
 │   │           └── perlonjava/
-│   │               ├── Main.java
-│   │               ├── ArgumentParser.java
-│   │               ├── scriptengine/
-│   │               │   ├── PerlScriptEngine.java
-│   │               │   └── other script engine classes
-│   │               ├── astnode/
-│   │               │   ├── Node.java
-│   │               │   └── other AST node classes
+│   │               ├── app/
+│   │               │   ├── cli/
+│   │               │   │   ├── Main.java
+│   │               │   │   ├── ArgumentParser.java
+│   │               │   ├── scriptengine/
+│   │               │   │   ├── PerlScriptEngine.java
+│   │               │   │   └── other script engine classes
 │   │               ├── frontend/
 │   │               │   ├── analysis/
 │   │               │   │   ├── Visitor.java
@@ -48,6 +47,12 @@ This document describes the internal architecture and compilation pipeline.
 │   │               │   ├── lexer/
 │   │               │   │   ├── Lexer.java
 │   │               │   │   └── other lexer classes
+│   │               │   ├── astnode/
+│   │               │   │   ├── Node.java
+│   │               │   │   └── other AST node classes
+│   │               │   ├── semantic/
+│   │               │   │   ├── ScopedSymbolTable.java
+│   │               │   │   └── other symbol table classes
 │   │               │   └── parser/
 │   │               │       ├── Parser.java
 │   │               │       └── other parser classes
@@ -62,32 +67,29 @@ This document describes the internal architecture and compilation pipeline.
 │   │               │   │   └── other interpreter classes
 │   │               │   └── jvm/
 │   │               │       └── JVM bytecode generator classes
-│   │               ├── perlmodule/
-│   │               │   ├── Universal.java
-│   │               │   └── other internalized Perl module classes
 │   │               ├── runtime/
+│   │               │   ├── perlmodule/
+│   │               │   │   ├── Universal.java
+│   │               │   │   └── other internalized Perl module classes
 │   │               │   ├── operators/
 │   │               │   │   ├── OperatorHandler.java
 │   │               │   │   ├── ArithmeticOperators.java
 │   │               │   │   └── other operator handling classes
+│   │               │   ├── regex/
+│   │               │   │   ├── RuntimeRegex.java
+│   │               │   │   └── other regex classes
+│   │               │   ├── io/
+│   │               │   │   ├── SocketIO.java
+│   │               │   │   └── other io classes
+│   │               │   ├── mro/
+│   │               │   │   ├── C3.java
+│   │               │   │   └── other mro classes
+│   │               │   ├── terminal/
+│   │               │   │   ├── TerminalHandler.java
+│   │               │   │   └── other platform-specific terminal classes
 │   │               │   └── runtimetypes/
 │   │               │       ├── RuntimeScalar.java
-│   │               │       └── other runtime classes
-│   │               ├── regex/
-│   │               │   ├── RuntimeRegex.java
-│   │               │   └── other regex classes
-│   │               ├── io/
-│   │               |   ├── SocketIO.java
-│   │               |   └── other io classes
-│   │               ├── mro/
-│   │               |   ├── C3.java
-│   │               |   └── other mro classes
-│   │               ├── symbols/
-│   │               |   ├── ScopedSymbolTable.java
-│   │               |   └── other symbol table classes
-│   │               └── terminal/
-│   │                   ├── TerminalHandler.java
-│   │                   └── other platform-specific terminal classes
+│   │               │       └── other runtime types
 │   └── test/
 │       ├── java/
 │       │   └── org/
@@ -103,17 +105,11 @@ This document describes the internal architecture and compilation pipeline.
 ├── docs/
 │   └── project documentation files
 ├── dev/
-│   └── interpreter/
-│       ├── SKILL.md
-│       ├── STATUS.md
-│       ├── TESTING.md
-│       ├── BYTECODE_DOCUMENTATION.md
+│   └── custom_bytecode/
 │       ├── architecture/
 │       └── tests/
 ├── t/
 │   └── Perl test suite placeholder
-└── misc/
-    └── project notes
 ```
 
 
@@ -132,7 +128,7 @@ This document describes the internal architecture and compilation pipeline.
 
 ### Custom Bytecode VM
 
-The interpreter provides an alternative execution mode that runs Perl bytecode directly without generating JVM bytecode. It offers faster startup time and lower memory usage compared to the compiler.
+The Custom Bytecode VM provides an alternative execution mode that runs Perl bytecode directly without generating JVM bytecode. It offers faster startup time and lower memory usage compared to the compiler.
 
 - **BytecodeInterpreter**: Main execution loop with register-based architecture. Executes interpreter bytecode using a unified switch statement with tableswitch optimization.
 - **BytecodeCompiler**: Translates AST to interpreter bytecode with register allocation. Assigns variables to register indices and generates compact bytecode instructions.

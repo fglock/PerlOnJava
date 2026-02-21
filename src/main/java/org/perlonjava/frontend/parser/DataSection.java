@@ -1,6 +1,6 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.io.ScalarBackedIO;
+import org.perlonjava.runtime.io.ScalarBackedIO;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;

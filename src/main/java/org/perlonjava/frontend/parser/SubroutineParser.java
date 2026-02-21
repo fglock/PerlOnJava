@@ -1,16 +1,17 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
-import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -584,7 +585,7 @@ public class SubroutineParser {
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
         // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
         String lexicalKey = "&" + subName;
-        org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+        SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
         String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
 
         // If the package stash has been aliased (e.g. via `*{Pkg::} = *{Other::}`), then
@@ -735,12 +736,12 @@ public class SubroutineParser {
         // Create a filtered snapshot that excludes field declarations and code references
         // Fields cause bytecode generation issues when present in the symbol table
         // Code references (&) should not be captured as closure variables
-        org.perlonjava.symbols.ScopedSymbolTable filteredSnapshot = new org.perlonjava.symbols.ScopedSymbolTable();
+        ScopedSymbolTable filteredSnapshot = new ScopedSymbolTable();
         filteredSnapshot.enterScope();
         
         // Copy all visible variables except field declarations and code references
-        Map<Integer, org.perlonjava.symbols.SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
-        for (org.perlonjava.symbols.SymbolTable.SymbolEntry entry : visibleVars.values()) {
+        Map<Integer, SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        for (SymbolTable.SymbolEntry entry : visibleVars.values()) {
             // Skip field declarations when creating snapshot for bytecode generation
             if (entry.decl().equals("field")) {
                 continue;

@@ -3,7 +3,7 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import java.util.ArrayDeque;
 import java.util.Deque;

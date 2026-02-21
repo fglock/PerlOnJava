@@ -1,11 +1,11 @@
 package org.perlonjava.frontend.analysis;
 
-import org.perlonjava.astnode.*;
-import org.perlonjava.perlmodule.Strict;
+import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.runtime.perlmodule.Strict;
 
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
-import static org.perlonjava.symbols.ScopedSymbolTable.stringifyFeatureFlags;
-import static org.perlonjava.symbols.ScopedSymbolTable.stringifyWarningFlags;
+import static org.perlonjava.frontend.semantic.ScopedSymbolTable.stringifyFeatureFlags;
+import static org.perlonjava.frontend.semantic.ScopedSymbolTable.stringifyWarningFlags;
 
 /*
  *

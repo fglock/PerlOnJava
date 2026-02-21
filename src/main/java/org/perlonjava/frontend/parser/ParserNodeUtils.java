@@ -1,6 +1,6 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 
 /**
  * Utility class for common node transformations and operations used during parsing.

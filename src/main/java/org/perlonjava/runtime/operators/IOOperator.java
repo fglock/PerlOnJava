@@ -1,9 +1,9 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.astnode.FormatLine;
-import org.perlonjava.astnode.PictureLine;
-import org.perlonjava.io.*;
+import org.perlonjava.frontend.astnode.FormatLine;
+import org.perlonjava.frontend.astnode.PictureLine;
 import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -1752,7 +1752,7 @@ public class IOOperator {
             // For now, implement basic shutdown by closing the socket
             // In a full implementation, we would handle the different HOW values:
             // 0 = SHUT_RD (shutdown reading), 1 = SHUT_WR (shutdown writing), 2 = SHUT_RDWR (shutdown both)
-            if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
+            if (socketIO.ioHandle instanceof SocketIO) {
                 // For simplicity, just return success - actual socket shutdown would be more complex
                 return scalarTrue;
             } else {

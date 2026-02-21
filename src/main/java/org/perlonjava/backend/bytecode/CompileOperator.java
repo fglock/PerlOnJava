@@ -1,6 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.ClassRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;

@@ -1,6 +1,6 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;

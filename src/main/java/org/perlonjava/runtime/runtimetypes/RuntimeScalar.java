@@ -1,8 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.frontend.parser.NumberParser;
-import org.perlonjava.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -1375,7 +1376,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Clear the code value but keep the type as CODE
             this.value = new RuntimeCode(null, null);
             // Invalidate the method resolution cache
-            org.perlonjava.mro.InheritanceResolver.invalidateCache();
+            InheritanceResolver.invalidateCache();
             return this;
         }
         // For all other types, set to undef

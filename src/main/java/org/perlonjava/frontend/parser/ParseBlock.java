@@ -1,9 +1,9 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.BlockNode;
-import org.perlonjava.astnode.LabelNode;
-import org.perlonjava.astnode.ListNode;
-import org.perlonjava.astnode.Node;
+import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.LabelNode;
+import org.perlonjava.frontend.astnode.ListNode;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 

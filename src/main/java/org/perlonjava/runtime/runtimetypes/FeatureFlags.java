@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import java.util.*;
 import java.util.regex.Matcher;

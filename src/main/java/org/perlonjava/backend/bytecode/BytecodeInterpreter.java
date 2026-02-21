@@ -1,6 +1,8 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.operators.*;
+import org.perlonjava.runtime.perlmodule.Universal;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 /**
@@ -2193,7 +2195,7 @@ public class BytecodeInterpreter {
                 RuntimeArray isaArgs = new RuntimeArray();
                 isaArgs.push(obj);
                 isaArgs.push(packageName);
-                RuntimeList result = org.perlonjava.perlmodule.Universal.isa(isaArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = Universal.isa(isaArgs, RuntimeContextType.SCALAR);
                 registers[rd] = result.scalar();
                 return pc;
             }
@@ -2222,7 +2224,7 @@ public class BytecodeInterpreter {
                                        " flags=" + flags.toString());
                 }
 
-                registers[rd] = org.perlonjava.regex.RuntimeRegex.getQuotedRegex(pattern, flags);
+                registers[rd] = RuntimeRegex.getQuotedRegex(pattern, flags);
                 return pc;
             }
 

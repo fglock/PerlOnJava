@@ -56,7 +56,7 @@ my ($list_ref, $map_ref, $format, $default) = prop_invmap("General_Category");
 ### Phase 1: Create UnicodeUCD.java Module
 
 ```java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;

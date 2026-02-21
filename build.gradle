@@ -24,7 +24,7 @@ plugins {
 
 // Main application class configuration
 application {
-    mainClass = 'org.perlonjava.Main'
+    mainClass = 'org.perlonjava.app.cli.Main'
 }
 
 // Debian package build dependency
@@ -147,7 +147,7 @@ shadowJar {
     archiveClassifier.set('')
     destinationDirectory = file("$buildDir/../target")
     manifest {
-        attributes 'Main-Class': 'org.perlonjava.Main'
+        attributes 'Main-Class': 'org.perlonjava.app.cli.Main'
     }
     exclude 'module-info.class'
     exclude 'META-INF/MANIFEST.MF'

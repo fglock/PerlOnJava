@@ -27,6 +27,8 @@ my $upgrade = 0;  # Flag to upgrade dependencies to their latest versions
 my %config;       # Hash to store key-value pairs for configuration updates
 my $help = 0;     # Flag to show help message
 
+my $java_config_filename = 'src/main/java/org/perlonjava/Configuration.java';
+
 # Parse command-line options
 Getopt::Long::Configure("no_ignore_case");
 GetOptions(
@@ -79,7 +81,7 @@ Examples:
 
 # Function to display the current configuration by reading a Java configuration file
 sub show_config {
-    my $java_config = read_file('src/main/java/org/perlonjava/Configuration.java');
+    my $java_config = read_file($java_config_filename);
     print "Current configuration:\n\n";
     while ($java_config =~ /public static final (\w+)\s+(\w+)\s*=\s*(.+?);/g) {
         print "$2 = $3\n";
@@ -90,7 +92,7 @@ sub show_config {
 # Function to update configuration values in the Java configuration file
 sub update_configuration {
     my $config = shift;
-    my $file = 'src/main/java/org/perlonjava/Configuration.java';
+    my $file = $java_config_filename;
     my $content = read_file($file);
 
     foreach my $key (keys %$config) {

@@ -1,6 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.astnode.Node;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -8,8 +8,8 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.symbols.ScopedSymbolTable;
-import org.perlonjava.CompilerOptions;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.app.cli.CompilerOptions;
 
 import java.util.List;
 import java.util.Map;

@@ -3,10 +3,10 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.For3Node;
-import org.perlonjava.astnode.IfNode;
-import org.perlonjava.astnode.OperatorNode;
-import org.perlonjava.astnode.TryNode;
+import org.perlonjava.frontend.astnode.For3Node;
+import org.perlonjava.frontend.astnode.IfNode;
+import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.TryNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 

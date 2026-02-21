@@ -1,6 +1,6 @@
 package org.perlonjava.backend.jvm.astrefactor;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 
 import java.util.ArrayList;
 import java.util.List;

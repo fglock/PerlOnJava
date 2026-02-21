@@ -1,8 +1,8 @@
 package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -195,7 +195,7 @@ public class EmitRegex {
 
         // Create the replacement regex
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/regex/RuntimeRegex", "getReplacementRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex", "getReplacementRegex",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -232,7 +232,7 @@ public class EmitRegex {
 
         // Create the quoted regex
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/regex/RuntimeRegex", "getQuotedRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -254,7 +254,7 @@ public class EmitRegex {
 
         // Create the regex matcher
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/regex/RuntimeRegex", "getQuotedRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -285,7 +285,7 @@ public class EmitRegex {
         emitterVisitor.pushCallContext();
         // Invoke the regex matching operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/regex/RuntimeRegex", "matchRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex", "matchRegex",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

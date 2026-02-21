@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.io.DirectoryIO;
+import org.perlonjava.runtime.io.DirectoryIO;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;

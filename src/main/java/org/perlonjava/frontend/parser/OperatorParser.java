@@ -1,11 +1,11 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
