@@ -35,7 +35,7 @@ Note:
 <span class="metric">A Perl compiler and runtime for the JVM</span>
 
 - Compiles Perl scripts to **native JVM bytecode**
-- Not just wrapping an interpreter
+- Not just wrapping a Perl compiler
 - Maintains Perl semantics
 - Gains JVM benefits
 
@@ -128,7 +128,7 @@ Note:
 
 - Latest Perl class features
 
-- Dual execution backend (compiler + interpreter)
+- Dual execution backend (JVM compiler + Internal VM)
 
 - System V IPC and socket operations
 
@@ -209,26 +209,31 @@ Note:
 ## Background: Compilation Approaches
 
 **Perl 5 (traditional):**
-```
-Perl Source → Compiler → Perl Bytecode → Bytecode Interpreter
-```
+
+- Builds OP tree
+- Performs peephole optimizations
+- Then runs
+
+There isn’t a super clean phase separation in p5 internals — it’s more organically evolved.
 
 **PerlOnJava (dual backend approach):**
 ```
 Perl Source → Compiler → JVM Bytecode → JVM Execution (JVM backend)
-                      ↘ Custom Bytecode → Bytecode Interpreter (Interpreter backend)
+                      ↘ Custom Bytecode → Bytecode engine (Internal VM)
 ```
 
-**Code generation targets (backends):**
-- **JVM backend**: Generates native JVM bytecode using ASM library
-- **Interpreter backend**: Custom bytecode format, compact and no size limits
+A multi-backend compiler with a shared frontend + shared runtime.
+
+**Code generation targets (backends): two execution engines**
+- **JVM backend**: Generates native JVM bytecode using ASM library (primary)
+- **Internal VM**: A size-optimized execution backend specialized for dynamic code. Compact and no size limits (fallback + fast eval path)
 
 Note:
 - Backend = code generation target
 - Perl 5 compiles to internal bytecode, then interprets it
 - PerlOnJava can generate either JVM bytecode or custom bytecode
 - JVM backend: optimized by JVM JIT compiler, faster
-- Interpreter backend: more flexible, no size limits, handles complex control flow
+- Internal VM: more flexible, no size limits, handles complex control flow
 - Both approaches use bytecode interpreters at some level
 
 ---
@@ -240,7 +245,7 @@ Note:
    ↓
 2. Parser (AST Construction)
    ↓
-3. StringParser (Domain-Specific Languages)
+2.1. StringParser (Domain-Specific Languages)
    ↓
 4. EmitterVisitor (Bytecode Generation)
    ↓
@@ -249,7 +254,6 @@ Note:
 
 Note:
 - True compiler architecture
-- Not an interpreter
 - Perl becomes indistinguishable from Java bytecode
 
 ---
@@ -395,7 +399,7 @@ Note:
 
 **Perl:** `my $x = 10; say $x`
 
-**Generated interpreter bytecode:**
+**Generated Internal VM bytecode:**
 ```
 Registers: 9
 Bytecode length: 26 shorts
@@ -556,7 +560,7 @@ Note:
 
 Note:
 - Custom bytecode format
-- Switch-based interpreter VM
+- Switch-based bytecode VM
 - Register-based crucial for Perl's control flow
 - ~200 opcodes covering all Perl operations
 - Stack-based would corrupt on non-local jumps
@@ -603,15 +607,15 @@ Note:
    - Convert JVM bytecode → Dalvik bytecode
    - Run Perl on Android devices
 
-**Key advantage: Interpreter backend enables portability**
+**Key advantage: Internal VM enables portability**
 - Custom bytecode format is platform-independent
 - Can be ported to any JVM derivative
 - Compiler mode ties us to standard JVM bytecode
 
 Note:
-- Interpreter mode is the key to multi-platform support
+- Internal VM mode is the key to multi-platform support
 - GraalVM and DEX support planned for future releases
-- Interpreter's custom bytecode can run anywhere
+- Internal VM's custom bytecode can run anywhere
 - This is why dual backend matters beyond just performance
 
 ---
@@ -799,7 +803,7 @@ Note:
 **Key:** Perl semantics on JVM objects
 
 Note:
-- All shared between compiler and interpreter
+- All shared between JVM compiler and Internal VM
 - Context tracking propagated through operations
 - Auto-vivification implemented consistently
 - Proper truthiness, string/number coercion
@@ -1035,7 +1039,7 @@ Note:
 -  System V IPC, socket operations
 
 **Active Development:**
-- Interpreter performance refinement
+- Internal VM performance refinement
 - Automatic fallback for large methods
 - Optimizing eval STRING compilation
 - 260,000+ tests passing
