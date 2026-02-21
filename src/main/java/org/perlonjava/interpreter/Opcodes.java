@@ -963,9 +963,28 @@ public class Opcodes {
     public static final short TELLDIR = LASTOP + 41;
     public static final short CHDIR = LASTOP + 42;
     public static final short EXIT = LASTOP + 43;
-
     // GENERATED_OPCODES_END
 
+    // Miscellaneous operators with context-sensitive signatures (284-301)
+    // These use absolute numbers to avoid shifting generated opcodes
+    public static final short CHMOD = 284;
+    public static final short UNLINK = 285;
+    public static final short UTIME = 286;
+    public static final short RENAME = 287;
+    public static final short LINK = 288;
+    public static final short READLINK = 289;
+    public static final short UMASK = 290;
+    public static final short GETC = 291;
+    public static final short FILENO = 292;
+    public static final short QX = 293;  // backticks
+    public static final short SYSTEM = 294;
+    public static final short CALLER = 295;
+    public static final short EACH = 296;
+    public static final short PACK = 297;
+    public static final short VEC = 298;
+    public static final short LOCALTIME = 299;
+    public static final short GMTIME = 300;
+    public static final short CRYPT = 301;
 
     private Opcodes() {} // Utility class - no instantiation
 }

@@ -1788,6 +1788,7 @@ public class BytecodeInterpreter {
                     case Opcodes.EXIT:
                         pc = ScalarUnaryOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
+                    // GENERATED_HANDLERS_END
 
                     case Opcodes.TR_TRANSLITERATE:
                         pc = SlowOpcodeHandler.executeTransliterate(bytecode, pc, registers);
@@ -1932,7 +1933,27 @@ public class BytecodeInterpreter {
                         break;
                     }
 
-                    // GENERATED_HANDLERS_END
+                    // Miscellaneous operators with context-sensitive signatures
+                    case Opcodes.CHMOD:
+                    case Opcodes.UNLINK:
+                    case Opcodes.UTIME:
+                    case Opcodes.RENAME:
+                    case Opcodes.LINK:
+                    case Opcodes.READLINK:
+                    case Opcodes.UMASK:
+                    case Opcodes.GETC:
+                    case Opcodes.FILENO:
+                    case Opcodes.QX:
+                    case Opcodes.SYSTEM:
+                    case Opcodes.CALLER:
+                    case Opcodes.EACH:
+                    case Opcodes.PACK:
+                    case Opcodes.VEC:
+                    case Opcodes.LOCALTIME:
+                    case Opcodes.GMTIME:
+                    case Opcodes.CRYPT:
+                        pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
+                        break;
 
                     default:
                         // Unknown opcode
