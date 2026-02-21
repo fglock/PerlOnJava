@@ -1,7 +1,7 @@
 [versions]
 asm = "9.9.1"
 commons-csv = "1.14.1"
-fastjson2 = "2.0.60"
+fastjson2 = "2.0.61"
 icu4j = "78.2"
 jna = "5.18.1"
 junit-jupiter = "6.1.0-M1"
@@ -25,4 +25,4 @@ tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 [plugins]
 ospackage = "com.netflix.nebula.ospackage:12.2.0"
 shadow = "com.gradleup.shadow:9.3.1"
-version-catalog-update = "nl.littlerobots.version-catalog-update:1.0.1"
+version-catalog-update = "nl.littlerobots.version-catalog-update:1.1.0"
