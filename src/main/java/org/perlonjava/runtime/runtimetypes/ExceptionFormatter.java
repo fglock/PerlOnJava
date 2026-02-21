@@ -86,7 +86,7 @@ public class ExceptionFormatter {
                     lastFileName = frame.code.sourceName != null ? frame.code.sourceName : "";
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||
-                    element.getClassName().contains("org.perlonjava.perlmodule")) {
+                    element.getClassName().contains("org.perlonjava.runtime.perlmodule")) {
                 // parseStackTraceElement returns null if location already seen in a different class
                 var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
                 if (loc != null) {

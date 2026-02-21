@@ -3,18 +3,18 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.symbols.ScopedSymbolTable;
-import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.Arrays;
 import java.util.Map;
 
-import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 
 /**
  * The EmitSubroutine class is responsible for handling subroutine-related operations
@@ -263,7 +263,7 @@ public class EmitSubroutine {
             // This is &$var() or $var->() syntax
             isScalarVariable = true;
             scalarOpNode = operatorNode;
-        } else if (node.left instanceof BlockNode blockNode && 
+        } else if (node.left instanceof BlockNode blockNode &&
                    blockNode.elements.size() == 1 &&
                    blockNode.elements.get(0) instanceof OperatorNode opNode &&
                    opNode.operator.equals("$")) {

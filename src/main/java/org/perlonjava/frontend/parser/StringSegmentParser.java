@@ -1,10 +1,12 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.regex.CaptureNameEncoder;
+import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
@@ -755,7 +757,7 @@ public abstract class StringSegmentParser {
                     captureName = String.format("cb%03du", codeBlockCaptureCounter++);
                 } else {
                     // Use CaptureNameEncoder to encode the value in the capture name
-                    captureName = org.perlonjava.regex.CaptureNameEncoder.encodeCodeBlockValue(
+                    captureName = CaptureNameEncoder.encodeCodeBlockValue(
                             codeBlockCaptureCounter++, constantValue
                     );
                 }
@@ -1213,7 +1215,7 @@ public abstract class StringSegmentParser {
                 // This handles U+XXXX format, official Unicode names, and Perl charnames aliases
                 int codePoint;
                 try {
-                    codePoint = org.perlonjava.regex.UnicodeResolver.getCodePointFromName(name);
+                    codePoint = UnicodeResolver.getCodePointFromName(name);
                     var result = new String(Character.toChars(codePoint));
                     appendToCurrentSegment(result);
                 } catch (IllegalArgumentException e) {

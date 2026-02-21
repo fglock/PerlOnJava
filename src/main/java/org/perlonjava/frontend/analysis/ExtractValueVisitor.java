@@ -1,6 +1,6 @@
 package org.perlonjava.frontend.analysis;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;

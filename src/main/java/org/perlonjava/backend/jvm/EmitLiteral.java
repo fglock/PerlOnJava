@@ -2,13 +2,13 @@ package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.perlmodule.Strict.HINT_STRICT_SUBS;
-import static org.perlonjava.perlmodule.Strict.HINT_UTF8;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_SUBS;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.isInteger;
 
 /**

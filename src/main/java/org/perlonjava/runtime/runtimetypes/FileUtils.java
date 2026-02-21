@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.CompilerOptions;
+import org.perlonjava.app.cli.CompilerOptions;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

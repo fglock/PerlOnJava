@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 
 /**
  * TiedVariableBase provides a common base class for all tied variable types in Perl.

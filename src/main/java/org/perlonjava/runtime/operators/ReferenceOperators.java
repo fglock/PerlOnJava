@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.perlmodule.Universal;
+import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarEmptyString;

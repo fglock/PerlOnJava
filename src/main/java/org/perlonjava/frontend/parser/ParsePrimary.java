@@ -1,6 +1,6 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
@@ -8,7 +8,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
@@ -487,7 +487,7 @@ public class ParsePrimary {
         }
 
         // Check for ambiguous cases like -C- where we have a unary minus without operand
-        if (operand instanceof org.perlonjava.astnode.OperatorNode opNode &&
+        if (operand instanceof OperatorNode opNode &&
                 "unaryMinus".equals(opNode.operator) && opNode.operand == null) {
             // This is an ambiguous case like -C- 
             // Use the saved line number from before peek() side effects

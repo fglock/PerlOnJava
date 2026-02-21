@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;

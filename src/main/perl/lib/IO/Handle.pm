@@ -43,7 +43,7 @@ use constant _IONBF => 2;  # Unbuffered
 # Try to load Java backend if available
 my $has_java_backend = 0;
 eval {
-    require 'org.perlonjava.perlmodule.IOHandleModule';
+    require 'org.perlonjava.runtime.perlmodule.IOHandleModule';
     IOHandleInit();
     $has_java_backend = 1;
 };

@@ -1,7 +1,7 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
 import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.perlonjava.perlmodule.Strict.HINT_UTF8;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
 
 /*

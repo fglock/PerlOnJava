@@ -1,11 +1,12 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import java.util.*;
 
@@ -345,7 +346,7 @@ public class BytecodeCompiler implements Visitor {
         char c = name.charAt(0);
         // Allow if character > 127 (Latin-1) and 'use utf8' is NOT enabled
         return c > 127 && emitterContext != null && emitterContext.symbolTable != null
-                && !emitterContext.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_UTF8);
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
     }
 
     /**
@@ -362,7 +363,7 @@ public class BytecodeCompiler implements Visitor {
             return false;  // No context, allow access
         }
 
-        boolean strictEnabled = emitterContext.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS);
+        boolean strictEnabled = emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS);
         if (!strictEnabled) {
             return false;  // Strict vars not enabled, allow access
         }
@@ -814,7 +815,7 @@ public class BytecodeCompiler implements Visitor {
                 if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
                     // This is a bareword (no sigil)
                     if (emitterContext != null && emitterContext.symbolTable != null &&
-                        emitterContext.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_STRICT_SUBS)) {
+                        emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
                     }
                     // Not strict - treat bareword as string literal

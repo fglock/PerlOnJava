@@ -153,7 +153,7 @@
                 <configuration>
                     <transformers>
                         <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                            <mainClass>org.perlonjava.Main</mainClass>
+                            <mainClass>org.perlonjava.app.cli.Main</mainClass>
                         </transformer>
                     </transformers>
                     <filters>

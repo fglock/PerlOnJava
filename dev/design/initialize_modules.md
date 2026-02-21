@@ -10,7 +10,7 @@ Automatically Initialize Modules: Iterate over the discovered classes and invoke
 
 ```
 // src/main/java/org/perlonjava/perlmodule/InitializableModule.java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 public interface InitializableModule {
     void initialize();
@@ -19,7 +19,7 @@ public interface InitializableModule {
 
 
 ```
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -44,7 +44,7 @@ public class ScalarUtil extends PerlModuleBase implements InitializableModule {
 ```
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.perlmodule.InitializableModule;
+import org.perlonjava.runtime.perlmodule.InitializableModule;
 
 import java.util.Set;
 import org.reflections.Reflections;
@@ -55,7 +55,7 @@ public class GlobalContext {
         // Existing initialization code...
 
         // Use reflection to find and initialize all modules
-        Reflections reflections = new Reflections("org.perlonjava.perlmodule");
+        Reflections reflections = new Reflections("org.perlonjava.runtime.perlmodule");
         Set<Class<? extends InitializableModule>> modules = reflections.getSubTypesOf(InitializableModule.class);
 
         for (Class<? extends InitializableModule> moduleClass : modules) {
@@ -96,7 +96,7 @@ implementation 'org.reflections:reflections:0.10.2'
 
 ```
 // src/main/java/org/perlonjava/perlmodule/InitializableModule.java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 public interface InitializableModule {
     void initialize();
@@ -106,7 +106,7 @@ public interface InitializableModule {
 
 
 ```
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -125,9 +125,9 @@ public class ScalarUtil extends PerlModuleBase implements InitializableModule {
 ```
 
 
-META-INF/services/org.perlonjava.perlmodule.InitializableModule
+META-INF/services/org.perlonjava.runtime.perlmodule.InitializableModule
 ```
-org.perlonjava.perlmodule.ScalarUtil
+org.perlonjava.runtime.perlmodule.ScalarUtil
 // Add other module implementations here
 ```
 
@@ -135,7 +135,7 @@ org.perlonjava.perlmodule.ScalarUtil
 ```
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.perlmodule.InitializableModule;
+import org.perlonjava.runtime.perlmodule.InitializableModule;
 
 import java.util.ServiceLoader;
 
@@ -171,7 +171,7 @@ public class GlobalContext {
 // src/main/java/org/perlonjava/runtime/ModuleRegistry.java
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.perlmodule.InitializableModule;
+import org.perlonjava.runtime.perlmodule.InitializableModule;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -200,7 +200,7 @@ public class ModuleRegistry {
 
 ```
 // src/main/java/org/perlonjava/perlmodule/ScalarUtil.java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.ModuleRegistry;
 

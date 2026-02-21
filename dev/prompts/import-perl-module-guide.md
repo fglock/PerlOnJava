@@ -34,7 +34,7 @@ implementation 'group.id:artifact-id:version'           // Description
 Create `src/main/java/org/perlonjava/perlmodule/ModuleName.java`:
 
 ```java
-package org.perlonjava.perlmodule;
+package org.perlonjava.runtime.perlmodule;
 
 // Import Java library classes
 

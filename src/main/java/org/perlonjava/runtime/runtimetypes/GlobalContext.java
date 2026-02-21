@@ -1,10 +1,11 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.CompilerOptions;
-import org.perlonjava.Configuration;
-import org.perlonjava.mro.InheritanceResolver;
-import org.perlonjava.perlmodule.*;
-import org.perlonjava.regex.RuntimeRegex;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.core.Configuration;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.perlmodule.*;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,7 @@ public class GlobalContext {
     public static void initializeGlobals(CompilerOptions compilerOptions) {
 
         // Clear package versions from previous runs
-        org.perlonjava.symbols.ScopedSymbolTable.clearPackageVersions();
+        ScopedSymbolTable.clearPackageVersions();
 
         // Initialize regex state and special variables
         RuntimeRegex.initialize();

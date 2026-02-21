@@ -13,13 +13,14 @@ import org.objectweb.asm.tree.analysis.SourceValue;
 import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
-import org.perlonjava.astnode.*;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.DepthFirstLiteralRefactorVisitor;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
+import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -1421,8 +1422,8 @@ public class EmitterMethodCreator implements Opcodes {
             ));
             
             // Add refactoring information if available
-            if (ast instanceof org.perlonjava.astnode.BlockNode) {
-                org.perlonjava.astnode.BlockNode blockNode = (org.perlonjava.astnode.BlockNode) ast;
+            if (ast instanceof BlockNode) {
+                BlockNode blockNode = (BlockNode) ast;
                 Object estimatedSize = blockNode.getAnnotation("estimatedBytecodeSize");
                 Object skipReason = blockNode.getAnnotation("refactorSkipReason");
                 

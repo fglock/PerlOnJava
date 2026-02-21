@@ -4,14 +4,14 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.perlonjava.CompilerOptions;
-import org.perlonjava.astnode.EvalOperatorNode;
-import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.frontend.astnode.EvalOperatorNode;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 /**
  * EmitEval handles the bytecode generation for Perl's eval operator.

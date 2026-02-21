@@ -6,12 +6,13 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.perlonjava.io.StandardIO;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

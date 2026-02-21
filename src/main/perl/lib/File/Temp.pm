@@ -34,7 +34,7 @@ my $TOP_SYSTEM_UID = 10;
 
 # Load Java backend if available
 eval {
-    require 'org.perlonjava.perlmodule.FileTemp';
+    require 'org.perlonjava.runtime.perlmodule.FileTemp';
     initialize();
 };
 

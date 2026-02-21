@@ -1,7 +1,7 @@
 package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;

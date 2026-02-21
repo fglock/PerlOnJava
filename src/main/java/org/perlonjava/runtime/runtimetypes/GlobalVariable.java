@@ -2,7 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.jvm.CustomClassLoader;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
-import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.frontend.parser.ParserTables;
 
 import java.util.HashMap;

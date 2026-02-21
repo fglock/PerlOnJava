@@ -1,8 +1,8 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.CompilerOptions;
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
@@ -10,10 +10,10 @@ import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.frontend.parser.Parser;
-import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
-import org.perlonjava.symbols.ScopedSymbolTable;
-import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 

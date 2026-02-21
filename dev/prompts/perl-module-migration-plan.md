@@ -156,7 +156,7 @@ Categorize by priority:
 
 2. **Create Java implementation:**
    ```java
-   package org.perlonjava.perlmodule;
+   package org.perlonjava.runtime.perlmodule;
    
    public class ModuleName extends PerlModuleBase {
        public static void initialize() {

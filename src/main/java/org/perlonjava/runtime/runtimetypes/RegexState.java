@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.regex.Matcher;
 

@@ -2,7 +2,7 @@ package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.Node;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 
 /**

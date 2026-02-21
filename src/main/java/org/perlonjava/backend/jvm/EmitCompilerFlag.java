@@ -1,7 +1,7 @@
 package org.perlonjava.backend.jvm;
 
-import org.perlonjava.astnode.CompilerFlagNode;
-import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.frontend.astnode.CompilerFlagNode;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 public class EmitCompilerFlag {
     public static void emitCompilerFlag(EmitterContext ctx, CompilerFlagNode node) {

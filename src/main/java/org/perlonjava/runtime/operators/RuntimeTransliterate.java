@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -405,7 +406,7 @@ public class RuntimeTransliterate {
 
                             // Try to resolve the Unicode character name
                             try {
-                                int codePoint = org.perlonjava.regex.UnicodeResolver.getCodePointFromName(content);
+                                int codePoint = UnicodeResolver.getCodePointFromName(content);
                                 result.add(codePoint);
                                 return closePos - pos + 1;
                             } catch (IllegalArgumentException e) {

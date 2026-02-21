@@ -1,7 +1,7 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.StringNode;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.StringNode;
 
 /**
  * The {@code StringSingleQuoted} class provides functionality to parse strings

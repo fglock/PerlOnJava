@@ -1,9 +1,9 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.CompilerOptions;
-import org.perlonjava.Configuration;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,7 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static org.perlonjava.perlmodule.Feature.featureManager;
+import static org.perlonjava.runtime.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;

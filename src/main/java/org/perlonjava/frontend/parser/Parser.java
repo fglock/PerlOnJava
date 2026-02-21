@@ -1,8 +1,8 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.FormatNode;
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.FormatNode;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;

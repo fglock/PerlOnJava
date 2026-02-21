@@ -5,9 +5,9 @@ import com.sun.jna.Native;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinNT;
-import org.perlonjava.nativ.NativeUtils;
-import org.perlonjava.nativ.PosixLibrary;
-import org.perlonjava.regex.RuntimeRegex;
+import org.perlonjava.runtime.nativ.NativeUtils;
+import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;

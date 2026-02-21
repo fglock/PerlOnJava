@@ -1,8 +1,9 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
@@ -502,7 +503,7 @@ public class Variable {
         if (peeked.type == LexerTokenType.IDENTIFIER) {
             String subName = peeked.text;
             String lexicalKey = "&" + subName;
-            org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+            SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
             
             if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
                 // Check if this is an "our sub" - if so, replace with fully qualified name

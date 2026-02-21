@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.regex.RuntimeRegex;
- import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.runtime.regex.RuntimeRegex;
+ import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.AbstractMap;
 import java.util.HashSet;
