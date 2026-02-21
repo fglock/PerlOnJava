@@ -37,7 +37,8 @@ public class Operator {
         // chmod MODE, LIST
 
         if (runtimeList.size() < 2) {
-            throw new PerlCompilerException("Not enough arguments for chmod");
+            // Not enough arguments - return 0 (compatible with Perl behavior)
+            return new RuntimeScalar(0);
         }
 
         int mode = runtimeList.elements.getFirst().scalar().getInt();
