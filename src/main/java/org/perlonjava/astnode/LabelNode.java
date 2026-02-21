@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.frontend.analysis.Visitor;
 
 public class LabelNode extends AbstractNode {
     public final String label;

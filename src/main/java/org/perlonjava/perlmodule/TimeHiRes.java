@@ -1,10 +1,10 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.MathOperators;
-import org.perlonjava.operators.Time;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.operators.MathOperators;
+import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.time.Instant;
 

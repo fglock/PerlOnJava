@@ -1,8 +1,8 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeIO;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -14,8 +14,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
 
 /**
  * The StandardIO class implements the IOHandle interface and provides functionality for

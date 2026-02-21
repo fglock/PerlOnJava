@@ -1,7 +1,7 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -9,10 +9,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.handleIOException;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 /**
  * A pipe input channel that reads raw octets from an external program.

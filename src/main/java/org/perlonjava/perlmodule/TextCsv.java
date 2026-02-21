@@ -1,14 +1,14 @@
 package org.perlonjava.perlmodule;
 
 import org.apache.commons.csv.*;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.JAVAOBJECT;
 
 /**
  * Text::CSV module implementation for PerlOnJava.

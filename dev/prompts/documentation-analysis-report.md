@@ -101,7 +101,7 @@ After a deep dive into the pack/unpack implementation to fix critical bugs (Math
  *   <li>x format skips characters in char mode, bytes in byte mode</li>
  * </ul>
  * 
- * @see org.perlonjava.operators.Unpack
+ * @see org.perlonjava.runtime.operators.Unpack
  * @see UnpackGroupProcessor
  */
 ```
@@ -198,12 +198,13 @@ return result.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1).
 **Status:** ⚠️ Inconsistent with calculatePackedSize
 
 **User's recent change removed:**
+
 ```java
-case 'U', 'W' -> {
-    // Unicode formats - use a value > 255 to ensure UTF-8 encoding is calculated
-    // Use 0x1FFC (8188) which requires 3 bytes in UTF-8 (e1 9f bc)
-    args.add(new org.perlonjava.runtime.RuntimeScalar(0x1FFC));
-}
+case'U','W'->{
+        // Unicode formats - use a value > 255 to ensure UTF-8 encoding is calculated
+        // Use 0x1FFC (8188) which requires 3 bytes in UTF-8 (e1 9f bc)
+        args.add(new org.perlonjava.runtime.runtimetypes.RuntimeScalar(0x1FFC));
+        }
 ```
 
 **Why was this here?** To ensure `calculatePackedSize` returned the correct UTF-8 byte length. But now it's gone, so `calculatePackedSize` will use default dummy values and get wrong byte counts for W/U formats.

@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.PrintVisitor;
+import org.perlonjava.frontend.analysis.PrintVisitor;
 
 import java.util.HashMap;
 import java.util.Map;

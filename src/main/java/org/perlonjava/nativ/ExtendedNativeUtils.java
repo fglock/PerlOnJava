@@ -1,14 +1,14 @@
 package org.perlonjava.nativ;
 
-import org.perlonjava.parser.StringParser;
-import org.perlonjava.runtime.*;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
 /**
  * Extended native operations for missing Perl operators

@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.frontend.analysis.Visitor;
 
 /**
  * The For1Node class represents a node in the abstract syntax tree (AST) that holds a "for" loop statement.

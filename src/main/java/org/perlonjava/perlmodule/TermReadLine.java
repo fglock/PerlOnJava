@@ -1,7 +1,7 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ReferenceOperators;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -9,8 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
  * The TermReadLine class provides functionalities similar to the Perl Term::ReadLine module.

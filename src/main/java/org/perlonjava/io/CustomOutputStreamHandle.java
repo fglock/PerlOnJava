@@ -1,13 +1,13 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 /**
  * An IOHandle implementation that wraps a Java OutputStream for Perl-compatible output operations.

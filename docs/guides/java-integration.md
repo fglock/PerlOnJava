@@ -84,7 +84,7 @@ For more control, you can use PerlOnJava's internal API directly.
 ### Compiling Perl Code
 
 ```java
-import org.perlonjava.runtime.PerlCompiler;
+import org.perlonjava.runtime.runtimetypes.PerlCompiler;
 
 public class DirectExample {
     public static void main(String[] args) {

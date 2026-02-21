@@ -2,7 +2,7 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.mro.InheritanceResolver.MROAlgorithm;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;
 
@@ -59,21 +59,21 @@ public class Mro extends PerlModuleBase {
      * Implements next::method functionality - wrapper for NextMethod.nextMethod
      */
     public static RuntimeList nextMethod(RuntimeArray args, int ctx) {
-        return org.perlonjava.runtime.NextMethod.nextMethod(args, ctx);
+        return NextMethod.nextMethod(args, ctx);
     }
 
     /**
      * Implements next::can functionality - wrapper for NextMethod.nextCan
      */
     public static RuntimeList nextCan(RuntimeArray args, int ctx) {
-        return org.perlonjava.runtime.NextMethod.nextCan(args, ctx);
+        return NextMethod.nextCan(args, ctx);
     }
 
     /**
      * Implements maybe::next::method functionality - wrapper for NextMethod.maybeNextMethod
      */
     public static RuntimeList maybeNextMethod(RuntimeArray args, int ctx) {
-        return org.perlonjava.runtime.NextMethod.maybeNextMethod(args, ctx);
+        return NextMethod.maybeNextMethod(args, ctx);
     }
 
     /**

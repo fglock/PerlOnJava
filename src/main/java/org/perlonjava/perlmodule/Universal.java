@@ -1,8 +1,8 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.mro.InheritanceResolver;
-import org.perlonjava.operators.VersionHelper;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.VersionHelper;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -12,9 +12,9 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
  * The Universal class provides methods that are universally available to all objects in a Perl-like environment.

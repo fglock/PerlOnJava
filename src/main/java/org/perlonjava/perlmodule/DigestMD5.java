@@ -1,7 +1,7 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.parser.StringParser;
-import org.perlonjava.runtime.*;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -9,8 +9,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 import static org.perlonjava.perlmodule.DigestSHA.bitStringToBytes;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.JAVAOBJECT;
 
 /**
  * Digest::MD5 module implementation for PerlOnJava.

@@ -2,9 +2,9 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.io.IOLayer;
 import org.perlonjava.io.LayeredIOHandle;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 /**
  * The Re class provides functionalities similar to the Perl re module.

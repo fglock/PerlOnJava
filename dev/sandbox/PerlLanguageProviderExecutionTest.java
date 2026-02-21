@@ -3,8 +3,8 @@ package org.perlonjava;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.perlonjava.runtime.RuntimeIO;
-import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;

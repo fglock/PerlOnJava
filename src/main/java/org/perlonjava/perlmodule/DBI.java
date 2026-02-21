@@ -1,14 +1,14 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ReferenceOperators;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.sql.*;
 import java.util.Enumeration;
 import java.util.Properties;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
  * DBI (Database Independent Interface) module implementation for PerlonJava.

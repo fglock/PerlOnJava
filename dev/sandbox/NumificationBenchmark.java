@@ -1,6 +1,6 @@
 // package org.perlonjava.benchmark;
 
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Random;
 import java.util.ArrayList;

@@ -1,10 +1,10 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
-import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
  * The IntegerPragma class provides functionalities similar to the Perl integer module.

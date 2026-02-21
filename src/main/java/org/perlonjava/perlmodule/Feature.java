@@ -1,10 +1,10 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
-import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
-import static org.perlonjava.runtime.FeatureFlags.getFeatureList;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.runtime.runtimetypes.FeatureFlags.getFeatureList;
 
 /**
  * The FeatureFlags class provides functionalities similar to the Perl feature module.

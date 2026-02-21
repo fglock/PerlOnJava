@@ -1,8 +1,8 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.frontend.analysis.Visitor;
 
-import static org.perlonjava.runtime.ScalarUtils.printable;
+import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
 
 /**
  * The StringNode class represents a node in the abstract syntax tree (AST) that holds

@@ -1,8 +1,8 @@
 package org.perlonjava.regex;
 
 import com.ibm.icu.lang.UCharacter;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 
 import java.util.LinkedHashSet;
 import java.util.Map;

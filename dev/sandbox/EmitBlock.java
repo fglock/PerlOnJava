@@ -6,8 +6,8 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
 import java.util.List;

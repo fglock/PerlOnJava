@@ -1,6 +1,6 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,8 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeIO.handleIOException;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
  * The SocketIO class provides a simplified interface for socket operations,

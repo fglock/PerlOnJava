@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ModuleOperators;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalArray;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalArray;
 
 /**
  * The Base class is responsible for establishing ISA relationships with base classes at compile time.

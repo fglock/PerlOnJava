@@ -1,7 +1,7 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 /**
  * Central configuration class for the Perl-to-Java compiler.

@@ -2,11 +2,10 @@ package org.perlonjava.perlmodule;
 
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
-import com.ibm.icu.text.UnicodeSet;
-import org.perlonjava.runtime.*;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 /**
  * Unicode::UCD module implementation using ICU4J.

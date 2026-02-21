@@ -16,7 +16,7 @@ Static analysis can only handle straightforward cases - it can't promise to hand
 
 # Local
 
-org.perlonjava.codegen.Local.localTeardown() can run a method on a variable when it leaves the scope.
+org.perlonjava.backend.jvm.Local.localTeardown() can run a method on a variable when it leaves the scope.
 
 # Try-with-Resources
 

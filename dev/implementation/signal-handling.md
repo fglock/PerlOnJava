@@ -63,7 +63,7 @@ public static void checkPendingSignals() {
 ```java
 public static void emitSignalCheck(MethodVisitor mv) {
     mv.visitMethodInsn(INVOKESTATIC,
-        "org/perlonjava/runtime/PerlSignalQueue",
+        "org/perlonjava/runtimetypes/PerlSignalQueue",
         "checkPendingSignals",
         "()V",
         false);
@@ -379,7 +379,7 @@ public static void checkPendingSignals() {
 ### Check bytecode generation
 ```bash
 ./jperl --disassemble -e 'for(;;) {}' | grep checkPendingSignals
-# Should show: INVOKESTATIC org/perlonjava/runtime/PerlSignalQueue.checkPendingSignals
+# Should show: INVOKESTATIC org/perlonjava/runtimetypes/PerlSignalQueue.checkPendingSignals
 ```
 
 ### Test alarm timing

@@ -1,11 +1,11 @@
-package org.perlonjava.runtime;
+package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Stack;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 
 /**
  * The RuntimeArray class simulates Perl arrays that are autovivified by dereferencing an undefined scalar.

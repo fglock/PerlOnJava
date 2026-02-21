@@ -382,7 +382,7 @@ JPERL_EVAL_USE_INTERPRETER=1 ./jperl op/bop.t # Interpreter mode
 
 # Verify tableswitch preserved
 javap -c -classpath build/classes/java/main \
-  org.perlonjava.interpreter.BytecodeInterpreter | grep -A 5 "switch"
+  org.perlonjava.backend.bytecode.BytecodeInterpreter | grep -A 5 "switch"
 ```
 
 **Must see `tableswitch`, not `lookupswitch`!**

@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 
 public class DataDumper extends PerlModuleBase {
 

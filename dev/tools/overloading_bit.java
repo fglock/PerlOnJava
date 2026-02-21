@@ -1,4 +1,4 @@
-package org.perlonjava.runtime;
+package org.perlonjava.runtime.runtimetypes;
 
 public abstract class RuntimeBase implements RuntimeDataProvider, DynamicState {
     public int blessId;

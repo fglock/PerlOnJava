@@ -36,7 +36,7 @@ We could implement a similar pattern with a lightweight loader for common cases:
 ```java:src/main/java/org/perlonjava/perlmodule/JavaXSLoader.java
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**

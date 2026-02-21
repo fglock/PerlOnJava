@@ -1,7 +1,8 @@
 package org.perlonjava.regex;
 
-import org.perlonjava.operators.WarnDie;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -14,8 +15,8 @@ import static org.perlonjava.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.regex.RegexFlags.validateModifiers;
 import static org.perlonjava.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.regex.RegexQuoteMeta.escapeQ;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
@@ -371,8 +372,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Check if alarm is active - if so, use timeout wrapper to prevent catastrophic backtracking
-        if (org.perlonjava.operators.Time.hasActiveAlarm()) {
-            int timeoutSeconds = org.perlonjava.operators.Time.getAlarmRemainingSeconds();
+        if (Time.hasActiveAlarm()) {
+            int timeoutSeconds = Time.getAlarmRemainingSeconds();
             if (timeoutSeconds > 0) {
                 return matchRegexWithTimeout(quotedRegex, string, ctx, timeoutSeconds + 1);
             }
@@ -612,7 +613,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             future.cancel(true);
             executor.shutdownNow();
             // Check for pending signals - alarm handler will fire here
-            org.perlonjava.runtime.PerlSignalQueue.checkPendingSignals();
+            PerlSignalQueue.checkPendingSignals();
             // If we get here, no alarm handler or it didn't die - return false
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();
@@ -631,7 +632,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Thread was interrupted - clean up and check signals
             future.cancel(true);
             executor.shutdownNow();
-            org.perlonjava.runtime.PerlSignalQueue.checkPendingSignals();
+            PerlSignalQueue.checkPendingSignals();
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();
             } else {

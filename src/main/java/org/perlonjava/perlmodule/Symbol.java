@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.codegen.EmitterMethodCreator;
-import org.perlonjava.runtime.*;
+import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
 /**
  * The Symbol class provides functionalities for symbol manipulation in a Perl-like environment.

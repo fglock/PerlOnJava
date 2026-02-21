@@ -17,7 +17,7 @@ The current implementation uses:
 ### 1. Define a Functional Interface
 
 ```java
-package org.perlonjava.runtime;
+package org.perlonjava.runtime.runtimetypes;
 
 @FunctionalInterface
 public interface PerlSubroutine {
@@ -36,7 +36,7 @@ public class EmitterMethodCreator implements Opcodes {
         
         // Define the class to implement PerlSubroutine
         cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, 
-                 "java/lang/Object", new String[]{"org/perlonjava/runtime/PerlSubroutine"});
+                 "java/lang/Object", new String[]{"org/perlonjava/runtimetypes/PerlSubroutine"});
         
         // ... rest of the method generation remains the same ...
         // The generated apply method already has the correct signature

@@ -1,7 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
@@ -12,8 +11,8 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
  * The {@code Toml} class provides methods for parsing and generating TOML data
@@ -193,7 +192,7 @@ public class Toml extends PerlModuleBase {
                     RuntimeScalar value = hash.get(key);
                     if (value.type == RuntimeScalarType.HASHREFERENCE) {
                         tableKeys.add(key);
-                    } else if (value.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    } else if (value.type == ARRAYREFERENCE) {
                         RuntimeArray arr = (RuntimeArray) value.value;
                         if (!arr.elements.isEmpty() && arr.elements.get(0).type == RuntimeScalarType.HASHREFERENCE) {
                             tableKeys.add(key);
@@ -218,7 +217,7 @@ public class Toml extends PerlModuleBase {
                     RuntimeScalar value = hash.get(key);
                     String newPrefix = prefix.isEmpty() ? key : prefix + "." + key;
                     
-                    if (value.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    if (value.type == ARRAYREFERENCE) {
                         RuntimeArray arr = (RuntimeArray) value.value;
                         if (!arr.elements.isEmpty() && arr.elements.get(0).type == RuntimeScalarType.HASHREFERENCE) {
                             // Array of tables

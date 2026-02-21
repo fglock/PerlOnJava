@@ -2,28 +2,27 @@ package org.perlonjava.scriptengine;
 
 import org.perlonjava.CompilerOptions;
 import org.perlonjava.astnode.Node;
-import org.perlonjava.codegen.CompiledCode;
-import org.perlonjava.codegen.EmitterContext;
-import org.perlonjava.codegen.EmitterMethodCreator;
-import org.perlonjava.codegen.JavaClassInfo;
-import org.perlonjava.interpreter.BytecodeCompiler;
-import org.perlonjava.interpreter.InterpretedCode;
-import org.perlonjava.lexer.Lexer;
-import org.perlonjava.lexer.LexerToken;
-import org.perlonjava.parser.DataSection;
-import org.perlonjava.parser.Parser;
-import org.perlonjava.parser.SpecialBlockParser;
+import org.perlonjava.backend.jvm.CompiledCode;
+import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.backend.bytecode.BytecodeCompiler;
+import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.frontend.lexer.Lexer;
+import org.perlonjava.frontend.lexer.LexerToken;
+import org.perlonjava.frontend.parser.DataSection;
+import org.perlonjava.frontend.parser.Parser;
+import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.perlmodule.Strict;
-import org.perlonjava.runtime.ErrorMessageUtil;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
-import static org.perlonjava.runtime.GlobalVariable.resetAllGlobals;
-import static org.perlonjava.runtime.SpecialBlock.*;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.resetAllGlobals;
+import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
 
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
