@@ -7,10 +7,10 @@ import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.Tlhelp32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinNT;
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeIO;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.IOException;
 import java.nio.file.Files;

@@ -663,7 +663,7 @@ Interpreter reuses **ALL** existing runtime (no duplication):
 
 1. **Global Variables** - `GlobalVariable.getGlobalScalar()`, `getGlobalArray()`, `getGlobalHash()`
 2. **Runtime Types** - `RuntimeScalar`, `RuntimeArray`, `RuntimeHash`, `RuntimeList`, `RuntimeCode`
-3. **Operators** - `org.perlonjava.operators.MathOperators`, `StringOperators`, `CompareOperators`, etc.
+3. **Operators** - `org.perlonjava.runtime.operators.MathOperators`, `StringOperators`, `CompareOperators`, etc.
 4. **Caches** - `RuntimeScalarCache.getScalarInt()`, `getScalarByteString()`
 5. **Symbol Tables** - `ScopedSymbolTable` (for lexical scopes)
 6. **Context** - `RuntimeContextType` (VOID=0, SCALAR=1, LIST=2, RUNTIME=3)

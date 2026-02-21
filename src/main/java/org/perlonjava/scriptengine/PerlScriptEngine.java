@@ -1,7 +1,7 @@
 package org.perlonjava.scriptengine;
 
 import org.perlonjava.CompilerOptions;
-import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 
 import javax.script.*;
 import java.io.Reader;

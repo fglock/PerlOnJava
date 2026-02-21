@@ -1,8 +1,8 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.LValueVisitor;
-import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.Visitor;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 /**
  * The For3Node class represents a node in the abstract syntax tree (AST) that holds a "for" loop statement.

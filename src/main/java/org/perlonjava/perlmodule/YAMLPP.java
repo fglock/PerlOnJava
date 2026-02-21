@@ -1,8 +1,8 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ReferenceOperators;
-import org.perlonjava.operators.WarnDie;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.*;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.DumpSettings;
 import org.snakeyaml.engine.v2.api.Load;
@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 
-import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
  * YAML::PP module implementation for PerlonJava.

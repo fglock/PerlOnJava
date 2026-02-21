@@ -1,6 +1,6 @@
 package org.perlonjava.mro;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;
 

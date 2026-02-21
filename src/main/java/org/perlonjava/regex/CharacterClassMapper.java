@@ -1,6 +1,6 @@
 package org.perlonjava.regex;
 
-import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.HashMap;
 import java.util.Map;

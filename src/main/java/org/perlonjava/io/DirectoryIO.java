@@ -1,9 +1,9 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.nio.file.DirectoryStream;
 import java.nio.file.Path;
@@ -11,8 +11,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
  * The {@code DirectoryIO} class provides methods for directory operations such as opening,

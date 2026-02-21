@@ -6,12 +6,12 @@ This documentation describes the actual implementation of Perl's overload system
 
 ### Core Components
 
-1. **OverloadContext** (`org.perlonjava.runtime.OverloadContext`)
+1. **OverloadContext** (`org.perlonjava.runtime.runtimetypes.OverloadContext`)
    - Helper class that manages overloading context for blessed objects
    - Handles method resolution and fallback mechanisms
    - Provides caching for performance optimization
 
-2. **Overload** (`org.perlonjava.runtime.Overload`)
+2. **Overload** (`org.perlonjava.runtime.runtimetypes.Overload`)
    - Central class implementing operator overloading logic
    - Provides methods for stringification, numification, and boolification
    - Handles fallback chains and default conversions

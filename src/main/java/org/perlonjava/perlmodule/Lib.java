@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.HashSet;
 import java.util.Set;

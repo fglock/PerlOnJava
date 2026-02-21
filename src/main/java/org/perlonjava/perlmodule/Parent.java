@@ -1,10 +1,10 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ModuleOperators;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalArray;
-import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalArray;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
 
 /**
  * The Parent class is responsible for managing inheritance in Perl-like modules.

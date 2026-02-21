@@ -1,6 +1,6 @@
 package org.perlonjava.mro;
 
-import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.*;
 

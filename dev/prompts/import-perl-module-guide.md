@@ -36,11 +36,8 @@ Create `src/main/java/org/perlonjava/perlmodule/ModuleName.java`:
 ```java
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
 // Import Java library classes
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The {@code ModuleName} class provides methods for [description]
@@ -79,14 +76,14 @@ public class ModuleName extends PerlModuleBase {
     public static RuntimeList function_name(RuntimeArray args, int ctx) {
         // Get arguments
         RuntimeScalar arg1 = args.get(0);
-        
+
         // Process using Java library
         // ...
-        
+
         // Return result - ALWAYS use .getList()
         return new RuntimeScalar(result).getList();
     }
-    
+
     /**
      * For methods returning multiple values or supporting list context
      */
@@ -324,7 +321,7 @@ public static RuntimeList parse(RuntimeArray args, int ctx) {
 }
 
 // Throw Perl exception (preferred)
-// Import: import org.perlonjava.runtime.PerlCompilerException;
+// Import: import org.perlonjava.runtime.runtimetypestypes.PerlCompilerException;
 throw new PerlCompilerException("Error message");
 
 // Alternative (less preferred)

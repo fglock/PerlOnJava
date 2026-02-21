@@ -1,9 +1,9 @@
 package org.perlonjava.mro;
 
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 
 import java.util.*;
 

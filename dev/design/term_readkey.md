@@ -85,8 +85,8 @@ Each approach has its trade-offs. The pure Java approach is simplest but limited
 ```
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ReferenceOperators;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.Console;
 import java.io.IOException;

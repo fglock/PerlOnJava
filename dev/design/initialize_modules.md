@@ -21,7 +21,7 @@ public interface InitializableModule {
 ```
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 public class ScalarUtil extends PerlModuleBase implements InitializableModule {
 
@@ -42,7 +42,7 @@ public class ScalarUtil extends PerlModuleBase implements InitializableModule {
 
 
 ```
-package org.perlonjava.runtime;
+package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.perlmodule.InitializableModule;
 
@@ -108,7 +108,7 @@ public interface InitializableModule {
 ```
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 public class ScalarUtil extends PerlModuleBase implements InitializableModule {
 
@@ -133,7 +133,7 @@ org.perlonjava.perlmodule.ScalarUtil
 
 
 ```
-package org.perlonjava.runtime;
+package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.perlmodule.InitializableModule;
 
@@ -169,7 +169,7 @@ public class GlobalContext {
 
 ```
 // src/main/java/org/perlonjava/runtime/ModuleRegistry.java
-package org.perlonjava.runtime;
+package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.perlmodule.InitializableModule;
 
@@ -202,7 +202,7 @@ public class ModuleRegistry {
 // src/main/java/org/perlonjava/perlmodule/ScalarUtil.java
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.ModuleRegistry;
+import org.perlonjava.runtime.runtimetypes.ModuleRegistry;
 
 public class ScalarUtil extends PerlModuleBase implements InitializableModule {
 

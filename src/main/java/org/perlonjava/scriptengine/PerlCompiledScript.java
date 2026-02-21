@@ -1,9 +1,9 @@
 package org.perlonjava.scriptengine;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
 import javax.script.CompiledScript;
 import javax.script.ScriptContext;

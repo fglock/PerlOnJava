@@ -175,7 +175,7 @@ The scanner uses `javap -c -private` to disassemble all compiled classes and ext
 
 # Check specific method
 javap -c -private -classpath build/classes/java/main \
-  org.perlonjava.interpreter.BytecodeInterpreter | \
+  org.perlonjava.backend.bytecode.BytecodeInterpreter | \
   grep "public static.*execute" -A 500 | tail -5
 ```
 

@@ -1,14 +1,13 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.lang.reflect.Method;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class XSLoader extends PerlModuleBase {
 

@@ -1,6 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.terminal.LinuxTerminalHandler;
 import org.perlonjava.terminal.MacOSTerminalHandler;
 import org.perlonjava.terminal.TerminalHandler;
@@ -10,8 +10,8 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-import static org.perlonjava.runtime.RuntimeScalarType.INTEGER;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.INTEGER;
 
 /**
  * The TermReadKey class provides functionalities similar to the Perl Term::ReadKey module.

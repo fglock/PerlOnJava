@@ -1,9 +1,9 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeIO;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;

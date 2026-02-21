@@ -12,7 +12,7 @@ This would be similar to how Perl's DynaLoader works but adapted for the JVM eco
 ```java:src/main/java/org/perlonjava/perlmodule/JavaDynaLoader.java
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.lang.reflect.Method;
@@ -238,7 +238,7 @@ my $connection = JavaDynaLoader::create_instance(
 ```java:src/main/java/org/perlonjava/perlmodule/JavaObjectWrapper.java
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 import java.lang.reflect.Method;
 
 public class JavaObjectWrapper {

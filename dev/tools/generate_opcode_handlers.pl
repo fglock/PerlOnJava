@@ -37,7 +37,7 @@ while ($content =~ /put\("([^"]+)",\s*"(\w+)",\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g
     next if $op_name eq 'getc';  # varargs signature: (int, RuntimeBase...)
 
     # Default descriptor for binary scalar operators
-    $descriptor //= "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;";
+    $descriptor //= "(Lorg/perlonjava/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtimetypes/RuntimeScalar;";
 
     my $class = $class_path =~ s|.*/||r;
     my $sig_type = classify_signature($descriptor);
@@ -248,8 +248,8 @@ sub generate_java_class {
 
     return qq{package org.perlonjava.interpreter;
 
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 $imports
 
 /**

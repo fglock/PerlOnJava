@@ -97,9 +97,9 @@ static void handleArrowOperator(EmitterVisitor emitterVisitor, BinaryOperatorNod
     // Get object.blessedId()
     mv.visitInsn(Opcodes.DUP);  // Duplicate object
     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-        "org/perlonjava/runtime/RuntimeScalar",
+        "org/perlonjava/runtimetypes/RuntimeScalar",
         "blessedId",
-        "(Lorg/perlonjava/runtime/RuntimeScalar;)I",
+        "(Lorg/perlonjava/runtimetypes/RuntimeScalar;)I",
         false);
     // Stack: [object, method, ..., blessId]
 

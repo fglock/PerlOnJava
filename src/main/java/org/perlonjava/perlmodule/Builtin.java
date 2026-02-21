@@ -1,12 +1,12 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
  * The Builtin class provides functionalities similar to the Perl builtin module.

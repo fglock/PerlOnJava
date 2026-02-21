@@ -1,15 +1,15 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
  * Socket module implementation providing socket-related functions

@@ -1,12 +1,12 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ReferenceOperators;
-import org.perlonjava.operators.VersionHelper;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.operators.VersionHelper;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.DOUBLE;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
 
 // TODO - create test cases
 // $ perl -E ' use version; say version->declare("v1.2.3"); say version->declare("1.2.3"); say version->declare("1.2"); say version->declare("1.2.3.4"); say version->declare("1"); say version->declare(" 1.2.4 ")->normal; say version->new(1.2); say version->new(1.2)->normal; say version->new("1.200000"); say version->new("1.2"); '

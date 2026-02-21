@@ -117,29 +117,27 @@ public static void initialize() {
 ```java
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
-
 public class HashUtil extends PerlModuleBase {
-    
-    public HashUtil() {
-        super("Hash::Util", false);  // false for XSLoader modules
-    }
-    
-    public static void initialize() {
-        HashUtil hashUtil = new HashUtil();
-        try {
-            hashUtil.registerMethod("bucket_ratio", "bucket_ratio", "\\%");
-            // Register other methods...
-        } catch (NoSuchMethodException e) {
-            System.err.println("Warning: " + e.getMessage());
-        }
-    }
-    
-    // Methods MUST return RuntimeList
-    public static RuntimeList bucket_ratio(RuntimeArray args, int ctx) {
-        // Implementation...
-        return new RuntimeScalar(result).getList();
-    }
+
+   public HashUtil() {
+      super("Hash::Util", false);  // false for XSLoader modules
+   }
+
+   public static void initialize() {
+      HashUtil hashUtil = new HashUtil();
+      try {
+         hashUtil.registerMethod("bucket_ratio", "bucket_ratio", "\\%");
+         // Register other methods...
+      } catch (NoSuchMethodException e) {
+         System.err.println("Warning: " + e.getMessage());
+      }
+   }
+
+   // Methods MUST return RuntimeList
+   public static RuntimeList bucket_ratio(RuntimeArray args, int ctx) {
+      // Implementation...
+      return new RuntimeScalar(result).getList();
+   }
 }
 ```
 

@@ -1,8 +1,8 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
  * Utility class for Scalar operations in Perl.
@@ -256,7 +256,7 @@ public class ScalarUtil extends PerlModuleBase {
         RuntimeScalar scalar = args.get(0);
         RuntimeScalar prototypeScalar = args.get(1);
 
-        if (scalar.type != RuntimeScalarType.CODE) {
+        if (scalar.type != CODE) {
             throw new IllegalArgumentException("First argument must be a CODE reference");
         }
 

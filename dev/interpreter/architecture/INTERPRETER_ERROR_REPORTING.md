@@ -7,7 +7,7 @@ When exceptions occur during interpreter execution, stack traces show JVM locati
 **Current Problem:**
 ```
 JVM Stack Trace:
-        org.perlonjava.interpreter.BytecodeInterpreter.execute at BytecodeInterpreter.java line 1191
+        org.perlonjava.backend.bytecode.BytecodeInterpreter.execute at BytecodeInterpreter.java line 1191
 ```
 
 **Goal:**
@@ -265,7 +265,7 @@ private static ArrayList<ArrayList<String>> formatThrowable(Throwable t) {
     var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
 
     for (var element : t.getStackTrace()) {
-        if (element.getClassName().equals("org.perlonjava.parser.StatementParser") &&
+        if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                 element.getMethodName().equals("parseUseDeclaration")) {
             // Existing: Artificial caller stack entry for use statements
             // ... existing code ...
@@ -273,7 +273,7 @@ private static ArrayList<ArrayList<String>> formatThrowable(Throwable t) {
                 element.getClassName().contains("org.perlonjava.perlmodule")) {
             // Existing: Compiled code frames
             // ... existing code ...
-        } else if (element.getClassName().equals("org.perlonjava.interpreter.BytecodeInterpreter") &&
+        } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
                    element.getMethodName().equals("execute")) {
             // NEW: Interpreter frame detected
             InterpreterState.InterpreterFrame frame = InterpreterState.current();

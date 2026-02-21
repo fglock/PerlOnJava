@@ -2,11 +2,11 @@ package org.perlonjava.perlmodule;
 
 import com.ibm.icu.text.CharsetDetector;
 import com.ibm.icu.text.CharsetMatch;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
-import org.perlonjava.runtime.RuntimeScalarReadOnly;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarReadOnly;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.nio.ByteBuffer;
@@ -16,9 +16,9 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
-import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
-import static org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING;
-import static org.perlonjava.runtime.RuntimeScalarType.STRING;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 
 /**
  * The Utf8 class provides functionalities similar to the Perl utf8 pragma.

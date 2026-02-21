@@ -1,10 +1,10 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.MathOperators;
-import org.perlonjava.parser.ParserTables;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.MathOperators;
+import org.perlonjava.frontend.parser.ParserTables;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
 /**
  * The Exporter class is responsible for managing the export of symbols from one Perl package to another.

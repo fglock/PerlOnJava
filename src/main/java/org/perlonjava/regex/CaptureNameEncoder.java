@@ -1,7 +1,8 @@
 package org.perlonjava.regex;
 
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 /**
  * Utility class for encoding/decoding capture group names to work around Java regex limitations.
@@ -126,7 +127,7 @@ public class CaptureNameEncoder {
 
             // Handle undef type
             if (typeIndicator == 'u') {
-                return org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+                return RuntimeScalarCache.scalarUndef;
             }
 
             // Skip "cb" prefix, 3-digit counter, and type indicator to get hex value

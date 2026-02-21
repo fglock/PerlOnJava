@@ -1,6 +1,6 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
 import java.io.File;

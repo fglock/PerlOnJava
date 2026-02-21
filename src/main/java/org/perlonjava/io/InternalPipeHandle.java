@@ -1,7 +1,7 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.IOException;
 import java.io.PipedInputStream;
@@ -9,9 +9,9 @@ import java.io.PipedOutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.handleIOException;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
  * Internal pipe handle for implementing the pipe() operator.

@@ -1,7 +1,7 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.parser.StringParser;
-import org.perlonjava.runtime.*;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -10,9 +10,9 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.JAVAOBJECT;
 
 /**
  * Digest::SHA module implementation for PerlOnJava.

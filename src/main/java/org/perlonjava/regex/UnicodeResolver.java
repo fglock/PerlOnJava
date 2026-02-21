@@ -3,7 +3,7 @@ package org.perlonjava.regex;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.HashSet;
 import java.util.Set;

@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.WarnDie;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarEmptyString;
 
 public class Carp extends PerlModuleBase {
 

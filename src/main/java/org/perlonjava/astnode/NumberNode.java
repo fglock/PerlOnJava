@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.frontend.analysis.Visitor;
 
 /**
  * The NumberNode class represents a node in the abstract syntax tree (AST) that holds

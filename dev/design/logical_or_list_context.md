@@ -170,7 +170,7 @@ endLabel:
        // LHS always scalar (for boolean test)
        node.left.accept(emitterVisitor.with(SCALAR));
        mv.visitInsn(DUP);
-       mv.visitMethodInsn(INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", 
+       mv.visitMethodInsn(INVOKEVIRTUAL, "org/perlonjava/runtimetypes/RuntimeBase", 
                           getBoolean, "()Z", false);
        mv.visitJumpInsn(compareOpcode, convertLabel);
        
@@ -183,8 +183,8 @@ endLabel:
        mv.visitLabel(convertLabel);
        if (callerContext == RuntimeContextType.LIST) {
            // Convert scalar to single-element list
-           mv.visitMethodInsn(INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-                              "scalarToList", "()Lorg/perlonjava/runtime/RuntimeList;", 
+           mv.visitMethodInsn(INVOKEVIRTUAL, "org/perlonjava/runtimetypes/RuntimeScalar",
+                              "scalarToList", "()Lorg/perlonjava/runtimetypes/RuntimeList;", 
                               false);
        }
        

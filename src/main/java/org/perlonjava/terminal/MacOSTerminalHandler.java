@@ -1,6 +1,6 @@
 package org.perlonjava.terminal;
 
-import org.perlonjava.runtime.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 
 import java.io.FileDescriptor;
 import java.io.FileInputStream;

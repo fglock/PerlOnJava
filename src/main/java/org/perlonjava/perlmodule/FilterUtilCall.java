@@ -1,8 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarZero;
 
 /**
  * Java implementation of Filter::Util::Call XS functions.

@@ -1,12 +1,12 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.ListOperators;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.operators.ListOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
  * List::Util module implementation for PerlOnJava.

@@ -436,7 +436,7 @@ To trigger `LargeBlockRefactorer`:
 1. **Parser** creates AST (in `org.perlonjava.astnode`)
 2. **Refactorer** modifies AST to avoid JVM limits (in `org.perlonjava.astrefactor`)
 3. **Emitter** converts AST to bytecode (in `org.perlonjava.codegen`)
-4. **Runtime** executes bytecode (in `org.perlonjava.runtime`)
+4. **Runtime** executes bytecode (in `org.perlonjava.runtime.runtimetypes`)
 
 Each layer doesn't need to know about the others' internals.
 

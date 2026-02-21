@@ -1,6 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 /**
  * The Strict class provides functionalities similar to the Perl strict module.

@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.WarnDie;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 public class DynaLoader extends PerlModuleBase {
 

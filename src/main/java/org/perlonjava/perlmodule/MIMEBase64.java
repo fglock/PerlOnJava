@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.parser.StringParser;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.nio.charset.StandardCharsets;
 import org.perlonjava.util.Base64Util;

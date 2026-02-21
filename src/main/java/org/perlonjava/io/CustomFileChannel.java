@@ -1,7 +1,7 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -14,10 +14,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.handleIOException;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 /**
  * A custom file channel implementation that provides Perl-compatible I/O operations.

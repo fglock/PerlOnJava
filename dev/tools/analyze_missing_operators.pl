@@ -142,7 +142,7 @@ printf "   %d via operator files, %d via runtime class methods\n", $operator_fil
 # Show breakdown by implementation type
 my $total_runtime_ops = scalar(keys %defined_operators) - scalar(@parser_handled);
 if ($total_runtime_ops > 0) {
-    printf "   %.1f%% of runtime operators have complete implementations\n\n", 
+    printf "   %.1f%% of runtime operators have complete implementations\n\n",
            (scalar(@implemented) / $total_runtime_ops * 100);
 }
 

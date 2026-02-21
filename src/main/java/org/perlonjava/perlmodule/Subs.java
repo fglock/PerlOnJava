@@ -1,7 +1,7 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.parser.ParserTables;
-import org.perlonjava.runtime.*;
+import org.perlonjava.frontend.parser.ParserTables;
+import org.perlonjava.runtime.runtimetypes.*;
 
 /**
  * The Subs class is responsible for creating variables in the current package.

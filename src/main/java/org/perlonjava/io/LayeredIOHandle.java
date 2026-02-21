@@ -1,6 +1,6 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;

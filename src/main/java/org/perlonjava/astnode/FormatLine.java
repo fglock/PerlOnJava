@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.frontend.analysis.Visitor;
 
 /**
  * Base class for different types of format template lines.
