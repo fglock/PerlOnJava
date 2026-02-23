@@ -101,25 +101,13 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException(op + " operator requires an identifier");
             }
         } else if (op.equals("say") || op.equals("print")) {
-            // say/print $x  (no explicit filehandle — use select() default)
+            // say/print $x
             if (node.operand != null) {
                 node.operand.accept(bytecodeCompiler);
-                int contentReg = bytecodeCompiler.lastResultReg;
-
-                // Emit SELECT with empty list to get the default filehandle,
-                // matching the CompileBinaryOperator path for print FILEHANDLE LIST
-                int listReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(listReg);
-                bytecodeCompiler.emit(0); // count = 0
-                int fhReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
-                bytecodeCompiler.emitReg(fhReg);
-                bytecodeCompiler.emitReg(listReg);
+                int rs = bytecodeCompiler.lastResultReg;
 
                 bytecodeCompiler.emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-                bytecodeCompiler.emitReg(contentReg);
-                bytecodeCompiler.emitReg(fhReg);
+                bytecodeCompiler.emitReg(rs);
             }
         } else if (op.equals("not") || op.equals("!")) {
             // Logical NOT operator: not $x or !$x
