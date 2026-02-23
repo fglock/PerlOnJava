@@ -1907,7 +1907,7 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.GLOB_SLOT_GET: {
-                        // Glob slot access: rd = glob.hashDerefGetNonStrict(key, "main")
+                        // Glob slot access: rd = glob.hashDerefGetNonStrict(key, pkg)
                         // Format: GLOB_SLOT_GET rd globReg keyReg
                         pc = SlowOpcodeHandler.executeGlobSlotGet(bytecode, pc, registers);
                         break;

@@ -2686,7 +2686,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Add package prefix if not present
                 if (!varName.contains("::")) {
-                    varName = "main::" + varName;
+                    varName = getCurrentPackage() + "::" + varName;
                 }
 
                 // Allocate register for glob
@@ -2729,6 +2729,16 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("\\")) {
             // Reference operator: \$x, \@x, \%x, \*x, etc.
             if (node.operand != null) {
+                // Special case: \&name — CODE is already a reference type.
+                // Emit LOAD_GLOBAL_CODE directly without CREATE_REF, matching JVM compiler.
+                if (node.operand instanceof OperatorNode operandOp
+                        && operandOp.operator.equals("&")
+                        && operandOp.operand instanceof IdentifierNode) {
+                    node.operand.accept(this);
+                    // lastResultReg already holds the CODE scalar — no wrapping needed
+                    return;
+                }
+
                 // Compile operand in LIST context to get the actual value
                 // Example: \@array should get a reference to the array itself,
                 // not its size (which would happen in SCALAR context)

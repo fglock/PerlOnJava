@@ -903,10 +903,10 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * GLOB_SLOT_GET: rd = glob.hashDerefGetNonStrict(key, "main")
+     * GLOB_SLOT_GET: rd = glob.hashDerefGetNonStrict(key, pkg)
      * Format: [GLOB_SLOT_GET] [rd] [globReg] [keyReg]
-     * Effect: Access glob slot (like *X{HASH}) using RuntimeGlob's override
-     * This ensures proper glob slot access without incorrectly dereferencing the glob as a hash
+     * Effect: Access glob slot (like *X{HASH}) using RuntimeGlob's override.
+     * Uses the runtime current package, which is correct for both regular code and eval STRING.
      */
     public static int executeGlobSlotGet(
             int[] bytecode,
@@ -920,12 +920,15 @@ public class SlowOpcodeHandler {
         RuntimeBase globBase = registers[globReg];
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
 
+        // Use runtime current package — correct for both regular code and eval STRING
+        String pkg = InterpreterState.currentPackage.get().toString();
+
         // Convert to scalar if needed
         RuntimeScalar glob = globBase.scalar();
 
         // Call hashDerefGetNonStrict which for RuntimeGlob accesses the slot directly
         // without dereferencing the glob as a hash
-        registers[rd] = glob.hashDerefGetNonStrict(key, "main");
+        registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
 
         return pc;
     }
