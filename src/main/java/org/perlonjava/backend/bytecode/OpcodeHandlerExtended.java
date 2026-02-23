@@ -713,14 +713,28 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute open operation.
-     * Format: OPEN rd ctx argsReg
+     * Format: OPEN rd ctx fhReg argsReg
+     *
+     * fhReg is the actual lvalue register for the filehandle. IOOperator.open calls
+     * fileHandle.set() on args[0], so we pass registers[fhReg] directly (not a copy
+     * from ARRAY_PUSH which would call addToArray -> new RuntimeScalar(this)).
+     * After the call, registers[fhReg] has been updated in place by set().
      */
     public static int executeOpen(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int ctx = bytecode[pc++];
+        int fhReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
         RuntimeArray argsArray = (RuntimeArray) registers[argsReg];
-        RuntimeBase[] argsVarargs = argsArray.elements.toArray(new RuntimeBase[0]);
+
+        // Build varargs with the actual fh lvalue as args[0], then the rest
+        RuntimeBase fhLvalue = registers[fhReg];
+        RuntimeBase[] argsVarargs = new RuntimeBase[argsArray.elements.size() + 1];
+        argsVarargs[0] = fhLvalue;
+        for (int i = 0; i < argsArray.elements.size(); i++) {
+            argsVarargs[i + 1] = argsArray.elements.get(i);
+        }
+
         registers[rd] = IOOperator.open(ctx, argsVarargs);
         return pc;
     }
