@@ -1383,9 +1383,20 @@ public class BytecodeInterpreter {
                         RuntimeBase value = registers[rs];
 
                         if (value instanceof RuntimeScalar) {
-                            registers[rd] = ((RuntimeScalar) value).scalarDeref();
+                            RuntimeScalar sv = (RuntimeScalar) value;
+                            // Call scalarDeref() for scalar refs, undef, non-ref types (strings, globs, etc.)
+                            // Pass through non-scalar reference types (array/hash/code/regex refs) —
+                            // those are handled by the JVM compiler as non-scalar refs and should not
+                            // throw here (decl-refs.t uses $$arrayref in no-strict context).
+                            if (sv.type == RuntimeScalarType.ARRAYREFERENCE
+                                    || sv.type == RuntimeScalarType.HASHREFERENCE
+                                    || sv.type == RuntimeScalarType.CODE
+                                    || sv.type == RuntimeScalarType.REGEX) {
+                                registers[rd] = sv; // pass through non-scalar refs
+                            } else {
+                                registers[rd] = sv.scalarDeref();
+                            }
                         } else {
-                            // RuntimeList or other types, pass through
                             registers[rd] = value;
                         }
                         break;
@@ -1772,6 +1783,7 @@ public class BytecodeInterpreter {
                     case Opcodes.DEREF_GLOB:
                     case Opcodes.DEREF_HASH_NONSTRICT:
                     case Opcodes.DEREF_ARRAY_NONSTRICT:
+                    case Opcodes.DEREF_NONSTRICT:
                         pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -2217,12 +2229,19 @@ public class BytecodeInterpreter {
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
 
-                // Always call scalarDeref() on RuntimeScalar — throws "Not a SCALAR reference"
-                // for non-reference types (IO, FORMAT, etc.), matching Perl semantics.
+                // Call scalarDeref() for scalar refs, undef, non-ref types (strings, globs, etc.)
+                // Pass through non-scalar reference types (array/hash/code/regex refs).
                 if (value instanceof RuntimeScalar) {
-                    registers[rd] = ((RuntimeScalar) value).scalarDeref();
+                    RuntimeScalar sv = (RuntimeScalar) value;
+                    if (sv.type == RuntimeScalarType.ARRAYREFERENCE
+                            || sv.type == RuntimeScalarType.HASHREFERENCE
+                            || sv.type == RuntimeScalarType.CODE
+                            || sv.type == RuntimeScalarType.REGEX) {
+                        registers[rd] = sv; // pass through non-scalar refs
+                    } else {
+                        registers[rd] = sv.scalarDeref();
+                    }
                 } else {
-                    // RuntimeList or other types, pass through
                     registers[rd] = value;
                 }
                 return pc;
@@ -3100,6 +3119,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeDerefHashNonStrict(bytecode, pc, registers, code);
             case Opcodes.DEREF_ARRAY_NONSTRICT:
                 return SlowOpcodeHandler.executeDerefArrayNonStrict(bytecode, pc, registers, code);
+            case Opcodes.DEREF_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefNonStrict(bytecode, pc, registers, code);
             default:
                 throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }

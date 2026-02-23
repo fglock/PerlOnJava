@@ -1087,5 +1087,9 @@ public class Opcodes {
      * Format: DEREF_ARRAY_NONSTRICT rd scalarReg packageIdx */
     public static final short DEREF_ARRAY_NONSTRICT = 336;
 
+    /** Dereference scalar (no strict refs): rd = scalarReg.scalarDerefNonStrict(pkg)
+     * Format: DEREF_NONSTRICT rd scalarReg packageIdx */
+    public static final short DEREF_NONSTRICT = 337;
+
     private Opcodes() {} // Utility class - no instantiation
 }
