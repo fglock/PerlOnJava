@@ -24,7 +24,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeSprintf(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSprintf(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int formatReg = bytecode[pc++];
         int argsListReg = bytecode[pc++];
@@ -45,7 +45,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeChop(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeChop(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int scalarReg = bytecode[pc++];
 
@@ -63,7 +63,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeGetReplacementRegex(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeGetReplacementRegex(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int patternReg = bytecode[pc++];
         int replacementReg = bytecode[pc++];
@@ -86,7 +86,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeSubstrVar(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSubstrVar(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int argsListReg = bytecode[pc++];
         int ctx = bytecode[pc++];
@@ -107,7 +107,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeRepeatAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeRepeatAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeBase result = Operator.repeat(
@@ -128,7 +128,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executePowAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePowAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeBase val1 = registers[rd];
@@ -149,7 +149,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeLeftShiftAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeLeftShiftAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar s1 = (RuntimeScalar) registers[rd];
@@ -168,7 +168,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeRightShiftAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeRightShiftAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar s1 = (RuntimeScalar) registers[rd];
@@ -187,7 +187,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeLogicalAndAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeLogicalAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
@@ -210,7 +210,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeLogicalOrAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeLogicalOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
@@ -233,7 +233,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeStringConcatAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringConcatAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = StringOperators.stringConcat(
@@ -253,7 +253,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeBitwiseAndAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = BitwiseOperators.bitwiseAnd(
@@ -273,7 +273,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeBitwiseOrAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
@@ -293,7 +293,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeBitwiseXorAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
@@ -313,7 +313,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeStringBitwiseAndAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringBitwiseAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = BitwiseOperators.bitwiseAndDot(
@@ -333,7 +333,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeStringBitwiseOrAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringBitwiseOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = BitwiseOperators.bitwiseOrDot(
@@ -353,7 +353,7 @@ public class OpcodeHandlerExtended {
      * @param registers Register file
      * @return Updated program counter
      */
-    public static int executeStringBitwiseXorAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringBitwiseXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar result = BitwiseOperators.bitwiseXorDot(
@@ -370,7 +370,7 @@ public class OpcodeHandlerExtended {
      * Execute bitwise AND binary operation.
      * Format: BITWISE_AND_BINARY rd rs1 rs2
      */
-    public static int executeBitwiseAndBinary(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseAndBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
@@ -385,7 +385,7 @@ public class OpcodeHandlerExtended {
      * Execute bitwise OR binary operation.
      * Format: BITWISE_OR_BINARY rd rs1 rs2
      */
-    public static int executeBitwiseOrBinary(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseOrBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
@@ -400,7 +400,7 @@ public class OpcodeHandlerExtended {
      * Execute bitwise XOR binary operation.
      * Format: BITWISE_XOR_BINARY rd rs1 rs2
      */
-    public static int executeBitwiseXorBinary(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseXorBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
@@ -415,7 +415,7 @@ public class OpcodeHandlerExtended {
      * Execute string bitwise AND operation.
      * Format: STRING_BITWISE_AND rd rs1 rs2
      */
-    public static int executeStringBitwiseAnd(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringBitwiseAnd(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
@@ -430,7 +430,7 @@ public class OpcodeHandlerExtended {
      * Execute string bitwise OR operation.
      * Format: STRING_BITWISE_OR rd rs1 rs2
      */
-    public static int executeStringBitwiseOr(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringBitwiseOr(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
@@ -445,7 +445,7 @@ public class OpcodeHandlerExtended {
      * Execute string bitwise XOR operation.
      * Format: STRING_BITWISE_XOR rd rs1 rs2
      */
-    public static int executeStringBitwiseXor(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStringBitwiseXor(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
@@ -460,7 +460,7 @@ public class OpcodeHandlerExtended {
      * Execute bitwise NOT binary operation.
      * Format: BITWISE_NOT_BINARY rd rs
      */
-    public static int executeBitwiseNotBinary(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseNotBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseNotBinary((RuntimeScalar) registers[rs]);
@@ -471,7 +471,7 @@ public class OpcodeHandlerExtended {
      * Execute bitwise NOT string operation.
      * Format: BITWISE_NOT_STRING rd rs
      */
-    public static int executeBitwiseNotString(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeBitwiseNotString(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseNotDot((RuntimeScalar) registers[rs]);
@@ -482,7 +482,7 @@ public class OpcodeHandlerExtended {
      * Execute stat operation.
      * Format: STAT rd rs ctx
      */
-    public static int executeStat(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeStat(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         int ctx = bytecode[pc++];
@@ -494,7 +494,7 @@ public class OpcodeHandlerExtended {
      * Execute lstat operation.
      * Format: LSTAT rd rs ctx
      */
-    public static int executeLstat(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeLstat(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         int ctx = bytecode[pc++];
@@ -506,7 +506,7 @@ public class OpcodeHandlerExtended {
      * Execute print operation.
      * Format: PRINT contentReg filehandleReg
      */
-    public static int executePrint(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePrint(int[] bytecode, int pc, RuntimeBase[] registers) {
         int contentReg = bytecode[pc++];
         int filehandleReg = bytecode[pc++];
 
@@ -544,7 +544,7 @@ public class OpcodeHandlerExtended {
      * Execute say operation.
      * Format: SAY contentReg filehandleReg
      */
-    public static int executeSay(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSay(int[] bytecode, int pc, RuntimeBase[] registers) {
         int contentReg = bytecode[pc++];
         int filehandleReg = bytecode[pc++];
 
@@ -582,7 +582,7 @@ public class OpcodeHandlerExtended {
      * Execute chomp operation.
      * Format: CHOMP rd rs
      */
-    public static int executeChomp(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeChomp(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = registers[rs].chomp();
@@ -593,7 +593,7 @@ public class OpcodeHandlerExtended {
      * Execute wantarray operation.
      * Format: WANTARRAY rd wantarrayReg
      */
-    public static int executeWantarray(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeWantarray(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int wantarrayReg = bytecode[pc++];
         int ctx = ((RuntimeScalar) registers[wantarrayReg]).getInt();
@@ -605,7 +605,7 @@ public class OpcodeHandlerExtended {
      * Execute require operation.
      * Format: REQUIRE rd rs
      */
-    public static int executeRequire(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeRequire(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = ModuleOperators.require((RuntimeScalar) registers[rs]);
@@ -616,7 +616,7 @@ public class OpcodeHandlerExtended {
      * Execute pos operation.
      * Format: POS rd rs
      */
-    public static int executePos(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePos(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = ((RuntimeScalar) registers[rs]).pos();
@@ -627,7 +627,7 @@ public class OpcodeHandlerExtended {
      * Execute index operation.
      * Format: INDEX rd strReg substrReg posReg
      */
-    public static int executeIndex(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeIndex(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int strReg = bytecode[pc++];
         int substrReg = bytecode[pc++];
@@ -644,7 +644,7 @@ public class OpcodeHandlerExtended {
      * Execute rindex operation.
      * Format: RINDEX rd strReg substrReg posReg
      */
-    public static int executeRindex(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeRindex(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int strReg = bytecode[pc++];
         int substrReg = bytecode[pc++];
@@ -661,7 +661,7 @@ public class OpcodeHandlerExtended {
      * Execute pre-increment operation.
      * Format: PRE_AUTOINCREMENT rd
      */
-    public static int executePreAutoIncrement(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePreAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         ((RuntimeScalar) registers[rd]).preAutoIncrement();
         return pc;
@@ -671,7 +671,7 @@ public class OpcodeHandlerExtended {
      * Execute post-increment operation.
      * Format: POST_AUTOINCREMENT rd rs
      */
-    public static int executePostAutoIncrement(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePostAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = ((RuntimeScalar) registers[rs]).postAutoIncrement();
@@ -682,7 +682,7 @@ public class OpcodeHandlerExtended {
      * Execute pre-decrement operation.
      * Format: PRE_AUTODECREMENT rd
      */
-    public static int executePreAutoDecrement(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePreAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         ((RuntimeScalar) registers[rd]).preAutoDecrement();
         return pc;
@@ -692,7 +692,7 @@ public class OpcodeHandlerExtended {
      * Execute post-decrement operation.
      * Format: POST_AUTODECREMENT rd rs
      */
-    public static int executePostAutoDecrement(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executePostAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = ((RuntimeScalar) registers[rs]).postAutoDecrement();
@@ -703,7 +703,7 @@ public class OpcodeHandlerExtended {
      * Execute open operation.
      * Format: OPEN rd ctx argsReg
      */
-    public static int executeOpen(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeOpen(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int ctx = bytecode[pc++];
         int argsReg = bytecode[pc++];
@@ -717,7 +717,7 @@ public class OpcodeHandlerExtended {
      * Execute readline operation.
      * Format: READLINE rd fhReg ctx
      */
-    public static int executeReadline(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeReadline(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int fhReg = bytecode[pc++];
         int ctx = bytecode[pc++];
@@ -729,7 +729,7 @@ public class OpcodeHandlerExtended {
      * Execute match regex operation.
      * Format: MATCH_REGEX rd stringReg regexReg ctx
      */
-    public static int executeMatchRegex(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMatchRegex(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
@@ -746,7 +746,7 @@ public class OpcodeHandlerExtended {
      * Execute negated match regex operation.
      * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx
      */
-    public static int executeMatchRegexNot(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMatchRegexNot(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
@@ -765,7 +765,7 @@ public class OpcodeHandlerExtended {
      * Execute create closure operation.
      * Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
      */
-    public static int executeCreateClosure(short[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+    public static int executeCreateClosure(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
         int rd = bytecode[pc++];
         int templateIdx = bytecode[pc++];
         int numCaptures = bytecode[pc++];
@@ -802,7 +802,7 @@ public class OpcodeHandlerExtended {
      * Execute iterator create operation.
      * Format: ITERATOR_CREATE rd rs
      */
-    public static int executeIteratorCreate(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeIteratorCreate(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
@@ -819,7 +819,7 @@ public class OpcodeHandlerExtended {
      * Execute iterator has next operation.
      * Format: ITERATOR_HAS_NEXT rd iterReg
      */
-    public static int executeIteratorHasNext(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeIteratorHasNext(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int iterReg = bytecode[pc++];
 
@@ -837,7 +837,7 @@ public class OpcodeHandlerExtended {
      * Execute iterator next operation.
      * Format: ITERATOR_NEXT rd iterReg
      */
-    public static int executeIteratorNext(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeIteratorNext(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int iterReg = bytecode[pc++];
 
@@ -855,7 +855,7 @@ public class OpcodeHandlerExtended {
      * Execute subtract assign operation.
      * Format: SUBTRACT_ASSIGN rd rs
      */
-    public static int executeSubtractAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSubtractAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
@@ -872,7 +872,7 @@ public class OpcodeHandlerExtended {
      * Execute multiply assign operation.
      * Format: MULTIPLY_ASSIGN rd rs
      */
-    public static int executeMultiplyAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMultiplyAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
@@ -889,7 +889,7 @@ public class OpcodeHandlerExtended {
      * Execute divide assign operation.
      * Format: DIVIDE_ASSIGN rd rs
      */
-    public static int executeDivideAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeDivideAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
@@ -906,7 +906,7 @@ public class OpcodeHandlerExtended {
      * Execute modulus assign operation.
      * Format: MODULUS_ASSIGN rd rs
      */
-    public static int executeModulusAssign(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeModulusAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 

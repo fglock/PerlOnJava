@@ -22,7 +22,7 @@ public class OpcodeHandlerFileTest {
      * @param opcode The file test opcode (190-216)
      * @return Updated program counter
      */
-    public static int executeFileTest(short[] bytecode, int pc, RuntimeBase[] registers, short opcode) {
+    public static int executeFileTest(int[] bytecode, int pc, RuntimeBase[] registers, int opcode) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 

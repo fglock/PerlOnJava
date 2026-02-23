@@ -75,14 +75,26 @@ public class CompileOperator {
                             .set(new RuntimeScalar(version));
                 }
 
-                // Update the current package/class in symbol table
-                // This tracks package name, isClass flag, and version
+                // Update the current package/class in symbol table (compile-time tracking)
                 bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
 
                 // Register as Perl 5.38+ class for proper stringification if needed
                 if (isClass) {
                     ClassRegistry.registerClass(packageName);
                 }
+
+                // Emit runtime package tracking opcode so caller() and eval STRING work.
+                // Scoped blocks (package Foo { }) use PUSH_PACKAGE so DynamicVariableManager
+                // can restore the previous package when the scope exits.
+                // Non-scoped (package Foo;) use SET_PACKAGE which just overwrites.
+                boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
+                int nameIdx = bytecodeCompiler.addToStringPool(packageName);
+                if (isScoped) {
+                    bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.SET_PACKAGE);
+                }
+                bytecodeCompiler.emit(nameIdx);
 
                 bytecodeCompiler.lastResultReg = -1;  // No runtime value
             } else {
@@ -2708,9 +2720,16 @@ public class CompileOperator {
         } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
                    op.equals("rename") || op.equals("link") || op.equals("readlink") ||
                    op.equals("umask") || op.equals("system") || op.equals("pack") ||
-                   op.equals("vec") || op.equals("crypt") || op.equals("localtime") ||
-                   op.equals("gmtime") || op.equals("caller") || op.equals("fileno") ||
-                   op.equals("getc") || op.equals("qx")) {
+                   op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
+                   op.equals("localtime") || op.equals("gmtime") || op.equals("caller") ||
+                   op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
+                   op.equals("close") ||
+                   op.equals("binmode") || op.equals("seek") ||
+                   op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
+                   op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
+                   op.equals("connect") || op.equals("listen") || op.equals("write") ||
+                   op.equals("formline") || op.equals("printf") || op.equals("accept") ||
+                   op.equals("sysseek") || op.equals("truncate") || op.equals("read")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList
@@ -2753,10 +2772,29 @@ public class CompileOperator {
                 case "caller" -> Opcodes.CALLER;
                 case "each" -> Opcodes.EACH;
                 case "pack" -> Opcodes.PACK;
+                case "unpack" -> Opcodes.UNPACK;
                 case "vec" -> Opcodes.VEC;
                 case "localtime" -> Opcodes.LOCALTIME;
                 case "gmtime" -> Opcodes.GMTIME;
                 case "crypt" -> Opcodes.CRYPT;
+                case "close" -> Opcodes.CLOSE;
+                case "binmode" -> Opcodes.BINMODE;
+                case "seek" -> Opcodes.SEEK;
+                case "eof" -> Opcodes.EOF_OP;
+                case "sysread" -> Opcodes.SYSREAD;
+                case "syswrite" -> Opcodes.SYSWRITE;
+                case "sysopen" -> Opcodes.SYSOPEN;
+                case "socket" -> Opcodes.SOCKET;
+                case "bind" -> Opcodes.BIND;
+                case "connect" -> Opcodes.CONNECT;
+                case "listen" -> Opcodes.LISTEN;
+                case "write" -> Opcodes.WRITE;
+                case "formline" -> Opcodes.FORMLINE;
+                case "printf" -> Opcodes.PRINTF;
+                case "accept" -> Opcodes.ACCEPT;
+                case "sysseek" -> Opcodes.SYSSEEK;
+                case "truncate" -> Opcodes.TRUNCATE;
+                case "read" -> Opcodes.READ;
                 default -> throw new IllegalStateException("Unexpected operator: " + op);
             };
 

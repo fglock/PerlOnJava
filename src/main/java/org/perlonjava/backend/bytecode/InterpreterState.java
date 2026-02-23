@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -16,6 +17,22 @@ import java.util.List;
 public class InterpreterState {
     private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
             ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Thread-local RuntimeScalar holding the runtime current package name.
+     *
+     * This is the single source of truth for the current package at runtime.
+     * It is used by:
+     *   - caller() to return the correct calling package
+     *   - eval STRING to compile code in the right package
+     *   - SET_PACKAGE opcode (non-scoped: package Foo;) — sets it directly
+     *   - PUSH_PACKAGE opcode (scoped: package Foo { }) — saves via DynamicVariableManager then sets
+     *
+     * Scoped package blocks are automatically restored when the scope exits via
+     * the existing POP_LOCAL_LEVEL opcode (DynamicVariableManager.popToLocalLevel).
+     */
+    public static final ThreadLocal<RuntimeScalar> currentPackage =
+            ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
 
     /**
      * Represents a single interpreter call frame.
