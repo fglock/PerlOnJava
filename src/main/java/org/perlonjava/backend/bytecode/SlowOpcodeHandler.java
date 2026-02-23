@@ -992,8 +992,8 @@ public class SlowOpcodeHandler {
         int modifiersReg = bytecode[pc++];
         int targetReg = bytecode[pc++];
 
-        // Read context (4 bytes = 1 int)
-        int context = ((bytecode[pc++] & 0xFFFF) << 16) | (bytecode[pc++] & 0xFFFF);
+        // Read context (1 int slot)
+        int context = bytecode[pc++];
 
         RuntimeScalar search = (RuntimeScalar) registers[searchReg];
         RuntimeScalar replace = (RuntimeScalar) registers[replaceReg];
