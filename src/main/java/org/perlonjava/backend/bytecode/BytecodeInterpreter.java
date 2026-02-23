@@ -1774,6 +1774,10 @@ public class BytecodeInterpreter {
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:
                     case Opcodes.SLEEP_OP:
+                    case Opcodes.LOAD_SYMBOLIC_GLOB:
+                    case Opcodes.DEREF_GLOB:
+                    case Opcodes.DEREF_HASH_NONSTRICT:
+                    case Opcodes.DEREF_ARRAY_NONSTRICT:
                         pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -3099,6 +3103,14 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
             case Opcodes.SLEEP_OP:
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
+            case Opcodes.LOAD_SYMBOLIC_GLOB:
+                return SlowOpcodeHandler.executeLoadSymbolicGlob(bytecode, pc, registers);
+            case Opcodes.DEREF_GLOB:
+                return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers);
+            case Opcodes.DEREF_HASH_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefHashNonStrict(bytecode, pc, registers, code);
+            case Opcodes.DEREF_ARRAY_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefArrayNonStrict(bytecode, pc, registers, code);
             default:
                 throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }

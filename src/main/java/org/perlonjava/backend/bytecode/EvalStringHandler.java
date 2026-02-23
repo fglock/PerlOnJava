@@ -49,7 +49,9 @@ public class EvalStringHandler {
                                           InterpretedCode currentCode,
                                           RuntimeBase[] registers,
                                           String sourceName,
-                                          int sourceLine) {
+                                          int sourceLine,
+                                          int callSiteStrictOptions,
+                                          int callSiteFeatureFlags) {
         try {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -65,13 +67,15 @@ public class EvalStringHandler {
             opts.fileName = sourceName + " (eval)";
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
-            // Inherit lexical pragma flags from parent if available
+            // Inherit lexical pragma flags from the call site (not end-of-compilation snapshot)
+            // callSiteStrictOptions/callSiteFeatureFlags are embedded in the bytecode at the eval
+            // call site, capturing the exact pragmas in effect at that point (e.g. inside a
+            // "no strict 'refs'" block).  Fall back to currentCode snapshot if not available.
+            symbolTable.strictOptionsStack.pop();
+            symbolTable.strictOptionsStack.push(callSiteStrictOptions);
+            symbolTable.featureFlagsStack.pop();
+            symbolTable.featureFlagsStack.push(callSiteFeatureFlags);
             if (currentCode != null) {
-                // Replace default values with parent's flags
-                symbolTable.strictOptionsStack.pop();
-                symbolTable.strictOptionsStack.push(currentCode.strictOptions);
-                symbolTable.featureFlagsStack.pop();
-                symbolTable.featureFlagsStack.push(currentCode.featureFlags);
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }

@@ -835,10 +835,16 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Emit direct opcode EVAL_STRING
+                // Emit direct opcode EVAL_STRING with call-site strict/feature/warning flags
+                // so EvalStringHandler inherits the pragmas in effect at the eval call site
+                // (not just the end-of-compilation snapshot in InterpretedCode)
+                int callSiteStrictOptions = bytecodeCompiler.getCurrentStrictOptions();
+                int callSiteFeatureFlags  = bytecodeCompiler.getCurrentFeatureFlags();
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
+                bytecodeCompiler.emitInt(callSiteStrictOptions);
+                bytecodeCompiler.emitInt(callSiteFeatureFlags);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
