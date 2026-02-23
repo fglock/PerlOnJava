@@ -1476,23 +1476,17 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(arrayReg);
                     emit(nameIdx);
                 }
-            } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode) {
-                // Array dereference: @$arrayref
-                OperatorNode derefOp = (OperatorNode) leftOp.operand;
-                if (derefOp.operator.equals("$")) {
-                    // Compile the scalar reference
-                    derefOp.accept(this);
-                    int refReg = lastResultReg;
+            } else if (leftOp.operator.equals("@") && !(leftOp.operand instanceof IdentifierNode)) {
+                // Array dereference: @$arrayref or @{expr}
+                // Evaluate the operand expression to get the reference, then deref
+                leftOp.operand.accept(this);
+                int refReg = lastResultReg;
 
-                    // Dereference to get the array
-                    arrayReg = allocateRegister();
-                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    emitReg(arrayReg);
-                    emitReg(refReg);
-                } else {
-                    throwCompilerException("push/unshift requires array or array reference");
-                    return;
-                }
+                // Dereference to get the array
+                arrayReg = allocateRegister();
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(arrayReg);
+                emitReg(refReg);
             } else {
                 throwCompilerException("push/unshift requires array or array reference");
                 return;
@@ -1518,8 +1512,12 @@ public class BytecodeCompiler implements Visitor {
         emitReg(arrayReg);
         emitReg(valuesReg);
 
-        // push/unshift return the new array size
-        lastResultReg = -1;  // No result register needed
+        // push/unshift return the new array size in scalar context
+        int rd = allocateRegister();
+        emit(Opcodes.ARRAY_SIZE);
+        emitReg(rd);
+        emitReg(arrayReg);
+        lastResultReg = rd;
     }
 
     @Override
