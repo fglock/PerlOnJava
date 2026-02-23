@@ -1004,5 +1004,9 @@ public class Opcodes {
      * Format: FOREACH_GLOBAL_NEXT_OR_EXIT varReg iterReg nameIdx exitTarget */
     public static final short FOREACH_GLOBAL_NEXT_OR_EXIT = 304;
 
+    /** Unpack binary data into a list of scalars.
+     * Format: UNPACK rd argsReg ctx */
+    public static final short UNPACK = 305;
+
     private Opcodes() {} // Utility class - no instantiation
 }
