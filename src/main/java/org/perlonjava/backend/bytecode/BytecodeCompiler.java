@@ -660,6 +660,17 @@ public class BytecodeCompiler implements Visitor {
     // VISITOR METHODS
     // =========================================================================
 
+    /**
+     * Compiles a block node, creating a new lexical scope.
+     *
+     * <p>Special case: the parser wraps implicit-{@code $_} foreach loops as
+     * {@code BlockNode([local $_, For1Node(needsArrayOfAlias=true)])}.
+     * In that pattern the {@code local $_} child is skipped here because
+     * {@link #visit(For1Node)} emits {@code LOCAL_SCALAR_SAVE_LEVEL} itself,
+     * which atomically saves the pre-push dynamic level and calls {@code makeLocal}.
+     * This allows {@code POP_LOCAL_LEVEL} after the loop to restore {@code $_}
+     * correctly regardless of nesting depth.
+     */
     @Override
     public void visit(BlockNode node) {
         // Blocks create a new lexical scope
@@ -670,11 +681,23 @@ public class BytecodeCompiler implements Visitor {
             outerResultReg = allocateRegister();
         }
 
+        // Detect the BlockNode([local $_, For1Node(needsArrayOfAlias)]) pattern produced
+        // by the parser for implicit-$_ foreach loops. For1Node emits LOCAL_SCALAR_SAVE_LEVEL
+        // itself, so the 'local $_' child must be skipped here to avoid double-emission.
+        // Using a local variable (not a field) makes this safe against nesting and exceptions.
+        boolean skipFirstChild = node.elements.size() == 2
+                && node.elements.get(1) instanceof For1Node for1
+                && for1.needsArrayOfAlias
+                && node.elements.get(0) instanceof OperatorNode localOp
+                && localOp.operator.equals("local");
+
         enterScope();
 
         // Visit each statement in the block
         int numStatements = node.elements.size();
         for (int i = 0; i < numStatements; i++) {
+            // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
+            if (i == 0 && skipFirstChild) continue;
             Node stmt = node.elements.get(i);
 
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
@@ -2175,8 +2198,7 @@ public class BytecodeCompiler implements Visitor {
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
-                    String packageName = getCurrentPackage();
-                    String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                    String globalVarName = NameNormalizer.normalizeVariableName(((IdentifierNode) sigilOp.operand).name, getCurrentPackage());
                     int nameIdx = addToStringPool(globalVarName);
 
                     int rd = allocateRegister();
@@ -2218,8 +2240,7 @@ public class BytecodeCompiler implements Visitor {
                             }
 
                             // Localize global variable
-                            String packageName = getCurrentPackage();
-                            String globalVarName = packageName + "::" + idNode.name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                             int nameIdx = addToStringPool(globalVarName);
 
                             int rd = allocateRegister();
@@ -2291,8 +2312,7 @@ public class BytecodeCompiler implements Visitor {
                                     }
 
                                     // Localize global variable
-                                    String packageName = getCurrentPackage();
-                                    String globalVarName = packageName + "::" + idNode.name;
+                                    String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                                     int nameIdx = addToStringPool(globalVarName);
 
                                     int rd = allocateRegister();
@@ -2335,8 +2355,7 @@ public class BytecodeCompiler implements Visitor {
                                         }
 
                                         // Localize global variable
-                                        String packageName = getCurrentPackage();
-                                        String globalVarName = packageName + "::" + idNode.name;
+                                        String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                                         int nameIdx = addToStringPool(globalVarName);
 
                                         int rd = allocateRegister();
@@ -2360,8 +2379,7 @@ public class BytecodeCompiler implements Visitor {
                                 }
 
                                 // Localize global variable
-                                String packageName = getCurrentPackage();
-                                String globalVarName = packageName + "::" + idNode.name;
+                                String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                                 int nameIdx = addToStringPool(globalVarName);
 
                                 int rd = allocateRegister();
@@ -2384,8 +2402,7 @@ public class BytecodeCompiler implements Visitor {
                             }
 
                             // Localize global variable
-                            String packageName = getCurrentPackage();
-                            String globalVarName = packageName + "::" + idNode.name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                             int nameIdx = addToStringPool(globalVarName);
 
                             int rd = allocateRegister();
@@ -3276,17 +3293,55 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = resultReg;
     }
 
+    /**
+     * Compiles a foreach-style loop ({@code for my $var (@list) { body }}).
+     *
+     * <p>Uses a <em>do-while</em> bytecode layout to eliminate the back-edge
+     * {@code GOTO} that would otherwise execute on every iteration:
+     * <pre>
+     *   GOTO loopCheck          // one-time entry jump
+     * body:
+     *   &lt;body&gt;
+     * loopCheck:               // next/continue target
+     *   FOREACH_NEXT_OR_EXIT -&gt; body   // jump back if has next; fall through if exhausted
+     * exit:
+     * </pre>
+     *
+     * <p>For global loop variables (e.g. implicit {@code $_}, {@code needsArrayOfAlias=true}):
+     * <ul>
+     *   <li>{@code LOCAL_SCALAR_SAVE_LEVEL} atomically saves {@code getLocalLevel()} into
+     *       {@code levelReg} <em>before</em> calling {@code makeLocal}, so the pre-push
+     *       level is available for restore.</li>
+     *   <li>{@code FOREACH_GLOBAL_NEXT_OR_EXIT} combines hasNext + next +
+     *       {@code aliasGlobalVariable} + conditional jump per iteration.</li>
+     *   <li>{@code POP_LOCAL_LEVEL(levelReg)} after loop exit restores {@code $_} to
+     *       the pre-{@code makeLocal} state, correct for any nesting depth.</li>
+     * </ul>
+     */
     @Override
     public void visit(For1Node node) {
         // For1Node: foreach-style loop
         // for my $var (@list) { body }
+        //
+        // For global loop variables (needsArrayOfAlias=true, e.g. implicit $_):
+        //   The parser wraps this as BlockNode([local $_, For1Node]).
+        //   visit(BlockNode) detects this pattern and skips the 'local $_' child directly,
+        //   so For1Node emits LOCAL_SCALAR_SAVE_LEVEL here (saves pre-push level atomically),
+        //   uses FOREACH_GLOBAL_NEXT_OR_EXIT per iteration (hasNext+next+alias),
+        //   and POP_LOCAL_LEVEL after the loop (restores $_ correctly for nested loops).
+
+        // Determine if this is a global loop variable (e.g. $_).
+        String globalLoopVarName = null;
+        if (node.needsArrayOfAlias && node.variable instanceof OperatorNode varOp
+                && varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode idNode) {
+            globalLoopVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+        }
 
         // Step 1: Evaluate list in list context
         node.list.accept(this);
         int listReg = lastResultReg;
 
         // Step 2: Create iterator from the list
-        // This works for RuntimeArray, RuntimeList, PerlRange, etc.
         int iterReg = allocateRegister();
         emit(Opcodes.ITERATOR_CREATE);
         emitReg(iterReg);
@@ -3294,83 +3349,103 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 3: Allocate loop variable register BEFORE entering scope
         // This ensures both iterReg and varReg are protected from recycling
-        int varReg = -1;
-        if (node.variable != null && node.variable instanceof OperatorNode) {
-            OperatorNode varOp = (OperatorNode) node.variable;
-            if (varOp.operator.equals("my") && varOp.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) varOp.operand;
-                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-                    // Don't add to scope yet - just allocate register
-                    varReg = allocateRegister();
-                }
-            }
-        }
+        int varReg = allocateRegister();
 
-        // If no variable declared, allocate a temporary register
-        if (varReg == -1) {
-            varReg = allocateRegister();
+        // Step 3b: For global loop variable: emit LOCAL_SCALAR_SAVE_LEVEL.
+        // This atomically saves getLocalLevel() into levelReg (pre-push), then calls makeLocal.
+        // POP_LOCAL_LEVEL(levelReg) after the loop correctly restores $_ for any nesting depth.
+        int levelReg = -1;
+        if (globalLoopVarName != null) {
+            levelReg = allocateRegister();
+            int nameIdx = addToStringPool(globalLoopVarName);
+            emit(Opcodes.LOCAL_SCALAR_SAVE_LEVEL);
+            emitReg(varReg);      // rd: receives makeLocal result (the new localized container)
+            emitReg(levelReg);    // levelReg: receives pre-push dynamic level
+            emit(nameIdx);
         }
 
         // Step 4: Enter new scope for loop variable
-        // Now baseRegisterForStatement will be set past both iterReg and varReg,
-        // protecting them from being recycled by recycleTemporaryRegisters()
         enterScope();
 
-        // Step 5: If we have a named loop variable, add it to the scope now
+        // Step 5: If we have a named lexical loop variable, add it to the scope now
         if (node.variable != null && node.variable instanceof OperatorNode) {
             OperatorNode varOp = (OperatorNode) node.variable;
             if (varOp.operator.equals("my") && varOp.operand instanceof OperatorNode) {
                 OperatorNode sigilOp = (OperatorNode) varOp.operand;
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-                    // Add to scope and track for variableRegistry
                     variableScopes.peek().put(varName, varReg);
                     allDeclaredVariables.put(varName, varReg);
                 }
             }
         }
 
-        // Step 6: Push loop info onto stack for last/next/redo
-        int loopStartPc = bytecode.size();
-        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, true); // true = foreach is a true loop
+        // Step 6: Emit initial GOTO to the loop check (do-while structure).
+        // This avoids a back-edge GOTO on every iteration: the superinstruction at
+        // the bottom jumps backward to the body start if the iterator has more elements.
+        // Layout: GOTO check | body | check: FOREACH_NEXT_OR_EXIT → body | exit
+        emit(Opcodes.GOTO);
+        int entryJumpPc = bytecode.size();
+        emitInt(0);   // placeholder: will be patched to loopCheckPc
+
+        // Step 7: Body start (redo jumps here)
+        int bodyStartPc = bytecode.size();
+        LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
         loopStack.push(loopInfo);
 
-        // Step 7: Loop start - combined check/next/exit (superinstruction)
-        // Emit FOREACH_NEXT_OR_EXIT superinstruction
-        // This combines: hasNext check, next() call, and conditional jump
-        // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitTarget (absolute address)
-        emit(Opcodes.FOREACH_NEXT_OR_EXIT);
-        emitReg(varReg);        // destination register for element
-        emitReg(iterReg);       // iterator register
-        int loopEndJumpPc = bytecode.size();
-        emitInt(0);             // placeholder for exit target (absolute, will be patched)
-
-        // Step 8: Execute body (redo jumps here)
+        // Step 8: Execute body
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 9: Continue point (next jumps here)
-        loopInfo.continuePc = bytecode.size();
+        // Step 9: Loop check (next/continue jumps here) - the superinstruction
+        int loopCheckPc = bytecode.size();
+        loopInfo.continuePc = loopCheckPc;
+        patchJump(entryJumpPc, loopCheckPc);   // patch the entry GOTO
 
-        // Step 10: Jump back to loop start
-        emit(Opcodes.GOTO);
-        emitInt(loopStartPc);
+        // Step 10: Emit the loop superinstruction at the bottom (do-while check).
+        // If iterator has next: load element (and alias for global vars), jump back to body.
+        // If exhausted: fall through to exit.
+        int loopEndJumpPc;
+        if (globalLoopVarName != null) {
+            // FOREACH_GLOBAL_NEXT_OR_EXIT: hasNext + next + aliasGlobalVariable + conditional jump
+            int nameIdx = addToStringPool(globalLoopVarName);
+            emit(Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT);
+            emitReg(varReg);
+            emitReg(iterReg);
+            emit(nameIdx);
+            loopEndJumpPc = bytecode.size();
+            emitInt(bodyStartPc);   // jump backward to body start if has next
+        } else {
+            // FOREACH_NEXT_OR_EXIT: hasNext + next + conditional jump (lexical or temp var)
+            emit(Opcodes.FOREACH_NEXT_OR_EXIT);
+            emitReg(varReg);
+            emitReg(iterReg);
+            loopEndJumpPc = bytecode.size();
+            emitInt(bodyStartPc);   // jump backward to body start if has next
+        }
 
-        // Step 11: Loop end - patch the forward jump (last jumps here)
+        // Step 11: Loop exit - fall-through after the superinstruction
         int loopEndPc = bytecode.size();
-        patchJump(loopEndJumpPc, loopEndPc);
+
+        // Step 11b: Restore global loop variable after loop exits.
+        // POP_LOCAL_LEVEL(levelReg) pops to the pre-makeLocal level, undoing both
+        // the makeLocal push and all aliasGlobalVariable replacements. Correct for
+        // any nesting depth because levelReg holds the exact pre-push level.
+        if (levelReg >= 0) {
+            emit(Opcodes.POP_LOCAL_LEVEL);
+            emitReg(levelReg);
+        }
 
         // Step 12: Patch all last/next/redo jumps
         for (int pc : loopInfo.breakPcs) {
             patchJump(pc, loopEndPc);
         }
         for (int pc : loopInfo.nextPcs) {
-            patchJump(pc, loopInfo.continuePc);
+            patchJump(pc, loopCheckPc);
         }
         for (int pc : loopInfo.redoPcs) {
-            patchJump(pc, loopStartPc);
+            patchJump(pc, bodyStartPc);
         }
 
         // Step 13: Pop loop info and exit scope

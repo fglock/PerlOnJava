@@ -986,5 +986,23 @@ public class Opcodes {
     public static final short GMTIME = 300;
     public static final short CRYPT = 301;
 
+    /** Superinstruction: save dynamic level BEFORE makeLocal, then localize global scalar.
+     * Atomically: levelReg = getLocalLevel(), rd = makeLocal(stringPool[nameIdx]).
+     * The saved pre-push level is used by POP_LOCAL_LEVEL after the loop to fully restore $_.
+     * Format: LOCAL_SCALAR_SAVE_LEVEL rd levelReg nameIdx */
+    public static final short LOCAL_SCALAR_SAVE_LEVEL = 302;
+
+    /** Restore DynamicVariableManager to a previously saved local level.
+     * Matches JVM compiler's DynamicVariableManager.popToLocalLevel(savedLevel) call.
+     * Format: POP_LOCAL_LEVEL rs */
+    public static final short POP_LOCAL_LEVEL = 303;
+
+    /** Superinstruction: foreach loop step for a global loop variable (e.g. $_).
+     * Combines: hasNext check, next() into varReg, aliasGlobalVariable(name, varReg), conditional exit.
+     * If iterator has next: varReg = next(), aliasGlobalVariable(name, varReg), fall through.
+     * If iterator exhausted: jump to exitTarget (absolute address).
+     * Format: FOREACH_GLOBAL_NEXT_OR_EXIT varReg iterReg nameIdx exitTarget */
+    public static final short FOREACH_GLOBAL_NEXT_OR_EXIT = 304;
+
     private Opcodes() {} // Utility class - no instantiation
 }
