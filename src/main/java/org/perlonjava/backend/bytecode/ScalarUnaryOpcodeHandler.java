@@ -22,7 +22,7 @@ public class ScalarUnaryOpcodeHandler {
     /**
      * Execute scalar unary operations (chr, ord, abs, sin, cos, lc, uc, etc.) operation.
      */
-    public static int execute(int opcode, short[] bytecode, int pc,
+    public static int execute(int opcode, int[] bytecode, int pc,
                               RuntimeBase[] registers) {
         // Read registers (shared by all opcodes in this group)
         int rd = bytecode[pc++];
@@ -70,7 +70,7 @@ public class ScalarUnaryOpcodeHandler {
     /**
      * Disassemble scalar unary operations (chr, ord, abs, sin, cos, lc, uc, etc.) operation.
      */
-    public static int disassemble(int opcode, short[] bytecode, int pc,
+    public static int disassemble(int opcode, int[] bytecode, int pc,
                                    StringBuilder sb) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];

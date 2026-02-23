@@ -62,7 +62,7 @@ public class BytecodeInterpreter {
         }
 
         int pc = 0;  // Program counter
-        short[] bytecode = code.bytecode;
+        final int[] bytecode = code.bytecode;
 
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
@@ -72,7 +72,7 @@ public class BytecodeInterpreter {
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
-                short opcode = bytecode[pc++];
+                int opcode = bytecode[pc++];
 
                 switch (opcode) {
                     // =================================================================
@@ -2127,7 +2127,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeTypeOps(short opcode, short[] bytecode, int pc,
+    private static int executeTypeOps(int opcode, int[] bytecode, int pc,
                                       RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.CREATE_LAST: {
@@ -2323,7 +2323,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeCollections(short opcode, short[] bytecode, int pc,
+    private static int executeCollections(int opcode, int[] bytecode, int pc,
                                           RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.ARRAY_SET: {
@@ -2497,7 +2497,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeArithmetic(short opcode, short[] bytecode, int pc,
+    private static int executeArithmetic(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.MUL_SCALAR: {
@@ -2774,7 +2774,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeComparisons(short opcode, short[] bytecode, int pc,
+    private static int executeComparisons(int opcode, int[] bytecode, int pc,
                                           RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.COMPARE_NUM: {
@@ -2957,7 +2957,7 @@ public class BytecodeInterpreter {
      * Handles: DEREF_ARRAY, DEREF_HASH, *_SLICE, *_SLICE_SET, *_SLICE_DELETE, LIST_SLICE_FROM
      * Direct dispatch to SlowOpcodeHandler methods (Phase 2 complete).
      */
-    private static int executeSliceOps(short opcode, short[] bytecode, int pc,
+    private static int executeSliceOps(int opcode, int[] bytecode, int pc,
                                         RuntimeBase[] registers, InterpretedCode code) {
         // Direct method calls - no SLOWOP_* constants needed!
         switch (opcode) {
@@ -2986,7 +2986,7 @@ public class BytecodeInterpreter {
      * Execute array/string operations (opcodes 122-127).
      * Handles: SPLICE, REVERSE, SPLIT, LENGTH_OP, EXISTS, DELETE
      */
-    private static int executeArrayStringOps(short opcode, short[] bytecode, int pc,
+    private static int executeArrayStringOps(int opcode, int[] bytecode, int pc,
                                               RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.SPLICE:
@@ -3010,7 +3010,7 @@ public class BytecodeInterpreter {
      * Execute closure/scope operations (opcodes 128-131).
      * Handles: RETRIEVE_BEGIN_*, LOCAL_SCALAR
      */
-    private static int executeScopeOps(short opcode, short[] bytecode, int pc,
+    private static int executeScopeOps(int opcode, int[] bytecode, int pc,
                                         RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.RETRIEVE_BEGIN_SCALAR:
@@ -3031,7 +3031,7 @@ public class BytecodeInterpreter {
      * Handles: CHOWN, WAITPID, FORK, GETPPID, *PGRP, *PRIORITY, *SOCKOPT,
      *          SYSCALL, SEMGET, SEMOP, MSGGET, MSGSND, MSGRCV, SHMGET, SHMREAD, SHMWRITE
      */
-    private static int executeSystemOps(short opcode, short[] bytecode, int pc,
+    private static int executeSystemOps(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.CHOWN:
@@ -3081,7 +3081,7 @@ public class BytecodeInterpreter {
      * Execute special I/O operations (opcodes 151-154).
      * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP
      */
-    private static int executeSpecialIO(short opcode, short[] bytecode, int pc,
+    private static int executeSpecialIO(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.EVAL_STRING:
@@ -3098,13 +3098,11 @@ public class BytecodeInterpreter {
     }
 
     /**
-     * Read a 32-bit integer from bytecode (stored as 2 shorts: high 16 bits, low 16 bits).
-     * Uses unsigned short values to reconstruct the full 32-bit integer.
+     * Read a 32-bit integer from bytecode (stored as 2 ints: high 16 bits, low 16 bits).
+     * With int[] storage, values are already full ints — no masking needed.
      */
-    private static int readInt(short[] bytecode, int pc) {
-        int high = bytecode[pc] & 0xFFFF;      // Keep mask here - need full 32-bit range
-        int low = bytecode[pc + 1] & 0xFFFF;   // Keep mask here - need full 32-bit range
-        return (high << 16) | low;
+    private static int readInt(int[] bytecode, int pc) {
+        return (bytecode[pc] << 16) | bytecode[pc + 1];
     }
 
     /**

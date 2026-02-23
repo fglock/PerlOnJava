@@ -25,7 +25,7 @@ import java.util.*;
 public class BytecodeCompiler implements Visitor {
     // Pre-allocate with reasonable initial capacity to reduce resizing
     // Typical small eval/subroutine needs 20-50 bytecodes, 5-10 constants, 3-8 strings
-    final List<Short> bytecode = new ArrayList<>(64);
+    final List<Integer> bytecode = new ArrayList<>(64);
     private final List<Object> constants = new ArrayList<>(16);
     private final List<String> stringPool = new ArrayList<>(16);
     private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
@@ -2649,6 +2649,32 @@ public class BytecodeCompiler implements Visitor {
                 } else {
                     lastResultReg = hashReg;
                 }
+            } else if (node.operand instanceof OperatorNode refOp) {
+                // %$ref or %{expr} — dereference scalar to hash
+                refOp.accept(this);
+                int scalarReg = lastResultReg;
+                int hashReg = allocateRegister();
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarReg);
+                if (currentCallContext == RuntimeContextType.SCALAR) {
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(rd);
+                    emitReg(hashReg);
+                    lastResultReg = rd;
+                } else {
+                    lastResultReg = hashReg;
+                }
+            } else if (node.operand instanceof BlockNode blockNode) {
+                // %{ block } — evaluate block and dereference to hash
+                blockNode.accept(this);
+                int scalarReg = lastResultReg;
+                int hashReg = allocateRegister();
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarReg);
+                lastResultReg = hashReg;
             } else {
                 throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
             }
@@ -2833,7 +2859,7 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void emit(short opcode) {
-        bytecode.add(opcode);
+        bytecode.add((int) opcode);
     }
 
     /**
@@ -2843,23 +2869,23 @@ public class BytecodeCompiler implements Visitor {
     void emitWithToken(short opcode, int tokenIndex) {
         int pc = bytecode.size();
         pcToTokenIndex.put(pc, tokenIndex);
-        bytecode.add(opcode);
+        bytecode.add((int) opcode);
     }
 
     void emit(int value) {
-        bytecode.add((short)value);
+        bytecode.add(value);
     }
 
     void emitInt(int value) {
-        bytecode.add((short)(value >> 16));  // High 16 bits
-        bytecode.add((short)value);          // Low 16 bits
+        bytecode.add(value >> 16);  // High 16 bits
+        bytecode.add(value & 0xFFFF);  // Low 16 bits
     }
 
     /**
      * Emit a short value (register index, small immediate, etc.).
      */
     private void emitShort(int value) {
-        bytecode.add((short)value);
+        bytecode.add(value);
     }
 
     /**
@@ -2867,7 +2893,7 @@ public class BytecodeCompiler implements Visitor {
      * Registers are now 16-bit (0-65535) instead of 8-bit (0-255).
      */
     void emitReg(int register) {
-        bytecode.add((short)register);
+        bytecode.add(register);
     }
 
     /**
@@ -2875,9 +2901,9 @@ public class BytecodeCompiler implements Visitor {
      * Used for forward jumps where the target is unknown at emit time.
      */
     void patchIntOffset(int position, int target) {
-        // Store absolute target address (not relative offset) as 2 shorts
-        bytecode.set(position, (short)((target >> 16) & 0xFFFF));      // High 16 bits
-        bytecode.set(position + 1, (short)(target & 0xFFFF));          // Low 16 bits
+        // Store absolute target address (not relative offset) as 2 ints
+        bytecode.set(position, (target >> 16) & 0xFFFF);      // High 16 bits
+        bytecode.set(position + 1, target & 0xFFFF);          // Low 16 bits
     }
 
     /**
@@ -2896,14 +2922,14 @@ public class BytecodeCompiler implements Visitor {
      * Used for forward jumps where the target is unknown at emit time.
      */
     private void patchShortOffset(int position, int target) {
-        bytecode.set(position, (short)target);
+        bytecode.set(position, target);
     }
 
     /**
-     * Convert List<Short> bytecode to short[] array.
+     * Convert List<Integer> bytecode to int[] array.
      */
-    private short[] toShortArray() {
-        short[] result = new short[bytecode.size()];
+    private int[] toShortArray() {
+        int[] result = new int[bytecode.size()];
         for (int i = 0; i < bytecode.size(); i++) {
             result[i] = bytecode.get(i);
         }
@@ -3878,7 +3904,7 @@ public class BytecodeCompiler implements Visitor {
      * Get the bytecode list for position tracking.
      * Used by refactored compiler classes for jump patching.
      */
-    List<Short> getBytecode() {
+    List<Integer> getBytecode() {
         return bytecode;
     }
 
