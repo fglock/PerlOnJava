@@ -918,6 +918,7 @@ public class ArgumentParser {
                 // Enable disassemble mode
                 validateExclusiveOptions(parsedArgs, "disassemble");
                 parsedArgs.disassembleEnabled = true;
+                RuntimeCode.setDisassemble(true);
                 break;
             case "--interpreter":
                 // Use bytecode interpreter instead of JVM compiler
