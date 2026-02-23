@@ -147,10 +147,13 @@ public class BytecodeCompiler implements Visitor {
         globalScope.put("wantarray", 2);
 
         if (parentRegistry != null) {
-            // Add parent scope variables (for eval STRING variable capture)
+            // Add parent scope variables to the global scope so hasVariable() finds them.
+            // A "my $x" inside the eval will call addVariable() which puts $x into the
+            // current (inner) scope, shadowing the global-scope entry — so lookups find
+            // the local my-declared register first (correct shadowing behaviour).
             globalScope.putAll(parentRegistry);
 
-            // Mark parent scope variables as captured so assignments use SET_SCALAR
+            // Also mark them as captured so assignments use SET_SCALAR (not STORE_SCALAR)
             capturedVarIndices = new HashMap<>();
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
                 String varName = entry.getKey();
@@ -814,72 +817,71 @@ public class BytecodeCompiler implements Visitor {
         // Variable reference
         String varName = node.name;
 
-        // Check if this is a captured variable (with sigil)
-        // Try common sigils: $, @, %
         String[] sigils = {"$", "@", "%"};
+
+        // Check local scope first (my declarations shadow captured vars from outer scope).
+        // This is critical for eval STRING: if the eval declares "my $x", that new $x
+        // must shadow any $x captured from the outer scope (which lives at a different
+        // register index from the outer code's register file).
+        if (hasVariable(varName)) {
+            lastResultReg = getVariableRegister(varName);
+            return;
+        }
+        for (String sigil : sigils) {
+            String varNameWithSigil = sigil + varName;
+            if (hasVariable(varNameWithSigil)) {
+                lastResultReg = getVariableRegister(varNameWithSigil);
+                return;
+            }
+        }
+
+        // Not in local scope - check captured variables from outer eval scope.
+        // capturedVarIndices holds variables captured from the parent InterpretedCode
+        // (set up by EvalStringHandler). Only fall through to this if no local my
+        // declaration shadows the name.
         for (String sigil : sigils) {
             String varNameWithSigil = sigil + varName;
             if (capturedVarIndices != null && capturedVarIndices.containsKey(varNameWithSigil)) {
-                // Captured variable - use its pre-allocated register
                 lastResultReg = capturedVarIndices.get(varNameWithSigil);
                 return;
             }
         }
 
-        // Check if it's a lexical variable (may have sigil or not)
-        if (hasVariable(varName)) {
-            // Lexical variable - already has a register
-            lastResultReg = getVariableRegister(varName);
-        } else {
-            // Try with sigils
-            boolean found = false;
-            for (String sigil : sigils) {
-                String varNameWithSigil = sigil + varName;
-                if (hasVariable(varNameWithSigil)) {
-                    lastResultReg = getVariableRegister(varNameWithSigil);
-                    found = true;
-                    break;
-                }
+        // Not a lexical variable - could be a global or a bareword
+        // Check for strict subs violation (bareword without sigil)
+        if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
+            // This is a bareword (no sigil)
+            if (emitterContext != null && emitterContext.symbolTable != null &&
+                emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
             }
-
-            if (!found) {
-                // Not a lexical variable - could be a global or a bareword
-                // Check for strict subs violation (bareword without sigil)
-                if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
-                    // This is a bareword (no sigil)
-                    if (emitterContext != null && emitterContext.symbolTable != null &&
-                        emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
-                        throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
-                    }
-                    // Not strict - treat bareword as string literal
-                    int rd = allocateRegister();
-                    emit(Opcodes.LOAD_STRING);
-                    emitReg(rd);
-                    int strIdx = addToStringPool(varName);
-                    emit(strIdx);
-                    lastResultReg = rd;
-                    return;
-                }
-
-                // Global variable
-                // Check strict vars before accessing
-                if (shouldBlockGlobalUnderStrictVars(varName)) {
-                    throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-                }
-
-                // Strip sigil and normalize name (e.g., "$x" → "main::x")
-                String bareVarName = varName.substring(1);  // Remove sigil
-                String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
-                int rd = allocateRegister();
-                int nameIdx = addToStringPool(normalizedName);
-
-                emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                emitReg(rd);
-                emit(nameIdx);
-
-                lastResultReg = rd;
-            }
+            // Not strict - treat bareword as string literal
+            int rd = allocateRegister();
+            emit(Opcodes.LOAD_STRING);
+            emitReg(rd);
+            int strIdx = addToStringPool(varName);
+            emit(strIdx);
+            lastResultReg = rd;
+            return;
         }
+
+        // Global variable
+        // Check strict vars before accessing
+        if (shouldBlockGlobalUnderStrictVars(varName)) {
+            throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+        }
+
+        // Strip sigil and normalize name (e.g., "$x" → "main::x")
+        String bareVarName = varName.substring(1);  // Remove sigil
+        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+        int rd = allocateRegister();
+        int nameIdx = addToStringPool(normalizedName);
+
+        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+        emitReg(rd);
+        emit(nameIdx);
+
+        lastResultReg = rd;
     }
 
     /**

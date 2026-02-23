@@ -369,12 +369,16 @@ public class OpcodeHandlerExtended {
     /**
      * Execute bitwise AND binary operation.
      * Format: BITWISE_AND_BINARY rd rs1 rs2
+     *
+     * Uses the context-sensitive bitwiseAnd() (not bitwiseAndBinary()) to match
+     * the JVM path: if operands are non-numeric strings, dispatches to string ops.
+     * bitwiseAndBinary() is only for the explicit "binary&" operator.
      */
     public static int executeBitwiseAndBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseAndBinary(
+        registers[rd] = BitwiseOperators.bitwiseAnd(
             (RuntimeScalar) registers[rs1],
             (RuntimeScalar) registers[rs2]
         );
@@ -384,12 +388,16 @@ public class OpcodeHandlerExtended {
     /**
      * Execute bitwise OR binary operation.
      * Format: BITWISE_OR_BINARY rd rs1 rs2
+     *
+     * Uses the context-sensitive bitwiseOr() (not bitwiseOrBinary()) to match
+     * the JVM path: if operands are non-numeric strings, dispatches to string ops.
+     * bitwiseOrBinary() is only for the explicit "binary|" operator.
      */
     public static int executeBitwiseOrBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseOrBinary(
+        registers[rd] = BitwiseOperators.bitwiseOr(
             (RuntimeScalar) registers[rs1],
             (RuntimeScalar) registers[rs2]
         );
@@ -399,12 +407,16 @@ public class OpcodeHandlerExtended {
     /**
      * Execute bitwise XOR binary operation.
      * Format: BITWISE_XOR_BINARY rd rs1 rs2
+     *
+     * Uses the context-sensitive bitwiseXor() (not bitwiseXorBinary()) to match
+     * the JVM path: if operands are non-numeric strings, dispatches to string ops.
+     * bitwiseXorBinary() is only for the explicit "binary^" operator.
      */
     public static int executeBitwiseXorBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseXorBinary(
+        registers[rd] = BitwiseOperators.bitwiseXor(
             (RuntimeScalar) registers[rs1],
             (RuntimeScalar) registers[rs2]
         );
