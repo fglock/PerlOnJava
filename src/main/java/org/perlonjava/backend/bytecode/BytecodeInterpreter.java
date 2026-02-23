@@ -2002,6 +2002,24 @@ public class BytecodeInterpreter {
                     case Opcodes.LOCALTIME:
                     case Opcodes.GMTIME:
                     case Opcodes.CRYPT:
+                    case Opcodes.CLOSE:
+                    case Opcodes.BINMODE:
+                    case Opcodes.SEEK:
+                    case Opcodes.EOF_OP:
+                    case Opcodes.SYSREAD:
+                    case Opcodes.SYSWRITE:
+                    case Opcodes.SYSOPEN:
+                    case Opcodes.SOCKET:
+                    case Opcodes.BIND:
+                    case Opcodes.CONNECT:
+                    case Opcodes.LISTEN:
+                    case Opcodes.WRITE:
+                    case Opcodes.FORMLINE:
+                    case Opcodes.PRINTF:
+                    case Opcodes.ACCEPT:
+                    case Opcodes.SYSSEEK:
+                    case Opcodes.TRUNCATE:
+                    case Opcodes.READ:
                         pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
 

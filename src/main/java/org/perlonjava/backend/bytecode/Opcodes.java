@@ -1013,6 +1013,47 @@ public class Opcodes {
      * Effect: Updates InterpreterState current frame's packageName to stringPool[nameIdx] */
     public static final short SET_PACKAGE = 306;
 
+    // =================================================================
+    // I/O OPERATORS (309-329) - truly new ones not already defined above
+    // Note: OPEN=165, READLINE=166, TELL=LASTOP+37 already exist
+    // =================================================================
+    /** close FILEHANDLE: Format: CLOSE rd argsReg ctx */
+    public static final short CLOSE = 309;
+    /** binmode FILEHANDLE,LAYER: Format: BINMODE rd argsReg ctx */
+    public static final short BINMODE = 312;
+    /** seek FILEHANDLE,POS,WHENCE: Format: SEEK rd argsReg ctx */
+    public static final short SEEK = 313;
+    /** eof FILEHANDLE: Format: EOF_OP rd argsReg ctx */
+    public static final short EOF_OP = 315;
+    /** sysread FILEHANDLE,SCALAR,LENGTH: Format: SYSREAD rd argsReg ctx */
+    public static final short SYSREAD = 316;
+    /** syswrite FILEHANDLE,SCALAR: Format: SYSWRITE rd argsReg ctx */
+    public static final short SYSWRITE = 317;
+    /** sysopen FILEHANDLE,FILENAME,MODE: Format: SYSOPEN rd argsReg ctx */
+    public static final short SYSOPEN = 318;
+    /** socket SOCKET,DOMAIN,TYPE,PROTOCOL: Format: SOCKET rd argsReg ctx */
+    public static final short SOCKET = 319;
+    /** bind SOCKET,NAME: Format: BIND rd argsReg ctx */
+    public static final short BIND = 320;
+    /** connect SOCKET,NAME: Format: CONNECT rd argsReg ctx */
+    public static final short CONNECT = 321;
+    /** listen SOCKET,QUEUESIZE: Format: LISTEN rd argsReg ctx */
+    public static final short LISTEN = 322;
+    /** write FILEHANDLE: Format: WRITE rd argsReg ctx */
+    public static final short WRITE = 323;
+    /** formline PICTURE,LIST: Format: FORMLINE rd argsReg ctx */
+    public static final short FORMLINE = 324;
+    /** printf FILEHANDLE,FORMAT,LIST: Format: PRINTF rd argsReg ctx */
+    public static final short PRINTF = 325;
+    /** accept NEWSOCKET,GENERICSOCKET: Format: ACCEPT rd argsReg ctx */
+    public static final short ACCEPT = 326;
+    /** sysseek FILEHANDLE,POS,WHENCE: Format: SYSSEEK rd argsReg ctx */
+    public static final short SYSSEEK = 327;
+    /** truncate FILEHANDLE,LENGTH: Format: TRUNCATE rd argsReg ctx */
+    public static final short TRUNCATE = 328;
+    /** read FILEHANDLE,SCALAR,LENGTH: Format: READ rd argsReg ctx */
+    public static final short READ = 329;
+
     /** Enter scoped package block (package Foo { ...).
      * Format: PUSH_PACKAGE nameIdx
      * Effect: Saves current packageName, sets new one */

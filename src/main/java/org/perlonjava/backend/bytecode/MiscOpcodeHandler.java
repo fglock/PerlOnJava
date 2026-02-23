@@ -59,6 +59,25 @@ public class MiscOpcodeHandler {
             case Opcodes.LOCALTIME -> Time.localtime(args, ctx);
             case Opcodes.GMTIME -> Time.gmtime(args, ctx);
             case Opcodes.CRYPT -> Crypt.crypt(args);
+            // I/O operators
+            case Opcodes.CLOSE -> IOOperator.close(ctx, argsArray);
+            case Opcodes.BINMODE -> IOOperator.binmode(ctx, argsArray);
+            case Opcodes.SEEK -> IOOperator.seek(ctx, argsArray);
+            case Opcodes.EOF_OP -> IOOperator.eof(ctx, argsArray);
+            case Opcodes.SYSREAD -> IOOperator.sysread(ctx, argsArray);
+            case Opcodes.SYSWRITE -> IOOperator.syswrite(ctx, argsArray);
+            case Opcodes.SYSOPEN -> IOOperator.sysopen(ctx, argsArray);
+            case Opcodes.SOCKET -> IOOperator.socket(ctx, argsArray);
+            case Opcodes.BIND -> IOOperator.bind(ctx, argsArray);
+            case Opcodes.CONNECT -> IOOperator.connect(ctx, argsArray);
+            case Opcodes.LISTEN -> IOOperator.listen(ctx, argsArray);
+            case Opcodes.WRITE -> IOOperator.write(ctx, argsArray);
+            case Opcodes.FORMLINE -> IOOperator.formline(ctx, argsArray);
+            case Opcodes.PRINTF -> IOOperator.printf(ctx, argsArray);
+            case Opcodes.ACCEPT -> IOOperator.accept(ctx, argsArray);
+            case Opcodes.SYSSEEK -> IOOperator.sysseek(ctx, argsArray);
+            case Opcodes.TRUNCATE -> IOOperator.truncate(ctx, argsArray);
+            case Opcodes.READ -> IOOperator.read(ctx, argsArray);
             default -> throw new IllegalStateException("Unknown opcode in MiscOpcodeHandler: " + opcode);
         };
 

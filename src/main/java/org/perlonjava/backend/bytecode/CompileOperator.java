@@ -2722,7 +2722,14 @@ public class CompileOperator {
                    op.equals("umask") || op.equals("system") || op.equals("pack") ||
                    op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
                    op.equals("localtime") || op.equals("gmtime") || op.equals("caller") ||
-                   op.equals("fileno") || op.equals("getc") || op.equals("qx")) {
+                   op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
+                   op.equals("close") ||
+                   op.equals("binmode") || op.equals("seek") ||
+                   op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
+                   op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
+                   op.equals("connect") || op.equals("listen") || op.equals("write") ||
+                   op.equals("formline") || op.equals("printf") || op.equals("accept") ||
+                   op.equals("sysseek") || op.equals("truncate") || op.equals("read")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList
@@ -2770,6 +2777,24 @@ public class CompileOperator {
                 case "localtime" -> Opcodes.LOCALTIME;
                 case "gmtime" -> Opcodes.GMTIME;
                 case "crypt" -> Opcodes.CRYPT;
+                case "close" -> Opcodes.CLOSE;
+                case "binmode" -> Opcodes.BINMODE;
+                case "seek" -> Opcodes.SEEK;
+                case "eof" -> Opcodes.EOF_OP;
+                case "sysread" -> Opcodes.SYSREAD;
+                case "syswrite" -> Opcodes.SYSWRITE;
+                case "sysopen" -> Opcodes.SYSOPEN;
+                case "socket" -> Opcodes.SOCKET;
+                case "bind" -> Opcodes.BIND;
+                case "connect" -> Opcodes.CONNECT;
+                case "listen" -> Opcodes.LISTEN;
+                case "write" -> Opcodes.WRITE;
+                case "formline" -> Opcodes.FORMLINE;
+                case "printf" -> Opcodes.PRINTF;
+                case "accept" -> Opcodes.ACCEPT;
+                case "sysseek" -> Opcodes.SYSSEEK;
+                case "truncate" -> Opcodes.TRUNCATE;
+                case "read" -> Opcodes.READ;
                 default -> throw new IllegalStateException("Unexpected operator: " + op);
             };
 
