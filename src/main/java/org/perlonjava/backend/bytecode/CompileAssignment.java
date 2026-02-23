@@ -897,6 +897,27 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = globReg;
+                } else if (leftOp.operator.equals("*") &&
+                           (leftOp.operand instanceof BlockNode ||
+                            leftOp.operand instanceof OperatorNode ||
+                            leftOp.operand instanceof StringNode)) {
+                    // Dynamic typeglob assignment: *{"Pkg::name"} = value, *$ref = value, *{'name'} = value
+                    // Evaluate the expression to get the glob name at runtime
+                    leftOp.operand.accept(bytecodeCompiler);
+                    int nameReg = bytecodeCompiler.lastResultReg;
+
+                    // Load the glob via symbolic reference
+                    int globReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emitWithToken(Opcodes.LOAD_SYMBOLIC_GLOB, node.getIndex());
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(nameReg);
+
+                    // Store value to glob
+                    bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = globReg;
                 } else if (leftOp.operator.equals("pos")) {
                     // pos($var) = value - lvalue assignment to regex position
                     // pos() returns a PosLvalueScalar that can be assigned to
