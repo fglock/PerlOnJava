@@ -1675,13 +1675,19 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("open requires arguments");
             }
 
-            // Compile all arguments into a list
+            // Compile the filehandle argument (first arg) as an lvalue register
+            // We must NOT push it through ARRAY_PUSH (which copies via addToArray),
+            // because IOOperator.open needs to call fileHandle.set() on the actual lvalue.
+            argsList.elements.get(0).accept(bytecodeCompiler);
+            int fhReg = bytecodeCompiler.lastResultReg;
+
+            // Compile remaining arguments into a list (mode, filename/ref, ...)
             int argsReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
             bytecodeCompiler.emitReg(argsReg);
 
-            for (Node arg : argsList.elements) {
-                arg.accept(bytecodeCompiler);
+            for (int i = 1; i < argsList.elements.size(); i++) {
+                argsList.elements.get(i).accept(bytecodeCompiler);
                 int elemReg = bytecodeCompiler.lastResultReg;
 
                 bytecodeCompiler.emit(Opcodes.ARRAY_PUSH);
@@ -1689,11 +1695,13 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(elemReg);
             }
 
-            // Call open with context and args
+            // Call open: OPEN rd ctx fhReg argsReg
+            // fhReg is the actual lvalue register for the filehandle (written back directly)
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.OPEN);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+            bytecodeCompiler.emitReg(fhReg);
             bytecodeCompiler.emitReg(argsReg);
 
             bytecodeCompiler.lastResultReg = rd;

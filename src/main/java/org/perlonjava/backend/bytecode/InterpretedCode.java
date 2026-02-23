@@ -788,8 +788,9 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.OPEN:
                     rd = bytecode[pc++];
                     int openCtx = bytecode[pc++];
+                    int openFhReg = bytecode[pc++];
                     int openArgs = bytecode[pc++];
-                    sb.append("OPEN r").append(rd).append(" = open(ctx=").append(openCtx).append(", r").append(openArgs).append(")\n");
+                    sb.append("OPEN r").append(rd).append(" = open(ctx=").append(openCtx).append(", fh=r").append(openFhReg).append(", args=r").append(openArgs).append(")\n");
                     break;
                 case Opcodes.READLINE:
                     rd = bytecode[pc++];
