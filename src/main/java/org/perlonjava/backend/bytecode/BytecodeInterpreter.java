@@ -1558,7 +1558,11 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int listReg = bytecode[pc++];
 
-                        RuntimeList list = (RuntimeList) registers[listReg];
+                        // registers[listReg] may be a RuntimeList (from CREATE_LIST) or a
+                        // RuntimeScalar (from LOAD_UNDEF when an empty ListNode is compiled).
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = (listBase instanceof RuntimeList rl)
+                                ? rl : listBase.getList();
                         RuntimeScalar result = IOOperator.select(list, RuntimeContextType.SCALAR);
                         registers[rd] = result;
                         break;
