@@ -3035,25 +3035,25 @@ public class BytecodeInterpreter {
                                          RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.CHOWN:
-                return SlowOpcodeHandler.executeChown(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.CHOWN, bytecode, pc, registers);
             case Opcodes.WAITPID:
-                return SlowOpcodeHandler.executeWaitpid(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.WAITPID, bytecode, pc, registers);
             case Opcodes.FORK:
                 return SlowOpcodeHandler.executeFork(bytecode, pc, registers);
             case Opcodes.GETPPID:
                 return SlowOpcodeHandler.executeGetppid(bytecode, pc, registers);
             case Opcodes.GETPGRP:
-                return SlowOpcodeHandler.executeGetpgrp(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.GETPGRP, bytecode, pc, registers);
             case Opcodes.SETPGRP:
-                return SlowOpcodeHandler.executeSetpgrp(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.SETPGRP, bytecode, pc, registers);
             case Opcodes.GETPRIORITY:
-                return SlowOpcodeHandler.executeGetpriority(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.GETPRIORITY, bytecode, pc, registers);
             case Opcodes.SETPRIORITY:
-                return SlowOpcodeHandler.executeSetpriority(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.SETPRIORITY, bytecode, pc, registers);
             case Opcodes.GETSOCKOPT:
-                return SlowOpcodeHandler.executeGetsockopt(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.GETSOCKOPT, bytecode, pc, registers);
             case Opcodes.SETSOCKOPT:
-                return SlowOpcodeHandler.executeSetsockopt(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.SETSOCKOPT, bytecode, pc, registers);
             case Opcodes.SYSCALL:
                 return SlowOpcodeHandler.executeSyscall(bytecode, pc, registers);
             case Opcodes.SEMGET:
