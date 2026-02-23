@@ -255,6 +255,15 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Set the compile-time package for name normalization.
+     * Called by eval STRING handlers to sync the package from the call site,
+     * so bare names like *named compile to FOO3::named instead of main::named.
+     */
+    public void setCompilePackage(String packageName) {
+        symbolTable.setCurrentPackage(packageName, false);
+    }
+
+    /**
      * Helper: Get all variable names in all scopes (for closure detection).
      */
     private String[] getVariableNames() {

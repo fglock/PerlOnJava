@@ -161,7 +161,18 @@ public class EvalStringHandler {
                 capturedVars = capturedList.toArray(new RuntimeBase[0]);
             }
 
-            // Step 4: Compile AST to interpreter bytecode with adjusted variable registry
+            // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
+            //
+            // IMPORTANT: Do NOT call compiler.setCompilePackage() here.
+            // The package context is already correct because:
+            //   1. The BytecodeCompiler uses `errorUtil` (constructed above with the eval's tokens)
+            //      to bake "at file line N" into die/warn nodes at compile time.
+            //   2. Calling setCompilePackage() would change symbolTable.currentPackage, which
+            //      shifts how dieWarnNode() in OperatorParser maps token indices to line numbers,
+            //      causing signature-validation die nodes to report wrong locations.
+            //   3. Package-qualified name resolution (e.g. *named -> FOO3::named) is handled
+            //      by the SET_PACKAGE opcode emitted at runtime by the outer script, which
+            //      updates InterpreterState.currentPackage before this eval runs.
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
                 sourceLine,
@@ -169,6 +180,9 @@ public class EvalStringHandler {
                 adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            if (RuntimeCode.DISASSEMBLE) {
+                System.out.println(evalCode.disassemble());
+            }
 
             // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
             // This implements Perl's eval source retention feature for debugging
@@ -242,12 +256,17 @@ public class EvalStringHandler {
             Parser parser = new Parser(ctx, tokens);
             Node ast = parser.parse();
 
-            // Compile to bytecode
+            // Compile to bytecode.
+            // IMPORTANT: Do NOT call compiler.setCompilePackage() here — same reason as the
+            // first evalString overload above: it corrupts die/warn location baking.
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
                 sourceLine
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            if (RuntimeCode.DISASSEMBLE) {
+                System.out.println(evalCode.disassemble());
+            }
 
             // Store source lines in debugger symbol table if $^P flags are set
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();

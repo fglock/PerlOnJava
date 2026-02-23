@@ -64,6 +64,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             System.getenv("JPERL_EVAL_VERBOSE") != null;
 
     /**
+     * Flag to enable disassembly of eval STRING bytecode.
+     * When set, prints the interpreter bytecode for each eval STRING compilation.
+     *
+     * Set environment variable JPERL_DISASSEMBLE=1 to enable, or use --disassemble CLI flag.
+     * The --disassemble flag sets this via setDisassemble().
+     */
+    public static boolean DISASSEMBLE =
+            System.getenv("JPERL_DISASSEMBLE") != null;
+
+    /** Called by CLI argument parser when --disassemble is set. */
+    public static void setDisassemble(boolean value) {
+        DISASSEMBLE = value;
+    }
+
+    /**
      * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
      *
      * PROBLEM: In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values:
@@ -811,13 +826,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
 
-                // Compile to InterpretedCode with variable registry
+                // Compile to InterpretedCode with variable registry.
+                //
+                // setCompilePackage() is safe here (unlike EvalStringHandler) because:
+                //   - evalCtx.errorUtil uses evalCompilerOptions.fileName (the outer script name),
+                //     not the eval string's tokens, so die/warn location baking is already
+                //     relative to the outer script and is unaffected by the package change.
+                //   - capturedSymbolTable.getCurrentPackage() gives the compile-time package
+                //     of the eval call site (e.g. "FOO3"), so bare names like *named are
+                //     correctly qualified to FOO3::named in the bytecode string pool.
+                //   - Without this call, the BytecodeCompiler defaults to "main", causing
+                //     eval q[*named{CODE}] to look up main::named instead of FOO3::named.
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
                         1,
                         evalCtx.errorUtil,
                         adjustedRegistry);
+                compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
                 interpretedCode = compiler.compile(ast, evalCtx);
+                if (DISASSEMBLE) {
+                    System.out.println(interpretedCode.disassemble());
+                }
 
                 // Set captured variables
                 if (runtimeValues.length > 0) {
