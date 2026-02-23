@@ -672,10 +672,11 @@ Regex cache (1000 patterns) for performance. Unsupported: recursive patterns, va
 
 **Core classes:**
 
-1. **RuntimeScalar** - Context-aware string/number/reference
-2. **RuntimeArray** - Auto-vivification, slicing, context
-3. **RuntimeHash** - Lazy init, ordered keys
-4. **RuntimeCode** - Code refs with closures
+1. **RuntimeScalar** - Dynamically typed scalar: integer, double, string, reference, undef, or special types (regex, glob, tied, dualvar)
+2. **RuntimeArray** - Dynamic list of `RuntimeScalar` elements; supports plain, autovivifying, tied, and read-only modes
+3. **RuntimeHash** - Associative array; supports plain, autovivifying, and tied modes
+4. **RuntimeCode** - Compiled subroutine or eval string; holds either a JVM `MethodHandle` or `InterpretedCode` for the Internal VM
+5. **RuntimeGlob** - Typeglob (`*foo`); name holder that delegates slot access to the global symbol table maps
 
 **Key:** Perl semantics on JVM objects. All shared between JVM compiler and Internal VM. Context tracking, auto-vivification, truthiness, and string/number coercion are implemented consistently across both backends.
 
@@ -693,12 +694,10 @@ say $c->();  # 1
 say $c->();  # 2
 ```
 
-**Implementation:**
-- `VariableCaptureAnalyzer` identifies which lexical variables each sub closes over at compile time
-- Captured variables are stored in a shared cell (a reference-counted box)
-- The `CREATE_CLOSURE_VAR` opcode allocates these cells at closure creation time
-- Both the outer scope and the inner sub hold a reference to the same cell — mutations are visible to both
-- Works identically in both the JVM backend and the Internal VM
+**Implementation (JVM backend):**
+- Each anonymous sub is compiled into a new JVM class; all visible lexical variables are passed as constructor arguments
+- Captured variables (`RuntimeScalar`, `RuntimeArray`, or `RuntimeHash` depending on sigil) are shared by Java reference — both the outer scope and the inner sub hold a reference to the same object, so mutations are visible to both
+- The Internal VM uses a dedicated opcode for closure variable allocation, but shares the same runtime objects at runtime
 
 ---
 
