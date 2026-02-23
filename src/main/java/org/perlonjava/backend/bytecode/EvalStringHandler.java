@@ -76,11 +76,13 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Inherit the runtime current package so eval STRING compiles in the right package.
-            // InterpreterState.currentPackage is updated by SET_PACKAGE/PUSH_PACKAGE opcodes
-            // as "package Foo;" declarations execute at runtime.
-            String runtimePackage = InterpreterState.currentPackage.get().toString();
-            symbolTable.setCurrentPackage(runtimePackage, false);
+            // Inherit the compile-time package from the calling code, matching what
+            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
+            // Using the compile-time package (not InterpreterState.currentPackage which is
+            // the runtime package) ensures bare names like *named resolve to FOO3::named
+            // when the eval call site is inside "package FOO3".
+            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
+            symbolTable.setCurrentPackage(compilePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
@@ -162,17 +164,9 @@ public class EvalStringHandler {
             }
 
             // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
-            //
-            // IMPORTANT: Do NOT call compiler.setCompilePackage() here.
-            // The package context is already correct because:
-            //   1. The BytecodeCompiler uses `errorUtil` (constructed above with the eval's tokens)
-            //      to bake "at file line N" into die/warn nodes at compile time.
-            //   2. Calling setCompilePackage() would change symbolTable.currentPackage, which
-            //      shifts how dieWarnNode() in OperatorParser maps token indices to line numbers,
-            //      causing signature-validation die nodes to report wrong locations.
-            //   3. Package-qualified name resolution (e.g. *named -> FOO3::named) is handled
-            //      by the SET_PACKAGE opcode emitted at runtime by the outer script, which
-            //      updates InterpreterState.currentPackage before this eval runs.
+            // The compile-time package is already propagated via ctx.symbolTable (set above
+            // from currentCode.compilePackage), so BytecodeCompiler will use it for name
+            // resolution (e.g. *named -> FOO3::named) without needing setCompilePackage().
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
                 sourceLine,
