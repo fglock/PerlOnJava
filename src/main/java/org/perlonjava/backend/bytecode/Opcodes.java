@@ -1008,5 +1008,20 @@ public class Opcodes {
      * Format: UNPACK rd argsReg ctx */
     public static final short UNPACK = 305;
 
+    /** Set current package at runtime (non-scoped: package Foo;).
+     * Format: SET_PACKAGE nameIdx
+     * Effect: Updates InterpreterState current frame's packageName to stringPool[nameIdx] */
+    public static final short SET_PACKAGE = 306;
+
+    /** Enter scoped package block (package Foo { ...).
+     * Format: PUSH_PACKAGE nameIdx
+     * Effect: Saves current packageName, sets new one */
+    public static final short PUSH_PACKAGE = 307;
+
+    /** Exit scoped package block (closing } of package Foo { ...).
+     * Format: POP_PACKAGE
+     * Effect: Restores previous packageName */
+    public static final short POP_PACKAGE = 308;
+
     private Opcodes() {} // Utility class - no instantiation
 }
