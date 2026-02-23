@@ -1558,7 +1558,11 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int listReg = bytecode[pc++];
 
-                        RuntimeList list = (RuntimeList) registers[listReg];
+                        // registers[listReg] may be a RuntimeList (from CREATE_LIST) or a
+                        // RuntimeScalar (from LOAD_UNDEF when an empty ListNode is compiled).
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = (listBase instanceof RuntimeList rl)
+                                ? rl : listBase.getList();
                         RuntimeScalar result = IOOperator.select(list, RuntimeContextType.SCALAR);
                         registers[rd] = result;
                         break;
@@ -1907,7 +1911,7 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.GLOB_SLOT_GET: {
-                        // Glob slot access: rd = glob.hashDerefGetNonStrict(key, "main")
+                        // Glob slot access: rd = glob.hashDerefGetNonStrict(key, pkg)
                         // Format: GLOB_SLOT_GET rd globReg keyReg
                         pc = SlowOpcodeHandler.executeGlobSlotGet(bytecode, pc, registers);
                         break;
@@ -2020,6 +2024,9 @@ public class BytecodeInterpreter {
                     case Opcodes.SYSSEEK:
                     case Opcodes.TRUNCATE:
                     case Opcodes.READ:
+                    case Opcodes.OPENDIR:
+                    case Opcodes.READDIR:
+                    case Opcodes.SEEKDIR:
                         pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
 
@@ -3035,25 +3042,25 @@ public class BytecodeInterpreter {
                                          RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.CHOWN:
-                return SlowOpcodeHandler.executeChown(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.CHOWN, bytecode, pc, registers);
             case Opcodes.WAITPID:
-                return SlowOpcodeHandler.executeWaitpid(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.WAITPID, bytecode, pc, registers);
             case Opcodes.FORK:
                 return SlowOpcodeHandler.executeFork(bytecode, pc, registers);
             case Opcodes.GETPPID:
                 return SlowOpcodeHandler.executeGetppid(bytecode, pc, registers);
             case Opcodes.GETPGRP:
-                return SlowOpcodeHandler.executeGetpgrp(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.GETPGRP, bytecode, pc, registers);
             case Opcodes.SETPGRP:
-                return SlowOpcodeHandler.executeSetpgrp(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.SETPGRP, bytecode, pc, registers);
             case Opcodes.GETPRIORITY:
-                return SlowOpcodeHandler.executeGetpriority(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.GETPRIORITY, bytecode, pc, registers);
             case Opcodes.SETPRIORITY:
-                return SlowOpcodeHandler.executeSetpriority(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.SETPRIORITY, bytecode, pc, registers);
             case Opcodes.GETSOCKOPT:
-                return SlowOpcodeHandler.executeGetsockopt(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.GETSOCKOPT, bytecode, pc, registers);
             case Opcodes.SETSOCKOPT:
-                return SlowOpcodeHandler.executeSetsockopt(bytecode, pc, registers);
+                return MiscOpcodeHandler.execute(Opcodes.SETSOCKOPT, bytecode, pc, registers);
             case Opcodes.SYSCALL:
                 return SlowOpcodeHandler.executeSyscall(bytecode, pc, registers);
             case Opcodes.SEMGET:

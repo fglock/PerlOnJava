@@ -112,11 +112,23 @@ package B;
 # Main introspection function
 sub svref_2object {
     my $ref = shift;
-    
-    if (ref($ref) eq 'CODE') {
+    my $type = ref($ref);
+
+    # A plain CODE scalar (e.g. from \&f in interpreter mode) has ref() eq 'CODE'.
+    # A CODE-typed scalar passed directly (not wrapped in REFERENCE) also needs
+    # to be treated as a CV — detect it via Scalar::Util::reftype as well.
+    if ($type eq 'CODE') {
         return B::CV->new($ref);
     }
-    
+
+    # Scalar::Util::reftype sees through blessing; use it as a fallback
+    # for cases where ref() returns a package name (blessed code ref).
+    require Scalar::Util;
+    my $rtype = Scalar::Util::reftype($ref) // '';
+    if ($rtype eq 'CODE') {
+        return B::CV->new($ref);
+    }
+
     return B::SV->new($ref);
 }
 

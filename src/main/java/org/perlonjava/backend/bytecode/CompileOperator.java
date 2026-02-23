@@ -856,25 +856,23 @@ public class CompileOperator {
 
             int rd = bytecodeCompiler.allocateRegister();
 
-            if (node.operand != null && node.operand instanceof ListNode) {
-                // select FILEHANDLE or select() with arguments
-                // Compile the operand (ListNode containing filehandle ref)
+            boolean hasArgs = node.operand instanceof ListNode ln && !ln.elements.isEmpty();
+            if (hasArgs) {
+                // select FILEHANDLE or select(RBITS,WBITS,EBITS,TIMEOUT) with arguments
                 node.operand.accept(bytecodeCompiler);
                 int listReg = bytecodeCompiler.lastResultReg;
 
-                // Emit SELECT opcode
                 bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(listReg);
             } else {
-                // select() with no arguments - returns current filehandle
-                // Create empty list
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                // select() with no arguments (or empty ListNode from print-without-filehandle)
+                // Must emit CREATE_LIST so SELECT receives a RuntimeList, not a RuntimeScalar
                 int listReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(listReg);
                 bytecodeCompiler.emit(0); // count = 0
 
-                // Emit SELECT opcode
                 bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(listReg);
@@ -2591,62 +2589,6 @@ public class CompileOperator {
             bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("getpgrp")) {
-            // getpgrp($pid) - returns process group
-            // Format: GETPGRP rd pidReg
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int pidReg = bytecodeCompiler.lastResultReg;
-                int rd = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.GETPGRP, node.getIndex());
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(pidReg);
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("getpgrp requires an argument");
-            }
-        } else if (op.equals("setpgrp")) {
-            // setpgrp($pid, $pgrp) - sets process group
-            // Format: SETPGRP pidReg pgrpReg
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (list.elements.size() >= 2) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                    int pidReg = bytecodeCompiler.lastResultReg;
-                    list.elements.get(1).accept(bytecodeCompiler);
-                    int pgrpReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emitWithToken(Opcodes.SETPGRP, node.getIndex());
-                    bytecodeCompiler.emitReg(pidReg);
-                    bytecodeCompiler.emitReg(pgrpReg);
-                    bytecodeCompiler.lastResultReg = -1; // No return value
-                } else {
-                    bytecodeCompiler.throwCompilerException("setpgrp requires two arguments");
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("setpgrp requires two arguments");
-            }
-        } else if (op.equals("getpriority")) {
-            // getpriority($which, $who) - returns process priority
-            // Format: GETPRIORITY rd whichReg whoReg
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (list.elements.size() >= 2) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                    int whichReg = bytecodeCompiler.lastResultReg;
-                    list.elements.get(1).accept(bytecodeCompiler);
-                    int whoReg = bytecodeCompiler.lastResultReg;
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emitWithToken(Opcodes.GETPRIORITY, node.getIndex());
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(whichReg);
-                    bytecodeCompiler.emitReg(whoReg);
-                    bytecodeCompiler.lastResultReg = rd;
-                } else {
-                    bytecodeCompiler.throwCompilerException("getpriority requires two arguments");
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("getpriority requires two arguments");
-            }
         } else if (op.equals("atan2")) {
             // atan2($y, $x) - returns arctangent of y/x
             // Format: ATAN2 rd rs1 rs2
@@ -2729,7 +2671,12 @@ public class CompileOperator {
                    op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
                    op.equals("connect") || op.equals("listen") || op.equals("write") ||
                    op.equals("formline") || op.equals("printf") || op.equals("accept") ||
-                   op.equals("sysseek") || op.equals("truncate") || op.equals("read")) {
+                   op.equals("sysseek") || op.equals("truncate") || op.equals("read") ||
+                   op.equals("chown") || op.equals("waitpid") ||
+                   op.equals("setsockopt") || op.equals("getsockopt") ||
+                   op.equals("getpgrp") || op.equals("setpgrp") ||
+                   op.equals("getpriority") || op.equals("setpriority") ||
+                   op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList
@@ -2795,6 +2742,17 @@ public class CompileOperator {
                 case "sysseek" -> Opcodes.SYSSEEK;
                 case "truncate" -> Opcodes.TRUNCATE;
                 case "read" -> Opcodes.READ;
+                case "chown" -> Opcodes.CHOWN;
+                case "waitpid" -> Opcodes.WAITPID;
+                case "setsockopt" -> Opcodes.SETSOCKOPT;
+                case "getsockopt" -> Opcodes.GETSOCKOPT;
+                case "getpgrp" -> Opcodes.GETPGRP;
+                case "setpgrp" -> Opcodes.SETPGRP;
+                case "getpriority" -> Opcodes.GETPRIORITY;
+                case "setpriority" -> Opcodes.SETPRIORITY;
+                case "opendir" -> Opcodes.OPENDIR;
+                case "readdir" -> Opcodes.READDIR;
+                case "seekdir" -> Opcodes.SEEKDIR;
                 default -> throw new IllegalStateException("Unexpected operator: " + op);
             };
 
