@@ -62,133 +62,6 @@ public class SlowOpcodeHandler {
     // =================================================================
 
     /**
-     * SLOW_CHOWN: chown(list, uid, gid)
-     * Format: [SLOW_CHOWN] [rs_list] [rs_uid] [rs_gid]
-     * Effect: Changes ownership of files in list
-     */
-    public static int executeChown(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int listReg = bytecode[pc++];
-        int uidReg = bytecode[pc++];
-        int gidReg = bytecode[pc++];
-
-        // TODO: Implement chown via JNI or ProcessBuilder
-        // For now, throw unsupported operation exception
-        throw new UnsupportedOperationException(
-            "chown() not yet implemented in interpreter"
-        );
-    }
-
-    /**
-     * SLOW_WAITPID: rd = waitpid(pid, flags)
-     * Format: [SLOW_WAITPID] [rd] [rs_pid] [rs_flags]
-     * Effect: Waits for child process and returns status
-     */
-    public static int executeWaitpid(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++];
-        int pidReg = bytecode[pc++];
-        int flagsReg = bytecode[pc++];
-
-        RuntimeScalar pid = (RuntimeScalar) registers[pidReg];
-        RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
-
-        // TODO: Implement waitpid via JNI or ProcessBuilder
-        // For now, return -1 (error)
-        registers[rd] = new RuntimeScalar(-1);
-        return pc;
-    }
-
-    /**
-     * SLOW_SETSOCKOPT: setsockopt(socket, level, optname, optval)
-     * Format: [SLOW_SETSOCKOPT] [rs_socket] [rs_level] [rs_optname] [rs_optval]
-     * Effect: Sets socket option
-     */
-    public static int executeSetsockopt(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int socketReg = bytecode[pc++];
-        int levelReg = bytecode[pc++];
-        int optnameReg = bytecode[pc++];
-        int optvalReg = bytecode[pc++];
-
-        // TODO: Implement via java.nio.channels or JNI
-        throw new UnsupportedOperationException(
-            "setsockopt() not yet implemented in interpreter"
-        );
-    }
-
-    /**
-     * SLOW_GETSOCKOPT: rd = getsockopt(socket, level, optname)
-     * Format: [SLOW_GETSOCKOPT] [rd] [rs_socket] [rs_level] [rs_optname]
-     * Effect: Gets socket option value
-     */
-    public static int executeGetsockopt(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++];
-        int socketReg = bytecode[pc++];
-        int levelReg = bytecode[pc++];
-        int optnameReg = bytecode[pc++];
-
-        // TODO: Implement via java.nio.channels or JNI
-        throw new UnsupportedOperationException(
-            "getsockopt() not yet implemented in interpreter"
-        );
-    }
-
-    /**
-     * SLOW_GETPRIORITY: rd = getpriority(which, who)
-     * Format: [SLOW_GETPRIORITY] [rd] [rs_which] [rs_who]
-     * Effect: Gets process priority
-     */
-    public static int executeGetpriority(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++];
-        int whichReg = bytecode[pc++];
-        int whoReg = bytecode[pc++];
-
-        // TODO: Implement via JNI
-        registers[rd] = new RuntimeScalar(0); // Default priority
-        return pc;
-    }
-
-    /**
-     * SLOW_SETPRIORITY: setpriority(which, who, priority)
-     * Format: [SLOW_SETPRIORITY] [rs_which] [rs_who] [rs_priority]
-     * Effect: Sets process priority
-     */
-    public static int executeSetpriority(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int whichReg = bytecode[pc++];
-        int whoReg = bytecode[pc++];
-        int priorityReg = bytecode[pc++];
-
-        // TODO: Implement via JNI
-        // For now, silently succeed
-        return pc;
-    }
-
-    /**
-     * SLOW_GETPGRP: rd = getpgrp(pid)
-     * Format: [SLOW_GETPGRP] [rd] [rs_pid]
-     * Effect: Gets process group ID
-     */
-    public static int executeGetpgrp(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++];
-        int pidReg = bytecode[pc++];
-
-        // TODO: Implement via JNI
-        registers[rd] = new RuntimeScalar(0);
-        return pc;
-    }
-
-    /**
-     * SLOW_SETPGRP: setpgrp(pid, pgrp)
-     * Format: [SLOW_SETPGRP] [rs_pid] [rs_pgrp]
-     * Effect: Sets process group ID
-     */
-    public static int executeSetpgrp(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int pidReg = bytecode[pc++];
-        int pgrpReg = bytecode[pc++];
-
-        // TODO: Implement via JNI
-        return pc;
-    }
-
-    /**
      * SLOW_GETPPID: rd = getppid()
      * Format: [SLOW_GETPPID] [rd]
      * Effect: Gets parent process ID
@@ -1030,10 +903,10 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * GLOB_SLOT_GET: rd = glob.hashDerefGetNonStrict(key, "main")
+     * GLOB_SLOT_GET: rd = glob.hashDerefGetNonStrict(key, pkg)
      * Format: [GLOB_SLOT_GET] [rd] [globReg] [keyReg]
-     * Effect: Access glob slot (like *X{HASH}) using RuntimeGlob's override
-     * This ensures proper glob slot access without incorrectly dereferencing the glob as a hash
+     * Effect: Access glob slot (like *X{HASH}) using RuntimeGlob's override.
+     * Uses the runtime current package, which is correct for both regular code and eval STRING.
      */
     public static int executeGlobSlotGet(
             int[] bytecode,
@@ -1047,12 +920,15 @@ public class SlowOpcodeHandler {
         RuntimeBase globBase = registers[globReg];
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
 
+        // Use runtime current package — correct for both regular code and eval STRING
+        String pkg = InterpreterState.currentPackage.get().toString();
+
         // Convert to scalar if needed
         RuntimeScalar glob = globBase.scalar();
 
         // Call hashDerefGetNonStrict which for RuntimeGlob accesses the slot directly
         // without dereferencing the glob as a hash
-        registers[rd] = glob.hashDerefGetNonStrict(key, "main");
+        registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
 
         return pc;
     }

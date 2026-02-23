@@ -76,11 +76,13 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Inherit the runtime current package so eval STRING compiles in the right package.
-            // InterpreterState.currentPackage is updated by SET_PACKAGE/PUSH_PACKAGE opcodes
-            // as "package Foo;" declarations execute at runtime.
-            String runtimePackage = InterpreterState.currentPackage.get().toString();
-            symbolTable.setCurrentPackage(runtimePackage, false);
+            // Inherit the compile-time package from the calling code, matching what
+            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
+            // Using the compile-time package (not InterpreterState.currentPackage which is
+            // the runtime package) ensures bare names like *named resolve to FOO3::named
+            // when the eval call site is inside "package FOO3".
+            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
+            symbolTable.setCurrentPackage(compilePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
@@ -161,7 +163,10 @@ public class EvalStringHandler {
                 capturedVars = capturedList.toArray(new RuntimeBase[0]);
             }
 
-            // Step 4: Compile AST to interpreter bytecode with adjusted variable registry
+            // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
+            // The compile-time package is already propagated via ctx.symbolTable (set above
+            // from currentCode.compilePackage), so BytecodeCompiler will use it for name
+            // resolution (e.g. *named -> FOO3::named) without needing setCompilePackage().
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
                 sourceLine,
@@ -169,6 +174,9 @@ public class EvalStringHandler {
                 adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            if (RuntimeCode.DISASSEMBLE) {
+                System.out.println(evalCode.disassemble());
+            }
 
             // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
             // This implements Perl's eval source retention feature for debugging
@@ -242,12 +250,17 @@ public class EvalStringHandler {
             Parser parser = new Parser(ctx, tokens);
             Node ast = parser.parse();
 
-            // Compile to bytecode
+            // Compile to bytecode.
+            // IMPORTANT: Do NOT call compiler.setCompilePackage() here — same reason as the
+            // first evalString overload above: it corrupts die/warn location baking.
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
                 sourceLine
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            if (RuntimeCode.DISASSEMBLE) {
+                System.out.println(evalCode.disassemble());
+            }
 
             // Store source lines in debugger symbol table if $^P flags are set
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
