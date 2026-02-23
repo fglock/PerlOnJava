@@ -660,6 +660,17 @@ public class BytecodeCompiler implements Visitor {
     // VISITOR METHODS
     // =========================================================================
 
+    /**
+     * Compiles a block node, creating a new lexical scope.
+     *
+     * <p>Special case: the parser wraps implicit-{@code $_} foreach loops as
+     * {@code BlockNode([local $_, For1Node(needsArrayOfAlias=true)])}.
+     * In that pattern the {@code local $_} child is skipped here because
+     * {@link #visit(For1Node)} emits {@code LOCAL_SCALAR_SAVE_LEVEL} itself,
+     * which atomically saves the pre-push dynamic level and calls {@code makeLocal}.
+     * This allows {@code POP_LOCAL_LEVEL} after the loop to restore {@code $_}
+     * correctly regardless of nesting depth.
+     */
     @Override
     public void visit(BlockNode node) {
         // Blocks create a new lexical scope
@@ -3282,6 +3293,31 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = resultReg;
     }
 
+    /**
+     * Compiles a foreach-style loop ({@code for my $var (@list) { body }}).
+     *
+     * <p>Uses a <em>do-while</em> bytecode layout to eliminate the back-edge
+     * {@code GOTO} that would otherwise execute on every iteration:
+     * <pre>
+     *   GOTO loopCheck          // one-time entry jump
+     * body:
+     *   &lt;body&gt;
+     * loopCheck:               // next/continue target
+     *   FOREACH_NEXT_OR_EXIT -&gt; body   // jump back if has next; fall through if exhausted
+     * exit:
+     * </pre>
+     *
+     * <p>For global loop variables (e.g. implicit {@code $_}, {@code needsArrayOfAlias=true}):
+     * <ul>
+     *   <li>{@code LOCAL_SCALAR_SAVE_LEVEL} atomically saves {@code getLocalLevel()} into
+     *       {@code levelReg} <em>before</em> calling {@code makeLocal}, so the pre-push
+     *       level is available for restore.</li>
+     *   <li>{@code FOREACH_GLOBAL_NEXT_OR_EXIT} combines hasNext + next +
+     *       {@code aliasGlobalVariable} + conditional jump per iteration.</li>
+     *   <li>{@code POP_LOCAL_LEVEL(levelReg)} after loop exit restores {@code $_} to
+     *       the pre-{@code makeLocal} state, correct for any nesting depth.</li>
+     * </ul>
+     */
     @Override
     public void visit(For1Node node) {
         // For1Node: foreach-style loop
