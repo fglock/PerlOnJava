@@ -223,6 +223,55 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.LOCAL_SCALAR_SAVE_LEVEL: {
+                        // Superinstruction: save dynamic level BEFORE makeLocal, then localize.
+                        // Atomically: levelReg = getLocalLevel(), rd = makeLocal(name).
+                        // The pre-push level in levelReg is used by POP_LOCAL_LEVEL after the loop.
+                        int rd = bytecode[pc++];
+                        int levelReg = bytecode[pc++];
+                        int nameIdx = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+
+                        registers[levelReg] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
+                        registers[rd] = GlobalRuntimeScalar.makeLocal(name);
+                        break;
+                    }
+
+                    case Opcodes.POP_LOCAL_LEVEL: {
+                        // Restore DynamicVariableManager to a previously saved local level.
+                        // Matches JVM compiler's DynamicVariableManager.popToLocalLevel(savedLevel) call.
+                        int rs = bytecode[pc++];
+                        int savedLevel = ((RuntimeScalar) registers[rs]).getInt();
+                        DynamicVariableManager.popToLocalLevel(savedLevel);
+                        break;
+                    }
+
+                    case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT: {
+                        // Superinstruction: foreach loop step for a global loop variable (e.g. $_).
+                        // Combines: hasNext check, next() into varReg, aliasGlobalVariable, conditional jump.
+                        // Do-while layout: if hasNext jump to bodyTarget, else fall through to exit.
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+                        int nameIdx = bytecode[pc++];
+                        int bodyTarget = readInt(bytecode, pc);
+                        pc += 2;
+
+                        String name = code.stringPool[nameIdx];
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        if (iterator.hasNext()) {
+                            RuntimeScalar element = iterator.next();
+                            registers[rd] = element;
+                            GlobalVariable.aliasGlobalVariable(name, element);
+                            pc = bodyTarget;  // ABSOLUTE jump back to body start
+                        }
+                        // else: fall through to exit
+                        break;
+                    }
+
                     case Opcodes.STORE_GLOBAL_ARRAY: {
                         // Store global array: GlobalVariable.getGlobalArray(name).setFromList(list)
                         int nameIdx = bytecode[pc++];
@@ -543,14 +592,14 @@ public class BytecodeInterpreter {
                         break;
 
                     case Opcodes.FOREACH_NEXT_OR_EXIT: {
-                        // Superinstruction for foreach loops
-                        // Combines: hasNext check, next() call, and conditional exit
-                        // Format: FOREACH_NEXT_OR_EXIT rd, iterReg, exitTarget
-                        // If hasNext: rd = iterator.next(), continue to next instruction
-                        // Else: jump to exitTarget (absolute address)
+                        // Superinstruction for foreach loops (do-while layout).
+                        // Combines: hasNext check, next() call, and conditional jump to body.
+                        // Format: FOREACH_NEXT_OR_EXIT rd, iterReg, bodyTarget
+                        // If hasNext: rd = iterator.next(), jump to bodyTarget (backward)
+                        // Else: fall through to exit (iterator exhausted)
                         int rd = bytecode[pc++];
                         int iterReg = bytecode[pc++];
-                        int exitTarget = readInt(bytecode, pc);  // Absolute target address
+                        int bodyTarget = readInt(bytecode, pc);  // Absolute target address
                         pc += 2;  // Skip the int we just read
 
                         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
@@ -559,13 +608,11 @@ public class BytecodeInterpreter {
                             (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
                         if (iterator.hasNext()) {
-                            // Get next element and continue to body
+                            // Get next element and jump back to body
                             registers[rd] = iterator.next();
-                            // Fall through to next instruction (body)
-                        } else {
-                            // Exit loop - jump to absolute target
-                            pc = exitTarget;  // ABSOLUTE jump, not relative!
+                            pc = bodyTarget;  // ABSOLUTE jump back to body start
                         }
+                        // else: fall through to exit
                         break;
                     }
 

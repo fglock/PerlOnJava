@@ -1138,15 +1138,16 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
                     break;
-                case Opcodes.FOREACH_NEXT_OR_EXIT:
+                case Opcodes.FOREACH_NEXT_OR_EXIT: {
                     rd = bytecode[pc++];
                     int iterReg = bytecode[pc++];
-                    int exitTarget = readInt(bytecode, pc);  // Absolute target address
+                    int bodyTarget = readInt(bytecode, pc);  // Absolute body address
                     pc += 2;
                     sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
-                      .append(" = r").append(iterReg).append(".next() or goto ")
-                      .append(exitTarget).append("\n");
+                      .append(" = r").append(iterReg).append(".next() and goto ")
+                      .append(bodyTarget).append("\n");
                     break;
+                }
                 case Opcodes.SUBTRACT_ASSIGN:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
@@ -1264,6 +1265,27 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     sb.append("LOCAL_SCALAR r").append(rd).append(" = local $").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.LOCAL_SCALAR_SAVE_LEVEL: {
+                    rd = bytecode[pc++];
+                    int levelReg = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOCAL_SCALAR_SAVE_LEVEL r").append(rd).append(", level=r").append(levelReg)
+                      .append(" = local $").append(stringPool[nameIdx]).append("\n");
+                    break;
+                }
+                case Opcodes.POP_LOCAL_LEVEL:
+                    rs = bytecode[pc++];
+                    sb.append("POP_LOCAL_LEVEL DynamicVariableManager.popToLocalLevel(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT: {
+                    rd = bytecode[pc++];
+                    int fgIterReg = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    int fgBody = readInt(bytecode, pc); pc += 2;
+                    sb.append("FOREACH_GLOBAL_NEXT_OR_EXIT r").append(rd).append(" = r").append(fgIterReg)
+                      .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
+                    break;
+                }
                 // DEPRECATED: SLOW_OP case removed - opcode 87 is no longer emitted
                 // All operations now use direct opcodes (114-154)
 
