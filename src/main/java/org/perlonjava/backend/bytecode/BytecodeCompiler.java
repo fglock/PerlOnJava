@@ -2218,6 +2218,25 @@ public class BytecodeCompiler implements Visitor {
                 OperatorNode sigilOp = (OperatorNode) node.operand;
                 String sigil = sigilOp.operator;
 
+                if (sigil.equals("*") && sigilOp.operand instanceof IdentifierNode) {
+                    // local *glob — save glob state and return same glob object
+                    // Mirrors JVM path: load glob, call DynamicVariableManager.pushLocalVariable(RuntimeGlob)
+                    String globName = NameNormalizer.normalizeVariableName(((IdentifierNode) sigilOp.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globName);
+
+                    int globReg = allocateRegister();
+                    emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
+                    emitReg(globReg);
+                    emit(nameIdx);
+
+                    // Push glob to local variable stack (saves state, returns same object)
+                    emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    emitReg(globReg);
+
+                    lastResultReg = globReg;
+                    return;
+                }
+
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 

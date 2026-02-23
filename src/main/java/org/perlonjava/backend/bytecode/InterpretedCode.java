@@ -730,6 +730,28 @@ public class InterpretedCode extends RuntimeCode {
                     int keyReg = bytecode[pc++];
                     sb.append("GLOB_SLOT_GET r").append(rd).append(" = r").append(globReg2).append("{r").append(keyReg).append("}\n");
                     break;
+                case Opcodes.LOAD_SYMBOLIC_GLOB:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("LOAD_SYMBOLIC_GLOB r").append(rd).append(" = getGlobalIO(r").append(rs1).append(")\n");
+                    break;
+                case Opcodes.DEREF_GLOB:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("DEREF_GLOB r").append(rd).append(" = r").append(rs1).append(".globDeref()\n");
+                    break;
+                case Opcodes.DEREF_HASH_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("DEREF_HASH_NONSTRICT r").append(rd).append(" = r").append(rs1).append(".hashDerefNonStrict(pool[").append(rs2).append("])\n");
+                    break;
+                case Opcodes.DEREF_ARRAY_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("DEREF_ARRAY_NONSTRICT r").append(rd).append(" = r").append(rs1).append(".arrayDerefNonStrict(pool[").append(rs2).append("])\n");
+                    break;
                 case Opcodes.SPRINTF:
                     rd = bytecode[pc++];
                     int formatReg = bytecode[pc++];
