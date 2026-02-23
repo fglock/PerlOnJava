@@ -2005,6 +2005,24 @@ public class BytecodeInterpreter {
                         pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
 
+                    case Opcodes.SET_PACKAGE: {
+                        // Non-scoped package declaration: package Foo;
+                        // Update the runtime current-package tracker so caller() returns the right package.
+                        int nameIdx = bytecode[pc++];
+                        InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                        break;
+                    }
+
+                    case Opcodes.PUSH_PACKAGE: {
+                        // Scoped package block entry: package Foo { ...
+                        // Save current package via DynamicVariableManager so it is restored
+                        // automatically when the scope exits via POP_LOCAL_LEVEL.
+                        int nameIdx = bytecode[pc++];
+                        DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+                        InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                        break;
+                    }
+
                     default:
                         // Unknown opcode
                         int opcodeInt = opcode & 0xFF;

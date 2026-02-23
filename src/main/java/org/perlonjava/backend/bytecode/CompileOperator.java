@@ -75,14 +75,26 @@ public class CompileOperator {
                             .set(new RuntimeScalar(version));
                 }
 
-                // Update the current package/class in symbol table
-                // This tracks package name, isClass flag, and version
+                // Update the current package/class in symbol table (compile-time tracking)
                 bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
 
                 // Register as Perl 5.38+ class for proper stringification if needed
                 if (isClass) {
                     ClassRegistry.registerClass(packageName);
                 }
+
+                // Emit runtime package tracking opcode so caller() and eval STRING work.
+                // Scoped blocks (package Foo { }) use PUSH_PACKAGE so DynamicVariableManager
+                // can restore the previous package when the scope exits.
+                // Non-scoped (package Foo;) use SET_PACKAGE which just overwrites.
+                boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
+                int nameIdx = bytecodeCompiler.addToStringPool(packageName);
+                if (isScoped) {
+                    bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.SET_PACKAGE);
+                }
+                bytecodeCompiler.emit(nameIdx);
 
                 bytecodeCompiler.lastResultReg = -1;  // No runtime value
             } else {

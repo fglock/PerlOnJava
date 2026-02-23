@@ -16,6 +16,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.backend.bytecode.InterpreterState;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -1189,15 +1190,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (stackTraceSize > 0) {
             frame++;
         }
-
-//        // Show debug info
-//        System.err.println("# Runtime stack trace: frame=" + frame + " size=" + stackTraceSize);
-//        for (int i = 0; i < stackTraceSize; i++) {
-//            ArrayList<String> entry = stackTrace.get(i);
-//            String subName = entry.size() > 3 ? entry.get(3) : "NO_SUB";
-//            System.err.println("#   " + i + ": pkg=" + entry.get(0) + " file=" + entry.get(1) + " line=" + entry.get(2) + " sub=" + subName);
-//        }
-//        System.err.println();
 
         if (frame >= 0 && frame < stackTraceSize) {
             // Runtime stack trace
