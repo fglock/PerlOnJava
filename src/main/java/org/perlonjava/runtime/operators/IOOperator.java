@@ -2093,4 +2093,53 @@ public class IOOperator {
         }
     }
 
+    // =================================================================
+    // Adapter overloads for MiscOpcodeHandler (int ctx, RuntimeBase... args) signature
+    // =================================================================
+
+    public static RuntimeScalar seek(int ctx, RuntimeBase... args) {
+        if (args.length < 3) throw new PerlCompilerException("Not enough arguments for seek");
+        RuntimeList list = new RuntimeList();
+        for (int i = 1; i < args.length; i++) list.add(args[i]);
+        return seek(args[0].scalar(), list);
+    }
+
+    public static RuntimeScalar tell(int ctx, RuntimeBase... args) {
+        RuntimeScalar fh = args.length > 0 ? args[0].scalar() : new RuntimeScalar();
+        return tell(fh);
+    }
+
+    public static RuntimeScalar binmode(int ctx, RuntimeBase... args) {
+        if (args.length < 1) throw new PerlCompilerException("Not enough arguments for binmode");
+        RuntimeList list = new RuntimeList();
+        for (int i = 1; i < args.length; i++) list.add(args[i]);
+        return binmode(args[0].scalar(), list);
+    }
+
+    public static RuntimeScalar eof(int ctx, RuntimeBase... args) {
+        RuntimeScalar fh = args.length > 0 ? args[0].scalar() : new RuntimeScalar();
+        return eof(fh);
+    }
+
+    public static RuntimeScalar printf(int ctx, RuntimeBase... args) {
+        if (args.length < 1) throw new PerlCompilerException("Not enough arguments for printf");
+        RuntimeScalar fh = args[0].scalar();
+        RuntimeList list = new RuntimeList();
+        for (int i = 1; i < args.length; i++) list.add(args[i]);
+        return printf(list, fh);
+    }
+
+    public static RuntimeScalar readline(int ctx, RuntimeBase... args) {
+        RuntimeScalar fh = args.length > 0 ? args[0].scalar() : new RuntimeScalar("main::STDIN");
+        return (RuntimeScalar) Readline.readline(fh, ctx);
+    }
+
+    public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {
+        return seek(ctx, args);
+    }
+
+    public static RuntimeScalar read(int ctx, RuntimeBase... args) {
+        return sysread(ctx, args);
+    }
+
 }

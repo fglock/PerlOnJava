@@ -51,6 +51,12 @@ public class ExceptionFormatter {
 
         var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
 
+        // Snapshot interpreter frames so we can consume them in order.
+        // Each BytecodeInterpreter.execute() JVM frame corresponds to one Perl call
+        // level; consuming them in order gives the correct nested call stack.
+        var interpreterFrames = InterpreterState.getStack();
+        int interpreterFrameIndex = 0;
+
         for (var element : t.getStackTrace()) {
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
@@ -68,22 +74,33 @@ public class ExceptionFormatter {
                 }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
                        element.getMethodName().equals("execute")) {
-                // Interpreter frame - get information from InterpreterState
-                var frame = InterpreterState.current();
-                if (frame != null && frame.code != null) {
-                    // Format the interpreter frame as a Perl stack entry
-                    String subName = frame.subroutineName;
-                    if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
-                        subName = frame.packageName + "::" + subName;
-                    }
+                // Consume the next interpreter frame in order.
+                // Using current() always returned the same topmost frame; consuming
+                // in order correctly maps each JVM execute() frame to its Perl level.
+                if (interpreterFrameIndex < interpreterFrames.size()) {
+                    var frame = interpreterFrames.get(interpreterFrameIndex);
+                    if (frame != null && frame.code != null) {
+                        // For the innermost frame (index 0), use the runtime current package
+                        // tracked by SET_PACKAGE/PUSH_PACKAGE opcodes, which reflects runtime
+                        // "package Foo;" declarations.  Outer frames still use compile-time names.
+                        String pkg = (interpreterFrameIndex == 0)
+                                ? InterpreterState.currentPackage.get().toString()
+                                : frame.packageName;
+                        interpreterFrameIndex++;
 
-                    var entry = new ArrayList<String>();
-                    entry.add(frame.packageName);
-                    entry.add(frame.code.sourceName);
-                    entry.add(String.valueOf(frame.code.sourceLine));
-                    entry.add(subName);  // Subroutine name
-                    stackTrace.add(entry);
-                    lastFileName = frame.code.sourceName != null ? frame.code.sourceName : "";
+                        String subName = frame.subroutineName;
+                        if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
+                            subName = pkg + "::" + subName;
+                        }
+
+                        var entry = new ArrayList<String>();
+                        entry.add(pkg);
+                        entry.add(frame.code.sourceName);
+                        entry.add(String.valueOf(frame.code.sourceLine));
+                        entry.add(subName);
+                        stackTrace.add(entry);
+                        lastFileName = frame.code.sourceName != null ? frame.code.sourceName : "";
+                    }
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||
                     element.getClassName().contains("org.perlonjava.runtime.perlmodule")) {

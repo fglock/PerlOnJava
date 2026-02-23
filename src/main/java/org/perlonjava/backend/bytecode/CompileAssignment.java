@@ -1203,28 +1203,34 @@ public class CompileAssignment {
                             bytecodeCompiler.currentCallContext = savedContext;
                             return;
                         } else if (hashOp.operator.equals("$")) {
-                            // $hash{key} - dereference to get hash
-                            if (!(hashOp.operand instanceof IdentifierNode)) {
-                                bytecodeCompiler.throwCompilerException("Hash assignment requires identifier");
-                                return;
-                            }
-                            String varName = ((IdentifierNode) hashOp.operand).name;
-                            String hashVarName = "%" + varName;
+                            // $hash{key} or $$ref{key} - dereference to get hash
+                            if (hashOp.operand instanceof IdentifierNode) {
+                                String varName = ((IdentifierNode) hashOp.operand).name;
+                                String hashVarName = "%" + varName;
 
-                            if (bytecodeCompiler.hasVariable(hashVarName)) {
-                                // Lexical hash
-                                hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
+                                if (bytecodeCompiler.hasVariable(hashVarName)) {
+                                    // Lexical hash
+                                    hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
+                                } else {
+                                    // Global hash - load it
+                                    hashReg = bytecodeCompiler.allocateRegister();
+                                    String globalHashName = NameNormalizer.normalizeVariableName(
+                                            varName,
+                                            bytecodeCompiler.getCurrentPackage()
+                                    );
+                                    int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                }
                             } else {
-                                // Global hash - load it
+                                // $$ref{key} = value — compile the scalar ref expression and deref to hash
+                                hashOp.operand.accept(bytecodeCompiler);
+                                int scalarReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
-                                String globalHashName = NameNormalizer.normalizeVariableName(
-                                        varName,
-                                        bytecodeCompiler.getCurrentPackage()
-                                );
-                                int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
-                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                                 bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emitReg(scalarReg);
                             }
                         } else {
                             bytecodeCompiler.throwCompilerException("Hash assignment requires scalar dereference: $var{key}");
@@ -1288,6 +1294,83 @@ public class CompileAssignment {
                     bytecodeCompiler.lastResultReg = hashValueReg;
                     bytecodeCompiler.currentCallContext = savedContext;
                     return;
+                }
+
+                // Handle arrow dereference assignment: $ref->{key} = value or $$ref{key} = value
+                // These parse as BinaryOperatorNode("->", expr, HashLiteralNode/ArrayLiteralNode)
+                if (leftBin.operator.equals("->")) {
+                    Node rightSide = leftBin.right;
+                    if (rightSide instanceof HashLiteralNode hashKey) {
+                        // $ref->{key} = value — hash element via reference
+                        leftBin.left.accept(bytecodeCompiler);
+                        int refReg = bytecodeCompiler.lastResultReg;
+
+                        // Dereference to get the hash
+                        int hashReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(refReg);
+
+                        // Compile key
+                        int keyReg;
+                        if (!hashKey.elements.isEmpty()) {
+                            Node keyElement = hashKey.elements.get(0);
+                            if (keyElement instanceof IdentifierNode) {
+                                String keyString = ((IdentifierNode) keyElement).name;
+                                keyReg = bytecodeCompiler.allocateRegister();
+                                int keyIdx = bytecodeCompiler.addToStringPool(keyString);
+                                bytecodeCompiler.emit(Opcodes.LOAD_STRING);
+                                bytecodeCompiler.emitReg(keyReg);
+                                bytecodeCompiler.emit(keyIdx);
+                            } else {
+                                keyElement.accept(bytecodeCompiler);
+                                keyReg = bytecodeCompiler.lastResultReg;
+                            }
+                        } else {
+                            bytecodeCompiler.throwCompilerException("Hash key required for arrow assignment");
+                            return;
+                        }
+
+                        // Compile RHS and emit HASH_SET
+                        node.right.accept(bytecodeCompiler);
+                        int valReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.HASH_SET);
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(keyReg);
+                        bytecodeCompiler.emitReg(valReg);
+                        bytecodeCompiler.lastResultReg = valReg;
+                        bytecodeCompiler.currentCallContext = savedContext;
+                        return;
+                    } else if (rightSide instanceof ArrayLiteralNode arrayIdx) {
+                        // $ref->[index] = value — array element via reference
+                        leftBin.left.accept(bytecodeCompiler);
+                        int refReg = bytecodeCompiler.lastResultReg;
+
+                        // Dereference to get the array
+                        int arrayReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(refReg);
+
+                        // Compile index
+                        if (arrayIdx.elements.isEmpty()) {
+                            bytecodeCompiler.throwCompilerException("Array index required for arrow assignment");
+                            return;
+                        }
+                        arrayIdx.elements.get(0).accept(bytecodeCompiler);
+                        int idxReg = bytecodeCompiler.lastResultReg;
+
+                        // Compile RHS and emit ARRAY_SET
+                        node.right.accept(bytecodeCompiler);
+                        int valReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.ARRAY_SET);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(idxReg);
+                        bytecodeCompiler.emitReg(valReg);
+                        bytecodeCompiler.lastResultReg = valReg;
+                        bytecodeCompiler.currentCallContext = savedContext;
+                        return;
+                    }
                 }
 
                 // Handle lvalue subroutine: f() = value

@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
+import org.perlonjava.runtime.operators.Unpack;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -17,7 +18,7 @@ public class MiscOpcodeHandler {
      * Execute miscellaneous operators that take arguments and call runtime methods.
      * Format: OPCODE rd argsReg ctx
      */
-    public static int execute(short opcode, short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int execute(int opcode, int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
@@ -53,10 +54,30 @@ public class MiscOpcodeHandler {
                 }
             }
             case Opcodes.PACK -> Pack.pack(args);
+            case Opcodes.UNPACK -> Unpack.unpack(ctx, argsArray);
             case Opcodes.VEC -> Vec.vec(args);
             case Opcodes.LOCALTIME -> Time.localtime(args, ctx);
             case Opcodes.GMTIME -> Time.gmtime(args, ctx);
             case Opcodes.CRYPT -> Crypt.crypt(args);
+            // I/O operators
+            case Opcodes.CLOSE -> IOOperator.close(ctx, argsArray);
+            case Opcodes.BINMODE -> IOOperator.binmode(ctx, argsArray);
+            case Opcodes.SEEK -> IOOperator.seek(ctx, argsArray);
+            case Opcodes.EOF_OP -> IOOperator.eof(ctx, argsArray);
+            case Opcodes.SYSREAD -> IOOperator.sysread(ctx, argsArray);
+            case Opcodes.SYSWRITE -> IOOperator.syswrite(ctx, argsArray);
+            case Opcodes.SYSOPEN -> IOOperator.sysopen(ctx, argsArray);
+            case Opcodes.SOCKET -> IOOperator.socket(ctx, argsArray);
+            case Opcodes.BIND -> IOOperator.bind(ctx, argsArray);
+            case Opcodes.CONNECT -> IOOperator.connect(ctx, argsArray);
+            case Opcodes.LISTEN -> IOOperator.listen(ctx, argsArray);
+            case Opcodes.WRITE -> IOOperator.write(ctx, argsArray);
+            case Opcodes.FORMLINE -> IOOperator.formline(ctx, argsArray);
+            case Opcodes.PRINTF -> IOOperator.printf(ctx, argsArray);
+            case Opcodes.ACCEPT -> IOOperator.accept(ctx, argsArray);
+            case Opcodes.SYSSEEK -> IOOperator.sysseek(ctx, argsArray);
+            case Opcodes.TRUNCATE -> IOOperator.truncate(ctx, argsArray);
+            case Opcodes.READ -> IOOperator.read(ctx, argsArray);
             default -> throw new IllegalStateException("Unknown opcode in MiscOpcodeHandler: " + opcode);
         };
 

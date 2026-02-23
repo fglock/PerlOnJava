@@ -62,7 +62,7 @@ public class BytecodeInterpreter {
         }
 
         int pc = 0;  // Program counter
-        short[] bytecode = code.bytecode;
+        final int[] bytecode = code.bytecode;
 
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
@@ -72,7 +72,7 @@ public class BytecodeInterpreter {
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
-                short opcode = bytecode[pc++];
+                int opcode = bytecode[pc++];
 
                 switch (opcode) {
                     // =================================================================
@@ -115,7 +115,7 @@ public class BytecodeInterpreter {
                         // Conditional jump: if (!rs) pc = offset
                         int condReg = bytecode[pc++];
                         int target = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         // Convert to scalar if needed for boolean test
                         RuntimeBase condBase = registers[condReg];
@@ -133,7 +133,7 @@ public class BytecodeInterpreter {
                         // Conditional jump: if (rs) pc = offset
                         int condReg = bytecode[pc++];
                         int target = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         // Convert to scalar if needed for boolean test
                         RuntimeBase condBase = registers[condReg];
@@ -171,7 +171,7 @@ public class BytecodeInterpreter {
                         // Load integer: rd = immediate (create NEW mutable scalar, not cached)
                         int rd = bytecode[pc++];
                         int value = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
                         // Create NEW RuntimeScalar (mutable) instead of using cache
                         // This is needed for local variables that may be modified (++/--)
                         registers[rd] = new RuntimeScalar(value);
@@ -254,7 +254,7 @@ public class BytecodeInterpreter {
                         int iterReg = bytecode[pc++];
                         int nameIdx = bytecode[pc++];
                         int bodyTarget = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         String name = code.stringPool[nameIdx];
                         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
@@ -490,7 +490,7 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
                         // Calls specialized unboxed method (rare optimization)
                         registers[rd] = MathOperators.add(
                             (RuntimeScalar) registers[rs],
@@ -600,7 +600,7 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int iterReg = bytecode[pc++];
                         int bodyTarget = readInt(bytecode, pc);  // Absolute target address
-                        pc += 2;  // Skip the int we just read
+                        pc += 1;  // Skip the int we just read
 
                         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
                         @SuppressWarnings("unchecked")
@@ -1087,7 +1087,7 @@ public class BytecodeInterpreter {
                         // Add immediate and assign: rd += imm (modifies rd in place)
                         int rd = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
                         RuntimeScalar result = MathOperators.add((RuntimeScalar) registers[rd], immediate);
                         ((RuntimeScalar) registers[rd]).set(result);
                         break;
@@ -1417,7 +1417,7 @@ public class BytecodeInterpreter {
                         // catch_target is absolute bytecode address (4 bytes)
 
                         int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
-                        pc += 2;  // Skip the 2 shorts we just read
+                        pc += 1;  // Skip the 2 shorts we just read
 
                         // Push catch PC onto eval stack
                         evalCatchStack.push(catchPc);
@@ -1651,7 +1651,7 @@ public class BytecodeInterpreter {
                         int listReg = bytecode[pc++];
                         int closureReg = bytecode[pc++];
                         int packageIdx = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         RuntimeBase listBase = registers[listReg];
                         RuntimeList list = listBase.getList();
@@ -1997,12 +1997,49 @@ public class BytecodeInterpreter {
                     case Opcodes.CALLER:
                     case Opcodes.EACH:
                     case Opcodes.PACK:
+                    case Opcodes.UNPACK:
                     case Opcodes.VEC:
                     case Opcodes.LOCALTIME:
                     case Opcodes.GMTIME:
                     case Opcodes.CRYPT:
+                    case Opcodes.CLOSE:
+                    case Opcodes.BINMODE:
+                    case Opcodes.SEEK:
+                    case Opcodes.EOF_OP:
+                    case Opcodes.SYSREAD:
+                    case Opcodes.SYSWRITE:
+                    case Opcodes.SYSOPEN:
+                    case Opcodes.SOCKET:
+                    case Opcodes.BIND:
+                    case Opcodes.CONNECT:
+                    case Opcodes.LISTEN:
+                    case Opcodes.WRITE:
+                    case Opcodes.FORMLINE:
+                    case Opcodes.PRINTF:
+                    case Opcodes.ACCEPT:
+                    case Opcodes.SYSSEEK:
+                    case Opcodes.TRUNCATE:
+                    case Opcodes.READ:
                         pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
+
+                    case Opcodes.SET_PACKAGE: {
+                        // Non-scoped package declaration: package Foo;
+                        // Update the runtime current-package tracker so caller() returns the right package.
+                        int nameIdx = bytecode[pc++];
+                        InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                        break;
+                    }
+
+                    case Opcodes.PUSH_PACKAGE: {
+                        // Scoped package block entry: package Foo { ...
+                        // Save current package via DynamicVariableManager so it is restored
+                        // automatically when the scope exits via POP_LOCAL_LEVEL.
+                        int nameIdx = bytecode[pc++];
+                        DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+                        InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                        break;
+                    }
 
                     default:
                         // Unknown opcode
@@ -2090,7 +2127,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeTypeOps(short opcode, short[] bytecode, int pc,
+    private static int executeTypeOps(int opcode, int[] bytecode, int pc,
                                       RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.CREATE_LAST: {
@@ -2251,7 +2288,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 int packageIdx = readInt(bytecode, pc);
-                pc += 2;  // readInt reads 2 shorts
+                pc += 1;  // readInt reads 2 shorts
                 RuntimeScalar codeRef = (RuntimeScalar) registers[rs];
                 String packageName = code.stringPool[packageIdx];
                 registers[rd] = RuntimeCode.prototype(codeRef, packageName);
@@ -2286,7 +2323,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeCollections(short opcode, short[] bytecode, int pc,
+    private static int executeCollections(int opcode, int[] bytecode, int pc,
                                           RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.ARRAY_SET: {
@@ -2460,7 +2497,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeArithmetic(short opcode, short[] bytecode, int pc,
+    private static int executeArithmetic(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.MUL_SCALAR: {
@@ -2522,7 +2559,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 int immediate = readInt(bytecode, pc);
-                pc += 2;
+                pc += 1;
                 registers[rd] = MathOperators.add(
                     (RuntimeScalar) registers[rs],
                     immediate
@@ -2737,7 +2774,7 @@ public class BytecodeInterpreter {
      *
      * @return Updated program counter
      */
-    private static int executeComparisons(short opcode, short[] bytecode, int pc,
+    private static int executeComparisons(int opcode, int[] bytecode, int pc,
                                           RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.COMPARE_NUM: {
@@ -2920,7 +2957,7 @@ public class BytecodeInterpreter {
      * Handles: DEREF_ARRAY, DEREF_HASH, *_SLICE, *_SLICE_SET, *_SLICE_DELETE, LIST_SLICE_FROM
      * Direct dispatch to SlowOpcodeHandler methods (Phase 2 complete).
      */
-    private static int executeSliceOps(short opcode, short[] bytecode, int pc,
+    private static int executeSliceOps(int opcode, int[] bytecode, int pc,
                                         RuntimeBase[] registers, InterpretedCode code) {
         // Direct method calls - no SLOWOP_* constants needed!
         switch (opcode) {
@@ -2949,7 +2986,7 @@ public class BytecodeInterpreter {
      * Execute array/string operations (opcodes 122-127).
      * Handles: SPLICE, REVERSE, SPLIT, LENGTH_OP, EXISTS, DELETE
      */
-    private static int executeArrayStringOps(short opcode, short[] bytecode, int pc,
+    private static int executeArrayStringOps(int opcode, int[] bytecode, int pc,
                                               RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.SPLICE:
@@ -2973,7 +3010,7 @@ public class BytecodeInterpreter {
      * Execute closure/scope operations (opcodes 128-131).
      * Handles: RETRIEVE_BEGIN_*, LOCAL_SCALAR
      */
-    private static int executeScopeOps(short opcode, short[] bytecode, int pc,
+    private static int executeScopeOps(int opcode, int[] bytecode, int pc,
                                         RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.RETRIEVE_BEGIN_SCALAR:
@@ -2994,7 +3031,7 @@ public class BytecodeInterpreter {
      * Handles: CHOWN, WAITPID, FORK, GETPPID, *PGRP, *PRIORITY, *SOCKOPT,
      *          SYSCALL, SEMGET, SEMOP, MSGGET, MSGSND, MSGRCV, SHMGET, SHMREAD, SHMWRITE
      */
-    private static int executeSystemOps(short opcode, short[] bytecode, int pc,
+    private static int executeSystemOps(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers) {
         switch (opcode) {
             case Opcodes.CHOWN:
@@ -3044,7 +3081,7 @@ public class BytecodeInterpreter {
      * Execute special I/O operations (opcodes 151-154).
      * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP
      */
-    private static int executeSpecialIO(short opcode, short[] bytecode, int pc,
+    private static int executeSpecialIO(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers, InterpretedCode code) {
         switch (opcode) {
             case Opcodes.EVAL_STRING:
@@ -3061,13 +3098,11 @@ public class BytecodeInterpreter {
     }
 
     /**
-     * Read a 32-bit integer from bytecode (stored as 2 shorts: high 16 bits, low 16 bits).
-     * Uses unsigned short values to reconstruct the full 32-bit integer.
+     * Read a 32-bit integer from bytecode (stored as 1 int slot).
+     * With int[] storage a full int fits in a single slot.
      */
-    private static int readInt(short[] bytecode, int pc) {
-        int high = bytecode[pc] & 0xFFFF;      // Keep mask here - need full 32-bit range
-        int low = bytecode[pc + 1] & 0xFFFF;   // Keep mask here - need full 32-bit range
-        return (high << 16) | low;
+    private static int readInt(int[] bytecode, int pc) {
+        return bytecode[pc];
     }
 
     /**

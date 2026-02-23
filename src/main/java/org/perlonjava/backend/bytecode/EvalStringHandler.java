@@ -76,6 +76,12 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
+            // Inherit the runtime current package so eval STRING compiles in the right package.
+            // InterpreterState.currentPackage is updated by SET_PACKAGE/PUSH_PACKAGE opcodes
+            // as "package Foo;" declarations execute at runtime.
+            String runtimePackage = InterpreterState.currentPackage.get().toString();
+            symbolTable.setCurrentPackage(runtimePackage, false);
+
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),
