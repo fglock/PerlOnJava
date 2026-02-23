@@ -1376,20 +1376,14 @@ public class BytecodeInterpreter {
 
                     case Opcodes.DEREF: {
                         // Dereference: rd = $$rs (scalar reference dereference)
-                        // Can receive RuntimeScalar or RuntimeList
+                        // Always call scalarDeref() — throws "Not a SCALAR reference" for
+                        // non-reference types (IO, FORMAT, etc.), matching Perl semantics.
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
-                        // Only dereference if it's a RuntimeScalar with REFERENCE type
                         if (value instanceof RuntimeScalar) {
-                            RuntimeScalar scalar = (RuntimeScalar) value;
-                            if (scalar.type == RuntimeScalarType.REFERENCE) {
-                                registers[rd] = scalar.scalarDeref();
-                            } else {
-                                // Non-reference scalar, just copy
-                                registers[rd] = value;
-                            }
+                            registers[rd] = ((RuntimeScalar) value).scalarDeref();
                         } else {
                             // RuntimeList or other types, pass through
                             registers[rd] = value;
@@ -2223,15 +2217,10 @@ public class BytecodeInterpreter {
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
 
-                // Only dereference if it's a RuntimeScalar with REFERENCE type
+                // Always call scalarDeref() on RuntimeScalar — throws "Not a SCALAR reference"
+                // for non-reference types (IO, FORMAT, etc.), matching Perl semantics.
                 if (value instanceof RuntimeScalar) {
-                    RuntimeScalar scalar = (RuntimeScalar) value;
-                    if (scalar.type == RuntimeScalarType.REFERENCE) {
-                        registers[rd] = scalar.scalarDeref();
-                    } else {
-                        // Non-reference scalar, just copy
-                        registers[rd] = value;
-                    }
+                    registers[rd] = ((RuntimeScalar) value).scalarDeref();
                 } else {
                     // RuntimeList or other types, pass through
                     registers[rd] = value;

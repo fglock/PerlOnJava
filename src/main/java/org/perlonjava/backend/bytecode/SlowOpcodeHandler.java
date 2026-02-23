@@ -368,7 +368,10 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int nameReg = bytecode[pc++];
 
-        String globName = registers[nameReg].toString();
+        // Normalize the name with the current package (e.g. "mysub" -> "main::mysub")
+        String rawName = registers[nameReg].toString();
+        String pkg = InterpreterState.currentPackage.get().toString();
+        String globName = NameNormalizer.normalizeVariableName(rawName, pkg);
         registers[rd] = GlobalVariable.getGlobalIO(globName);
         return pc;
     }
@@ -1004,12 +1007,18 @@ public class SlowOpcodeHandler {
         // Use runtime current package — correct for both regular code and eval STRING
         String pkg = InterpreterState.currentPackage.get().toString();
 
-        // Convert to scalar if needed
-        RuntimeScalar glob = globBase.scalar();
-
-        // Call hashDerefGetNonStrict which for RuntimeGlob accesses the slot directly
-        // without dereferencing the glob as a hash
-        registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
+        RuntimeScalar result;
+        if (globBase instanceof RuntimeGlob globObj) {
+            // Direct glob — access slot via a scalar wrapper that holds the glob reference
+            // RuntimeGlob.hashDerefGetNonStrict is not available directly; use scalar() to get
+            // a RuntimeScalar of type GLOB, then call hashDerefGetNonStrict on it.
+            // But scalar() on a RuntimeGlob returns a GLOB-typed scalar that delegates correctly.
+            result = globObj.scalar().hashDerefGetNonStrict(key, pkg);
+        } else {
+            // Already a scalar (e.g. from a variable holding a glob)
+            result = globBase.scalar().hashDerefGetNonStrict(key, pkg);
+        }
+        registers[rd] = result;
 
         return pc;
     }
