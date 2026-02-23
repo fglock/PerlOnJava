@@ -233,30 +233,30 @@ public class InterpretedCode extends RuntimeCode {
                     break;
                 case Opcodes.GOTO:
                     sb.append("GOTO ").append(readInt(bytecode, pc)).append("\n");
-                    pc += 2;
+                    pc += 1;
                     break;
                 case Opcodes.LAST:
                     sb.append("LAST ").append(readInt(bytecode, pc)).append("\n");
-                    pc += 2;
+                    pc += 1;
                     break;
                 case Opcodes.NEXT:
                     sb.append("NEXT ").append(readInt(bytecode, pc)).append("\n");
-                    pc += 2;
+                    pc += 1;
                     break;
                 case Opcodes.REDO:
                     sb.append("REDO ").append(readInt(bytecode, pc)).append("\n");
-                    pc += 2;
+                    pc += 1;
                     break;
                 case Opcodes.GOTO_IF_FALSE:
                     int condReg = bytecode[pc++];
                     int target = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("GOTO_IF_FALSE r").append(condReg).append(" -> ").append(target).append("\n");
                     break;
                 case Opcodes.GOTO_IF_TRUE:
                     condReg = bytecode[pc++];
                     target = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("GOTO_IF_TRUE r").append(condReg).append(" -> ").append(target).append("\n");
                     break;
                 case Opcodes.MOVE:
@@ -295,7 +295,7 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.LOAD_INT:
                     rd = bytecode[pc++];
                     int value = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("LOAD_INT r").append(rd).append(" = ").append(value).append("\n");
                     break;
                 case Opcodes.LOAD_STRING:
@@ -398,21 +398,21 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int rs = bytecode[pc++];
                     int imm = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("ADD_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" + ").append(imm).append("\n");
                     break;
                 case Opcodes.SUB_SCALAR_INT:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     int subImm = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("SUB_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" - ").append(subImm).append("\n");
                     break;
                 case Opcodes.MUL_SCALAR_INT:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     int mulImm = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("MUL_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" * ").append(mulImm).append("\n");
                     break;
                 case Opcodes.CONCAT:
@@ -473,7 +473,7 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.ADD_ASSIGN_INT:
                     rd = bytecode[pc++];
                     imm = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("ADD_ASSIGN_INT r").append(rd).append(" += ").append(imm).append("\n");
                     break;
                 case Opcodes.STRING_CONCAT_ASSIGN:
@@ -1033,7 +1033,7 @@ public class InterpretedCode extends RuntimeCode {
                     rs1 = bytecode[pc++];  // list register
                     rs2 = bytecode[pc++];  // closure register
                     int pkgIdx = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 1;
                     sb.append("SORT r").append(rd).append(" = sort(r").append(rs1)
                       .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
                     break;
@@ -1110,7 +1110,7 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     int packageIdx = readInt(bytecode, pc);
-                    pc += 2;  // readInt reads 2 shorts
+                    pc += 1;  // readInt reads 2 shorts
                     String packageName = (stringPool != null && packageIdx < stringPool.length) ?
                         stringPool[packageIdx] : "<unknown>";
                     sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
@@ -1142,7 +1142,7 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int iterReg = bytecode[pc++];
                     int bodyTarget = readInt(bytecode, pc);  // Absolute body address
-                    pc += 2;
+                    pc += 1;
                     sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
                       .append(" = r").append(iterReg).append(".next() and goto ")
                       .append(bodyTarget).append("\n");
@@ -1281,7 +1281,7 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int fgIterReg = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    int fgBody = readInt(bytecode, pc); pc += 2;
+                    int fgBody = readInt(bytecode, pc); pc += 1;
                     sb.append("FOREACH_GLOBAL_NEXT_OR_EXIT r").append(rd).append(" = r").append(fgIterReg)
                       .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
                     break;
@@ -1407,11 +1407,11 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     /**
-     * Read a 32-bit integer from bytecode (stored as 2 ints: high 16 bits, low 16 bits).
-     * With int[] storage, values are already full ints — no masking needed.
+     * Read a 32-bit integer from bytecode (stored as 1 int slot).
+     * With int[] storage a full int fits in a single slot.
      */
     private static int readInt(int[] bytecode, int pc) {
-        return (bytecode[pc] << 16) | bytecode[pc + 1];
+        return bytecode[pc];
     }
 
     /**

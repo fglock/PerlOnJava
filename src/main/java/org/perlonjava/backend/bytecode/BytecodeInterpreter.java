@@ -115,7 +115,7 @@ public class BytecodeInterpreter {
                         // Conditional jump: if (!rs) pc = offset
                         int condReg = bytecode[pc++];
                         int target = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         // Convert to scalar if needed for boolean test
                         RuntimeBase condBase = registers[condReg];
@@ -133,7 +133,7 @@ public class BytecodeInterpreter {
                         // Conditional jump: if (rs) pc = offset
                         int condReg = bytecode[pc++];
                         int target = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         // Convert to scalar if needed for boolean test
                         RuntimeBase condBase = registers[condReg];
@@ -171,7 +171,7 @@ public class BytecodeInterpreter {
                         // Load integer: rd = immediate (create NEW mutable scalar, not cached)
                         int rd = bytecode[pc++];
                         int value = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
                         // Create NEW RuntimeScalar (mutable) instead of using cache
                         // This is needed for local variables that may be modified (++/--)
                         registers[rd] = new RuntimeScalar(value);
@@ -254,7 +254,7 @@ public class BytecodeInterpreter {
                         int iterReg = bytecode[pc++];
                         int nameIdx = bytecode[pc++];
                         int bodyTarget = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         String name = code.stringPool[nameIdx];
                         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
@@ -490,7 +490,7 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
                         // Calls specialized unboxed method (rare optimization)
                         registers[rd] = MathOperators.add(
                             (RuntimeScalar) registers[rs],
@@ -600,7 +600,7 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int iterReg = bytecode[pc++];
                         int bodyTarget = readInt(bytecode, pc);  // Absolute target address
-                        pc += 2;  // Skip the int we just read
+                        pc += 1;  // Skip the int we just read
 
                         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
                         @SuppressWarnings("unchecked")
@@ -1087,7 +1087,7 @@ public class BytecodeInterpreter {
                         // Add immediate and assign: rd += imm (modifies rd in place)
                         int rd = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
                         RuntimeScalar result = MathOperators.add((RuntimeScalar) registers[rd], immediate);
                         ((RuntimeScalar) registers[rd]).set(result);
                         break;
@@ -1417,7 +1417,7 @@ public class BytecodeInterpreter {
                         // catch_target is absolute bytecode address (4 bytes)
 
                         int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
-                        pc += 2;  // Skip the 2 shorts we just read
+                        pc += 1;  // Skip the 2 shorts we just read
 
                         // Push catch PC onto eval stack
                         evalCatchStack.push(catchPc);
@@ -1651,7 +1651,7 @@ public class BytecodeInterpreter {
                         int listReg = bytecode[pc++];
                         int closureReg = bytecode[pc++];
                         int packageIdx = readInt(bytecode, pc);
-                        pc += 2;
+                        pc += 1;
 
                         RuntimeBase listBase = registers[listReg];
                         RuntimeList list = listBase.getList();
@@ -2288,7 +2288,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 int packageIdx = readInt(bytecode, pc);
-                pc += 2;  // readInt reads 2 shorts
+                pc += 1;  // readInt reads 2 shorts
                 RuntimeScalar codeRef = (RuntimeScalar) registers[rs];
                 String packageName = code.stringPool[packageIdx];
                 registers[rd] = RuntimeCode.prototype(codeRef, packageName);
@@ -2559,7 +2559,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 int immediate = readInt(bytecode, pc);
-                pc += 2;
+                pc += 1;
                 registers[rd] = MathOperators.add(
                     (RuntimeScalar) registers[rs],
                     immediate
@@ -3098,11 +3098,11 @@ public class BytecodeInterpreter {
     }
 
     /**
-     * Read a 32-bit integer from bytecode (stored as 2 ints: high 16 bits, low 16 bits).
-     * With int[] storage, values are already full ints — no masking needed.
+     * Read a 32-bit integer from bytecode (stored as 1 int slot).
+     * With int[] storage a full int fits in a single slot.
      */
     private static int readInt(int[] bytecode, int pc) {
-        return (bytecode[pc] << 16) | bytecode[pc + 1];
+        return bytecode[pc];
     }
 
     /**
