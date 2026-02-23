@@ -369,6 +369,30 @@ public class BytecodeCompiler implements Visitor {
      * @param varName The variable name with sigil (e.g., "$A", "@array")
      * @return true if access should be blocked under strict vars
      */
+    /** Returns true if strict refs is currently enabled at compile time. */
+    boolean isStrictRefsEnabled() {
+        if (emitterContext == null || emitterContext.symbolTable == null) {
+            return false;
+        }
+        return emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
+    }
+
+    /** Returns the current strict options bitmask at this point in compilation. */
+    int getCurrentStrictOptions() {
+        if (emitterContext == null || emitterContext.symbolTable == null) {
+            return 0;
+        }
+        return emitterContext.symbolTable.strictOptionsStack.peek();
+    }
+
+    /** Returns the current feature flags bitmask at this point in compilation. */
+    int getCurrentFeatureFlags() {
+        if (emitterContext == null || emitterContext.symbolTable == null) {
+            return 0;
+        }
+        return emitterContext.symbolTable.featureFlagsStack.peek();
+    }
+
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
         // Only check if strict vars is enabled
         if (emitterContext == null || emitterContext.symbolTable == null) {
@@ -2194,6 +2218,25 @@ public class BytecodeCompiler implements Visitor {
                 OperatorNode sigilOp = (OperatorNode) node.operand;
                 String sigil = sigilOp.operator;
 
+                if (sigil.equals("*") && sigilOp.operand instanceof IdentifierNode) {
+                    // local *glob — save glob state and return same glob object
+                    // Mirrors JVM path: load glob, call DynamicVariableManager.pushLocalVariable(RuntimeGlob)
+                    String globName = NameNormalizer.normalizeVariableName(((IdentifierNode) sigilOp.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globName);
+
+                    int globReg = allocateRegister();
+                    emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
+                    emitReg(globReg);
+                    emit(nameIdx);
+
+                    // Push glob to local variable stack (saves state, returns same object)
+                    emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    emitReg(globReg);
+
+                    lastResultReg = globReg;
+                    return;
+                }
+
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
@@ -2601,31 +2644,60 @@ public class BytecodeCompiler implements Visitor {
                 operandOp.accept(this);
                 int refReg = lastResultReg;
 
-                // Dereference to get the array
-                // The reference should contain a RuntimeArray
-                // For @$scalar, we need to dereference it
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
 
                 lastResultReg = rd;
-                // Note: We don't check scalar context here because dereferencing
-                // should return the array itself. The slice or other operation
-                // will handle scalar context conversion if needed.
             } else if (node.operand instanceof BlockNode) {
                 // @{ block } - evaluate block and dereference the result
-                // The block should return an arrayref
                 BlockNode blockNode = (BlockNode) node.operand;
                 blockNode.accept(this);
                 int refReg = lastResultReg;
 
-                // Dereference to get the array
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
 
+                lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // @{'name'} — symbolic array reference
+                int nameReg = allocateRegister();
+                int strIdx = addToStringPool(strNode.value);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(nameReg);
+                emit(strIdx);
+
+                int rd = allocateRegister();
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(rd);
+                    emitReg(nameReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(nameReg);
+                    emit(pkgIdx);
+                }
                 lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
@@ -2666,9 +2738,17 @@ public class BytecodeCompiler implements Visitor {
                 refOp.accept(this);
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
-                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                emitReg(hashReg);
-                emitReg(scalarReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                    emit(pkgIdx);
+                }
                 if (currentCallContext == RuntimeContextType.SCALAR) {
                     int rd = allocateRegister();
                     emit(Opcodes.ARRAY_SIZE);
@@ -2683,15 +2763,44 @@ public class BytecodeCompiler implements Visitor {
                 blockNode.accept(this);
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
-                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                emitReg(hashReg);
-                emitReg(scalarReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                    emit(pkgIdx);
+                }
+                lastResultReg = hashReg;
+            } else if (node.operand instanceof StringNode strNode) {
+                // %{'name'} — symbolic hash reference
+                int nameReg = allocateRegister();
+                int strIdx = addToStringPool(strNode.value);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(nameReg);
+                emit(strIdx);
+
+                int hashReg = allocateRegister();
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(nameReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(nameReg);
+                    emit(pkgIdx);
+                }
                 lastResultReg = hashReg;
             } else {
                 throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("*")) {
-            // Glob variable dereference: *x
+            // Glob variable dereference: *x or *{expr}
             if (node.operand instanceof IdentifierNode) {
                 IdentifierNode idNode = (IdentifierNode) node.operand;
                 String varName = idNode.name;
@@ -2709,6 +2818,28 @@ public class BytecodeCompiler implements Visitor {
                 emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
                 emitReg(rd);
                 emit(nameIdx);
+
+                lastResultReg = rd;
+            } else if (node.operand instanceof BlockNode || node.operand instanceof StringNode) {
+                // *{expr} or *{'name'} — dynamic glob via symbolic reference
+                node.operand.accept(this);
+                int nameReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.LOAD_SYMBOLIC_GLOB, node.getIndex());
+                emitReg(rd);
+                emitReg(nameReg);
+
+                lastResultReg = rd;
+            } else if (node.operand instanceof OperatorNode) {
+                // *$ref or **postfix — dereference scalar as glob
+                node.operand.accept(this);
+                int scalarReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.DEREF_GLOB, node.getIndex());
+                emitReg(rd);
+                emitReg(scalarReg);
 
                 lastResultReg = rd;
             } else {

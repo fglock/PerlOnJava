@@ -1071,5 +1071,25 @@ public class Opcodes {
      * Effect: Restores previous packageName */
     public static final short POP_PACKAGE = 308;
 
+    /** Load glob via symbolic reference: rd = GlobalVariable.getGlobalIO(nameReg.toString())
+     * Format: LOAD_SYMBOLIC_GLOB rd nameReg */
+    public static final short LOAD_SYMBOLIC_GLOB = 333;
+
+    /** Dereference scalar as glob: rd = scalarReg.globDeref()
+     * Format: DEREF_GLOB rd scalarReg */
+    public static final short DEREF_GLOB = 334;
+
+    /** Dereference scalar as hash (no strict refs): rd = scalarReg.hashDerefNonStrict(pkg)
+     * Format: DEREF_HASH_NONSTRICT rd scalarReg packageIdx */
+    public static final short DEREF_HASH_NONSTRICT = 335;
+
+    /** Dereference scalar as array (no strict refs): rd = scalarReg.arrayDerefNonStrict(pkg)
+     * Format: DEREF_ARRAY_NONSTRICT rd scalarReg packageIdx */
+    public static final short DEREF_ARRAY_NONSTRICT = 336;
+
+    /** Dereference scalar (no strict refs): rd = scalarReg.scalarDerefNonStrict(pkg)
+     * Format: DEREF_NONSTRICT rd scalarReg packageIdx */
+    public static final short DEREF_NONSTRICT = 337;
+
     private Opcodes() {} // Utility class - no instantiation
 }

@@ -1376,22 +1376,27 @@ public class BytecodeInterpreter {
 
                     case Opcodes.DEREF: {
                         // Dereference: rd = $$rs (scalar reference dereference)
-                        // Can receive RuntimeScalar or RuntimeList
+                        // Always call scalarDeref() — throws "Not a SCALAR reference" for
+                        // non-reference types (IO, FORMAT, etc.), matching Perl semantics.
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
-                        // Only dereference if it's a RuntimeScalar with REFERENCE type
                         if (value instanceof RuntimeScalar) {
-                            RuntimeScalar scalar = (RuntimeScalar) value;
-                            if (scalar.type == RuntimeScalarType.REFERENCE) {
-                                registers[rd] = scalar.scalarDeref();
+                            RuntimeScalar sv = (RuntimeScalar) value;
+                            // Call scalarDeref() for scalar refs, undef, non-ref types (strings, globs, etc.)
+                            // Pass through non-scalar reference types (array/hash/code/regex refs) —
+                            // those are handled by the JVM compiler as non-scalar refs and should not
+                            // throw here (decl-refs.t uses $$arrayref in no-strict context).
+                            if (sv.type == RuntimeScalarType.ARRAYREFERENCE
+                                    || sv.type == RuntimeScalarType.HASHREFERENCE
+                                    || sv.type == RuntimeScalarType.CODE
+                                    || sv.type == RuntimeScalarType.REGEX) {
+                                registers[rd] = sv; // pass through non-scalar refs
                             } else {
-                                // Non-reference scalar, just copy
-                                registers[rd] = value;
+                                registers[rd] = sv.scalarDeref();
                             }
                         } else {
-                            // RuntimeList or other types, pass through
                             registers[rd] = value;
                         }
                         break;
@@ -1774,6 +1779,11 @@ public class BytecodeInterpreter {
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:
                     case Opcodes.SLEEP_OP:
+                    case Opcodes.LOAD_SYMBOLIC_GLOB:
+                    case Opcodes.DEREF_GLOB:
+                    case Opcodes.DEREF_HASH_NONSTRICT:
+                    case Opcodes.DEREF_ARRAY_NONSTRICT:
+                    case Opcodes.DEREF_NONSTRICT:
                         pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -2219,17 +2229,19 @@ public class BytecodeInterpreter {
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
 
-                // Only dereference if it's a RuntimeScalar with REFERENCE type
+                // Call scalarDeref() for scalar refs, undef, non-ref types (strings, globs, etc.)
+                // Pass through non-scalar reference types (array/hash/code/regex refs).
                 if (value instanceof RuntimeScalar) {
-                    RuntimeScalar scalar = (RuntimeScalar) value;
-                    if (scalar.type == RuntimeScalarType.REFERENCE) {
-                        registers[rd] = scalar.scalarDeref();
+                    RuntimeScalar sv = (RuntimeScalar) value;
+                    if (sv.type == RuntimeScalarType.ARRAYREFERENCE
+                            || sv.type == RuntimeScalarType.HASHREFERENCE
+                            || sv.type == RuntimeScalarType.CODE
+                            || sv.type == RuntimeScalarType.REGEX) {
+                        registers[rd] = sv; // pass through non-scalar refs
                     } else {
-                        // Non-reference scalar, just copy
-                        registers[rd] = value;
+                        registers[rd] = sv.scalarDeref();
                     }
                 } else {
-                    // RuntimeList or other types, pass through
                     registers[rd] = value;
                 }
                 return pc;
@@ -3099,6 +3111,16 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
             case Opcodes.SLEEP_OP:
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
+            case Opcodes.LOAD_SYMBOLIC_GLOB:
+                return SlowOpcodeHandler.executeLoadSymbolicGlob(bytecode, pc, registers);
+            case Opcodes.DEREF_GLOB:
+                return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers);
+            case Opcodes.DEREF_HASH_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefHashNonStrict(bytecode, pc, registers, code);
+            case Opcodes.DEREF_ARRAY_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefArrayNonStrict(bytecode, pc, registers, code);
+            case Opcodes.DEREF_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefNonStrict(bytecode, pc, registers, code);
             default:
                 throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }

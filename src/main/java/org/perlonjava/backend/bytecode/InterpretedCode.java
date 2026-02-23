@@ -730,6 +730,28 @@ public class InterpretedCode extends RuntimeCode {
                     int keyReg = bytecode[pc++];
                     sb.append("GLOB_SLOT_GET r").append(rd).append(" = r").append(globReg2).append("{r").append(keyReg).append("}\n");
                     break;
+                case Opcodes.LOAD_SYMBOLIC_GLOB:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("LOAD_SYMBOLIC_GLOB r").append(rd).append(" = getGlobalIO(r").append(rs1).append(")\n");
+                    break;
+                case Opcodes.DEREF_GLOB:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("DEREF_GLOB r").append(rd).append(" = r").append(rs1).append(".globDeref()\n");
+                    break;
+                case Opcodes.DEREF_HASH_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("DEREF_HASH_NONSTRICT r").append(rd).append(" = r").append(rs1).append(".hashDerefNonStrict(pool[").append(rs2).append("])\n");
+                    break;
+                case Opcodes.DEREF_ARRAY_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("DEREF_ARRAY_NONSTRICT r").append(rd).append(" = r").append(rs1).append(".arrayDerefNonStrict(pool[").append(rs2).append("])\n");
+                    break;
                 case Opcodes.SPRINTF:
                     rd = bytecode[pc++];
                     int formatReg = bytecode[pc++];
@@ -766,8 +788,9 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.OPEN:
                     rd = bytecode[pc++];
                     int openCtx = bytecode[pc++];
+                    int openFhReg = bytecode[pc++];
                     int openArgs = bytecode[pc++];
-                    sb.append("OPEN r").append(rd).append(" = open(ctx=").append(openCtx).append(", r").append(openArgs).append(")\n");
+                    sb.append("OPEN r").append(rd).append(" = open(ctx=").append(openCtx).append(", fh=r").append(openFhReg).append(", args=r").append(openArgs).append(")\n");
                     break;
                 case Opcodes.READLINE:
                     rd = bytecode[pc++];
@@ -863,6 +886,14 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("DEREF r").append(rd).append(" = ${r").append(rs).append("}\n");
                     break;
+                case Opcodes.DEREF_NONSTRICT: {
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int derefNsPkgIdx = bytecode[pc++];
+                    sb.append("DEREF_NONSTRICT r").append(rd).append(" = ${r").append(rs)
+                      .append("} pkg=").append(stringPool[derefNsPkgIdx]).append("\n");
+                    break;
+                }
                 case Opcodes.GET_TYPE:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
