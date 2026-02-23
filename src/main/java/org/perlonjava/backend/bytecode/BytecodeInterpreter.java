@@ -1997,6 +1997,7 @@ public class BytecodeInterpreter {
                     case Opcodes.CALLER:
                     case Opcodes.EACH:
                     case Opcodes.PACK:
+                    case Opcodes.UNPACK:
                     case Opcodes.VEC:
                     case Opcodes.LOCALTIME:
                     case Opcodes.GMTIME:

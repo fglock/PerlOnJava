@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
+import org.perlonjava.runtime.operators.Unpack;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -53,6 +54,7 @@ public class MiscOpcodeHandler {
                 }
             }
             case Opcodes.PACK -> Pack.pack(args);
+            case Opcodes.UNPACK -> Unpack.unpack(ctx, argsArray);
             case Opcodes.VEC -> Vec.vec(args);
             case Opcodes.LOCALTIME -> Time.localtime(args, ctx);
             case Opcodes.GMTIME -> Time.gmtime(args, ctx);

@@ -1286,6 +1286,55 @@ public class InterpretedCode extends RuntimeCode {
                       .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
                     break;
                 }
+                // Misc list operators: OPCODE rd argsReg ctx
+                case Opcodes.PACK:
+                case Opcodes.UNPACK:
+                case Opcodes.CRYPT:
+                case Opcodes.LOCALTIME:
+                case Opcodes.GMTIME:
+                case Opcodes.CHMOD:
+                case Opcodes.UNLINK:
+                case Opcodes.UTIME:
+                case Opcodes.RENAME:
+                case Opcodes.LINK:
+                case Opcodes.READLINK:
+                case Opcodes.UMASK:
+                case Opcodes.GETC:
+                case Opcodes.FILENO:
+                case Opcodes.SYSTEM:
+                case Opcodes.CALLER:
+                case Opcodes.EACH:
+                case Opcodes.VEC: {
+                    rd = bytecode[pc++];
+                    int miscArgsReg = bytecode[pc++];
+                    int miscCtx = bytecode[pc++];
+                    String miscName = switch (opcode) {
+                        case Opcodes.PACK -> "pack";
+                        case Opcodes.UNPACK -> "unpack";
+                        case Opcodes.CRYPT -> "crypt";
+                        case Opcodes.LOCALTIME -> "localtime";
+                        case Opcodes.GMTIME -> "gmtime";
+                        case Opcodes.CHMOD -> "chmod";
+                        case Opcodes.UNLINK -> "unlink";
+                        case Opcodes.UTIME -> "utime";
+                        case Opcodes.RENAME -> "rename";
+                        case Opcodes.LINK -> "link";
+                        case Opcodes.READLINK -> "readlink";
+                        case Opcodes.UMASK -> "umask";
+                        case Opcodes.GETC -> "getc";
+                        case Opcodes.FILENO -> "fileno";
+                        case Opcodes.SYSTEM -> "system";
+                        case Opcodes.CALLER -> "caller";
+                        case Opcodes.EACH -> "each";
+                        case Opcodes.VEC -> "vec";
+                        default -> "misc_op_" + opcode;
+                    };
+                    sb.append(miscName).append(" r").append(rd)
+                      .append(" = ").append(miscName).append("(r").append(miscArgsReg)
+                      .append(", ctx=").append(miscCtx).append(")\n");
+                    break;
+                }
+
                 // DEPRECATED: SLOW_OP case removed - opcode 87 is no longer emitted
                 // All operations now use direct opcodes (114-154)
 

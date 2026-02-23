@@ -2708,9 +2708,9 @@ public class CompileOperator {
         } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
                    op.equals("rename") || op.equals("link") || op.equals("readlink") ||
                    op.equals("umask") || op.equals("system") || op.equals("pack") ||
-                   op.equals("vec") || op.equals("crypt") || op.equals("localtime") ||
-                   op.equals("gmtime") || op.equals("caller") || op.equals("fileno") ||
-                   op.equals("getc") || op.equals("qx")) {
+                   op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
+                   op.equals("localtime") || op.equals("gmtime") || op.equals("caller") ||
+                   op.equals("fileno") || op.equals("getc") || op.equals("qx")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList
@@ -2753,6 +2753,7 @@ public class CompileOperator {
                 case "caller" -> Opcodes.CALLER;
                 case "each" -> Opcodes.EACH;
                 case "pack" -> Opcodes.PACK;
+                case "unpack" -> Opcodes.UNPACK;
                 case "vec" -> Opcodes.VEC;
                 case "localtime" -> Opcodes.LOCALTIME;
                 case "gmtime" -> Opcodes.GMTIME;
