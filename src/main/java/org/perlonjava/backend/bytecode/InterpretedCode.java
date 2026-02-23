@@ -22,7 +22,7 @@ import java.util.TreeMap;
  */
 public class InterpretedCode extends RuntimeCode {
     // Bytecode and metadata
-    public final short[] bytecode;         // Instruction stream (opcodes + operands as shorts)
+    public final int[] bytecode;           // Instruction stream (opcodes + operands as ints)
     public final Object[] constants;       // Constant pool (RuntimeBase objects)
     public final String[] stringPool;      // String constants (variable names, etc.)
     public final int maxRegisters;         // Number of registers needed
@@ -57,7 +57,7 @@ public class InterpretedCode extends RuntimeCode {
      * @param featureFlags  Feature flags at compile time (for eval STRING inheritance)
      * @param warningFlags  Warning flags at compile time (for eval STRING inheritance)
      */
-    public InterpretedCode(short[] bytecode, Object[] constants, String[] stringPool,
+    public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
                           String sourceName, int sourceLine,
                           TreeMap<Integer, Integer> pcToTokenIndex,
@@ -81,7 +81,7 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     // Legacy constructor for backward compatibility
-    public InterpretedCode(short[] bytecode, Object[] constants, String[] stringPool,
+    public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
                           String sourceName, int sourceLine,
                           java.util.Map<Integer, Integer> pcToTokenIndex) {
@@ -92,7 +92,7 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     // Legacy constructor with variableRegistry but no errorUtil
-    public InterpretedCode(short[] bytecode, Object[] constants, String[] stringPool,
+    public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
                           String sourceName, int sourceLine,
                           java.util.Map<Integer, Integer> pcToTokenIndex,
@@ -220,7 +220,7 @@ public class InterpretedCode extends RuntimeCode {
         int pc = 0;
         while (pc < bytecode.length) {
             int startPc = pc;
-            short opcode = bytecode[pc++];
+            int opcode = bytecode[pc++];
             sb.append(String.format("%4d: ", startPc));
 
             switch (opcode) {
@@ -1407,20 +1407,18 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     /**
-     * Read a 32-bit integer from bytecode (stored as 2 shorts: high 16 bits, low 16 bits).
-     * Uses unsigned short values to reconstruct the full 32-bit integer.
+     * Read a 32-bit integer from bytecode (stored as 2 ints: high 16 bits, low 16 bits).
+     * With int[] storage, values are already full ints — no masking needed.
      */
-    private static int readInt(short[] bytecode, int pc) {
-        int high = bytecode[pc] & 0xFFFF;      // Keep mask here - need full 32-bit range
-        int low = bytecode[pc + 1] & 0xFFFF;   // Keep mask here - need full 32-bit range
-        return (high << 16) | low;
+    private static int readInt(int[] bytecode, int pc) {
+        return (bytecode[pc] << 16) | bytecode[pc + 1];
     }
 
     /**
      * Builder class for constructing InterpretedCode instances.
      */
     public static class Builder {
-        private short[] bytecode;
+        private int[] bytecode;
         private Object[] constants = new Object[0];
         private String[] stringPool = new String[0];
         private int maxRegisters = 10;
@@ -1428,7 +1426,7 @@ public class InterpretedCode extends RuntimeCode {
         private String sourceName = "<eval>";
         private int sourceLine = 1;
 
-        public Builder bytecode(short[] bytecode) {
+        public Builder bytecode(int[] bytecode) {
             this.bytecode = bytecode;
             return this;
         }

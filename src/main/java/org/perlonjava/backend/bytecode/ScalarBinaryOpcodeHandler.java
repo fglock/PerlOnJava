@@ -17,7 +17,7 @@ public class ScalarBinaryOpcodeHandler {
     /**
      * Execute scalar binary operations (atan2, eq, ne, lt, le, gt, ge, cmp, etc.) operation.
      */
-    public static int execute(int opcode, short[] bytecode, int pc,
+    public static int execute(int opcode, int[] bytecode, int pc,
                               RuntimeBase[] registers) {
         // Read registers (shared by all opcodes in this group)
         int rd = bytecode[pc++];
@@ -47,7 +47,7 @@ public class ScalarBinaryOpcodeHandler {
     /**
      * Disassemble scalar binary operations (atan2, eq, ne, lt, le, gt, ge, cmp, etc.) operation.
      */
-    public static int disassemble(int opcode, short[] bytecode, int pc,
+    public static int disassemble(int opcode, int[] bytecode, int pc,
                                    StringBuilder sb) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];

@@ -18,7 +18,7 @@ public class MiscOpcodeHandler {
      * Execute miscellaneous operators that take arguments and call runtime methods.
      * Format: OPCODE rd argsReg ctx
      */
-    public static int execute(short opcode, short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int execute(int opcode, int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
