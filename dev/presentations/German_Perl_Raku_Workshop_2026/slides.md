@@ -6,11 +6,7 @@ German Perl/Raku Workshop 2026
 
 Flavio Glock
 
-Note:
-- Welcome everyone
-- 40-minute technical talk
-- First section useful for everyone, then progressively more technical
-- Feel free to ask questions at the end
+*40-minute technical talk — starts accessible, gets progressively more technical*
 
 ---
 
@@ -21,12 +17,7 @@ Note:
 - Text processing, sysadmin, web, databases
 - Comprehensive module ecosystem (CPAN)
 - "Makes easy things easy and hard things possible"
-
-Note:
-- For those unfamiliar with Perl
-- Mature, battle-tested language
 - Still widely used in enterprise, bioinformatics, finance, DevOps
-- Powerful pattern matching and text processing
 
 ---
 
@@ -34,16 +25,12 @@ Note:
 
 <span class="metric">A Perl compiler and runtime for the JVM</span>
 
-- Compiles Perl scripts to **native JVM bytecode**
-- Not just wrapping a Perl compiler
-- Maintains Perl semantics
-- Gains JVM benefits
+- Compiles Perl scripts to **native JVM bytecode** — same as Java, Kotlin, Scala
+- Not an interpreter wrapping a Perl binary
+- Targets Perl 5.42+ semantics; compatibility is driven by the Perl test suite (not all behavior is covered yet)
+- Gains JVM benefits: cross-platform, Java library access, JVM tooling
 
-Note:
-- True compilation to bytecode
-- Same as Java/Kotlin/Scala compilation
-- Cross-platform, integrates with Java libraries
-- Access to JVM tooling
+**Targets:** Java 21+ (any JDK)
 
 ---
 
@@ -54,91 +41,71 @@ Note:
 - **1997**: JPL (Java-Perl Library) - Brian Jepson
 - **2001**: Bradley Kuhn's MS thesis on porting Perl to JVM
 - **2002**: perljvm prototype using Perl's B compiler
-- **2013-2023**: Perlito5 - Perl to Java/JavaScript compiler
-- **2024**: PerlOnJava - Production-ready compiler and runtime
+- **2013-2023**: Perlito5 - Perl to Java/JavaScript compiler (same author)
+- **2024**: PerlOnJava - Production-oriented compiler and runtime (active development)
 
-**Key insight:** Previous attempts informed this implementation
-
-Note:
-- Not the first attempt, but the first production-ready implementation
-- Learned from decades of prior work
-- Perlito5 was the predecessor project (same author)
-- PerlOnJava represents culmination of lessons learned
+Each prior attempt informed this implementation. PerlOnJava is the culmination of lessons learned.
 
 ---
 
-## Why Does This Matter?
+## Why Does This Matter? — A Concrete Scenario
 
-<div class="three-columns">
-<div>
+You have **50,000 lines of Perl** data-processing code. Your company is moving to a Java/Kubernetes stack.
 
-### Enterprise
-- JDBC databases
-- Maven dependencies
-- JSR-223 scripting
+**Without PerlOnJava:** Rewrite everything in Java, or maintain a separate Perl runtime.
 
-</div>
-<div>
+**With PerlOnJava:**
+- Run many existing Perl scripts unchanged on the JVM
+- Access any JDBC database (PostgreSQL, MySQL, Oracle, SQLite) — no C drivers needed
+- Package as a single JAR for deployment (future)
+- Embed Perl scripting in Java apps via the standard JSR-223 scripting API
+- Use JNA (Java Native Access) for platform-specific native libraries
+- Deploy to Docker, Kubernetes, Debian packages — anywhere Java runs
 
-### Cloud
-- **Single JAR** packages complete apps (like PAR) (future)
-- Runs on Linux, macOS, Windows
-- JNA for platform-specific features
-- Docker, Kubernetes, Debian packages
-- Android (future)
+---
 
-</div>
-<div>
+## Getting Started
 
-### Performance
-- Competitive with Perl 5
-- JVM JIT optimization
-- Higher startup time (JVM warmup)
+**Requirements:** Java 21+ (any JDK)
 
-</div>
-</div>
+```bash
+git clone https://github.com/fglock/PerlOnJava
+cd PerlOnJava
+make           # Build and run tests (~5 minutes)
+./jperl -E 'say "Hello from PerlOnJava!"'
+```
 
-Note:
-- Enterprise: Use Perl in Java-heavy environments
-- Cloud: Modern deployment platforms
-- JAR files can package complete Perl applications (similar to Perl PAR files)
-- Performance: Average runtime around Perl 5 speed, with higher startup time
+**Add Maven dependencies (e.g. a JDBC driver):**
+```bash
+./Configure.pl --search mysql-connector-java
+# Downloads and adds to classpath automatically
+```
+
+**Pure-Perl CPAN modules** typically work as-is — copy them to your lib path.
+**XS/C modules** need Java equivalents (many bundled already).
+**Migration checklist:** run your test suite under `./jperl`, then replace XS modules or JVM-incompatible features.
 
 ---
 
 ## Key Achievements
 
-- <span class="metric">260,000+ tests passing</span>
-- <span class="metric">74,000+ lines of Java code</span> (383 files)
-- <span class="metric">70,000+ lines of Perl code</span> (398 bundled modules)
-- <span class="metric">5,621+ commits</span>
+- <span class="metric">~260,000 tests</span> in the suite (compatibility tracked via tests)
+- <span class="metric">392 Java source files</span> (src/main/java)
+- <span class="metric">341 bundled Perl module files</span> (src/main/perl/lib/*.pm)
+- <span class="metric">5,741 commits</span> since June 2024
 
-**Bundled modules:** DBI, HTTP::Tiny, JSON, YAML, Text::CSV, and more
+**Bundled modules:** DBI, HTTP::Tiny, JSON, YAML, Text::CSV, Digest::MD5, MIME::Base64, and more
 
-Note:
-- Demonstrates comprehensive Perl 5 compatibility
-- Scale of implementation
-- Includes popular CPAN modules out of the box
-- Project started June 2024 with small Perl (parser) and Java (ASM generation) prototypes
-- Production-ready
+Compatibility is validated primarily through tests — Perl has no formal specification; the test suite is the de facto spec.
 
 ---
 
 ## Recent Milestones
 
-- Latest Perl class features
-
+- Latest Perl `class` features (modern OOP)
 - Dual execution backend (JVM compiler + Internal VM)
-
 - System V IPC and socket operations
-
-- 250,000+ tests passing
-
-Note:
-- Modern OOP with class keyword
-- Two execution modes for flexibility
-- Production-ready networking
-- Comprehensive test coverage
+- 260,000+ tests in the suite
 
 ---
 
@@ -158,17 +125,13 @@ Note:
 ./jperl examples/dbi.pl
 ```
 
-Note:
-- Quick demo if doing live
-- Shows it's real and working
-- Conway's Life is visually impressive
-- DBI example shows Java ecosystem integration
-
 ---
 
 ## Live Demo: Database Integration
 
-**DBI with JDBC drivers:**
+**DBI with JDBC (Java Database Connectivity) drivers:**
+
+JDBC is the standard Java database API — like DBI, but for Java. PerlOnJava's DBI module speaks JDBC directly, so any JDBC driver works without compiling C-based DBD::* adapters.
 
 ```perl
 use DBI;
@@ -185,13 +148,7 @@ while (my $row = $sth->fetchrow_hashref) {
 }
 ```
 
-**Key advantage:** Uses JDBC drivers directly, no DBD::* adapter needed
-
-Note:
-- Perl DBI module works seamlessly with JDBC
-- Any JDBC driver: PostgreSQL, MySQL, Oracle, SQLite, H2
-- No need to compile C-based DBD drivers
-- Pure Java integration
+**Supports:** PostgreSQL, MySQL, Oracle, SQLite, H2, any JDBC driver
 
 ---
 
@@ -199,10 +156,15 @@ Note:
 
 ## From Perl to JVM Bytecode
 
-Note:
-- Now diving into technical details
-- How we transform Perl source into executable bytecode
-- Casual viewers: this is where it gets technical
+---
+
+## Key Concepts Before We Dive In
+
+**AST (Abstract Syntax Tree):** A tree representation of source code structure. `my $x = 1 + 2` becomes a tree with an assignment node whose right child is an addition node. The compiler walks this tree to generate code.
+
+**JVM Bytecode:** Low-level instructions for the Java Virtual Machine — the same format Java, Kotlin, and Scala compile to. The JVM's JIT (Just-In-Time) compiler turns hot bytecode into native machine code at runtime.
+
+**ASM library:** A Java library for generating JVM bytecode programmatically. PerlOnJava uses it to emit bytecode directly, without going through Java source.
 
 ---
 
@@ -228,13 +190,11 @@ A multi-backend compiler with a shared frontend + shared runtime.
 - **JVM backend**: Generates native JVM bytecode using ASM library (primary)
 - **Internal VM**: A size-optimized execution backend specialized for dynamic code. Compact and no size limits (fallback + fast eval path)
 
-Note:
-- Backend = code generation target
-- Perl 5 compiles to internal bytecode, then interprets it
-- PerlOnJava can generate either JVM bytecode or custom bytecode
-- JVM backend: optimized by JVM JIT compiler, faster
-- Internal VM: more flexible, no size limits, handles complex control flow
-- Both approaches use bytecode interpreters at some level
+Both backends share 100% of the runtime APIs — user code doesn't know which is running.
+
+**Why generate bytecode directly instead of transpiling to Java source?**
+
+Perlito5 (the predecessor) compiled Perl → Java source → bytecode. It generates efficient code but startup tends to be slower, and `eval STRING` is slower because it invokes the Java compiler at runtime. PerlOnJava generates JVM bytecode directly via the ASM library.
 
 ---
 
@@ -245,16 +205,14 @@ Note:
    ↓
 2. Parser (AST Construction)
    ↓
-2.1. StringParser (Domain-Specific Languages)
+3. StringParser (Domain-Specific Languages)
    ↓
 4. EmitterVisitor (Bytecode Generation)
    ↓
 5. Custom ClassLoader (Runtime Loading)
 ```
 
-Note:
-- True compiler architecture
-- Perl becomes indistinguishable from Java bytecode
+Perl source becomes indistinguishable from Java bytecode at the end of this pipeline.
 
 ---
 
@@ -271,11 +229,9 @@ my $𝕦𝕟𝕚𝕔𝕠𝕕𝕖 = "test";      # Surrogate pairs
 - IBM's ICU4J library
 - Unicode code points (not UTF-16 units)
 - Proper surrogate pair handling
+- Perl limits identifiers to 251 code points; characters beyond U+FFFF require surrogate pair handling
 
-Note:
-- Breaks source into tokens: identifiers, operators, keywords
-- Perl limits identifiers to 251 code points
-- Must handle characters beyond U+FFFF correctly
+Breaks source into tokens: identifiers, operators, keywords.
 
 ---
 
@@ -301,12 +257,7 @@ Note:
    - `NumberParser` - Numeric literals (hex, octal, binary)
    - `IdentifierParser`, `SignatureParser`, `FieldParser`
 
-Note:
-- Precedence climbing: efficient operator precedence handling
-- Recursive descent: handles statements and control structures
-- 20+ specialized parsers for different operators and syntax
-- Modular design: easy to add new operators and syntax
-- Produces AST with nodes like `BlockNode`, `BinaryOperatorNode`, `ListNode`
+Produces AST nodes like `BlockNode`, `BinaryOperatorNode`, `ListNode`. Modular design makes it easy to add new operators and syntax.
 
 ---
 
@@ -336,12 +287,8 @@ say @data;  # Uses data set by BEGIN
 - **CHECK** - Runs after compilation (reverse order)
 - **UNITCHECK** - Runs after each compilation unit
 
-Note:
-- BEGIN is unique: executes during parsing
-- Enables compile-time code generation
-- Used by `use` statements (use = BEGIN + require + import)
-- Can access and modify lexical variables from outer scope
-- Sets `${^GLOBAL_PHASE}` to "START" during execution
+`use Module` is syntactic sugar for `BEGIN { require Module; Module->import() }` — so `use strict` and `use warnings` execute at compile time.
+Behavior follows what's covered by the Perl test suite; some edge cases are not yet implemented.
 
 ---
 
@@ -353,15 +300,7 @@ Note:
 - Manages symbol tables
 - Context propagation (void/scalar/list)
 
-**Challenges:**
-1. 65KB method size limit
-2. Complex control flow
-
-Note:
-- Heart of the compiler
-- Symbol table maps variable names to indices
-- Large Perl subroutines can exceed 65KB
-- Solution: fallback to custom bytecode backend
+**Key challenge:** The JVM imposes a **65,535-byte (~64KB) limit per method**. Large Perl subroutines can exceed this. Solution: automatic fallback to the custom bytecode backend for oversized methods.
 
 ---
 
@@ -388,10 +327,7 @@ INVOKESTATIC IOOperator.say(RuntimeList;RuntimeScalar)
 
 **View with:** `./jperl --disassemble -E '...'`
 
-Note:
-- Standard JVM bytecode instructions
-- Uses ASM library for generation
-- Optimized by JVM JIT compiler at runtime
+Standard JVM bytecode — optimized by the JVM's JIT compiler at runtime.
 
 ---
 
@@ -416,11 +352,7 @@ Bytecode length: 26 shorts
 
 **View with:** `./jperl --interpreter --disassemble -E '...'`
 
-Note:
-- Custom register-based bytecode format
-- Much more compact than JVM bytecode
-- Explicit register operands (r3, r4, etc.)
-- ~200 custom opcodes
+Custom register-based bytecode — much more compact than JVM bytecode. Explicit register operands (r3, r4, etc.), ~200 custom opcodes.
 
 ---
 
@@ -428,55 +360,44 @@ Note:
 
 ## JVM Bytecode vs Custom Bytecode
 
-Note:
-- Key innovation in PerlOnJava
-- Two execution pathways
-- User code doesn't know which is running
+Key innovation in PerlOnJava: two execution pathways that share 100% of the runtime. User code doesn't know which is running.
 
 ---
 
 ## Why Two Bytecode Backends?
 
-**The Problem:**
-- JVM 65KB method limit
-- Large Perl subroutines exceed this
-- Dynamic `eval STRING` slow to compile
+**JVM bytecode is a good choice for most code:**
+- Maximum performance via JIT optimization
+- Native JVM stack frames, inlining, loop optimizations
 
-**This is a common VM design pattern:**
-- JVM HotSpot: bytecode interpreter + JIT compilers
-- JavaScript engines (V8, SpiderMonkey): interpreter/baseline tier + optimizing JIT tier
-- Ruby (CRuby): interpreter + optional JIT (MJIT/YJIT)
+**But three problems push us toward a second backend:**
 
-**The Solution:**
-1. **JVM Bytecode Backend** (default): AST → JVM bytecode
-2. **Custom Bytecode Backend** (fallback): AST → Custom bytecode
+1. **65,535-byte (~64KB) method size limit** — large Perl subroutines can exceed it. The Internal VM has no such limit.
 
-Note:
-- Both solve different problems
-- Share 100% of runtime APIs
-- Seamless interoperability
+2. **CPU cache pressure** — very large JVM methods produce sparse bytecode that overflows instruction caches. The Internal VM's compact bytecode is more cache-efficient for those cases.
+
+3. **ClassLoader bottleneck for `eval STRING`** — the JVM class loader has overhead per loaded class. The Internal VM avoids that overhead and reduces eval latency (exact speedup varies).
+
+This is a common VM design pattern: many VMs (HotSpot, V8, SpiderMonkey, CRuby) use tiered execution for similar reasons.
 
 ---
 
 ## JVM Bytecode Backend: The Fast Path
 
-**Performance example (loop increment with lexical variable, 100M iterations):**
-- Perl 5: 1.53s baseline
-- PerlOnJava JVM Backend: 0.86s (1.78x faster)
+**Performance example (loop increment with lexical variable, 1,000,000,000 iterations):**
+- Perl 5: 7.88s baseline
+- PerlOnJava JVM Backend: 3.57s (2.20x faster)
 
 **Advantages:**
-- Maximum performance after JIT warmup
+- High throughput after JIT warmup
 - Native JVM stack frames
-- JVM optimizations (inlining, escape analysis)
+- JVM optimizations (inlining, loop optimizations)
 
 **Limitations:**
-- 65KB method size limit
-- Slower compilation for dynamic eval
+- 65,535-byte (~64KB) method size limit
+- Higher compilation overhead for dynamic eval
 
-Note:
-- AST → ASM → JVM bytecode → ClassLoader
-- After warmup (~10K iterations), reaches peak
-- Best for production, long-running code
+Pipeline: AST → ASM → JVM bytecode → ClassLoader. After warmup (order of 10K iterations), reaches peak performance. Best for long-running code.
 
 ---
 
@@ -494,17 +415,13 @@ Note:
 - Tier 3: Full C1 with profiling for C2
 
 **Tier 4: C2 Compiler** (Server compiler, max optimization)
-- Aggressive inlining, escape analysis, loop optimizations
+- Aggressive inlining, loop optimizations
 - Uses profiling data from Tier 3
 - Peak performance, but slow to compile
 
 **Strategy:** Keep critical paths small (≤ 35 bytecodes) for aggressive inlining
 
-Note:
-- Default in Java 8+: `-XX:+TieredCompilation`
-- Hot methods progress: Tier 0 → Tier 3 → Tier 4
-- Inlining thresholds: `-XX:MaxInlineSize=35`, `-XX:FreqInlineSize=325`
-- This is why we split methods into fast/slow paths
+Default in Java 8+: `-XX:+TieredCompilation`. Hot methods progress: Tier 0 → Tier 3 → Tier 4. Inlining thresholds: `-XX:MaxInlineSize=35`, `-XX:FreqInlineSize=325`. This is why PerlOnJava splits methods into fast/slow paths.
 
 ---
 
@@ -537,33 +454,25 @@ private int getIntLarge() {
 
 **Result:** Common case (INTEGER) is inlined, rare cases don't bloat hot path
 
-Note:
-- 90%+ of getInt() calls are on INTEGER type
-- Fast path: 2-3ns (fully inlined)
-- Slow path: 50-500ns (method call + switch + conversion)
-- This pattern used throughout: getDouble(), toString(), getBoolean()
+90%+ of `getInt()` calls are on INTEGER type. Fast path: single-digit nanoseconds when inlined. Slow path: tens to hundreds of nanoseconds. This pattern is used throughout: `getDouble()`, `toString()`, `getBoolean()`.
 
 ---
 
 ## Custom Bytecode Backend: Compact and Flexible
 
-**Performance example (loop increment, 100M iterations):**
-- Perl 5: 1.53s baseline
-- PerlOnJava Custom Backend: 1.80s (0.85x, 15% slower)
+**Performance characteristics:**
+- Lower startup overhead — no JVM class generation
+- Peak throughput is generally lower than the JVM backend (numbers vary)
+- Good fit for eval-heavy scripts where classloading dominates
 
 **Advantages:**
 - No method size limits
-- **~19x faster** eval STRING than the compiler backend
+- Compact bytecode footprint
 - 65,536 virtual registers
 
-**Architecture:** Register-based, not stack-based
+**Architecture:** Register-based, not stack-based (explained on the next slide)
 
-Note:
-- Custom bytecode format
-- Switch-based bytecode VM
-- Register-based crucial for Perl's control flow
-- ~200 opcodes covering all Perl operations
-- Stack-based would corrupt on non-local jumps
+Switch-based bytecode VM. ~200 opcodes covering all Perl operations.
 
 ---
 
@@ -578,14 +487,10 @@ eval {
 LABEL: print "Jumped out!\n";
 ```
 
-- **Stack-based:** Easy to corrupt the stack on non-local jumps
-- **Register-based:** Explicit operands maintain correctness
+- **Stack-based:** Stack state becomes inconsistent on non-local jumps (`goto`, `last LABEL`)
+- **Register-based:** Explicit operands (`rd = rs1 op rs2`) maintain correctness regardless of control flow
 
-Note:
-- Perl's complex control flow requires registers
-- Stack state becomes inconsistent with goto
-- Register: rd = rs1 op rs2 (3-address code)
-- ~200 opcodes covering all Perl operations
+Perl's complex control flow — labeled loops, `goto`, `eval` — requires register architecture.
 
 ---
 
@@ -612,28 +517,20 @@ Note:
 - Can be ported to any JVM derivative
 - Compiler mode ties us to standard JVM bytecode
 
-Note:
-- Internal VM mode is the key to multi-platform support
-- GraalVM and DEX support planned for future releases
-- Internal VM's custom bytecode can run anywhere
-- This is why dual backend matters beyond just performance
+The Internal VM is the key to multi-platform support. GraalVM and DEX support are planned for future releases. This is why the dual backend matters beyond just performance.
 
 ---
 
 ## eval STRING Performance
 
-**Dynamic eval (1,000,000 unique strings):**
+**Dynamic eval (1,000,000 unique strings, JPERL_EVAL_USE_INTERPRETER=1):**
 
 | Implementation | Time | vs Perl 5 |
 |----------------|------|-----------|
-| Perl 5 | 1.25s | baseline |
-| PerlOnJava | 6.00s | 4.80x slower |
+| Perl 5 | 1.29s | baseline |
+| PerlOnJava | 2.78s | 2.16x slower |
 
-**Note:** PerlOnJava automatically uses custom bytecode backend for eval STRING
-
-Note:
-- Custom bytecode backend used automatically for dynamic eval
-- Each iteration evals a different string
+PerlOnJava can use the internal VM for `eval STRING` to avoid classloader overhead (enabled here via `JPERL_EVAL_USE_INTERPRETER=1`). Each iteration evals a different string —
 - Compilation overhead dominates runtime
 - Still functional for typical eval usage patterns
 
@@ -641,9 +538,7 @@ Note:
 
 # Section 4: Complex Language Features
 
-Note:
-- Showcase sophisticated handling of Perl's challenges
-- These are the hard problems
+Now that we've seen *how* code runs, let's look at the hardest parts of making Perl *semantics* work correctly on the JVM.
 
 ---
 
@@ -661,11 +556,7 @@ say length($emoji);  # Must return 1, not 2
 say ord($emoji);     # Must return 128077
 ```
 
-Note:
-- Java uses 2 code units for emoji
-- Perl counts code points, not units
-- Use Character.toCodePoint(), codePointCount()
-- Pack/unpack with dual representation
+Java uses 2 UTF-16 code units for emoji; Perl counts code points, not units. Solution: `Character.toCodePoint()`, `codePointCount()`, and dual representation in pack/unpack.
 
 ---
 
@@ -688,12 +579,6 @@ ELSEWHERE: print "Jumped!\n";
 
 - We implement these using **tagged return values** (`RuntimeControlFlowList`) that carry control-flow markers across subroutine boundaries
 
-Note:
-- Perl's flexible control flow is challenging
-- last/next/redo with labels
-- Non-local goto across scopes
-- Exception handling with die/eval
-
 ---
 
 ## Control Flow: Solutions
@@ -712,13 +597,7 @@ Note:
     - If list is not tagged, program continues normally
     - Implements Perl tail calls (`goto &sub`) and non-local jumps safely
 
-**Why register architecture helps:** Stack would corrupt
-
-Note:
-- Shared handlers for multiple exits
-- Label → bytecode offset mapping
-- Careful JVM frame management
-- Register-based maintains state explicitly
+**Why register architecture helps:** Stack state would corrupt on non-local jumps. Register-based maintains state explicitly. Label → bytecode offset mapping with shared handlers for multiple exits.
 
 ---
 
@@ -739,11 +618,7 @@ Note:
 - Generates optimized bytecode
 - Provides consistent error messages
 
-Note:
-- String interpolation parser: breaks `"$x\n"` into literals, variables, escapes
-- Regex parser: parses pattern syntax; translation to Java regex happens at regex compile time
-- Pack/unpack parser: validates templates, generates format handlers
-- Each parser is invoked by main parser when context requires it
+String interpolation parser breaks `"$x\n"` into literals, variables, escapes. Regex parser translates Perl syntax to Java regex at compile time. Pack/unpack parser validates templates and generates format handlers. Each parser is invoked by the main parser when context requires it.
 
 ---
 
@@ -754,17 +629,22 @@ my $name = "World";
 my $msg = "Hello $name!\n";
 ```
 
-**Generated AST:**
-- `LiteralNode("Hello ")`
-- `VariableNode($name)`
-- `LiteralNode("!")`
-- `EscapeNode(\n)`
+**Generated AST** (from `./jperl --parse`):
+```
+BinaryOperatorNode: =
+  OperatorNode: my
+    OperatorNode: $
+      IdentifierNode: 'msg'
+  BinaryOperatorNode: join
+    StringNode: empty
+    ListNode:
+      StringNode: 'Hello '
+      OperatorNode: $
+        IdentifierNode: 'name'
+      StringNode: '!\x0A'
+```
 
-Note:
-- String interpolation is complex
-- Must parse literals, variables escapes
-- Compile-time validation catches errors early
-- Can optimize away unnecessary operations
+Compile-time validation catches errors early and can optimize away unnecessary operations.
 
 ---
 
@@ -782,12 +662,9 @@ Note:
 - Multi-character case folds: `ß` → `(?:ß|ss|SS)`
 - Perl modifiers: `/i`, `/g`, `/x`, `/xx`, `/e`, `/ee`
 
-**Result:** Most Perl regex features work seamlessly
+**Result:** Many Perl regex features work with the compatibility layer
 
-Note:
-- Regex cache (1000 patterns) for performance
-- Some advanced features not supported (recursive patterns, variable-length lookbehind)
-- See feature-matrix.md for complete regex support details
+Regex cache (1000 patterns) for performance. Unsupported: recursive patterns, variable-length lookbehind. See `feature-matrix.md` for complete details.
 
 ---
 
@@ -800,13 +677,107 @@ Note:
 3. **RuntimeHash** - Lazy init, ordered keys
 4. **RuntimeCode** - Code refs with closures
 
-**Key:** Perl semantics on JVM objects
+**Key:** Perl semantics on JVM objects. All shared between JVM compiler and Internal VM. Context tracking, auto-vivification, truthiness, and string/number coercion are implemented consistently across both backends.
 
-Note:
-- All shared between JVM compiler and Internal VM
-- Context tracking propagated through operations
-- Auto-vivification implemented consistently
-- Proper truthiness, string/number coercion
+---
+
+## Closures and Lexical Scoping
+
+```perl
+sub make_counter {
+    my $count = 0;
+    return sub { return ++$count };
+}
+my $c = make_counter();
+say $c->();  # 1
+say $c->();  # 2
+```
+
+**Implementation:**
+- `VariableCaptureAnalyzer` identifies which lexical variables each sub closes over at compile time
+- Captured variables are stored in a shared cell (a reference-counted box)
+- The `CREATE_CLOSURE_VAR` opcode allocates these cells at closure creation time
+- Both the outer scope and the inner sub hold a reference to the same cell — mutations are visible to both
+- Works identically in both the JVM backend and the Internal VM
+
+---
+
+## Context Propagation and `wantarray`
+
+Perl has three calling contexts: **void**, **scalar**, and **list**. The called function can query which context it was called in:
+
+```perl
+sub flexible {
+    if (wantarray) {
+        return (1, 2, 3);   # list context
+    } else {
+        return 42;           # scalar context
+    }
+}
+my @arr = flexible();   # list context → (1, 2, 3)
+my $n   = flexible();   # scalar context → 42
+```
+
+Context is threaded through the entire call stack as an `EmitterContext` parameter during code generation. At each call site, the compiler emits the correct context flag. `wantarray` reads this flag at runtime. Implemented in both backends.
+
+---
+
+## `local` and Dynamic Scoping
+
+```perl
+our $x = "global";
+sub inner { say $x }      # prints whatever $x is dynamically
+
+sub outer {
+    local $x = "dynamic"; # saves old value, restores on scope exit
+    inner();               # prints "dynamic"
+}
+inner();  # prints "global"
+outer();  # prints "dynamic"
+inner();  # prints "global" again
+```
+
+`local` is implemented for scalars, arrays, hashes, typeglobs, and filehandles. It saves the current value of a global variable onto a save stack and restores it when the enclosing scope exits — even through `die`/`eval`.
+
+---
+
+## `tie`: Attaching Behavior to Variables
+
+```perl
+package MyScalar;
+sub TIESCALAR { bless { val => $_[1] }, $_[0] }
+sub FETCH     { say "reading!"; $_[0]{val} }
+sub STORE     { say "writing!"; $_[0]{val} = $_[1] }
+
+package main;
+tie my $x, 'MyScalar', 42;
+$x = 10;   # prints "writing!"
+say $x;    # prints "reading!" then 10
+```
+
+Tied scalars, arrays, hashes, and filehandles are supported for core behaviors. The `TIED_SCALAR` type in `RuntimeScalar` dispatches `FETCH`/`STORE` calls to the tied class transparently.
+
+---
+
+## Module Loading: `require` and `@INC`
+
+**How `require` works:**
+1. Converts `Module::Name` → `Module/Name.pm`
+2. Searches `@INC` for the file
+3. Executes it once; caches path in `%INC`
+
+**PerlOnJava's `@INC`:**
+```
+@INC = ('jar:PERL5LIB');
+```
+
+The **300+ bundled Perl modules** live *inside the JAR file* itself:
+```
+%INC: 'Data/Dumper.pm' =>
+  'file:/path/to/perlonjava-3.0.0.jar!/lib/Data/Dumper.pm'
+```
+
+**Pure-Perl CPAN modules** typically work as-is — add their path to `PERL5LIB` or use `-I`. **XS modules** need Java equivalents (many are bundled already).
 
 ---
 
@@ -832,11 +803,7 @@ Note:
 - Negative `blessId` → class has overloads → check `OverloadContext`
 - Positive `blessId` → no overloads → skip expensive lookup (~10-20ns saved per operation)
 
-Note:
-- Dynamic typing: type can change at runtime
-- Reference bit (0x8000) distinguishes references from simple values
-- Overload detection happens at bless time, cached in blessId sign
-- All operations check blessId for overloaded operator dispatch
+Dynamic typing: type can change at runtime. Reference bit (0x8000) distinguishes references from simple values. Overload detection happens at `bless` time, cached in `blessId` sign.
 
 ---
 
@@ -858,11 +825,7 @@ my $count = @arr;      # Scalar context: returns length
 
 **Auto-vivification**
 
-Note:
-- RuntimeScalar handles Perl's dual nature
-- Same variable is string and number
-- RuntimeArray auto-expands
-- Context determines behavior
+The same variable is both string and number — context determines behavior. `RuntimeArray` auto-expands on assignment.
 
 ---
 
@@ -899,11 +862,7 @@ $foo{CODE}             # Access CODE slot
 
 **Result:** Perl glob semantics without JVM Gv structures
 
-Note:
-- Aliasing works by sharing references in maps, not copying
-- globalGlobs tracks which names had glob assignments (for CORE::GLOBAL overrides)
-- Lazy initialization: slots created on first access
-- Memory efficient: only allocated slots consume memory
+Aliasing works by sharing references in maps, not copying. `globalGlobs` tracks names that had glob assignments (for `CORE::GLOBAL` overrides). Lazy initialization: slots created on first access — only allocated slots consume memory.
 
 ---
 
@@ -921,14 +880,9 @@ Note:
 - Direct access to Java libraries and JVM ecosystem
 - Examples: `DBI` (uses JDBC), native Java library bindings
 
-**Key difference:** XS → Java Native Access (JNA) for native libraries
+**Key difference:** XS → JNA (Java Native Access) for native libraries
 
-Note:
-- Perl 5 XS modules won't work directly on PerlOnJava
-- But we can create Java equivalents with same API
-- Advantage: easier to write and maintain than C/XS
-- Access to entire Java ecosystem instead of C libraries
-- Some CPAN modules being ported to Java backend
+JNA is the Java equivalent of Perl's XS: it lets Java code call native C libraries without writing C. Perl 5 XS modules won't work directly, but Java equivalents with the same API can be created — easier to write and maintain than C/XS, with access to the entire Java ecosystem.
 
 ---
 
@@ -942,7 +896,7 @@ Note:
 
 **Partially implemented:**
 -  Some regex features (recursive patterns, variable-length lookbehind)
--  Some warnings and pragmas
+-  Warnings/strict behaviors implemented where covered by tests (edge cases remain)
 -  Taint checks
 
 **Workarounds available:**
@@ -950,19 +904,11 @@ Note:
 - Use Java threading APIs instead of Perl threads
 - File auto-close happens at program end
 
-Note:
-- Most limitations are JVM-related, not design choices
-- Many CPAN modules being ported to Java backend
-- XSLoader works with Java implementations
-- See feature-matrix.md for complete details
+Most limitations are JVM-related, not design choices. Many CPAN modules are being ported to Java backend. See `feature-matrix.md` for complete details.
 
 ---
 
 # Section 5: Integration & Future
-
-Note:
-- How PerlOnJava fits in the ecosystem
-- Where we're going
 
 ---
 
@@ -978,17 +924,13 @@ my $sth = $dbh->prepare("SELECT * FROM users WHERE id = ?");
 $sth->execute($user_id);
 ```
 
-**Supports:** PostgreSQL, MySQL, Oracle, H2, SQLite, any JDBC
-
-Note:
-- Perl DBI module with JDBC drivers
-- Direct database access from Perl
-- No need for DBD::* drivers
-- Any JDBC driver works
+**Supports:** PostgreSQL, MySQL, Oracle, H2, SQLite, most JDBC drivers — no DBD::* adapters needed.
 
 ---
 
 ## JSR-223 Scripting API
+
+JSR-223 is the standard Java scripting API (part of the JDK since Java 6). It lets any JVM language be embedded in Java applications via a common interface.
 
 **Call Perl from Java:**
 
@@ -1000,13 +942,7 @@ perl.put("data", myJavaObject);
 Object result = perl.eval("process_data($data)");
 ```
 
-**Bidirectional:** Java ↔ Perl seamlessly
-
-Note:
-- Standard Java scripting interface
-- Embed Perl in Java applications
-- Pass objects between languages
-- Legacy Perl scripts in modern Java apps
+**Bidirectional:** Java ↔ Perl seamlessly. Use case: embed legacy Perl scripts in a modern Java application without rewriting them.
 
 ---
 
@@ -1023,18 +959,14 @@ Note:
 - Embedded scripting in Java applications
 - Cross-language integration
 
-Note:
-- Manage dependencies with Maven
-- No manual JAR management
-- Integrate any Java library
-- Perl's power + Java's ecosystem
+Manage dependencies with Maven — no manual JAR management. Integrate any Java library with Perl's expressive power.
 
 ---
 
 ## Current Status
 
 **Recently Completed (v5.42.3):**
--  JVM Compiler backend production-ready
+-  JVM Compiler backend stable for many workloads
 -  Full Perl class features
 -  System V IPC, socket operations
 
@@ -1042,15 +974,11 @@ Note:
 - Internal VM performance refinement
 - Automatic fallback for large methods
 - Optimizing eval STRING compilation
-- 260,000+ tests passing
+- 260,000+ tests in the suite
 
 **Future Plans:**
 - Replace regex engine with one more compatible with Perl
 - Add a Perl-like single-step debugger
-
-Note:
-- Production-ready now
-- Active development continues
 
 ---
 
@@ -1059,7 +987,7 @@ Note:
 **Project:**
 - GitHub: github.com/fglock/PerlOnJava
 - License: Artistic 2.0 (same as Perl)
-- 5,621+ commits since 2024
+- 5,741 commits since 2024
 
 **Ways to contribute:**
 1. Testing - run your scripts, report issues
@@ -1067,11 +995,6 @@ Note:
 3. Documentation - improve guides
 4. Core development - implement features
 5. Performance - identify bottlenecks
-
-Note:
-- Open source, active community
-- Production-ready, sustained development
-- Many ways to help
 
 ---
 
@@ -1085,14 +1008,9 @@ make           # Build and run tests
 ```
 
 **Resources:**
-- Comprehensive documentation
-- Tests as examples
+- Comprehensive documentation in `docs/`
+- Tests as examples in `src/test/resources/unit/`
 - Active development
-
-Note:
-- Easy to get started
-- Well-documented
-- Plenty of examples to learn from
 
 ---
 
@@ -1100,40 +1018,29 @@ Note:
 
 **PerlOnJava demonstrates:**
 
-- Compiler engineering at scale (383 files, 260k tests)
-- **Test-Driven Development**: No Perl specification exists—only tests and CPAN code
+- Compiler engineering at scale (392 files, 260k test suite)
+- **Test-Driven Development**: No formal Perl specification exists; tests and CPAN code define behavior
 - Creative solutions to hard problems
 - Language interoperability
 - Sustained engineering effort (10+ years)
 
 **Bringing Perl's expressiveness to the JVM's platform reach**
 
-Note:
-- Significant technical achievement
-- TDD approach: compatibility verified through comprehensive test suite
-- Perl has no formal spec—behavior defined by tests and reference implementation
-- Dynamic language on modern VM
-- Maintains compatibility
-- Achieves competitive performance
+Perl has no formal specification — behavior is defined by tests and the reference implementation. PerlOnJava's compatibility is validated primarily through its test suite.
 
 ---
 
 ## Conclusion
 
--  **Production-ready** Perl compiler for JVM
--  **Competitive performance** with Perl 5 (1.78x faster with JVM bytecode backend, 0.85x with custom bytecode backend)
--  **260,000+ tests** passing
--  **Full ecosystem integration** (JDBC, JSR-223)
--  **Active development** with clear roadmap
+-  **Production-oriented** Perl compiler for JVM (actively evolving)
+-  **Benchmark snapshot:** JVM backend 2.20x faster on loop increment; eval STRING 2.16x slower (numbers vary by workload)
+-  **260,000+ tests** in the suite
+-  **Key ecosystem integration** (JDBC, JSR-223)
+-  **Active development** with public roadmap
 
 **Proving language ecosystems can be bridged**
 
-Note:
-- Comprehensive Perl 5 compatibility
-- JVM bytecode backend: 1.78x faster on loop benchmarks
-- Custom bytecode backend: 19x faster eval compilation
-- Modern deployment options
-- Active, sustained development
+JVM bytecode backend: 2.20x faster than Perl 5 on loop benchmarks (current script run). Eval STRING remains slower than Perl 5 in this microbenchmark. Modern deployment options. Active, sustained development.
 
 ---
 
@@ -1158,12 +1065,4 @@ Note:
 - **Perl community** - for decades of innovation and support
 - **Prior Perl-on-JVM pioneers** - JPL, perljvm, Perlito5
 
-Note:
-- Test-driven development only works with excellent tests
-- Perl's test suite is remarkably comprehensive
-- This project stands on the shoulders of giants
-
-Note:
-- Open for questions
-- Happy to discuss technical details
-- Looking forward to contributions
+This project stands on the shoulders of giants. Perl's test suite is remarkably comprehensive — test-driven development only works when the tests are this good.
