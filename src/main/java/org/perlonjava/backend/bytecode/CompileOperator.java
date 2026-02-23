@@ -101,13 +101,25 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException(op + " operator requires an identifier");
             }
         } else if (op.equals("say") || op.equals("print")) {
-            // say/print $x
+            // say/print $x  (no explicit filehandle — use select() default)
             if (node.operand != null) {
                 node.operand.accept(bytecodeCompiler);
-                int rs = bytecodeCompiler.lastResultReg;
+                int contentReg = bytecodeCompiler.lastResultReg;
+
+                // Emit SELECT with empty list to get the default filehandle,
+                // matching the CompileBinaryOperator path for print FILEHANDLE LIST
+                int listReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(listReg);
+                bytecodeCompiler.emit(0); // count = 0
+                int fhReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
+                bytecodeCompiler.emitReg(fhReg);
+                bytecodeCompiler.emitReg(listReg);
 
                 bytecodeCompiler.emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-                bytecodeCompiler.emitReg(rs);
+                bytecodeCompiler.emitReg(contentReg);
+                bytecodeCompiler.emitReg(fhReg);
             }
         } else if (op.equals("not") || op.equals("!")) {
             // Logical NOT operator: not $x or !$x
@@ -856,25 +868,23 @@ public class CompileOperator {
 
             int rd = bytecodeCompiler.allocateRegister();
 
-            if (node.operand != null && node.operand instanceof ListNode) {
-                // select FILEHANDLE or select() with arguments
-                // Compile the operand (ListNode containing filehandle ref)
+            boolean hasArgs = node.operand instanceof ListNode ln && !ln.elements.isEmpty();
+            if (hasArgs) {
+                // select FILEHANDLE or select(RBITS,WBITS,EBITS,TIMEOUT) with arguments
                 node.operand.accept(bytecodeCompiler);
                 int listReg = bytecodeCompiler.lastResultReg;
 
-                // Emit SELECT opcode
                 bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(listReg);
             } else {
-                // select() with no arguments - returns current filehandle
-                // Create empty list
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                // select() with no arguments (or empty ListNode from print-without-filehandle)
+                // Must emit CREATE_LIST so SELECT receives a RuntimeList, not a RuntimeScalar
                 int listReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(listReg);
                 bytecodeCompiler.emit(0); // count = 0
 
-                // Emit SELECT opcode
                 bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(listReg);
