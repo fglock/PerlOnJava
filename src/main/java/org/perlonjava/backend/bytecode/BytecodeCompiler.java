@@ -2877,8 +2877,7 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void emitInt(int value) {
-        bytecode.add(value >> 16);  // High 16 bits
-        bytecode.add(value & 0xFFFF);  // Low 16 bits
+        bytecode.add(value);  // Full int in one slot
     }
 
     /**
@@ -2901,16 +2900,15 @@ public class BytecodeCompiler implements Visitor {
      * Used for forward jumps where the target is unknown at emit time.
      */
     void patchIntOffset(int position, int target) {
-        // Store absolute target address (not relative offset) as 2 ints
-        bytecode.set(position, (target >> 16) & 0xFFFF);      // High 16 bits
-        bytecode.set(position + 1, target & 0xFFFF);          // Low 16 bits
+        // Store absolute target address in one slot
+        bytecode.set(position, target);
     }
 
     /**
      * Helper for forward jumps - emit placeholder and return position for later patching.
      */
     private void emitJumpPlaceholder() {
-        emitInt(0);  // 2 shorts (4 bytes) placeholder
+        emitInt(0);  // 1 int slot placeholder
     }
 
     private void patchJump(int placeholderPos, int target) {
