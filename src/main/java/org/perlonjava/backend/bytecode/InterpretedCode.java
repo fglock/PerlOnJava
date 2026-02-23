@@ -886,6 +886,14 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("DEREF r").append(rd).append(" = ${r").append(rs).append("}\n");
                     break;
+                case Opcodes.DEREF_NONSTRICT: {
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int derefNsPkgIdx = bytecode[pc++];
+                    sb.append("DEREF_NONSTRICT r").append(rd).append(" = ${r").append(rs)
+                      .append("} pkg=").append(stringPool[derefNsPkgIdx]).append("\n");
+                    break;
+                }
                 case Opcodes.GET_TYPE:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

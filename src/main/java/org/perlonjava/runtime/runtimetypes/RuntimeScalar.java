@@ -1106,6 +1106,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case UNDEF -> {
+                // Autovivify: create a new scalar reference for undefined values (same as scalarDeref)
+                RuntimeScalar newScalar = new RuntimeScalar();
+                this.value = newScalar;
+                this.type = RuntimeScalarType.REFERENCE;
+                yield newScalar;
+            }
             case REFERENCE -> (RuntimeScalar) value;
             case TIED_SCALAR -> tiedFetch().scalarDerefNonStrict(packageName);
             default -> {

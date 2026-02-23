@@ -338,6 +338,27 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * DEREF_NONSTRICT: rd = scalarReg.scalarDerefNonStrict(pkg)
+     * Format: [DEREF_NONSTRICT] [rd] [scalarReg] [packageIdx]
+     * Effect: Dereferences a scalar as a scalar with no-strict-refs semantics ($$ref or symbolic ref)
+     */
+    public static int executeDerefNonStrict(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int scalarReg = bytecode[pc++];
+        int packageIdx = bytecode[pc++];
+
+        String packageName = code.stringPool[packageIdx];
+        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
+        registers[rd] = scalar.scalarDerefNonStrict(packageName);
+        return pc;
+    }
+
+    /**
      * DEREF_GLOB: rd = scalarReg.globDeref()
      * Format: [DEREF_GLOB] [rd] [scalarReg]
      * Effect: Dereferences a scalar as a glob (** postfix deref)
