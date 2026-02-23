@@ -34,7 +34,7 @@ import java.util.List;
  */
 public class CompilerOptions implements Cloneable {
     public boolean debugEnabled = false;
-    public boolean disassembleEnabled = false;
+    public boolean disassembleEnabled = System.getenv("JPERL_DISASSEMBLE") != null;
     public boolean useInterpreter = false;
     public boolean tokenizeOnly = false;
     public boolean parseOnly = false;
