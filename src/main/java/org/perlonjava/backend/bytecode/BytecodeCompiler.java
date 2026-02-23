@@ -3344,46 +3344,53 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 6: Push loop info onto stack for last/next/redo
-        int loopStartPc = bytecode.size();
-        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, true);
+        // Step 6: Emit initial GOTO to the loop check (do-while structure).
+        // This avoids a back-edge GOTO on every iteration: the superinstruction at
+        // the bottom jumps backward to the body start if the iterator has more elements.
+        // Layout: GOTO check | body | check: FOREACH_NEXT_OR_EXIT → body | exit
+        emit(Opcodes.GOTO);
+        int entryJumpPc = bytecode.size();
+        emitInt(0);   // placeholder: will be patched to loopCheckPc
+
+        // Step 7: Body start (redo jumps here)
+        int bodyStartPc = bytecode.size();
+        LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
         loopStack.push(loopInfo);
 
-        // Step 7: Loop start superinstruction
+        // Step 8: Execute body
+        if (node.body != null) {
+            node.body.accept(this);
+        }
+
+        // Step 9: Loop check (next/continue jumps here) - the superinstruction
+        int loopCheckPc = bytecode.size();
+        loopInfo.continuePc = loopCheckPc;
+        patchJump(entryJumpPc, loopCheckPc);   // patch the entry GOTO
+
+        // Step 10: Emit the loop superinstruction at the bottom (do-while check).
+        // If iterator has next: load element (and alias for global vars), jump back to body.
+        // If exhausted: fall through to exit.
         int loopEndJumpPc;
         if (globalLoopVarName != null) {
-            // FOREACH_GLOBAL_NEXT_OR_EXIT: hasNext + next + aliasGlobalVariable + conditional exit
+            // FOREACH_GLOBAL_NEXT_OR_EXIT: hasNext + next + aliasGlobalVariable + conditional jump
             int nameIdx = addToStringPool(globalLoopVarName);
             emit(Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT);
             emitReg(varReg);
             emitReg(iterReg);
             emit(nameIdx);
             loopEndJumpPc = bytecode.size();
-            emitInt(0);   // placeholder for exit target
+            emitInt(bodyStartPc);   // jump backward to body start if has next
         } else {
-            // FOREACH_NEXT_OR_EXIT: hasNext + next + conditional exit (lexical or temp var)
+            // FOREACH_NEXT_OR_EXIT: hasNext + next + conditional jump (lexical or temp var)
             emit(Opcodes.FOREACH_NEXT_OR_EXIT);
             emitReg(varReg);
             emitReg(iterReg);
             loopEndJumpPc = bytecode.size();
-            emitInt(0);   // placeholder for exit target
+            emitInt(bodyStartPc);   // jump backward to body start if has next
         }
 
-        // Step 8: Execute body (redo jumps here)
-        if (node.body != null) {
-            node.body.accept(this);
-        }
-
-        // Step 9: Continue point (next jumps here)
-        loopInfo.continuePc = bytecode.size();
-
-        // Step 10: Jump back to loop start
-        emit(Opcodes.GOTO);
-        emitInt(loopStartPc);
-
-        // Step 11: Loop end - patch the forward jump (last/exit jumps here)
+        // Step 11: Loop exit - fall-through after the superinstruction
         int loopEndPc = bytecode.size();
-        patchJump(loopEndJumpPc, loopEndPc);
 
         // Step 11b: Restore global loop variable after loop exits.
         // POP_LOCAL_LEVEL(levelReg) pops to the pre-makeLocal level, undoing both
@@ -3399,10 +3406,10 @@ public class BytecodeCompiler implements Visitor {
             patchJump(pc, loopEndPc);
         }
         for (int pc : loopInfo.nextPcs) {
-            patchJump(pc, loopInfo.continuePc);
+            patchJump(pc, loopCheckPc);
         }
         for (int pc : loopInfo.redoPcs) {
-            patchJump(pc, loopStartPc);
+            patchJump(pc, bodyStartPc);
         }
 
         // Step 13: Pop loop info and exit scope
