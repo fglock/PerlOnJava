@@ -2,6 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
+import org.perlonjava.runtime.operators.ChownOperator;
+import org.perlonjava.runtime.operators.WaitpidOperator;
 import org.perlonjava.runtime.operators.Unpack;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -78,6 +80,14 @@ public class MiscOpcodeHandler {
             case Opcodes.SYSSEEK -> IOOperator.sysseek(ctx, argsArray);
             case Opcodes.TRUNCATE -> IOOperator.truncate(ctx, argsArray);
             case Opcodes.READ -> IOOperator.read(ctx, argsArray);
+            case Opcodes.CHOWN -> ChownOperator.chown(ctx, argsArray);
+            case Opcodes.WAITPID -> WaitpidOperator.waitpid(ctx, argsArray);
+            case Opcodes.SETSOCKOPT -> IOOperator.setsockopt(ctx, argsArray);
+            case Opcodes.GETSOCKOPT -> IOOperator.getsockopt(ctx, argsArray);
+            case Opcodes.GETPGRP -> Operator.getpgrp(ctx, argsArray);
+            case Opcodes.SETPGRP -> Operator.setpgrp(ctx, argsArray);
+            case Opcodes.GETPRIORITY -> Operator.getpriority(ctx, argsArray);
+            case Opcodes.SETPRIORITY -> new RuntimeScalar(0); // stub - no native impl yet
             default -> throw new IllegalStateException("Unknown opcode in MiscOpcodeHandler: " + opcode);
         };
 
