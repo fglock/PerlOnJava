@@ -33,6 +33,7 @@ public class InterpretedCode extends RuntimeCode {
     public final int strictOptions;        // Strict flags at compile time
     public final int featureFlags;         // Feature flags at compile time
     public final BitSet warningFlags;      // Warning flags at compile time
+    public final String compilePackage;    // Package at compile time (for eval STRING name resolution)
 
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
@@ -64,6 +65,19 @@ public class InterpretedCode extends RuntimeCode {
                           Map<String, Integer> variableRegistry,
                           ErrorMessageUtil errorUtil,
                           int strictOptions, int featureFlags, BitSet warningFlags) {
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+             sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+             strictOptions, featureFlags, warningFlags, "main");
+    }
+
+    public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
+                          int maxRegisters, RuntimeBase[] capturedVars,
+                          String sourceName, int sourceLine,
+                          TreeMap<Integer, Integer> pcToTokenIndex,
+                          Map<String, Integer> variableRegistry,
+                          ErrorMessageUtil errorUtil,
+                          int strictOptions, int featureFlags, BitSet warningFlags,
+                          String compilePackage) {
         super(null, new java.util.ArrayList<>()); // Call RuntimeCode constructor with null prototype, empty attributes
         this.bytecode = bytecode;
         this.constants = constants;
@@ -78,6 +92,7 @@ public class InterpretedCode extends RuntimeCode {
         this.strictOptions = strictOptions;
         this.featureFlags = featureFlags;
         this.warningFlags = warningFlags;
+        this.compilePackage = compilePackage;
     }
 
     // Legacy constructor for backward compatibility

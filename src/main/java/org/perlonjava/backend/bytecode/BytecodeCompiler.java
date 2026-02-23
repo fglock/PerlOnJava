@@ -545,7 +545,8 @@ public class BytecodeCompiler implements Visitor {
             errorUtil,  // Pass error util for line number lookup
             strictOptions,  // Strict flags for eval STRING inheritance
             featureFlags,  // Feature flags for eval STRING inheritance
-            warningFlags  // Warning flags for eval STRING inheritance
+            warningFlags,  // Warning flags for eval STRING inheritance
+            symbolTable.getCurrentPackage()  // Compile-time package for eval STRING name resolution
         );
     }
 
