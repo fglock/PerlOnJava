@@ -894,19 +894,24 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("pop")) {
             // Array pop: $x = pop @array or $x = pop @$ref
-            // operand: ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
+            // operand: OperatorNode("@", ...) directly (default @_/@ARGV injected by parser)
+            //       or ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
+            if (node.operand == null) {
                 bytecodeCompiler.throwCompilerException("pop requires array argument");
             }
 
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
-                bytecodeCompiler.throwCompilerException("pop requires array variable");
-            }
-
-            OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-            if (!arrayOp.operator.equals("@")) {
+            OperatorNode arrayOp;
+            if (node.operand instanceof OperatorNode directOp && directOp.operator.equals("@")) {
+                // Direct OperatorNode("@", ...) - default array case
+                arrayOp = directOp;
+            } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()
+                    && list.elements.get(0) instanceof OperatorNode listOp
+                    && listOp.operator.equals("@")) {
+                // ListNode-wrapped OperatorNode("@", ...) - explicit array case
+                arrayOp = listOp;
+            } else {
                 bytecodeCompiler.throwCompilerException("pop requires array variable: pop @array");
+                return;
             }
 
             int arrayReg = -1;  // Will be assigned in if/else blocks
@@ -953,19 +958,24 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("shift")) {
             // Array shift: $x = shift @array or $x = shift @$ref
-            // operand: ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
+            // operand: OperatorNode("@", ...) directly (default @_/@ARGV injected by parser)
+            //       or ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
+            if (node.operand == null) {
                 bytecodeCompiler.throwCompilerException("shift requires array argument");
             }
 
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
-                bytecodeCompiler.throwCompilerException("shift requires array variable");
-            }
-
-            OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-            if (!arrayOp.operator.equals("@")) {
+            OperatorNode arrayOp;
+            if (node.operand instanceof OperatorNode directOp && directOp.operator.equals("@")) {
+                // Direct OperatorNode("@", ...) - default array case
+                arrayOp = directOp;
+            } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()
+                    && list.elements.get(0) instanceof OperatorNode listOp
+                    && listOp.operator.equals("@")) {
+                // ListNode-wrapped OperatorNode("@", ...) - explicit array case
+                arrayOp = listOp;
+            } else {
                 bytecodeCompiler.throwCompilerException("shift requires array variable: shift @array");
+                return;
             }
 
             int arrayReg = -1;  // Will be assigned in if/else blocks
