@@ -223,6 +223,54 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.LOCAL_SCALAR_SAVE_LEVEL: {
+                        // Superinstruction: save dynamic level BEFORE makeLocal, then localize.
+                        // Atomically: levelReg = getLocalLevel(), rd = makeLocal(name).
+                        // The pre-push level in levelReg is used by POP_LOCAL_LEVEL after the loop.
+                        int rd = bytecode[pc++];
+                        int levelReg = bytecode[pc++];
+                        int nameIdx = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+
+                        registers[levelReg] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
+                        registers[rd] = GlobalRuntimeScalar.makeLocal(name);
+                        break;
+                    }
+
+                    case Opcodes.POP_LOCAL_LEVEL: {
+                        // Restore DynamicVariableManager to a previously saved local level.
+                        // Matches JVM compiler's DynamicVariableManager.popToLocalLevel(savedLevel) call.
+                        int rs = bytecode[pc++];
+                        int savedLevel = ((RuntimeScalar) registers[rs]).getInt();
+                        DynamicVariableManager.popToLocalLevel(savedLevel);
+                        break;
+                    }
+
+                    case Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT: {
+                        // Superinstruction: foreach loop step for a global loop variable (e.g. $_).
+                        // Combines: hasNext check, next() into varReg, aliasGlobalVariable, conditional exit.
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+                        int nameIdx = bytecode[pc++];
+                        int exitTarget = readInt(bytecode, pc);
+                        pc += 2;
+
+                        String name = code.stringPool[nameIdx];
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        if (iterator.hasNext()) {
+                            RuntimeScalar element = iterator.next();
+                            registers[rd] = element;
+                            GlobalVariable.aliasGlobalVariable(name, element);
+                        } else {
+                            pc = exitTarget;
+                        }
+                        break;
+                    }
+
                     case Opcodes.STORE_GLOBAL_ARRAY: {
                         // Store global array: GlobalVariable.getGlobalArray(name).setFromList(list)
                         int nameIdx = bytecode[pc++];
