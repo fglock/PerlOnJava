@@ -2020,6 +2020,9 @@ public class BytecodeInterpreter {
                     case Opcodes.SYSSEEK:
                     case Opcodes.TRUNCATE:
                     case Opcodes.READ:
+                    case Opcodes.OPENDIR:
+                    case Opcodes.READDIR:
+                    case Opcodes.SEEKDIR:
                         pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
 

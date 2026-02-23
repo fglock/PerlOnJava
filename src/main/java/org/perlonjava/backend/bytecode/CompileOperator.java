@@ -2677,7 +2677,8 @@ public class CompileOperator {
                    op.equals("chown") || op.equals("waitpid") ||
                    op.equals("setsockopt") || op.equals("getsockopt") ||
                    op.equals("getpgrp") || op.equals("setpgrp") ||
-                   op.equals("getpriority") || op.equals("setpriority")) {
+                   op.equals("getpriority") || op.equals("setpriority") ||
+                   op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList
@@ -2751,6 +2752,9 @@ public class CompileOperator {
                 case "setpgrp" -> Opcodes.SETPGRP;
                 case "getpriority" -> Opcodes.GETPRIORITY;
                 case "setpriority" -> Opcodes.SETPRIORITY;
+                case "opendir" -> Opcodes.OPENDIR;
+                case "readdir" -> Opcodes.READDIR;
+                case "seekdir" -> Opcodes.SEEKDIR;
                 default -> throw new IllegalStateException("Unexpected operator: " + op);
             };
 
