@@ -2739,6 +2739,17 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(nameIdx);
                 lastResultReg = rd;
+            } else if (node.operand instanceof OperatorNode) {
+                // $ref->** — dereference a scalar as a glob (e.g. postfix deref)
+                node.operand.accept(this);
+                int refReg = lastResultReg;
+                int rd = allocateRegister();
+                int pkgIdx = addToStringPool(getCurrentPackage()); // consumed but unused at runtime
+                emitWithToken(Opcodes.DEREF_GLOB, node.getIndex());
+                emitReg(rd);
+                emitReg(refReg);
+                emit(pkgIdx);
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
             }
