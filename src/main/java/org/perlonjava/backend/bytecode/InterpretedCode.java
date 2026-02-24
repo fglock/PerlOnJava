@@ -1253,6 +1253,12 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("SLEEP_OP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
                     break;
+                case Opcodes.DEREF_GLOB:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("DEREF_GLOB r").append(rd).append(" = *{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
+                    break;
                 case Opcodes.DEREF_ARRAY:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

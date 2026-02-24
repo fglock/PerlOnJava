@@ -326,12 +326,21 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        int nameIdx = bytecode[pc++];
+        int nameIdx = bytecode[pc++];  // currentPackage (unused at runtime, consumed for alignment)
 
-        RuntimeScalar scalar = (RuntimeScalar) registers[rs];
+        RuntimeBase val = registers[rs];
 
-        // Use globDeref() — strict mode: throws "Not a GLOB reference" for non-glob scalars.
-        // This matches the JVM path (EmitVariable.java line 454: globDeref()).
+        // PVIO case: *STDOUT{IO} returns RuntimeIO directly — wrap in a temporary glob
+        if (val instanceof RuntimeIO io) {
+            RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+            tmp.setIO(io);
+            registers[rd] = tmp;
+            return pc;
+        }
+
+        // General case: use globDeref() — throws "Not a GLOB reference" for invalid refs.
+        // Matches JVM path (EmitVariable.java: globDeref()).
+        RuntimeScalar scalar = (RuntimeScalar) val;
         registers[rd] = scalar.globDeref();
         return pc;
     }
