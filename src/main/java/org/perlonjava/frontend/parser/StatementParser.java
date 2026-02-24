@@ -879,6 +879,10 @@ public class StatementParser {
                 parser.isInClassBlock = wasInClassBlock;
             }
 
+            // Mark the package/class declaration as scoped so backends can restore
+            // the previous package when the block exits.
+            packageNode.setAnnotation("isScoped", true);
+
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);
 

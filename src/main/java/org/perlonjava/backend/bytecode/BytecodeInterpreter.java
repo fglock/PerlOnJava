@@ -2052,6 +2052,16 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.POP_PACKAGE: {
+                        // Scoped package block exit: closing } of package Foo { ... }
+                        // Restore the previous package by popping exactly one saved dynamic state.
+                        int level = DynamicVariableManager.getLocalLevel();
+                        if (level > 0) {
+                            DynamicVariableManager.popToLocalLevel(level - 1);
+                        }
+                        break;
+                    }
+
                     default:
                         // Unknown opcode
                         int opcodeInt = opcode;
