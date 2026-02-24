@@ -835,10 +835,17 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Emit direct opcode EVAL_STRING
+                // Bake the call-site package into the opcode at compile time.
+                // ScopedSymbolTable.getCurrentPackage() reflects the packageStack at this
+                // exact node — e.g. "Foo" inside "package Foo { }", "main" outside.
+                // This is the interpreter equivalent of the JVM evalTag's ctx.symbolTable.
+                // Format: EVAL_STRING rd stringReg pkgIdx
+                int pkgIdx = bytecodeCompiler.addToStringPool(
+                        bytecodeCompiler.getCurrentPackage());
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
+                bytecodeCompiler.emit(pkgIdx);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {

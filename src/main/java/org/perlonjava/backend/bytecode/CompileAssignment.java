@@ -986,7 +986,13 @@ public class CompileAssignment {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
                     }
                 } else {
-                    bytecodeCompiler.throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);
+                    // Match Perl's error message for non-lvalue operators (e.g. chop, chomp)
+                    String op = leftOp.operator;
+                    if (op.equals("chop") || op.equals("chomp")) {
+                        bytecodeCompiler.throwCompilerException("Can't modify " + op + " in scalar assignment");
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Can't modify " + op + " in assignment");
+                    }
                 }
             } else if (node.left instanceof IdentifierNode) {
                 String varName = ((IdentifierNode) node.left).name;

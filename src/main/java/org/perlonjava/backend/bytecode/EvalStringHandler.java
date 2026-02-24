@@ -49,7 +49,8 @@ public class EvalStringHandler {
                                           InterpretedCode currentCode,
                                           RuntimeBase[] registers,
                                           String sourceName,
-                                          int sourceLine) {
+                                          int sourceLine,
+                                          String callSitePackage) {
         try {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -76,13 +77,10 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Inherit the compile-time package from the calling code, matching what
-            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
-            // Using the compile-time package (not InterpreterState.currentPackage which is
-            // the runtime package) ensures bare names like *named resolve to FOO3::named
-            // when the eval call site is inside "package FOO3".
-            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
-            symbolTable.setCurrentPackage(compilePackage, false);
+            // Use the call-site package baked into the EVAL_STRING opcode at compile time.
+            // Each eval() call site emits its own pkgIdx from ScopedSymbolTable.getCurrentPackage()
+            // at that exact point — equivalent to the JVM evalTag's ctx.symbolTable package.
+            symbolTable.setCurrentPackage(callSitePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
