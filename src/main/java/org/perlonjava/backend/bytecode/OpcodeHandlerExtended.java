@@ -735,8 +735,8 @@ public class OpcodeHandlerExtended {
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
         registers[rd] = RuntimeRegex.matchRegex(
-            (RuntimeScalar) registers[regexReg],  // quotedRegex first
-            (RuntimeScalar) registers[stringReg], // string second
+            registers[regexReg].scalar(),  // quotedRegex first
+            registers[stringReg].scalar(), // string second
             ctx
         );
         return pc;
@@ -752,8 +752,8 @@ public class OpcodeHandlerExtended {
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
         RuntimeBase matchResult = RuntimeRegex.matchRegex(
-            (RuntimeScalar) registers[regexReg],  // quotedRegex first
-            (RuntimeScalar) registers[stringReg], // string second
+            registers[regexReg].scalar(),  // quotedRegex first
+            registers[stringReg].scalar(), // string second
             ctx
         );
         // Negate the boolean result
