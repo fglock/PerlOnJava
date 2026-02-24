@@ -945,15 +945,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } catch (Throwable e) {
                 // Other runtime errors - set $@ and return undef/empty list
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                // PerlCompilerException.getMessage() may return empty when caller() lookup
-                // fails inside interpreter context — fall back to the superclass message.
                 String message = e.getMessage();
-                if ((message == null || message.isEmpty()) && e.getCause() != null) {
-                    message = e.getCause().getMessage();
-                }
-                if (message == null || message.isEmpty()) {
-                    message = ErrorMessageUtil.stringifyException(e);
-                }
                 if (message == null || message.isEmpty()) {
                     message = e.getClass().getSimpleName();
                 }
