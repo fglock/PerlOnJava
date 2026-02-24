@@ -151,10 +151,10 @@ public class TokenUtils {
     public static void consume(Parser parser, LexerTokenType type, String text) {
         LexerToken token = consume(parser);
         if (token.type != type || !token.text.equals(text)) {
-            String msg = text.equals("}") || text.equals("]")
-                    ? "Missing right curly or square bracket"
-                    : "Expected token " + type + " with text " + text + " but got " + token;
-            throw new PerlCompilerException(parser.tokenIndex, msg, parser.ctx.errorUtil);
+            throw new PerlCompilerException(
+                    parser.tokenIndex,
+                    "Expected token " + type + " with text " + text + " but got " + token,
+                    parser.ctx.errorUtil);
         }
     }
 }

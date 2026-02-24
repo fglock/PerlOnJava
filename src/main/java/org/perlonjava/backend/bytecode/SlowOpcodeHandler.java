@@ -777,10 +777,8 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int listReg = bytecode[pc++];
-        // Read startIndex as 2 shorts (int = high 16 bits + low 16 bits)
-        int high = bytecode[pc++] & 0xFFFF;
-        int low = bytecode[pc++] & 0xFFFF;
-        int startIndex = (high << 16) | low;
+        // Read startIndex as single int slot (emitInt writes one slot)
+        int startIndex = bytecode[pc++];
 
         RuntimeBase listBase = registers[listReg];
         RuntimeList sourceList;

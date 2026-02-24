@@ -1307,8 +1307,7 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
             }
 
-            // Strip sigil before normalizing — normalizeVariableName expects bare name
-            String normalizedName = NameNormalizer.normalizeVariableName(varName.substring(1), getCurrentPackage());
+            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
             emit(nameIdx);

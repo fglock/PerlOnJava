@@ -2050,7 +2050,7 @@ public class BytecodeInterpreter {
 
                     default:
                         // Unknown opcode
-                        int opcodeInt = opcode & 0xFF;
+                        int opcodeInt = opcode;
                         throw new RuntimeException(
                             "Unknown opcode: " + opcodeInt +
                             " at pc=" + (pc - 1) +

@@ -1198,12 +1198,8 @@ public class EmitterMethodCreator implements Opcodes {
                 }
             }
 
-            boolean interpreterActive = ctx.compilerOptions.useInterpreter
-                    || System.getenv("JPERL_EVAL_USE_INTERPRETER") != null;
-            if (ctx.compilerOptions.disassembleEnabled && !interpreterActive) {
-                // Disassemble the JVM bytecode for debugging purposes.
-                // Skip when interpreter mode is active — PerlLanguageProvider prints
-                // the interpreter bytecode instead.
+            if (ctx.compilerOptions.disassembleEnabled) {
+                // Disassemble the bytecode for debugging purposes
                 ClassReader cr = new ClassReader(classData);
                 PrintWriter pw = new PrintWriter(System.out);
                 TraceClassVisitor tcv = new TraceClassVisitor(pw);
