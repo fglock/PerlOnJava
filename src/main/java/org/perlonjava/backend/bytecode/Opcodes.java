@@ -1091,5 +1091,22 @@ public class Opcodes {
      * Format: DEREF_NONSTRICT rd scalarReg packageIdx */
     public static final short DEREF_NONSTRICT = 337;
 
+    /** Load via symbolic reference (strict refs): throws if nameReg is a string.
+     * Allows REFERENCE type (${\ ref}). Same format as LOAD_SYMBOLIC_SCALAR.
+     * Format: LOAD_SYMBOLIC_SCALAR rd nameReg   (strict — already the default opcode 232) */
+    // Note: LOAD_SYMBOLIC_SCALAR (232) is the strict variant.
+
+    /** Load via symbolic reference (no strict refs): allows string-keyed global lookup.
+     * Format: LOAD_SYMBOLIC_SCALAR_NONSTRICT rd nameReg */
+    public static final short LOAD_SYMBOLIC_SCALAR_NONSTRICT = 338;
+
+    /** Store via symbolic reference (strict refs): throws if nameReg is a string.
+     * Format: STORE_SYMBOLIC_SCALAR rd nameReg */
+    // Note: STORE_SYMBOLIC_SCALAR (231) is the strict variant.
+
+    /** Store via symbolic reference (no strict refs): allows string-keyed global store.
+     * Format: STORE_SYMBOLIC_SCALAR_NONSTRICT nameReg valueReg */
+    public static final short STORE_SYMBOLIC_SCALAR_NONSTRICT = 339;
+
     private Opcodes() {} // Utility class - no instantiation
 }
