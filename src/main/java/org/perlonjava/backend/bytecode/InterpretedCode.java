@@ -877,10 +877,8 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("WARN r").append(rs).append("\n");
                     break;
                 case Opcodes.EVAL_TRY: {
-                    // Read 4-byte absolute catch target
-                    int high = bytecode[pc++] & 0xFFFF;
-                    int low = bytecode[pc++] & 0xFFFF;
-                    int catchPc = (high << 16) | low;
+                    // Read catch target as single int slot (matches emitInt/readInt)
+                    int catchPc = bytecode[pc++];
                     sb.append("EVAL_TRY catch_at=").append(catchPc).append("\n");
                     break;
                 }
@@ -1414,7 +1412,7 @@ public class InterpretedCode extends RuntimeCode {
                 // GENERATED_DISASM_END
 
                 default:
-                    sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
+                    sb.append("UNKNOWN(").append(opcode).append(")\n");
                     break;
             }
         }
