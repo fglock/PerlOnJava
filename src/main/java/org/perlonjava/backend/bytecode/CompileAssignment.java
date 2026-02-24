@@ -641,36 +641,59 @@ public class CompileAssignment {
             // We need to evaluate the LHS FIRST to get the variable name,
             // then evaluate the RHS, to ensure the RHS doesn't clobber the LHS registers
             if (node.left instanceof OperatorNode leftOp && leftOp.operator.equals("$")) {
+                boolean strictRefsEnabled = bytecodeCompiler.isStrictRefsEnabled();
+
                 if (leftOp.operand instanceof BlockNode) {
-                    // ${block} = value
+                    // ${block} = value — mirrors JVM EmitVariable.java case "$"
                     BlockNode block = (BlockNode) leftOp.operand;
                     block.accept(bytecodeCompiler);
                     int nameReg = bytecodeCompiler.lastResultReg;
 
-                    // Now compile the RHS
+                    // Deref to get lvalue target (strict or non-strict)
+                    int derefReg = bytecodeCompiler.allocateRegister();
+                    if (strictRefsEnabled) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(derefReg);
+                        bytecodeCompiler.emitReg(nameReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(derefReg);
+                        bytecodeCompiler.emitReg(nameReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
+
+                    // Now compile the RHS and assign
                     node.right.accept(bytecodeCompiler);
                     int valueReg = bytecodeCompiler.lastResultReg;
-
-                    // Use STORE_SYMBOLIC_SCALAR to store via symbolic reference
-                    bytecodeCompiler.emit(Opcodes.STORE_SYMBOLIC_SCALAR);
-                    bytecodeCompiler.emitReg(nameReg);
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(derefReg);
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
                     return;
                 } else if (leftOp.operand instanceof OperatorNode) {
-                    // $$var = value (scalar dereference assignment)
-                    // Evaluate the inner expression to get the variable name
+                    // $$var = value — mirrors JVM EmitVariable.java case "$"
                     leftOp.operand.accept(bytecodeCompiler);
                     int nameReg = bytecodeCompiler.lastResultReg;
 
-                    // Now compile the RHS
+                    int derefReg = bytecodeCompiler.allocateRegister();
+                    if (strictRefsEnabled) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(derefReg);
+                        bytecodeCompiler.emitReg(nameReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(derefReg);
+                        bytecodeCompiler.emitReg(nameReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
+
                     node.right.accept(bytecodeCompiler);
                     int valueReg = bytecodeCompiler.lastResultReg;
-
-                    // Use STORE_SYMBOLIC_SCALAR to store via symbolic reference
-                    bytecodeCompiler.emit(Opcodes.STORE_SYMBOLIC_SCALAR);
-                    bytecodeCompiler.emitReg(nameReg);
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(derefReg);
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
@@ -890,6 +913,25 @@ public class CompileAssignment {
                     bytecodeCompiler.emit(Opcodes.LOAD_GLOB);
                     bytecodeCompiler.emitReg(globReg);
                     bytecodeCompiler.emit(nameIdx);
+
+                    // Store value to glob
+                    bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = globReg;
+                } else if (leftOp.operator.equals("*") && leftOp.operand instanceof BlockNode) {
+                    // Symbolic typeglob assignment: *{"name"} = value (no strict refs)
+                    // Evaluate the block to get the glob name as a scalar, then load glob by name
+                    leftOp.operand.accept(bytecodeCompiler);
+                    int nameScalarReg = bytecodeCompiler.lastResultReg;
+
+                    int globReg = bytecodeCompiler.allocateRegister();
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(nameScalarReg);
+                    bytecodeCompiler.emit(pkgIdx);
 
                     // Store value to glob
                     bytecodeCompiler.emit(Opcodes.STORE_GLOB);
