@@ -314,6 +314,29 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * DEREF_GLOB: rd = rs.globDerefNonStrict(currentPackage)
+     * Format: DEREF_GLOB rd rs nameIdx(currentPackage)
+     * Effect: Dereferences a scalar as a glob (for $ref->** postfix deref)
+     */
+    public static int executeDerefGlob(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+
+        RuntimeScalar scalar = (RuntimeScalar) registers[rs];
+
+        // Use globDeref() — strict mode: throws "Not a GLOB reference" for non-glob scalars.
+        // This matches the JVM path (EmitVariable.java line 454: globDeref()).
+        registers[rd] = scalar.globDeref();
+        return pc;
+    }
+
+    /**
      * Sleep for specified seconds.
      * Format: [rd] [rs_seconds]
      *

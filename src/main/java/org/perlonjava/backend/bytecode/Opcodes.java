@@ -1071,5 +1071,10 @@ public class Opcodes {
      * Effect: Restores previous packageName */
     public static final short POP_PACKAGE = 308;
 
+    /** Dereference a scalar as a glob: rd = rs.globDerefNonStrict(currentPackage)
+     * Used for $ref->** postfix glob deref
+     * Format: DEREF_GLOB rd rs nameIdx(currentPackage) */
+    public static final short DEREF_GLOB = 333;
+
     private Opcodes() {} // Utility class - no instantiation
 }
