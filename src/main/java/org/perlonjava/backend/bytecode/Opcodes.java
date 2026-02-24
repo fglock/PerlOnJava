@@ -1071,42 +1071,10 @@ public class Opcodes {
      * Effect: Restores previous packageName */
     public static final short POP_PACKAGE = 308;
 
-    /** Load glob via symbolic reference: rd = GlobalVariable.getGlobalIO(nameReg.toString())
-     * Format: LOAD_SYMBOLIC_GLOB rd nameReg */
-    public static final short LOAD_SYMBOLIC_GLOB = 333;
-
-    /** Dereference scalar as glob: rd = scalarReg.globDeref()
-     * Format: DEREF_GLOB rd scalarReg */
-    public static final short DEREF_GLOB = 334;
-
-    /** Dereference scalar as hash (no strict refs): rd = scalarReg.hashDerefNonStrict(pkg)
-     * Format: DEREF_HASH_NONSTRICT rd scalarReg packageIdx */
-    public static final short DEREF_HASH_NONSTRICT = 335;
-
-    /** Dereference scalar as array (no strict refs): rd = scalarReg.arrayDerefNonStrict(pkg)
-     * Format: DEREF_ARRAY_NONSTRICT rd scalarReg packageIdx */
-    public static final short DEREF_ARRAY_NONSTRICT = 336;
-
-    /** Dereference scalar (no strict refs): rd = scalarReg.scalarDerefNonStrict(pkg)
-     * Format: DEREF_NONSTRICT rd scalarReg packageIdx */
-    public static final short DEREF_NONSTRICT = 337;
-
-    /** Load via symbolic reference (strict refs): throws if nameReg is a string.
-     * Allows REFERENCE type (${\ ref}). Same format as LOAD_SYMBOLIC_SCALAR.
-     * Format: LOAD_SYMBOLIC_SCALAR rd nameReg   (strict — already the default opcode 232) */
-    // Note: LOAD_SYMBOLIC_SCALAR (232) is the strict variant.
-
-    /** Load via symbolic reference (no strict refs): allows string-keyed global lookup.
-     * Format: LOAD_SYMBOLIC_SCALAR_NONSTRICT rd nameReg */
-    public static final short LOAD_SYMBOLIC_SCALAR_NONSTRICT = 338;
-
-    /** Store via symbolic reference (strict refs): throws if nameReg is a string.
-     * Format: STORE_SYMBOLIC_SCALAR rd nameReg */
-    // Note: STORE_SYMBOLIC_SCALAR (231) is the strict variant.
-
-    /** Store via symbolic reference (no strict refs): allows string-keyed global store.
-     * Format: STORE_SYMBOLIC_SCALAR_NONSTRICT nameReg valueReg */
-    public static final short STORE_SYMBOLIC_SCALAR_NONSTRICT = 339;
+    /** Dereference a scalar as a glob: rd = rs.globDerefNonStrict(currentPackage)
+     * Used for $ref->** postfix glob deref
+     * Format: DEREF_GLOB rd rs nameIdx(currentPackage) */
+    public static final short DEREF_GLOB = 333;
 
     private Opcodes() {} // Utility class - no instantiation
 }

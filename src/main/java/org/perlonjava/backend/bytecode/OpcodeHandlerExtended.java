@@ -369,10 +369,6 @@ public class OpcodeHandlerExtended {
     /**
      * Execute bitwise AND binary operation.
      * Format: BITWISE_AND_BINARY rd rs1 rs2
-     *
-     * Uses the context-sensitive bitwiseAnd() (not bitwiseAndBinary()) to match
-     * the JVM path: if operands are non-numeric strings, dispatches to string ops.
-     * bitwiseAndBinary() is only for the explicit "binary&" operator.
      */
     public static int executeBitwiseAndBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
@@ -388,10 +384,6 @@ public class OpcodeHandlerExtended {
     /**
      * Execute bitwise OR binary operation.
      * Format: BITWISE_OR_BINARY rd rs1 rs2
-     *
-     * Uses the context-sensitive bitwiseOr() (not bitwiseOrBinary()) to match
-     * the JVM path: if operands are non-numeric strings, dispatches to string ops.
-     * bitwiseOrBinary() is only for the explicit "binary|" operator.
      */
     public static int executeBitwiseOrBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
@@ -407,10 +399,6 @@ public class OpcodeHandlerExtended {
     /**
      * Execute bitwise XOR binary operation.
      * Format: BITWISE_XOR_BINARY rd rs1 rs2
-     *
-     * Uses the context-sensitive bitwiseXor() (not bitwiseXorBinary()) to match
-     * the JVM path: if operands are non-numeric strings, dispatches to string ops.
-     * bitwiseXorBinary() is only for the explicit "binary^" operator.
      */
     public static int executeBitwiseXorBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
@@ -713,28 +701,14 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute open operation.
-     * Format: OPEN rd ctx fhReg argsReg
-     *
-     * fhReg is the actual lvalue register for the filehandle. IOOperator.open calls
-     * fileHandle.set() on args[0], so we pass registers[fhReg] directly (not a copy
-     * from ARRAY_PUSH which would call addToArray -> new RuntimeScalar(this)).
-     * After the call, registers[fhReg] has been updated in place by set().
+     * Format: OPEN rd ctx argsReg
      */
     public static int executeOpen(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int ctx = bytecode[pc++];
-        int fhReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
         RuntimeArray argsArray = (RuntimeArray) registers[argsReg];
-
-        // Build varargs with the actual fh lvalue as args[0], then the rest
-        RuntimeBase fhLvalue = registers[fhReg];
-        RuntimeBase[] argsVarargs = new RuntimeBase[argsArray.elements.size() + 1];
-        argsVarargs[0] = fhLvalue;
-        for (int i = 0; i < argsArray.elements.size(); i++) {
-            argsVarargs[i + 1] = argsArray.elements.get(i);
-        }
-
+        RuntimeBase[] argsVarargs = argsArray.elements.toArray(new RuntimeBase[0]);
         registers[rd] = IOOperator.open(ctx, argsVarargs);
         return pc;
     }

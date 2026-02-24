@@ -240,9 +240,6 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
-        // Read call-site strict/feature flags embedded by CompileOperator at the eval site
-        int callSiteStrictOptions = bytecode[pc++];
-        int callSiteFeatureFlags  = bytecode[pc++];
 
         // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
         RuntimeBase codeValue = registers[stringReg];
@@ -258,12 +255,10 @@ public class SlowOpcodeHandler {
         // Call EvalStringHandler to parse, compile, and execute
         RuntimeScalar result = EvalStringHandler.evalString(
             perlCode,
-            code,                    // Current InterpretedCode for context
-            registers,               // Current registers for variable access
+            code,           // Current InterpretedCode for context
+            registers,      // Current registers for variable access
             code.sourceName,
-            code.sourceLine,
-            callSiteStrictOptions,   // Strict flags at the eval call site
-            callSiteFeatureFlags     // Feature flags at the eval call site
+            code.sourceLine
         );
 
         registers[rd] = result;
@@ -296,108 +291,6 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * DEREF_HASH_NONSTRICT: rd = scalarReg.hashDerefNonStrict(pkg)
-     * Format: [DEREF_HASH_NONSTRICT] [rd] [scalarReg] [packageIdx]
-     * Effect: Dereferences a scalar as a hash with no-strict-refs semantics
-     */
-    public static int executeDerefHashNonStrict(
-            int[] bytecode,
-            int pc,
-            RuntimeBase[] registers,
-            InterpretedCode code) {
-
-        int rd = bytecode[pc++];
-        int scalarReg = bytecode[pc++];
-        int packageIdx = bytecode[pc++];
-
-        String packageName = code.stringPool[packageIdx];
-        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
-        registers[rd] = scalar.hashDerefNonStrict(packageName);
-        return pc;
-    }
-
-    /**
-     * DEREF_ARRAY_NONSTRICT: rd = scalarReg.arrayDerefNonStrict(pkg)
-     * Format: [DEREF_ARRAY_NONSTRICT] [rd] [scalarReg] [packageIdx]
-     * Effect: Dereferences a scalar as an array with no-strict-refs semantics
-     */
-    public static int executeDerefArrayNonStrict(
-            int[] bytecode,
-            int pc,
-            RuntimeBase[] registers,
-            InterpretedCode code) {
-
-        int rd = bytecode[pc++];
-        int scalarReg = bytecode[pc++];
-        int packageIdx = bytecode[pc++];
-
-        String packageName = code.stringPool[packageIdx];
-        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
-        registers[rd] = scalar.arrayDerefNonStrict(packageName);
-        return pc;
-    }
-
-    /**
-     * DEREF_NONSTRICT: rd = scalarReg.scalarDerefNonStrict(pkg)
-     * Format: [DEREF_NONSTRICT] [rd] [scalarReg] [packageIdx]
-     * Effect: Dereferences a scalar as a scalar with no-strict-refs semantics ($$ref or symbolic ref)
-     */
-    public static int executeDerefNonStrict(
-            int[] bytecode,
-            int pc,
-            RuntimeBase[] registers,
-            InterpretedCode code) {
-
-        int rd = bytecode[pc++];
-        int scalarReg = bytecode[pc++];
-        int packageIdx = bytecode[pc++];
-
-        String packageName = code.stringPool[packageIdx];
-        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
-        registers[rd] = scalar.scalarDerefNonStrict(packageName);
-        return pc;
-    }
-
-    /**
-     * DEREF_GLOB: rd = scalarReg.globDeref()
-     * Format: [DEREF_GLOB] [rd] [scalarReg]
-     * Effect: Dereferences a scalar as a glob (** postfix deref)
-     */
-    public static int executeDerefGlob(
-            int[] bytecode,
-            int pc,
-            RuntimeBase[] registers) {
-
-        int rd = bytecode[pc++];
-        int scalarReg = bytecode[pc++];
-
-        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
-        registers[rd] = scalar.globDeref();
-        return pc;
-    }
-
-    /**
-     * LOAD_SYMBOLIC_GLOB: rd = getGlobalIO(nameReg.toString())
-     * Format: [LOAD_SYMBOLIC_GLOB] [rd] [nameReg]
-     * Effect: Loads a glob via a runtime string expression (e.g. *{"Pkg::name"})
-     */
-    public static int executeLoadSymbolicGlob(
-            int[] bytecode,
-            int pc,
-            RuntimeBase[] registers) {
-
-        int rd = bytecode[pc++];
-        int nameReg = bytecode[pc++];
-
-        // Normalize the name with the current package (e.g. "mysub" -> "main::mysub")
-        String rawName = registers[nameReg].toString();
-        String pkg = InterpreterState.currentPackage.get().toString();
-        String globName = NameNormalizer.normalizeVariableName(rawName, pkg);
-        registers[rd] = GlobalVariable.getGlobalIO(globName);
-        return pc;
-    }
-
-    /**
      * SLOW_LOAD_GLOB: rd = getGlobalIO(name)
      * Format: [SLOW_LOAD_GLOB] [rd] [name_idx]
      * Effect: Loads a glob/filehandle from global variables
@@ -417,6 +310,38 @@ public class SlowOpcodeHandler {
         RuntimeGlob glob = GlobalVariable.getGlobalIO(globName);
 
         registers[rd] = glob;
+        return pc;
+    }
+
+    /**
+     * DEREF_GLOB: rd = rs.globDerefNonStrict(currentPackage)
+     * Format: DEREF_GLOB rd rs nameIdx(currentPackage)
+     * Effect: Dereferences a scalar as a glob (for $ref->** postfix deref)
+     */
+    public static int executeDerefGlob(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        int nameIdx = bytecode[pc++];  // currentPackage (unused at runtime, consumed for alignment)
+
+        RuntimeBase val = registers[rs];
+
+        // PVIO case: *STDOUT{IO} returns RuntimeIO directly — wrap in a temporary glob
+        if (val instanceof RuntimeIO io) {
+            RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+            tmp.setIO(io);
+            registers[rd] = tmp;
+            return pc;
+        }
+
+        // General case: use globDeref() — throws "Not a GLOB reference" for invalid refs.
+        // Matches JVM path (EmitVariable.java: globDeref()).
+        RuntimeScalar scalar = (RuntimeScalar) val;
+        registers[rd] = scalar.globDeref();
         return pc;
     }
 
@@ -884,7 +809,7 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int listReg = bytecode[pc++];
-        // Read startIndex as a single int (emitted by CompileAssignment via emitInt)
+        // Read startIndex as single int slot (emitInt writes one slot)
         int startIndex = bytecode[pc++];
 
         RuntimeBase listBase = registers[listReg];
@@ -1028,18 +953,12 @@ public class SlowOpcodeHandler {
         // Use runtime current package — correct for both regular code and eval STRING
         String pkg = InterpreterState.currentPackage.get().toString();
 
-        RuntimeScalar result;
-        if (globBase instanceof RuntimeGlob globObj) {
-            // Direct glob — access slot via a scalar wrapper that holds the glob reference
-            // RuntimeGlob.hashDerefGetNonStrict is not available directly; use scalar() to get
-            // a RuntimeScalar of type GLOB, then call hashDerefGetNonStrict on it.
-            // But scalar() on a RuntimeGlob returns a GLOB-typed scalar that delegates correctly.
-            result = globObj.scalar().hashDerefGetNonStrict(key, pkg);
-        } else {
-            // Already a scalar (e.g. from a variable holding a glob)
-            result = globBase.scalar().hashDerefGetNonStrict(key, pkg);
-        }
-        registers[rd] = result;
+        // Convert to scalar if needed
+        RuntimeScalar glob = globBase.scalar();
+
+        // Call hashDerefGetNonStrict which for RuntimeGlob accesses the slot directly
+        // without dereferencing the glob as a hash
+        registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
 
         return pc;
     }
