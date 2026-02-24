@@ -3937,9 +3937,13 @@ public class BytecodeCompiler implements Visitor {
         // List elements should be evaluated in LIST context
         if (node.elements.size() == 1) {
             int savedContext = currentCallContext;
-            currentCallContext = RuntimeContextType.LIST;
             try {
-                node.elements.get(0).accept(this);
+                Node element = node.elements.get(0);
+                String argContext = (String) element.getAnnotation("context");
+                currentCallContext = (argContext != null && argContext.equals("SCALAR"))
+                        ? RuntimeContextType.SCALAR
+                        : RuntimeContextType.LIST;
+                element.accept(this);
                 int elemReg = lastResultReg;
 
                 int listReg = allocateRegister();
@@ -3958,11 +3962,15 @@ public class BytecodeCompiler implements Visitor {
         // Evaluate each element into a register
         // List elements should be evaluated in LIST context
         int savedContext = currentCallContext;
-        currentCallContext = RuntimeContextType.LIST;
         try {
             int[] elementRegs = new int[node.elements.size()];
             for (int i = 0; i < node.elements.size(); i++) {
-                node.elements.get(i).accept(this);
+                Node element = node.elements.get(i);
+                String argContext = (String) element.getAnnotation("context");
+                currentCallContext = (argContext != null && argContext.equals("SCALAR"))
+                        ? RuntimeContextType.SCALAR
+                        : RuntimeContextType.LIST;
+                element.accept(this);
                 elementRegs[i] = lastResultReg;
             }
 
