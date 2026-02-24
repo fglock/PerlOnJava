@@ -352,7 +352,8 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDeref();
+        // mirrors JVM: node.operand.accept(emitterVisitor.with(SCALAR)) before scalarDeref
+        registers[rd] = registers[rs].scalar().scalarDeref();
         return pc;
     }
 
@@ -371,7 +372,8 @@ public class SlowOpcodeHandler {
         int rs = bytecode[pc++];
         int pkgIdx = bytecode[pc++];
         String pkg = code.stringPool[pkgIdx];
-        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDerefNonStrict(pkg);
+        // mirrors JVM: node.operand.accept(emitterVisitor.with(SCALAR)) before scalarDerefNonStrict
+        registers[rd] = registers[rs].scalar().scalarDerefNonStrict(pkg);
         return pc;
     }
 

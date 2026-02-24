@@ -2527,8 +2527,7 @@ public class BytecodeCompiler implements Visitor {
                 BlockNode block = (BlockNode) node.operand;
 
                 // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
-                block.accept(this);
-                int blockResultReg = lastResultReg;
+                int blockResultReg = emitInScalarContext(block);
                 int rd = allocateRegister();
                 if (isStrictRefsEnabled()) {
                     // strict refs: scalarDeref() — throws for non-refs
@@ -2546,9 +2545,8 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             } else if (node.operand instanceof OperatorNode) {
                 // Operator dereference: $$x, $${expr}, etc.
-                // Compile the operand expression (e.g., $x returns a reference)
-                node.operand.accept(this);
-                int refReg = lastResultReg;
+                // Compile the operand in scalar context (mirrors JVM path)
+                int refReg = emitInScalarContext(node.operand);
 
                 // Dereference the result — pick strict or non-strict opcode at compile time
                 int rd = allocateRegister();
@@ -2951,6 +2949,20 @@ public class BytecodeCompiler implements Visitor {
         constants.add(obj);
         constantPoolIndex.put(obj, index);
         return index;
+    }
+
+    /**
+     * Compile a node in scalar context.
+     * Mirrors JVM path's emitterVisitor.with(RuntimeContextType.SCALAR).
+     * The DEREF_SCALAR_STRICT/NONSTRICT handlers call .scalar() on the operand
+     * register at runtime, matching the JVM path.
+     */
+    int emitInScalarContext(Node node) {
+        int savedCtx = currentCallContext;
+        currentCallContext = RuntimeContextType.SCALAR;
+        node.accept(this);
+        currentCallContext = savedCtx;
+        return lastResultReg;
     }
 
     void emit(short opcode) {
