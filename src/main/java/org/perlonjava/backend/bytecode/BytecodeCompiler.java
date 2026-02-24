@@ -1673,6 +1673,8 @@ public class BytecodeCompiler implements Visitor {
                 // my ($x, $y, @rest) - list of variable declarations
                 ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
+                // Per-element: true = this slot should be returned as a reference
+                List<Boolean> varIsRef = new ArrayList<>();
 
                 // Check if this is a declared reference (my \($x, $y))
                 boolean isDeclaredReference = node.annotations != null &&
@@ -1752,6 +1754,7 @@ public class BytecodeCompiler implements Visitor {
                                             }
 
                                             varRegs.add(reg);
+                                        varIsRef.add(true);
                                         }
                                     }
                                 }
@@ -1785,6 +1788,7 @@ public class BytecodeCompiler implements Visitor {
                                     }
 
                                     varRegs.add(reg);
+                                    varIsRef.add(true);
                                 }
                             }
                             continue;
@@ -1828,6 +1832,7 @@ public class BytecodeCompiler implements Visitor {
                                 }
 
                                 varRegs.add(reg);
+                                varIsRef.add(false);
                             } else {
                                 // Regular lexical variable (not captured, not state)
                                 int reg = addVariable(varName, op);
@@ -1850,11 +1855,10 @@ public class BytecodeCompiler implements Visitor {
                                 }
 
                                 varRegs.add(reg);
+                                varIsRef.add(false);
                             }
                         } else if (sigilOp.operand instanceof OperatorNode) {
-                            // Handle declared references with backslash: my (\$x)
-                            // The backslash operator wraps the variable
-                            // For now, skip these as they require special handling
+                            // Unrecognized operand structure - skip
                             continue;
                         } else {
                             throwCompilerException("my list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
@@ -1871,23 +1875,30 @@ public class BytecodeCompiler implements Visitor {
                 // Return a list of the declared variables (or their references if isDeclaredReference)
                 int resultReg = allocateRegister();
 
-                if ((isDeclaredReference || foundBackslashInList) && currentCallContext != RuntimeContextType.VOID) {
-                    // Create references to all variables first
-                    List<Integer> refRegs = new ArrayList<>();
-                    for (int varReg : varRegs) {
-                        int refReg = allocateRegister();
-                        emit(Opcodes.CREATE_REF);
-                        emitReg(refReg);
-                        emitReg(varReg);
-                        refRegs.add(refReg);
-                    }
+                boolean hasAnyRef = isDeclaredReference || foundBackslashInList ||
+                        varIsRef.stream().anyMatch(Boolean::booleanValue);
 
-                    // Create a list of the references
+                if (hasAnyRef && currentCallContext != RuntimeContextType.VOID) {
+                    // Mixed list: per-element decide ref or plain (mirrors JVM hasAnyDeclaredRef path)
+                    List<Integer> outRegs = new ArrayList<>();
+                    for (int i = 0; i < varRegs.size(); i++) {
+                        int varReg = varRegs.get(i);
+                        boolean makeRef = isDeclaredReference || varIsRef.get(i);
+                        if (makeRef) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(varReg);
+                            outRegs.add(refReg);
+                        } else {
+                            outRegs.add(varReg);
+                        }
+                    }
                     emit(Opcodes.CREATE_LIST);
                     emitReg(resultReg);
-                    emit(refRegs.size());
-                    for (int refReg : refRegs) {
-                        emitReg(refReg);
+                    emit(outRegs.size());
+                    for (int outReg : outRegs) {
+                        emitReg(outReg);
                     }
                 } else {
                     // Regular list of variables

@@ -1459,7 +1459,7 @@ public class BytecodeInterpreter {
                     // =================================================================
 
                     case Opcodes.LIST_TO_SCALAR: {
-                        // Convert list to scalar context (returns size)
+                        // Convert list to scalar context (returns size for arrays/lists)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
@@ -1468,7 +1468,6 @@ public class BytecodeInterpreter {
                         } else if (val instanceof RuntimeArray) {
                             registers[rd] = new RuntimeScalar(((RuntimeArray) val).size());
                         } else {
-                            // Already a scalar
                             registers[rd] = val.scalar();
                         }
                         break;
