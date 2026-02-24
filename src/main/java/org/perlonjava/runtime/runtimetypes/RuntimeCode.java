@@ -842,7 +842,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         1,
                         evalCtx.errorUtil,
                         adjustedRegistry);
-                compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
+                // eval STRING runs in the *current runtime package*, which can change
+                // dynamically via package Foo { } blocks. Use the runtime package here so
+                // nested eval("__PACKAGE__") matches the JVM compiler behavior.
+                String runtimePackage = RuntimeCode.getCurrentPackage();
+                if (runtimePackage.endsWith("::")) {
+                    runtimePackage = runtimePackage.substring(0, runtimePackage.length() - 2);
+                }
+                compiler.setCompilePackage(runtimePackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 if (DISASSEMBLE) {
                     System.out.println(interpretedCode.disassemble());

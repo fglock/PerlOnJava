@@ -697,6 +697,26 @@ public class BytecodeCompiler implements Visitor {
             outerResultReg = allocateRegister();
         }
 
+        // Detect scoped package/class blocks: parseOptionalPackageBlock inserts the
+        // package/class OperatorNode as the first element and marks it with isScoped=true.
+        // The package node itself emits PUSH_PACKAGE; we emit POP_PACKAGE here so normal
+        // fallthrough restores the previous package.
+        boolean isScopedPackageBlock = !node.elements.isEmpty()
+                && node.elements.getFirst() instanceof OperatorNode pkgOp
+                && (pkgOp.operator.equals("package") || pkgOp.operator.equals("class"))
+                && Boolean.TRUE.equals(pkgOp.getAnnotation("isScoped"));
+
+        // Scoped package/class blocks change the compiler's symbolTable current package when
+        // compiling the leading package/class OperatorNode. Restore it after the block so
+        // subsequent name resolution (notably eval STRING compilation) uses the correct
+        // call-site package.
+        String savedCompilePackage = null;
+        boolean savedCompilePackageIsClass = false;
+        if (isScopedPackageBlock) {
+            savedCompilePackage = symbolTable.getCurrentPackage();
+            savedCompilePackageIsClass = symbolTable.currentPackageIsClass();
+        }
+
         // Detect the BlockNode([local $_, For1Node(needsArrayOfAlias)]) pattern produced
         // by the parser for implicit-$_ foreach loops. For1Node emits LOCAL_SCALAR_SAVE_LEVEL
         // itself, so the 'local $_' child must be skipped here to avoid double-emission.
@@ -747,6 +767,14 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.MOVE);
             emitReg(outerResultReg);
             emitReg(lastResultReg);
+        }
+
+        // Restore previous package for scoped package/class blocks.
+        if (isScopedPackageBlock) {
+            emit(Opcodes.POP_PACKAGE);
+
+            // Restore compile-time package tracking.
+            symbolTable.setCurrentPackage(savedCompilePackage, savedCompilePackageIsClass);
         }
 
         // Exit scope restores register state
@@ -1243,7 +1271,12 @@ public class BytecodeCompiler implements Visitor {
                     // Global variable - need to load it first
                     isGlobal = true;
                     targetReg = allocateRegister();
-                    String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    // NameNormalizer expects a variable name WITHOUT the sigil.
+                    // Using "$main::x" here would create a different global key than
+                    // regular assignments (which normalize "main::x"), so compound
+                    // assigns would update the wrong global.
+                    String bareVarName = varName.substring(1);
+                    String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
                     int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emitReg(targetReg);
@@ -1313,7 +1346,9 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
             }
 
-            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+            // NameNormalizer expects a variable name WITHOUT the sigil.
+            String bareVarName = varName.substring(1);
+            String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
             emit(nameIdx);
