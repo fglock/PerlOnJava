@@ -53,22 +53,25 @@ public class PerlCompilerException extends RuntimeException {
             return;
         }
 
-        // Retrieve caller information: package name, file name, line number
-        RuntimeList caller = RuntimeCode.caller(new RuntimeList(getScalarInt(0)), RuntimeContextType.LIST);
+        // Retrieve caller information: package name, file name, line number.
+        // Guard against exceptions from caller() when interpreter state is mid-exception
+        // (e.g. PerlCompilerException thrown during interpreter eval STRING execution).
+        this.errorMessage = buildErrorMessage(message);
+    }
 
-        // Check if caller information is available
-        if (caller.size() < 3) {
-            this.errorMessage = message + "\n";
-            return;
+    private static String buildErrorMessage(String message) {
+        try {
+            RuntimeList caller = RuntimeCode.caller(new RuntimeList(getScalarInt(0)), RuntimeContextType.LIST);
+            if (caller.size() < 3) {
+                return message + "\n";
+            }
+            String fileName = caller.elements.get(1).toString();
+            int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
+            return message + " at " + fileName + " line " + line + "\n";
+        } catch (Throwable t) {
+            // caller() failed (e.g. mid-exception in interpreter) — use bare message
+            return message + "\n";
         }
-
-        // Extract caller information
-        String packageName = caller.elements.get(0).toString();
-        String fileName = caller.elements.get(1).toString();
-        int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
-
-        // Construct the detailed error message with file and line information
-        this.errorMessage = message + " at " + fileName + " line " + line + "\n";
     }
 
     /**

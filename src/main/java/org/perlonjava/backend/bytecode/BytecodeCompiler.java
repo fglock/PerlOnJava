@@ -147,13 +147,10 @@ public class BytecodeCompiler implements Visitor {
         globalScope.put("wantarray", 2);
 
         if (parentRegistry != null) {
-            // Add parent scope variables to the global scope so hasVariable() finds them.
-            // A "my $x" inside the eval will call addVariable() which puts $x into the
-            // current (inner) scope, shadowing the global-scope entry — so lookups find
-            // the local my-declared register first (correct shadowing behaviour).
+            // Add parent scope variables (for eval STRING variable capture)
             globalScope.putAll(parentRegistry);
 
-            // Also mark them as captured so assignments use SET_SCALAR (not STORE_SCALAR)
+            // Mark parent scope variables as captured so assignments use SET_SCALAR
             capturedVarIndices = new HashMap<>();
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
                 String varName = entry.getKey();
@@ -230,23 +227,12 @@ public class BytecodeCompiler implements Visitor {
         savedBaseRegister.push(baseRegisterForStatement);
         // Update base to protect all registers allocated before this scope
         baseRegisterForStatement = nextRegister;
-        // Mirror the JVM compiler: push a new pragma frame so that strict/feature/warning
-        // changes inside this block (e.g. `use strict`, `use 5.012`) are scoped to the block
-        // and do not leak into the surrounding code after the block exits.
-        if (emitterContext != null && emitterContext.symbolTable != null) {
-            savedSymbolTableScopes.push(emitterContext.symbolTable.enterScope());
-        } else {
-            savedSymbolTableScopes.push(-1);  // sentinel so stacks stay in sync
-        }
     }
 
     /**
      * Helper: Exit the current lexical scope.
      * Restores register allocation state to what it was before entering the scope.
      */
-    // Saved symbol-table scope indices, parallel to savedNextRegister / savedBaseRegister.
-    private final Stack<Integer> savedSymbolTableScopes = new Stack<>();
-
     private void exitScope() {
         if (variableScopes.size() > 1) {
             variableScopes.pop();
@@ -257,11 +243,6 @@ public class BytecodeCompiler implements Visitor {
             if (!savedBaseRegister.isEmpty()) {
                 baseRegisterForStatement = savedBaseRegister.pop();
             }
-        }
-        // Restore the pragma frame (strict/feature/warning flags) for the scope we just exited.
-        if (emitterContext != null && emitterContext.symbolTable != null
-                && !savedSymbolTableScopes.isEmpty()) {
-            emitterContext.symbolTable.exitScope(savedSymbolTableScopes.pop());
         }
     }
 
@@ -385,30 +366,6 @@ public class BytecodeCompiler implements Visitor {
      * @param varName The variable name with sigil (e.g., "$A", "@array")
      * @return true if access should be blocked under strict vars
      */
-    /** Returns true if strict refs is currently enabled at compile time. */
-    boolean isStrictRefsEnabled() {
-        if (emitterContext == null || emitterContext.symbolTable == null) {
-            return false;
-        }
-        return emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
-    }
-
-    /** Returns the current strict options bitmask at this point in compilation. */
-    int getCurrentStrictOptions() {
-        if (emitterContext == null || emitterContext.symbolTable == null) {
-            return 0;
-        }
-        return emitterContext.symbolTable.strictOptionsStack.peek();
-    }
-
-    /** Returns the current feature flags bitmask at this point in compilation. */
-    int getCurrentFeatureFlags() {
-        if (emitterContext == null || emitterContext.symbolTable == null) {
-            return 0;
-        }
-        return emitterContext.symbolTable.featureFlagsStack.peek();
-    }
-
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
         // Only check if strict vars is enabled
         if (emitterContext == null || emitterContext.symbolTable == null) {
@@ -857,71 +814,72 @@ public class BytecodeCompiler implements Visitor {
         // Variable reference
         String varName = node.name;
 
+        // Check if this is a captured variable (with sigil)
+        // Try common sigils: $, @, %
         String[] sigils = {"$", "@", "%"};
-
-        // Check local scope first (my declarations shadow captured vars from outer scope).
-        // This is critical for eval STRING: if the eval declares "my $x", that new $x
-        // must shadow any $x captured from the outer scope (which lives at a different
-        // register index from the outer code's register file).
-        if (hasVariable(varName)) {
-            lastResultReg = getVariableRegister(varName);
-            return;
-        }
-        for (String sigil : sigils) {
-            String varNameWithSigil = sigil + varName;
-            if (hasVariable(varNameWithSigil)) {
-                lastResultReg = getVariableRegister(varNameWithSigil);
-                return;
-            }
-        }
-
-        // Not in local scope - check captured variables from outer eval scope.
-        // capturedVarIndices holds variables captured from the parent InterpretedCode
-        // (set up by EvalStringHandler). Only fall through to this if no local my
-        // declaration shadows the name.
         for (String sigil : sigils) {
             String varNameWithSigil = sigil + varName;
             if (capturedVarIndices != null && capturedVarIndices.containsKey(varNameWithSigil)) {
+                // Captured variable - use its pre-allocated register
                 lastResultReg = capturedVarIndices.get(varNameWithSigil);
                 return;
             }
         }
 
-        // Not a lexical variable - could be a global or a bareword
-        // Check for strict subs violation (bareword without sigil)
-        if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
-            // This is a bareword (no sigil)
-            if (emitterContext != null && emitterContext.symbolTable != null &&
-                emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
-                throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+        // Check if it's a lexical variable (may have sigil or not)
+        if (hasVariable(varName)) {
+            // Lexical variable - already has a register
+            lastResultReg = getVariableRegister(varName);
+        } else {
+            // Try with sigils
+            boolean found = false;
+            for (String sigil : sigils) {
+                String varNameWithSigil = sigil + varName;
+                if (hasVariable(varNameWithSigil)) {
+                    lastResultReg = getVariableRegister(varNameWithSigil);
+                    found = true;
+                    break;
+                }
             }
-            // Not strict - treat bareword as string literal
-            int rd = allocateRegister();
-            emit(Opcodes.LOAD_STRING);
-            emitReg(rd);
-            int strIdx = addToStringPool(varName);
-            emit(strIdx);
-            lastResultReg = rd;
-            return;
+
+            if (!found) {
+                // Not a lexical variable - could be a global or a bareword
+                // Check for strict subs violation (bareword without sigil)
+                if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
+                    // This is a bareword (no sigil)
+                    if (emitterContext != null && emitterContext.symbolTable != null &&
+                        emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                        throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+                    }
+                    // Not strict - treat bareword as string literal
+                    int rd = allocateRegister();
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(rd);
+                    int strIdx = addToStringPool(varName);
+                    emit(strIdx);
+                    lastResultReg = rd;
+                    return;
+                }
+
+                // Global variable
+                // Check strict vars before accessing
+                if (shouldBlockGlobalUnderStrictVars(varName)) {
+                    throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+                }
+
+                // Strip sigil and normalize name (e.g., "$x" → "main::x")
+                String bareVarName = varName.substring(1);  // Remove sigil
+                String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(normalizedName);
+
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emitReg(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            }
         }
-
-        // Global variable
-        // Check strict vars before accessing
-        if (shouldBlockGlobalUnderStrictVars(varName)) {
-            throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-        }
-
-        // Strip sigil and normalize name (e.g., "$x" → "main::x")
-        String bareVarName = varName.substring(1);  // Remove sigil
-        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
-        int rd = allocateRegister();
-        int nameIdx = addToStringPool(normalizedName);
-
-        emit(Opcodes.LOAD_GLOBAL_SCALAR);
-        emitReg(rd);
-        emit(nameIdx);
-
-        lastResultReg = rd;
     }
 
     /**
@@ -2234,25 +2192,6 @@ public class BytecodeCompiler implements Visitor {
                 OperatorNode sigilOp = (OperatorNode) node.operand;
                 String sigil = sigilOp.operator;
 
-                if (sigil.equals("*") && sigilOp.operand instanceof IdentifierNode) {
-                    // local *glob — save glob state and return same glob object
-                    // Mirrors JVM path: load glob, call DynamicVariableManager.pushLocalVariable(RuntimeGlob)
-                    String globName = NameNormalizer.normalizeVariableName(((IdentifierNode) sigilOp.operand).name, getCurrentPackage());
-                    int nameIdx = addToStringPool(globName);
-
-                    int globReg = allocateRegister();
-                    emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
-                    emitReg(globReg);
-                    emit(nameIdx);
-
-                    // Push glob to local variable stack (saves state, returns same object)
-                    emit(Opcodes.PUSH_LOCAL_VARIABLE);
-                    emitReg(globReg);
-
-                    lastResultReg = globReg;
-                    return;
-                }
-
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
@@ -2546,10 +2485,6 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = getVariableRegister(varName);
                 } else {
                     // Global variable - load it
-                    // Check strict vars before loading an undeclared global
-                    if (shouldBlockGlobalUnderStrictVars(varName)) {
-                        throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-                    }
                     // Use NameNormalizer to properly handle special variables (like $&)
                     // which must always be in the "main" package
                     String globalVarName = varName.substring(1); // Remove $ sigil first
@@ -2576,14 +2511,9 @@ public class BytecodeCompiler implements Visitor {
                 block.accept(this);
                 int blockResultReg = lastResultReg;
 
-                // Load via symbolic reference — use strict vs non-strict opcode.
-                // LOAD_SYMBOLIC_SCALAR throws "strict refs" for non-reference strings.
-                // LOAD_SYMBOLIC_SCALAR_NONSTRICT allows symbolic variable lookup.
+                // Load via symbolic reference
                 int rd = allocateRegister();
-                short symOp = isStrictRefsEnabled()
-                        ? Opcodes.LOAD_SYMBOLIC_SCALAR
-                        : Opcodes.LOAD_SYMBOLIC_SCALAR_NONSTRICT;
-                emitWithToken(symOp, node.getIndex());
+                emitWithToken(Opcodes.LOAD_SYMBOLIC_SCALAR, node.getIndex());
                 emitReg(rd);
                 emitReg(blockResultReg);
 
@@ -2669,60 +2599,40 @@ public class BytecodeCompiler implements Visitor {
                 operandOp.accept(this);
                 int refReg = lastResultReg;
 
+                // Dereference to get the array
+                // The reference should contain a RuntimeArray
+                // For @$scalar, we need to dereference it
                 int rd = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    emitReg(rd);
-                    emitReg(refReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    emitReg(rd);
-                    emitReg(refReg);
-                    emit(pkgIdx);
-                }
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(rd);
+                emitReg(refReg);
 
                 lastResultReg = rd;
+                // Note: We don't check scalar context here because dereferencing
+                // should return the array itself. The slice or other operation
+                // will handle scalar context conversion if needed.
             } else if (node.operand instanceof BlockNode) {
                 // @{ block } - evaluate block and dereference the result
+                // The block should return an arrayref
                 BlockNode blockNode = (BlockNode) node.operand;
                 blockNode.accept(this);
                 int refReg = lastResultReg;
 
+                // Dereference to get the array
                 int rd = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    emitReg(rd);
-                    emitReg(refReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    emitReg(rd);
-                    emitReg(refReg);
-                    emit(pkgIdx);
-                }
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(rd);
+                emitReg(refReg);
 
                 lastResultReg = rd;
             } else if (node.operand instanceof StringNode strNode) {
-                // @{'name'} — symbolic array reference
-                int nameReg = allocateRegister();
-                int strIdx = addToStringPool(strNode.value);
-                emit(Opcodes.LOAD_STRING);
-                emitReg(nameReg);
-                emit(strIdx);
-
+                // Symbolic ref: @{'name'} or 'name'->@* — load global array by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
                 int rd = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    emitReg(rd);
-                    emitReg(nameReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    emitReg(rd);
-                    emitReg(nameReg);
-                    emit(pkgIdx);
-                }
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(rd);
+                emit(nameIdx);
                 lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
@@ -2763,17 +2673,9 @@ public class BytecodeCompiler implements Visitor {
                 refOp.accept(this);
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                    emitReg(hashReg);
-                    emitReg(scalarReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                    emitReg(hashReg);
-                    emitReg(scalarReg);
-                    emit(pkgIdx);
-                }
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarReg);
                 if (currentCallContext == RuntimeContextType.SCALAR) {
                     int rd = allocateRegister();
                     emit(Opcodes.ARRAY_SIZE);
@@ -2788,44 +2690,24 @@ public class BytecodeCompiler implements Visitor {
                 blockNode.accept(this);
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                    emitReg(hashReg);
-                    emitReg(scalarReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                    emitReg(hashReg);
-                    emitReg(scalarReg);
-                    emit(pkgIdx);
-                }
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarReg);
                 lastResultReg = hashReg;
             } else if (node.operand instanceof StringNode strNode) {
-                // %{'name'} — symbolic hash reference
-                int nameReg = allocateRegister();
-                int strIdx = addToStringPool(strNode.value);
-                emit(Opcodes.LOAD_STRING);
-                emitReg(nameReg);
-                emit(strIdx);
-
+                // Symbolic ref: %{'name'} or 'name'->%* — load global hash by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
                 int hashReg = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                    emitReg(hashReg);
-                    emitReg(nameReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                    emitReg(hashReg);
-                    emitReg(nameReg);
-                    emit(pkgIdx);
-                }
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(hashReg);
+                emit(nameIdx);
                 lastResultReg = hashReg;
             } else {
                 throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("*")) {
-            // Glob variable dereference: *x or *{expr}
+            // Glob variable dereference: *x
             if (node.operand instanceof IdentifierNode) {
                 IdentifierNode idNode = (IdentifierNode) node.operand;
                 String varName = idNode.name;
@@ -2845,27 +2727,28 @@ public class BytecodeCompiler implements Visitor {
                 emit(nameIdx);
 
                 lastResultReg = rd;
-            } else if (node.operand instanceof BlockNode || node.operand instanceof StringNode) {
-                // *{expr} or *{'name'} — dynamic glob via symbolic reference
-                node.operand.accept(this);
-                int nameReg = lastResultReg;
-
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: *{'name'} or 'name'->** — load global glob by string name
+                String varName = strNode.value;
+                if (!varName.contains("::")) {
+                    varName = getCurrentPackage() + "::" + varName;
+                }
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.LOAD_SYMBOLIC_GLOB, node.getIndex());
+                int nameIdx = addToStringPool(varName);
+                emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
                 emitReg(rd);
-                emitReg(nameReg);
-
+                emit(nameIdx);
                 lastResultReg = rd;
             } else if (node.operand instanceof OperatorNode) {
-                // *$ref or **postfix — dereference scalar as glob
+                // $ref->** — dereference a scalar as a glob (e.g. postfix deref)
                 node.operand.accept(this);
-                int scalarReg = lastResultReg;
-
+                int refReg = lastResultReg;
                 int rd = allocateRegister();
+                int pkgIdx = addToStringPool(getCurrentPackage()); // consumed but unused at runtime
                 emitWithToken(Opcodes.DEREF_GLOB, node.getIndex());
                 emitReg(rd);
-                emitReg(scalarReg);
-
+                emitReg(refReg);
+                emit(pkgIdx);
                 lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported * operand: " + node.operand.getClass().getSimpleName());

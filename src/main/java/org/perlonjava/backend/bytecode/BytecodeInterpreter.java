@@ -1376,27 +1376,22 @@ public class BytecodeInterpreter {
 
                     case Opcodes.DEREF: {
                         // Dereference: rd = $$rs (scalar reference dereference)
-                        // Always call scalarDeref() — throws "Not a SCALAR reference" for
-                        // non-reference types (IO, FORMAT, etc.), matching Perl semantics.
+                        // Can receive RuntimeScalar or RuntimeList
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
+                        // Only dereference if it's a RuntimeScalar with REFERENCE type
                         if (value instanceof RuntimeScalar) {
-                            RuntimeScalar sv = (RuntimeScalar) value;
-                            // Call scalarDeref() for scalar refs, undef, non-ref types (strings, globs, etc.)
-                            // Pass through non-scalar reference types (array/hash/code/regex refs) —
-                            // those are handled by the JVM compiler as non-scalar refs and should not
-                            // throw here (decl-refs.t uses $$arrayref in no-strict context).
-                            if (sv.type == RuntimeScalarType.ARRAYREFERENCE
-                                    || sv.type == RuntimeScalarType.HASHREFERENCE
-                                    || sv.type == RuntimeScalarType.CODE
-                                    || sv.type == RuntimeScalarType.REGEX) {
-                                registers[rd] = sv; // pass through non-scalar refs
+                            RuntimeScalar scalar = (RuntimeScalar) value;
+                            if (scalar.type == RuntimeScalarType.REFERENCE) {
+                                registers[rd] = scalar.scalarDeref();
                             } else {
-                                registers[rd] = sv.scalarDeref();
+                                // Non-reference scalar, just copy
+                                registers[rd] = value;
                             }
                         } else {
+                            // RuntimeList or other types, pass through
                             registers[rd] = value;
                         }
                         break;
@@ -1774,16 +1769,12 @@ public class BytecodeInterpreter {
                         pc = executeSystemOps(opcode, bytecode, pc, registers);
                         break;
 
-                    // Group 9: Special I/O (151-154)
+                    // Group 9: Special I/O (151-154) and DEREF_GLOB
                     case Opcodes.EVAL_STRING:
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:
                     case Opcodes.SLEEP_OP:
-                    case Opcodes.LOAD_SYMBOLIC_GLOB:
                     case Opcodes.DEREF_GLOB:
-                    case Opcodes.DEREF_HASH_NONSTRICT:
-                    case Opcodes.DEREF_ARRAY_NONSTRICT:
-                    case Opcodes.DEREF_NONSTRICT:
                         pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -1858,72 +1849,57 @@ public class BytecodeInterpreter {
                         break;
 
                     case Opcodes.STORE_SYMBOLIC_SCALAR: {
-                        // Strict symbolic scalar store: throws for string refs, allows REFERENCE.
+                        // Store via symbolic reference: GlobalVariable.getGlobalVariable(nameReg.toString()).set(valueReg)
                         // Format: STORE_SYMBOLIC_SCALAR nameReg valueReg
                         int nameReg = bytecode[pc++];
                         int valueReg = bytecode[pc++];
 
+                        // Get the variable name from the name register
                         RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
-                        // scalarDeref() throws "strict refs" for STRING and acts as deref for REFERENCE
-                        RuntimeScalar targetVar = nameScalar.scalarDeref();
-                        targetVar.set(registers[valueReg]);
-                        break;
-                    }
+                        String varName = nameScalar.toString();
 
-                    case Opcodes.STORE_SYMBOLIC_SCALAR_NONSTRICT: {
-                        // Non-strict symbolic scalar store: allows string-keyed global variable store.
-                        // Format: STORE_SYMBOLIC_SCALAR_NONSTRICT nameReg valueReg
-                        int nameReg = bytecode[pc++];
-                        int valueReg = bytecode[pc++];
+                        // Normalize the variable name to include package prefix if needed
+                        // This is important for ${label:var} cases where "colon" becomes "main::colon"
+                        String normalizedName = NameNormalizer.normalizeVariableName(
+                            varName,
+                            "main"  // Use main package as default for symbolic references
+                        );
 
-                        RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
-
-                        if (nameScalar.type == RuntimeScalarType.REFERENCE) {
-                            // ${\ ref} = value — dereference then assign
-                            nameScalar.scalarDeref().set(registers[valueReg]);
-                        } else {
-                            // ${"varname"} = value — symbolic reference store
-                            String normalizedName = NameNormalizer.normalizeVariableName(
-                                nameScalar.toString(),
-                                code.compilePackage
-                            );
-                            GlobalVariable.getGlobalVariable(normalizedName).set(registers[valueReg]);
-                        }
+                        // Get the global variable and set its value
+                        RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
+                        RuntimeBase value = registers[valueReg];
+                        globalVar.set(value);
                         break;
                     }
 
                     case Opcodes.LOAD_SYMBOLIC_SCALAR: {
-                        // Strict symbolic scalar load: rd = ${\ref} only.
-                        // Throws "strict refs" for strings, matching Perl strict semantics.
+                        // Load via symbolic reference: rd = GlobalVariable.getGlobalVariable(nameReg.toString()).get()
+                        // OR dereference if nameReg contains a scalar reference
                         // Format: LOAD_SYMBOLIC_SCALAR rd nameReg
                         int rd = bytecode[pc++];
                         int nameReg = bytecode[pc++];
-                        // scalarDeref() handles both REFERENCE (dereference) and STRING
-                        // (throws "Can't use string ... as a SCALAR ref while strict refs in use")
-                        registers[rd] = ((RuntimeScalar) registers[nameReg]).scalarDeref();
-                        break;
-                    }
 
-                    case Opcodes.LOAD_SYMBOLIC_SCALAR_NONSTRICT: {
-                        // Non-strict symbolic scalar load: rd = ${"varname"} or ${\ref}.
-                        // Allows string-keyed global variable lookup (no strict refs).
-                        // Format: LOAD_SYMBOLIC_SCALAR_NONSTRICT rd nameReg
-                        int rd = bytecode[pc++];
-                        int nameReg = bytecode[pc++];
-
+                        // Get the value from the name register
                         RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
 
+                        // Check if it's a scalar reference - if so, dereference it
                         if (nameScalar.type == RuntimeScalarType.REFERENCE) {
-                            // ${\ref} — dereference the scalar reference
+                            // This is ${\ref} - dereference the reference
                             registers[rd] = nameScalar.scalarDeref();
                         } else {
-                            // ${"varname"} — symbolic reference: look up global by name
+                            // This is ${"varname"} - symbolic reference to variable
                             String varName = nameScalar.toString();
+
+                            // Normalize the variable name to include package prefix if needed
+                            // This is important for ${label:var} cases where "colon" becomes "main::colon"
                             String normalizedName = NameNormalizer.normalizeVariableName(
                                 varName,
-                                code.compilePackage  // Use compile-time package for name resolution
+                                "main"  // Use main package as default for symbolic references
                             );
-                            registers[rd] = GlobalVariable.getGlobalVariable(normalizedName);
+
+                            // Get the global variable and load its value
+                            RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
+                            registers[rd] = globalVar;
                         }
                         break;
                     }
@@ -2075,7 +2051,7 @@ public class BytecodeInterpreter {
 
                     default:
                         // Unknown opcode
-                        int opcodeInt = opcode & 0xFF;
+                        int opcodeInt = opcode;
                         throw new RuntimeException(
                             "Unknown opcode: " + opcodeInt +
                             " at pc=" + (pc - 1) +
@@ -2244,19 +2220,17 @@ public class BytecodeInterpreter {
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
 
-                // Call scalarDeref() for scalar refs, undef, non-ref types (strings, globs, etc.)
-                // Pass through non-scalar reference types (array/hash/code/regex refs).
+                // Only dereference if it's a RuntimeScalar with REFERENCE type
                 if (value instanceof RuntimeScalar) {
-                    RuntimeScalar sv = (RuntimeScalar) value;
-                    if (sv.type == RuntimeScalarType.ARRAYREFERENCE
-                            || sv.type == RuntimeScalarType.HASHREFERENCE
-                            || sv.type == RuntimeScalarType.CODE
-                            || sv.type == RuntimeScalarType.REGEX) {
-                        registers[rd] = sv; // pass through non-scalar refs
+                    RuntimeScalar scalar = (RuntimeScalar) value;
+                    if (scalar.type == RuntimeScalarType.REFERENCE) {
+                        registers[rd] = scalar.scalarDeref();
                     } else {
-                        registers[rd] = sv.scalarDeref();
+                        // Non-reference scalar, just copy
+                        registers[rd] = value;
                     }
                 } else {
+                    // RuntimeList or other types, pass through
                     registers[rd] = value;
                 }
                 return pc;
@@ -3113,7 +3087,7 @@ public class BytecodeInterpreter {
 
     /**
      * Execute special I/O operations (opcodes 151-154).
-     * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP
+     * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP, DEREF_GLOB
      */
     private static int executeSpecialIO(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers, InterpretedCode code) {
@@ -3126,16 +3100,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
             case Opcodes.SLEEP_OP:
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
-            case Opcodes.LOAD_SYMBOLIC_GLOB:
-                return SlowOpcodeHandler.executeLoadSymbolicGlob(bytecode, pc, registers);
             case Opcodes.DEREF_GLOB:
-                return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers);
-            case Opcodes.DEREF_HASH_NONSTRICT:
-                return SlowOpcodeHandler.executeDerefHashNonStrict(bytecode, pc, registers, code);
-            case Opcodes.DEREF_ARRAY_NONSTRICT:
-                return SlowOpcodeHandler.executeDerefArrayNonStrict(bytecode, pc, registers, code);
-            case Opcodes.DEREF_NONSTRICT:
-                return SlowOpcodeHandler.executeDerefNonStrict(bytecode, pc, registers, code);
+                return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers, code);
             default:
                 throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }
