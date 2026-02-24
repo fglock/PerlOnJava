@@ -464,6 +464,33 @@ public class CompileAssignment {
 
                             bytecodeCompiler.lastResultReg = arrayReg;
                             return;
+                        } else if (sigilOp.operator.equals("*") && sigilOp.operand instanceof IdentifierNode) {
+                            // Handle local *glob = value
+                            String globName = ((IdentifierNode) sigilOp.operand).name;
+                            String normalizedName = NameNormalizer.normalizeVariableName(globName, bytecodeCompiler.getCurrentPackage());
+                            int nameIdx = bytecodeCompiler.addToStringPool(normalizedName);
+
+                            // Compile RHS first
+                            node.right.accept(bytecodeCompiler);
+                            int valueReg = bytecodeCompiler.lastResultReg;
+
+                            // Load the glob
+                            int globReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.LOAD_GLOB);
+                            bytecodeCompiler.emitReg(globReg);
+                            bytecodeCompiler.emit(nameIdx);
+
+                            // Push glob to local variable stack for restoration on scope exit
+                            bytecodeCompiler.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                            bytecodeCompiler.emitReg(globReg);
+
+                            // Store the RHS value into the glob
+                            bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                            bytecodeCompiler.emitReg(globReg);
+                            bytecodeCompiler.emitReg(valueReg);
+
+                            bytecodeCompiler.lastResultReg = globReg;
+                            return;
                         } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
                             // Handle local %hash = value
                             String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
