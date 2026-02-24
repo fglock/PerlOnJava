@@ -1769,12 +1769,15 @@ public class BytecodeInterpreter {
                         pc = executeSystemOps(opcode, bytecode, pc, registers);
                         break;
 
-                    // Group 9: Special I/O (151-154) and DEREF_GLOB
+                    // Group 9: Special I/O (151-154), glob ops, strict deref
                     case Opcodes.EVAL_STRING:
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:
                     case Opcodes.SLEEP_OP:
                     case Opcodes.DEREF_GLOB:
+                    case Opcodes.LOAD_GLOB_DYNAMIC:
+                    case Opcodes.DEREF_SCALAR_STRICT:
+                    case Opcodes.DEREF_SCALAR_NONSTRICT:
                         pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -3087,7 +3090,8 @@ public class BytecodeInterpreter {
 
     /**
      * Execute special I/O operations (opcodes 151-154).
-     * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP, DEREF_GLOB
+     * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP, DEREF_GLOB, LOAD_GLOB_DYNAMIC,
+     * DEREF_SCALAR_STRICT, DEREF_SCALAR_NONSTRICT
      */
     private static int executeSpecialIO(int opcode, int[] bytecode, int pc,
                                          RuntimeBase[] registers, InterpretedCode code) {
@@ -3102,6 +3106,12 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
             case Opcodes.DEREF_GLOB:
                 return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers, code);
+            case Opcodes.LOAD_GLOB_DYNAMIC:
+                return SlowOpcodeHandler.executeLoadGlobDynamic(bytecode, pc, registers, code);
+            case Opcodes.DEREF_SCALAR_STRICT:
+                return SlowOpcodeHandler.executeDerefScalarStrict(bytecode, pc, registers);
+            case Opcodes.DEREF_SCALAR_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);
             default:
                 throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }

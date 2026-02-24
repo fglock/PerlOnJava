@@ -314,6 +314,64 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * LOAD_GLOB_DYNAMIC: rd = GlobalVariable.getGlobalIO(normalize(nameReg, pkg))
+     * Format: LOAD_GLOB_DYNAMIC rd nameReg pkgIdx
+     * Effect: Loads a glob by runtime name — used for *{"name"} = value symbolic assignment
+     */
+    public static int executeLoadGlobDynamic(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int nameReg = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+
+        String pkg = code.stringPool[pkgIdx];
+        String name = ((RuntimeScalar) registers[nameReg]).toString();
+        String globalName = NameNormalizer.normalizeVariableName(name, pkg);
+
+        registers[rd] = GlobalVariable.getGlobalIO(globalName);
+        return pc;
+    }
+
+    /**
+     * DEREF_SCALAR_STRICT: rd = rs.scalarDeref()
+     * Format: DEREF_SCALAR_STRICT rd rs
+     * Matches JVM path: scalarDeref() — throws for non-refs under strict refs.
+     */
+    public static int executeDerefScalarStrict(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDeref();
+        return pc;
+    }
+
+    /**
+     * DEREF_SCALAR_NONSTRICT: rd = rs.scalarDerefNonStrict(pkg)
+     * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx
+     * Matches JVM path: scalarDerefNonStrict(pkg) — allows symbolic refs.
+     */
+    public static int executeDerefScalarNonStrict(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+        String pkg = code.stringPool[pkgIdx];
+        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDerefNonStrict(pkg);
+        return pc;
+    }
+
+    /**
      * DEREF_GLOB: rd = rs.globDerefNonStrict(currentPackage)
      * Format: DEREF_GLOB rd rs nameIdx(currentPackage)
      * Effect: Dereferences a scalar as a glob (for $ref->** postfix deref)

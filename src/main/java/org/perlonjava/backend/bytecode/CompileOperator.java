@@ -1669,14 +1669,24 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("open requires arguments");
             }
 
-            // Compile all arguments into a list
+            // Compile all arguments into a list.
+            // Track the first-arg (filehandle) register so we can write the GLOB back
+            // after OPEN — IOOperator.open() does fileHandle.set() on a copy in the array,
+            // so we must propagate the result back to the original lexical register.
             int argsReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
             bytecodeCompiler.emitReg(argsReg);
 
+            int fhReg = -1;
+            boolean first = true;
             for (Node arg : argsList.elements) {
                 arg.accept(bytecodeCompiler);
                 int elemReg = bytecodeCompiler.lastResultReg;
+
+                if (first) {
+                    fhReg = elemReg; // remember the filehandle lvalue register
+                    first = false;
+                }
 
                 bytecodeCompiler.emit(Opcodes.ARRAY_PUSH);
                 bytecodeCompiler.emitReg(argsReg);
@@ -1689,6 +1699,24 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.emitReg(argsReg);
+
+            // Write the (now-modified) first element of args back to the fh register.
+            // IOOperator.open() calls fileHandle.set(glob) on a copy inside the array,
+            // so we must retrieve element 0 and store it back into the lexical $fh.
+            if (fhReg >= 0) {
+                int idx0Reg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                bytecodeCompiler.emitReg(idx0Reg);
+                bytecodeCompiler.emit(0); // index 0
+                int gotReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                bytecodeCompiler.emitReg(gotReg);
+                bytecodeCompiler.emitReg(argsReg);
+                bytecodeCompiler.emitReg(idx0Reg);
+                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                bytecodeCompiler.emitReg(fhReg);
+                bytecodeCompiler.emitReg(gotReg);
+            }
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("matchRegex")) {
