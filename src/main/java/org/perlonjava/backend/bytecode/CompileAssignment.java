@@ -939,6 +939,25 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = globReg;
+                } else if (leftOp.operator.equals("*") && leftOp.getAnnotation("postfixDeref") != null) {
+                    // Postfix-deref glob lvalue: 'name'->** = value
+                    // Evaluate the operand expression to get the glob name as a scalar,
+                    // then load that glob dynamically and store the RHS into it.
+                    leftOp.operand.accept(bytecodeCompiler);
+                    int nameScalarReg = bytecodeCompiler.lastResultReg;
+
+                    int globReg = bytecodeCompiler.allocateRegister();
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(nameScalarReg);
+                    bytecodeCompiler.emit(pkgIdx);
+
+                    bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = globReg;
                 } else if (leftOp.operator.equals("pos")) {
                     // pos($var) = value - lvalue assignment to regex position
                     // pos() returns a PosLvalueScalar that can be assigned to

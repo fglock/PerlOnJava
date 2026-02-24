@@ -1108,10 +1108,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
             case TIED_SCALAR -> tiedFetch().scalarDerefNonStrict(packageName);
-            default -> {
+            case GLOBREFERENCE ->
+                // GLOBREFERENCE (like *STDOUT{IO}) is not a scalar reference even without strict refs
+                throw new PerlCompilerException("Not a SCALAR reference");
+            case STRING, BYTE_STRING, UNDEF -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);
             }
+            default ->
+                throw new PerlCompilerException("Not a SCALAR reference");
         };
     }
 
