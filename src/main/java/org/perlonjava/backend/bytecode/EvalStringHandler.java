@@ -49,9 +49,7 @@ public class EvalStringHandler {
                                           InterpretedCode currentCode,
                                           RuntimeBase[] registers,
                                           String sourceName,
-                                          int sourceLine,
-                                          int callSiteStrictOptions,
-                                          int callSiteFeatureFlags) {
+                                          int sourceLine) {
         try {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -67,26 +65,23 @@ public class EvalStringHandler {
             opts.fileName = sourceName + " (eval)";
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
-            // Inherit lexical pragma flags from the call site (not end-of-compilation snapshot)
-            // callSiteStrictOptions/callSiteFeatureFlags are embedded in the bytecode at the eval
-            // call site, capturing the exact pragmas in effect at that point (e.g. inside a
-            // "no strict 'refs'" block).  Fall back to currentCode snapshot if not available.
-            symbolTable.strictOptionsStack.pop();
-            symbolTable.strictOptionsStack.push(callSiteStrictOptions);
-            symbolTable.featureFlagsStack.pop();
-            symbolTable.featureFlagsStack.push(callSiteFeatureFlags);
+            // Inherit lexical pragma flags from parent if available
             if (currentCode != null) {
+                // Replace default values with parent's flags
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(currentCode.strictOptions);
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(currentCode.featureFlags);
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Inherit the runtime package from InterpreterState.currentPackage.
-            // This is the package active at the eval call site at runtime, which is what
-            // Perl's eval STRING semantics require — e.g. inside "package Foo { eval '...' }"
-            // the eval sees package Foo, and __PACKAGE__ inside it returns "Foo".
-            // PUSH_PACKAGE already updates InterpreterState.currentPackage at runtime when
-            // entering a scoped package block, so this correctly tracks nested packages.
-            String compilePackage = InterpreterState.currentPackage.get().toString();
+            // Inherit the compile-time package from the calling code, matching what
+            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
+            // Using the compile-time package (not InterpreterState.currentPackage which is
+            // the runtime package) ensures bare names like *named resolve to FOO3::named
+            // when the eval call site is inside "package FOO3".
+            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
             symbolTable.setCurrentPackage(compilePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
@@ -144,10 +139,7 @@ public class EvalStringHandler {
                         // Skip non-Perl values (like Iterator objects from for loops)
                         // Only capture actual Perl variables: Scalar, Array, Hash, Code
                         if (value == null) {
-                            // Substitute undef for null registers — a null means the variable
-                            // was declared but not yet assigned; capture as undef scalar so
-                            // the eval's register is never null (which would crash on access).
-                            value = new RuntimeScalar();
+                            // Null is fine - capture it
                         } else if (value instanceof RuntimeScalar) {
                             // Check if the scalar contains an Iterator (used by for loops)
                             RuntimeScalar scalar = (RuntimeScalar) value;
