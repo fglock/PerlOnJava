@@ -230,12 +230,23 @@ public class BytecodeCompiler implements Visitor {
         savedBaseRegister.push(baseRegisterForStatement);
         // Update base to protect all registers allocated before this scope
         baseRegisterForStatement = nextRegister;
+        // Mirror the JVM compiler: push a new pragma frame so that strict/feature/warning
+        // changes inside this block (e.g. `use strict`, `use 5.012`) are scoped to the block
+        // and do not leak into the surrounding code after the block exits.
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            savedSymbolTableScopes.push(emitterContext.symbolTable.enterScope());
+        } else {
+            savedSymbolTableScopes.push(-1);  // sentinel so stacks stay in sync
+        }
     }
 
     /**
      * Helper: Exit the current lexical scope.
      * Restores register allocation state to what it was before entering the scope.
      */
+    // Saved symbol-table scope indices, parallel to savedNextRegister / savedBaseRegister.
+    private final Stack<Integer> savedSymbolTableScopes = new Stack<>();
+
     private void exitScope() {
         if (variableScopes.size() > 1) {
             variableScopes.pop();
@@ -246,6 +257,11 @@ public class BytecodeCompiler implements Visitor {
             if (!savedBaseRegister.isEmpty()) {
                 baseRegisterForStatement = savedBaseRegister.pop();
             }
+        }
+        // Restore the pragma frame (strict/feature/warning flags) for the scope we just exited.
+        if (emitterContext != null && emitterContext.symbolTable != null
+                && !savedSymbolTableScopes.isEmpty()) {
+            emitterContext.symbolTable.exitScope(savedSymbolTableScopes.pop());
         }
     }
 
@@ -2530,6 +2546,10 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = getVariableRegister(varName);
                 } else {
                     // Global variable - load it
+                    // Check strict vars before loading an undeclared global
+                    if (shouldBlockGlobalUnderStrictVars(varName)) {
+                        throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+                    }
                     // Use NameNormalizer to properly handle special variables (like $&)
                     // which must always be in the "main" package
                     String globalVarName = varName.substring(1); // Remove $ sigil first
@@ -2556,9 +2576,14 @@ public class BytecodeCompiler implements Visitor {
                 block.accept(this);
                 int blockResultReg = lastResultReg;
 
-                // Load via symbolic reference
+                // Load via symbolic reference — use strict vs non-strict opcode.
+                // LOAD_SYMBOLIC_SCALAR throws "strict refs" for non-reference strings.
+                // LOAD_SYMBOLIC_SCALAR_NONSTRICT allows symbolic variable lookup.
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.LOAD_SYMBOLIC_SCALAR, node.getIndex());
+                short symOp = isStrictRefsEnabled()
+                        ? Opcodes.LOAD_SYMBOLIC_SCALAR
+                        : Opcodes.LOAD_SYMBOLIC_SCALAR_NONSTRICT;
+                emitWithToken(symOp, node.getIndex());
                 emitReg(rd);
                 emitReg(blockResultReg);
 

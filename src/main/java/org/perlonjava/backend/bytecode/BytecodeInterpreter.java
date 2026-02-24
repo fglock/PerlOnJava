@@ -1858,57 +1858,72 @@ public class BytecodeInterpreter {
                         break;
 
                     case Opcodes.STORE_SYMBOLIC_SCALAR: {
-                        // Store via symbolic reference: GlobalVariable.getGlobalVariable(nameReg.toString()).set(valueReg)
+                        // Strict symbolic scalar store: throws for string refs, allows REFERENCE.
                         // Format: STORE_SYMBOLIC_SCALAR nameReg valueReg
                         int nameReg = bytecode[pc++];
                         int valueReg = bytecode[pc++];
 
-                        // Get the variable name from the name register
                         RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
-                        String varName = nameScalar.toString();
+                        // scalarDeref() throws "strict refs" for STRING and acts as deref for REFERENCE
+                        RuntimeScalar targetVar = nameScalar.scalarDeref();
+                        targetVar.set(registers[valueReg]);
+                        break;
+                    }
 
-                        // Normalize the variable name to include package prefix if needed
-                        // This is important for ${label:var} cases where "colon" becomes "main::colon"
-                        String normalizedName = NameNormalizer.normalizeVariableName(
-                            varName,
-                            "main"  // Use main package as default for symbolic references
-                        );
+                    case Opcodes.STORE_SYMBOLIC_SCALAR_NONSTRICT: {
+                        // Non-strict symbolic scalar store: allows string-keyed global variable store.
+                        // Format: STORE_SYMBOLIC_SCALAR_NONSTRICT nameReg valueReg
+                        int nameReg = bytecode[pc++];
+                        int valueReg = bytecode[pc++];
 
-                        // Get the global variable and set its value
-                        RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
-                        RuntimeBase value = registers[valueReg];
-                        globalVar.set(value);
+                        RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
+
+                        if (nameScalar.type == RuntimeScalarType.REFERENCE) {
+                            // ${\ ref} = value — dereference then assign
+                            nameScalar.scalarDeref().set(registers[valueReg]);
+                        } else {
+                            // ${"varname"} = value — symbolic reference store
+                            String normalizedName = NameNormalizer.normalizeVariableName(
+                                nameScalar.toString(),
+                                code.compilePackage
+                            );
+                            GlobalVariable.getGlobalVariable(normalizedName).set(registers[valueReg]);
+                        }
                         break;
                     }
 
                     case Opcodes.LOAD_SYMBOLIC_SCALAR: {
-                        // Load via symbolic reference: rd = GlobalVariable.getGlobalVariable(nameReg.toString()).get()
-                        // OR dereference if nameReg contains a scalar reference
+                        // Strict symbolic scalar load: rd = ${\ref} only.
+                        // Throws "strict refs" for strings, matching Perl strict semantics.
                         // Format: LOAD_SYMBOLIC_SCALAR rd nameReg
                         int rd = bytecode[pc++];
                         int nameReg = bytecode[pc++];
+                        // scalarDeref() handles both REFERENCE (dereference) and STRING
+                        // (throws "Can't use string ... as a SCALAR ref while strict refs in use")
+                        registers[rd] = ((RuntimeScalar) registers[nameReg]).scalarDeref();
+                        break;
+                    }
 
-                        // Get the value from the name register
+                    case Opcodes.LOAD_SYMBOLIC_SCALAR_NONSTRICT: {
+                        // Non-strict symbolic scalar load: rd = ${"varname"} or ${\ref}.
+                        // Allows string-keyed global variable lookup (no strict refs).
+                        // Format: LOAD_SYMBOLIC_SCALAR_NONSTRICT rd nameReg
+                        int rd = bytecode[pc++];
+                        int nameReg = bytecode[pc++];
+
                         RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
 
-                        // Check if it's a scalar reference - if so, dereference it
                         if (nameScalar.type == RuntimeScalarType.REFERENCE) {
-                            // This is ${\ref} - dereference the reference
+                            // ${\ref} — dereference the scalar reference
                             registers[rd] = nameScalar.scalarDeref();
                         } else {
-                            // This is ${"varname"} - symbolic reference to variable
+                            // ${"varname"} — symbolic reference: look up global by name
                             String varName = nameScalar.toString();
-
-                            // Normalize the variable name to include package prefix if needed
-                            // This is important for ${label:var} cases where "colon" becomes "main::colon"
                             String normalizedName = NameNormalizer.normalizeVariableName(
                                 varName,
-                                "main"  // Use main package as default for symbolic references
+                                code.compilePackage  // Use compile-time package for name resolution
                             );
-
-                            // Get the global variable and load its value
-                            RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
-                            registers[rd] = globalVar;
+                            registers[rd] = GlobalVariable.getGlobalVariable(normalizedName);
                         }
                         break;
                     }
