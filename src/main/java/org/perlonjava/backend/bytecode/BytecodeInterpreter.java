@@ -2110,6 +2110,14 @@ public class BytecodeInterpreter {
                 throw (PerlDieException) e;
             }
 
+            // PerlCompilerException is a meaningful Perl-level runtime error (e.g. "Use of
+            // strings with code points over 0xFF..."). Re-throw directly so the outer eval
+            // STRING handler (RuntimeCode or EvalStringHandler) can catch it and set $@
+            // from e.getMessage() without wrapping in interpreter context noise.
+            if (e instanceof PerlCompilerException) {
+                throw (PerlCompilerException) e;
+            }
+
             // Check if we're running inside an eval STRING context
             // (sourceName starts with "(eval " when code is from eval STRING)
             // In this case, don't wrap the exception - let the outer eval handler catch it
