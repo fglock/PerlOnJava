@@ -894,6 +894,16 @@ public class InterpretedCode extends RuntimeCode {
                       .append("} pkg=").append(stringPool[derefNsPkgIdx]).append("\n");
                     break;
                 }
+                case Opcodes.LOAD_SYMBOLIC_SCALAR_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LOAD_SYMBOLIC_SCALAR_NONSTRICT r").append(rd).append(" = ${r").append(rs).append("}\n");
+                    break;
+                case Opcodes.STORE_SYMBOLIC_SCALAR_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STORE_SYMBOLIC_SCALAR_NONSTRICT ${r").append(rd).append("} = r").append(rs).append("\n");
+                    break;
                 case Opcodes.GET_TYPE:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

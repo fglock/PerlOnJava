@@ -651,8 +651,11 @@ public class CompileAssignment {
                     node.right.accept(bytecodeCompiler);
                     int valueReg = bytecodeCompiler.lastResultReg;
 
-                    // Use STORE_SYMBOLIC_SCALAR to store via symbolic reference
-                    bytecodeCompiler.emit(Opcodes.STORE_SYMBOLIC_SCALAR);
+                    // Use strict vs non-strict store opcode depending on current strict refs
+                    short storeOp = bytecodeCompiler.isStrictRefsEnabled()
+                            ? Opcodes.STORE_SYMBOLIC_SCALAR
+                            : Opcodes.STORE_SYMBOLIC_SCALAR_NONSTRICT;
+                    bytecodeCompiler.emit(storeOp);
                     bytecodeCompiler.emitReg(nameReg);
                     bytecodeCompiler.emitReg(valueReg);
 
@@ -668,8 +671,11 @@ public class CompileAssignment {
                     node.right.accept(bytecodeCompiler);
                     int valueReg = bytecodeCompiler.lastResultReg;
 
-                    // Use STORE_SYMBOLIC_SCALAR to store via symbolic reference
-                    bytecodeCompiler.emit(Opcodes.STORE_SYMBOLIC_SCALAR);
+                    // Use strict vs non-strict store opcode depending on current strict refs
+                    short storeOp2 = bytecodeCompiler.isStrictRefsEnabled()
+                            ? Opcodes.STORE_SYMBOLIC_SCALAR
+                            : Opcodes.STORE_SYMBOLIC_SCALAR_NONSTRICT;
+                    bytecodeCompiler.emit(storeOp2);
                     bytecodeCompiler.emitReg(nameReg);
                     bytecodeCompiler.emitReg(valueReg);
 
