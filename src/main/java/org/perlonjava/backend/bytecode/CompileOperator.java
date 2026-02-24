@@ -835,7 +835,8 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Emit direct opcode EVAL_STRING with calling context
+                // Emit EVAL_STRING with calling context.
+                // Package is determined at runtime via RuntimeCode.getCurrentPackage().
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
