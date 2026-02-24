@@ -366,6 +366,12 @@ public class BytecodeCompiler implements Visitor {
      * @param varName The variable name with sigil (e.g., "$A", "@array")
      * @return true if access should be blocked under strict vars
      */
+    /** Returns true if strict refs is currently enabled in the symbol table. */
+    boolean isStrictRefsEnabled() {
+        return emitterContext != null && emitterContext.symbolTable != null
+                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
+    }
+
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
         // Only check if strict vars is enabled
         if (emitterContext == null || emitterContext.symbolTable == null) {
@@ -2484,7 +2490,11 @@ public class BytecodeCompiler implements Visitor {
                     // Lexical variable - use existing register
                     lastResultReg = getVariableRegister(varName);
                 } else {
-                    // Global variable - load it
+                    // Global variable - check strict vars then load
+                    if (shouldBlockGlobalUnderStrictVars(varName)) {
+                        throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+                    }
+
                     // Use NameNormalizer to properly handle special variables (like $&)
                     // which must always be in the "main" package
                     String globalVarName = varName.substring(1); // Remove $ sigil first
@@ -2507,16 +2517,23 @@ public class BytecodeCompiler implements Visitor {
                 // Execute the block to get a variable name string, then load that variable
                 BlockNode block = (BlockNode) node.operand;
 
-                // Compile the block
+                // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
                 block.accept(this);
                 int blockResultReg = lastResultReg;
-
-                // Load via symbolic reference
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.LOAD_SYMBOLIC_SCALAR, node.getIndex());
-                emitReg(rd);
-                emitReg(blockResultReg);
-
+                if (isStrictRefsEnabled()) {
+                    // strict refs: scalarDeref() — throws for non-refs
+                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(blockResultReg);
+                } else {
+                    // no strict refs: scalarDerefNonStrict(pkg) — allows symrefs
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(blockResultReg);
+                    emit(pkgIdx);
+                }
                 lastResultReg = rd;
             } else if (node.operand instanceof OperatorNode) {
                 // Operator dereference: $$x, $${expr}, etc.
