@@ -1381,15 +1381,11 @@ public class BytecodeInterpreter {
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
-                        // Only dereference if it's a RuntimeScalar with REFERENCE type
                         if (value instanceof RuntimeScalar) {
-                            RuntimeScalar scalar = (RuntimeScalar) value;
-                            if (scalar.type == RuntimeScalarType.REFERENCE) {
-                                registers[rd] = scalar.scalarDeref();
-                            } else {
-                                // Non-reference scalar, just copy
-                                registers[rd] = value;
-                            }
+                            // scalarDeref() handles REFERENCE (returns target),
+                            // GLOBREFERENCE (throws "Not a SCALAR reference"),
+                            // UNDEF (autovivifies), STRING (symref or strict error).
+                            registers[rd] = ((RuntimeScalar) value).scalarDeref();
                         } else {
                             // RuntimeList or other types, pass through
                             registers[rd] = value;
