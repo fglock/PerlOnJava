@@ -2066,10 +2066,17 @@ public class BytecodeInterpreter {
                     case Opcodes.PUSH_PACKAGE: {
                         // Scoped package block entry: package Foo { ...
                         // Save current package via DynamicVariableManager so it is restored
-                        // automatically when the scope exits via POP_LOCAL_LEVEL.
+                        // by POP_PACKAGE when the scoped block exits.
                         int nameIdx = bytecode[pc++];
                         DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
                         InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                        break;
+                    }
+
+                    case Opcodes.POP_PACKAGE: {
+                        // Scoped package block exit: closing } of package Foo { ...
+                        // Restore the previous package name saved by PUSH_PACKAGE.
+                        DynamicVariableManager.popToLocalLevel(DynamicVariableManager.getLocalLevel() - 1);
                         break;
                     }
 

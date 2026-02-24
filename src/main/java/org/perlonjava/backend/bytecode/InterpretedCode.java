@@ -1454,8 +1454,17 @@ public class InterpretedCode extends RuntimeCode {
                     break;
                 // GENERATED_DISASM_END
 
+                case Opcodes.SET_PACKAGE:
+                    sb.append("SET_PACKAGE ").append(stringPool[bytecode[pc++]]).append("\n");
+                    break;
+                case Opcodes.PUSH_PACKAGE:
+                    sb.append("PUSH_PACKAGE ").append(stringPool[bytecode[pc++]]).append("\n");
+                    break;
+                case Opcodes.POP_PACKAGE:
+                    sb.append("POP_PACKAGE\n");
+                    break;
                 default:
-                    sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
+                    sb.append("UNKNOWN(").append(opcode).append(")\n");
                     break;
             }
         }
