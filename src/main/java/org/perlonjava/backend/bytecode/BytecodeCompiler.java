@@ -2550,11 +2550,19 @@ public class BytecodeCompiler implements Visitor {
                 node.operand.accept(this);
                 int refReg = lastResultReg;
 
-                // Dereference the result
+                // Dereference the result — pick strict or non-strict opcode at compile time
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
 
                 lastResultReg = rd;
             } else {
