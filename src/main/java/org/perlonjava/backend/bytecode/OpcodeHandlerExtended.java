@@ -374,7 +374,7 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseAndBinary(
+        registers[rd] = BitwiseOperators.bitwiseAnd(
             (RuntimeScalar) registers[rs1],
             (RuntimeScalar) registers[rs2]
         );
@@ -389,7 +389,7 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseOrBinary(
+        registers[rd] = BitwiseOperators.bitwiseOr(
             (RuntimeScalar) registers[rs1],
             (RuntimeScalar) registers[rs2]
         );
@@ -404,7 +404,7 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseXorBinary(
+        registers[rd] = BitwiseOperators.bitwiseXor(
             (RuntimeScalar) registers[rs1],
             (RuntimeScalar) registers[rs2]
         );
