@@ -1076,5 +1076,22 @@ public class Opcodes {
      * Format: DEREF_GLOB rd rs nameIdx(currentPackage) */
     public static final short DEREF_GLOB = 333;
 
+    /** Load glob by runtime name (symbolic ref): rd = GlobalVariable.getGlobalIO(normalize(nameReg, pkg))
+     * Used for *{"name"} = value typeglob assignment with dynamic name
+     * Format: LOAD_GLOB_DYNAMIC rd nameReg pkgIdx */
+    public static final short LOAD_GLOB_DYNAMIC = 334;
+
+    /** Scalar dereference (strict refs): rd = rs.scalarDeref()
+     * Throws "Can't use string as a SCALAR ref while strict refs in use" for non-refs.
+     * Matches JVM path: scalarDeref() — used when strict refs is enabled.
+     * Format: DEREF_SCALAR_STRICT rd rs */
+    public static final short DEREF_SCALAR_STRICT = 335;
+
+    /** Scalar dereference (no strict refs): rd = rs.scalarDerefNonStrict(pkg)
+     * Allows symbolic references (string name -> global variable lookup).
+     * Matches JVM path: scalarDerefNonStrict(pkg) — used when strict refs is disabled.
+     * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx */
+    public static final short DEREF_SCALAR_NONSTRICT = 336;
+
     private Opcodes() {} // Utility class - no instantiation
 }
