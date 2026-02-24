@@ -2625,6 +2625,15 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(refReg);
 
                 lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: @{'name'} or 'name'->@* — load global array by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
+                int rd = allocateRegister();
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(rd);
+                emit(nameIdx);
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -2685,6 +2694,15 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(hashReg);
                 emitReg(scalarReg);
                 lastResultReg = hashReg;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: %{'name'} or 'name'->%* — load global hash by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
+                int hashReg = allocateRegister();
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(hashReg);
+                emit(nameIdx);
+                lastResultReg = hashReg;
             } else {
                 throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
             }
@@ -2708,6 +2726,18 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(nameIdx);
 
+                lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: *{'name'} or 'name'->** — load global glob by string name
+                String varName = strNode.value;
+                if (!varName.contains("::")) {
+                    varName = getCurrentPackage() + "::" + varName;
+                }
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(varName);
+                emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
+                emitReg(rd);
+                emit(nameIdx);
                 lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
