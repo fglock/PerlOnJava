@@ -77,18 +77,14 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // eval STRING compiles in the current *runtime* package.
-            // This can change dynamically via scoped package blocks (package Foo { ... }).
-            // Using the runtime package here ensures nested eval("__PACKAGE__") matches
-            // the JVM compiler behavior.
-            String compilePackage;
-            RuntimeScalar runtimePkg = InterpreterState.currentPackage.get();
-            if (runtimePkg != null && runtimePkg.getDefinedBoolean()) {
-                compilePackage = runtimePkg.toString();
-            } else {
-                compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
+            // Use the current runtime package, exactly as RuntimeCode.evalStringWithInterpreter does.
+            // RuntimeCode.getCurrentPackage() uses caller() to get the runtime package,
+            // which correctly reflects dynamic package changes (package Foo { } blocks).
+            String runtimePackage = RuntimeCode.getCurrentPackage();
+            if (runtimePackage.endsWith("::")) {
+                runtimePackage = runtimePackage.substring(0, runtimePackage.length() - 2);
             }
-            symbolTable.setCurrentPackage(compilePackage, false);
+            symbolTable.setCurrentPackage(runtimePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
