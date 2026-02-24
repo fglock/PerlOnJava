@@ -3446,8 +3446,18 @@ public class BytecodeCompiler implements Visitor {
             globalLoopVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
         }
 
-        // Step 1: Evaluate list in list context
-        node.list.accept(this);
+        // Step 1: Evaluate list in list context (guard against null from malformed parse)
+        // A null list can occur when the parser misinterprets e.g. "{ q,bar, }" as a for-loop.
+        // Emit an empty list so all subsequent iterator opcodes operate on valid registers.
+        if (node.list == null) {
+            int emptyReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emitReg(emptyReg);
+            emit(0); // zero elements
+            lastResultReg = emptyReg;
+        } else {
+            node.list.accept(this);
+        }
         int listReg = lastResultReg;
 
         // Step 2: Create iterator from the list
@@ -3582,7 +3592,19 @@ public class BytecodeCompiler implements Visitor {
                 if (node.body != null) {
                     node.body.accept(this);
                 }
-                lastResultReg = -1;  // Block returns empty
+                // Bare blocks produce no value; set lastResultReg to -1.
+                // If we are in a non-VOID context, the enclosing BlockNode's
+                // outerResultReg will be left uninitialized — emit LOAD_UNDEF
+                // here so that any downstream opcode that reads the register
+                // (e.g. ARRAY_SIZE from a scalar() wrapper) sees a defined value.
+                if (currentCallContext != RuntimeContextType.VOID) {
+                    int rd = allocateRegister();
+                    emit(Opcodes.LOAD_UNDEF);
+                    emitReg(rd);
+                    lastResultReg = rd;
+                } else {
+                    lastResultReg = -1;
+                }
             } finally {
                 // Exit scope to clean up lexical variables
                 exitScope();
