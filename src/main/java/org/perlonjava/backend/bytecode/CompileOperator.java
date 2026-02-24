@@ -66,7 +66,7 @@ public class CompileOperator {
                 Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
                 boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
 
-                // Check if there's a version associated with this package and set $Package::VERSION.
+                // Check if there's a version associated with this package and set $Package::VERSION
                 String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
                 if (version != null) {
                     // Set $PackageName::VERSION at compile time using GlobalVariable
@@ -75,9 +75,8 @@ public class CompileOperator {
                             .set(new RuntimeScalar(version));
                 }
 
-                // Update the current package/class in symbol table (compile-time tracking).
-                // Mirrors JVM handlePackageOperator which calls ctx.symbolTable.setCurrentPackage.
-                bytecodeCompiler.setCompilePackageWithClass(packageName, isClass);
+                // Update the current package/class in symbol table (compile-time tracking)
+                bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
 
                 // Register as Perl 5.38+ class for proper stringification if needed
                 if (isClass) {
@@ -86,13 +85,12 @@ public class CompileOperator {
 
                 // Emit runtime package tracking opcode so caller() and eval STRING work.
                 // Scoped blocks (package Foo { }) use PUSH_PACKAGE so DynamicVariableManager
-                // can restore the previous package when POP_PACKAGE is emitted at block exit.
+                // can restore the previous package when the scope exits.
                 // Non-scoped (package Foo;) use SET_PACKAGE which just overwrites.
-                // nextPackageIsScoped is set by visit(BlockNode) for scoped package blocks.
+                boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
                 int nameIdx = bytecodeCompiler.addToStringPool(packageName);
-                if (bytecodeCompiler.nextPackageIsScoped) {
+                if (isScoped) {
                     bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
-                    bytecodeCompiler.nextPackageIsScoped = false;  // consume the flag
                 } else {
                     bytecodeCompiler.emit(Opcodes.SET_PACKAGE);
                 }
@@ -830,34 +828,17 @@ public class CompileOperator {
         } else if (op.equals("eval")) {
             // eval $string;
             if (node.operand != null) {
-                // Evaluate eval operand (the code string) in SCALAR context
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+                // Evaluate eval operand (the code string)
                 node.operand.accept(bytecodeCompiler);
-                bytecodeCompiler.currentCallContext = savedContext;
                 int stringReg = bytecodeCompiler.lastResultReg;
-
-                // If operand produced no result (e.g. bare block with void semantics),
-                // substitute undef so the eval string is empty
-                if (stringReg < 0) {
-                    stringReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                    bytecodeCompiler.emitReg(stringReg);
-                }
 
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Emit direct opcode EVAL_STRING with call-site strict/feature/warning flags
-                // so EvalStringHandler inherits the pragmas in effect at the eval call site
-                // (not just the end-of-compilation snapshot in InterpretedCode)
-                int callSiteStrictOptions = bytecodeCompiler.getCurrentStrictOptions();
-                int callSiteFeatureFlags  = bytecodeCompiler.getCurrentFeatureFlags();
+                // Emit direct opcode EVAL_STRING
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
-                bytecodeCompiler.emitInt(callSiteStrictOptions);
-                bytecodeCompiler.emitInt(callSiteFeatureFlags);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
@@ -1688,19 +1669,13 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("open requires arguments");
             }
 
-            // Compile the filehandle argument (first arg) as an lvalue register
-            // We must NOT push it through ARRAY_PUSH (which copies via addToArray),
-            // because IOOperator.open needs to call fileHandle.set() on the actual lvalue.
-            argsList.elements.get(0).accept(bytecodeCompiler);
-            int fhReg = bytecodeCompiler.lastResultReg;
-
-            // Compile remaining arguments into a list (mode, filename/ref, ...)
+            // Compile all arguments into a list
             int argsReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
             bytecodeCompiler.emitReg(argsReg);
 
-            for (int i = 1; i < argsList.elements.size(); i++) {
-                argsList.elements.get(i).accept(bytecodeCompiler);
+            for (Node arg : argsList.elements) {
+                arg.accept(bytecodeCompiler);
                 int elemReg = bytecodeCompiler.lastResultReg;
 
                 bytecodeCompiler.emit(Opcodes.ARRAY_PUSH);
@@ -1708,13 +1683,11 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(elemReg);
             }
 
-            // Call open: OPEN rd ctx fhReg argsReg
-            // fhReg is the actual lvalue register for the filehandle (written back directly)
+            // Call open with context and args
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.OPEN);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-            bytecodeCompiler.emitReg(fhReg);
             bytecodeCompiler.emitReg(argsReg);
 
             bytecodeCompiler.lastResultReg = rd;
