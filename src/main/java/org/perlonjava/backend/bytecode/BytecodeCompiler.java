@@ -43,6 +43,10 @@ public class BytecodeCompiler implements Visitor {
     private final Stack<Integer> savedNextRegister = new Stack<>();
     private final Stack<Integer> savedBaseRegister = new Stack<>();
 
+    // Flag set by visit(BlockNode) when the block is a scoped package block (package Foo { }).
+    // CompileOperator reads this to emit PUSH_PACKAGE instead of SET_PACKAGE.
+    boolean nextPackageIsScoped = false;
+
     // Loop label stack for last/next/redo control flow
     // Each entry tracks loop boundaries and optional label
     private final Stack<LoopInfo> loopStack = new Stack<>();
@@ -267,19 +271,40 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Helper: Get current package name for global variable resolution.
-     * Uses symbolTable for proper package/class tracking.
+     * Uses emitterContext.symbolTable when available (mirrors JVM ctx.symbolTable),
+     * falling back to the BytecodeCompiler's own symbolTable.
      */
     String getCurrentPackage() {
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            return emitterContext.symbolTable.getCurrentPackage();
+        }
         return symbolTable.getCurrentPackage();
     }
 
     /**
      * Set the compile-time package for name normalization.
      * Called by eval STRING handlers to sync the package from the call site,
-     * so bare names like *named compile to FOO3::named instead of main::named.
+     * and by the package operator during compilation.
+     * Updates emitterContext.symbolTable (matching JVM ctx.symbolTable behaviour).
      */
     public void setCompilePackage(String packageName) {
-        symbolTable.setCurrentPackage(packageName, false);
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            emitterContext.symbolTable.setCurrentPackage(packageName, false);
+        } else {
+            symbolTable.setCurrentPackage(packageName, false);
+        }
+    }
+
+    /**
+     * Set the compile-time package with class flag.
+     * Used by the package/class operator during compilation.
+     */
+    public void setCompilePackageWithClass(String packageName, boolean isClass) {
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            emitterContext.symbolTable.setCurrentPackage(packageName, isClass);
+        } else {
+            symbolTable.setCurrentPackage(packageName, isClass);
+        }
     }
 
     /**
@@ -744,6 +769,16 @@ public class BytecodeCompiler implements Visitor {
                 && node.elements.get(0) instanceof OperatorNode localOp
                 && localOp.operator.equals("local");
 
+        // Detect scoped package blocks: package Foo { ... }
+        // The parser places the package OperatorNode first in the block.
+        // PUSH_PACKAGE saves the runtime current package (InterpreterState.currentPackage) so that
+        // eval STRING inside the block sees the correct package via InterpreterState.
+        // POP_PACKAGE restores it when the block exits — mirrors the JVM path's local variable save.
+        // Note: compile-time package is restored separately by exitScope() via packageStack.
+        boolean isScopedPackageBlock = !node.elements.isEmpty()
+                && node.elements.get(0) instanceof OperatorNode pkgOp
+                && (pkgOp.operator.equals("package") || pkgOp.operator.equals("class"));
+
         enterScope();
 
         // Visit each statement in the block
@@ -752,6 +787,12 @@ public class BytecodeCompiler implements Visitor {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
             Node stmt = node.elements.get(i);
+
+            // Signal to CompileOperator that the package operator is scoped (package Foo { })
+            // so it emits PUSH_PACKAGE instead of SET_PACKAGE.
+            if (i == 0 && isScopedPackageBlock) {
+                nextPackageIsScoped = true;
+            }
 
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
             if (stmt != null) {
@@ -780,13 +821,28 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Save the last statement's result to the outer register BEFORE exiting scope
-        if (outerResultReg >= 0 && lastResultReg >= 0) {
-            emit(Opcodes.MOVE);
-            emitReg(outerResultReg);
-            emitReg(lastResultReg);
+        if (outerResultReg >= 0) {
+            if (lastResultReg >= 0) {
+                emit(Opcodes.MOVE);
+                emitReg(outerResultReg);
+                emitReg(lastResultReg);
+            } else {
+                // Last statement produced no value (e.g. bare block with void semantics).
+                // Load undef so the register is never null when RETURN reads it.
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(outerResultReg);
+            }
         }
 
-        // Exit scope restores register state
+        // Restore runtime current package if this was a scoped package block.
+        // PUSH_PACKAGE saved InterpreterState.currentPackage; POP_PACKAGE restores it.
+        // The compile-time package is restored separately by exitScope() via packageStack.
+        if (isScopedPackageBlock) {
+            emit(Opcodes.POP_PACKAGE);
+        }
+
+        // Exit scope restores register state and compile-time pragma frames
+        // (including packageStack, which handles the compile-time package restore).
         exitScope();
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
@@ -1279,7 +1335,9 @@ public class BytecodeCompiler implements Visitor {
                     // Global variable - need to load it first
                     isGlobal = true;
                     targetReg = allocateRegister();
-                    String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    // Strip sigil before normalizing — varName is "$main::c", normalize needs "main::c"
+                    String bareVarName = varName.substring(1);
+                    String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
                     int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emitReg(targetReg);
@@ -1349,7 +1407,8 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
             }
 
-            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+            // Strip sigil before normalizing — varName is "$main::c", normalize needs "main::c"
+            String normalizedName = NameNormalizer.normalizeVariableName(varName.substring(1), getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
             emit(nameIdx);
@@ -3673,7 +3732,7 @@ public class BytecodeCompiler implements Visitor {
                 if (node.body != null) {
                     node.body.accept(this);
                 }
-                lastResultReg = -1;  // Block returns empty
+                lastResultReg = -1;  // Block returns empty (void semantics)
             } finally {
                 // Exit scope to clean up lexical variables
                 exitScope();

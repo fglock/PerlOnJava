@@ -80,12 +80,13 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Inherit the compile-time package from the calling code, matching what
-            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
-            // Using the compile-time package (not InterpreterState.currentPackage which is
-            // the runtime package) ensures bare names like *named resolve to FOO3::named
-            // when the eval call site is inside "package FOO3".
-            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
+            // Inherit the runtime package from InterpreterState.currentPackage.
+            // This is the package active at the eval call site at runtime, which is what
+            // Perl's eval STRING semantics require — e.g. inside "package Foo { eval '...' }"
+            // the eval sees package Foo, and __PACKAGE__ inside it returns "Foo".
+            // PUSH_PACKAGE already updates InterpreterState.currentPackage at runtime when
+            // entering a scoped package block, so this correctly tracks nested packages.
+            String compilePackage = InterpreterState.currentPackage.get().toString();
             symbolTable.setCurrentPackage(compilePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
@@ -143,7 +144,10 @@ public class EvalStringHandler {
                         // Skip non-Perl values (like Iterator objects from for loops)
                         // Only capture actual Perl variables: Scalar, Array, Hash, Code
                         if (value == null) {
-                            // Null is fine - capture it
+                            // Substitute undef for null registers — a null means the variable
+                            // was declared but not yet assigned; capture as undef scalar so
+                            // the eval's register is never null (which would crash on access).
+                            value = new RuntimeScalar();
                         } else if (value instanceof RuntimeScalar) {
                             // Check if the scalar contains an Iterator (used by for loops)
                             RuntimeScalar scalar = (RuntimeScalar) value;

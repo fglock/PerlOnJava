@@ -66,7 +66,7 @@ public class CompileOperator {
                 Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
                 boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
 
-                // Check if there's a version associated with this package and set $Package::VERSION
+                // Check if there's a version associated with this package and set $Package::VERSION.
                 String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
                 if (version != null) {
                     // Set $PackageName::VERSION at compile time using GlobalVariable
@@ -75,8 +75,9 @@ public class CompileOperator {
                             .set(new RuntimeScalar(version));
                 }
 
-                // Update the current package/class in symbol table (compile-time tracking)
-                bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
+                // Update the current package/class in symbol table (compile-time tracking).
+                // Mirrors JVM handlePackageOperator which calls ctx.symbolTable.setCurrentPackage.
+                bytecodeCompiler.setCompilePackageWithClass(packageName, isClass);
 
                 // Register as Perl 5.38+ class for proper stringification if needed
                 if (isClass) {
@@ -85,12 +86,13 @@ public class CompileOperator {
 
                 // Emit runtime package tracking opcode so caller() and eval STRING work.
                 // Scoped blocks (package Foo { }) use PUSH_PACKAGE so DynamicVariableManager
-                // can restore the previous package when the scope exits.
+                // can restore the previous package when POP_PACKAGE is emitted at block exit.
                 // Non-scoped (package Foo;) use SET_PACKAGE which just overwrites.
-                boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
+                // nextPackageIsScoped is set by visit(BlockNode) for scoped package blocks.
                 int nameIdx = bytecodeCompiler.addToStringPool(packageName);
-                if (isScoped) {
+                if (bytecodeCompiler.nextPackageIsScoped) {
                     bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
+                    bytecodeCompiler.nextPackageIsScoped = false;  // consume the flag
                 } else {
                     bytecodeCompiler.emit(Opcodes.SET_PACKAGE);
                 }
@@ -828,9 +830,20 @@ public class CompileOperator {
         } else if (op.equals("eval")) {
             // eval $string;
             if (node.operand != null) {
-                // Evaluate eval operand (the code string)
+                // Evaluate eval operand (the code string) in SCALAR context
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
                 node.operand.accept(bytecodeCompiler);
+                bytecodeCompiler.currentCallContext = savedContext;
                 int stringReg = bytecodeCompiler.lastResultReg;
+
+                // If operand produced no result (e.g. bare block with void semantics),
+                // substitute undef so the eval string is empty
+                if (stringReg < 0) {
+                    stringReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(stringReg);
+                }
 
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
