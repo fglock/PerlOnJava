@@ -42,7 +42,6 @@ public class BytecodeCompiler implements Visitor {
     // Stack to save/restore register state when entering/exiting scopes
     private final Stack<Integer> savedNextRegister = new Stack<>();
     private final Stack<Integer> savedBaseRegister = new Stack<>();
-
     // Loop label stack for last/next/redo control flow
     // Each entry tracks loop boundaries and optional label
     private final Stack<LoopInfo> loopStack = new Stack<>();
@@ -708,6 +707,10 @@ public class BytecodeCompiler implements Visitor {
                 && localOp.operator.equals("local");
 
         enterScope();
+        // Sync symbolTable package scope with block scope so that getCurrentPackage()
+        // at each eval() call site inside this block reflects the correct package.
+        // e.g. after "package Foo {}" closes, outer eval() call sites see "main" again.
+        int stScopeIdx = symbolTable.enterScope();
 
         // Visit each statement in the block
         int numStatements = node.elements.size();
@@ -749,7 +752,8 @@ public class BytecodeCompiler implements Visitor {
             emitReg(lastResultReg);
         }
 
-        // Exit scope restores register state
+        // Exit scope restores register state and symbolTable package
+        symbolTable.exitScope(stScopeIdx);
         exitScope();
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
@@ -1243,7 +1247,10 @@ public class BytecodeCompiler implements Visitor {
                     // Global variable - need to load it first
                     isGlobal = true;
                     targetReg = allocateRegister();
-                    String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    // Strip sigil before normalizing ("$x" -> "x", "$main::n" -> "main::n")
+                    // matching CompileAssignment.java's pattern for STORE_GLOBAL_SCALAR
+                    String bareVarName = varName.substring(1);
+                    String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
                     int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emitReg(targetReg);
@@ -1303,7 +1310,7 @@ public class BytecodeCompiler implements Visitor {
         emitReg(targetReg);
         emitReg(valueReg);
 
-        // If it's a global variable, store it back
+        // If it's a global variable, store the result back
         if (isGlobal) {
             OperatorNode leftOp = (OperatorNode) node.left;
             String varName = "$" + ((IdentifierNode) leftOp.operand).name;
@@ -1313,7 +1320,9 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
             }
 
-            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+            // Strip sigil before normalizing — same as CompileAssignment.java
+            String bareVarName = varName.substring(1);
+            String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
             emit(nameIdx);

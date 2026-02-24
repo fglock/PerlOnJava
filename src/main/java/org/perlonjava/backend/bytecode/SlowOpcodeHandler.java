@@ -240,6 +240,9 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
+        // Read call-site package baked in by CompileOperator — interpreter equivalent
+        // of the JVM evalTag's ctx.symbolTable.getCurrentPackage().
+        String callSitePackage = code.stringPool[bytecode[pc++]];
 
         // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
         RuntimeBase codeValue = registers[stringReg];
@@ -255,10 +258,11 @@ public class SlowOpcodeHandler {
         // Call EvalStringHandler to parse, compile, and execute
         RuntimeScalar result = EvalStringHandler.evalString(
             perlCode,
-            code,           // Current InterpretedCode for context
-            registers,      // Current registers for variable access
+            code,             // Current InterpretedCode for context
+            registers,        // Current registers for variable access
             code.sourceName,
-            code.sourceLine
+            code.sourceLine,
+            callSitePackage   // Call-site package baked in at compile time
         );
 
         registers[rd] = result;
