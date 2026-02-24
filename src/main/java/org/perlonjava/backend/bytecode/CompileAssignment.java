@@ -1,7 +1,9 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
@@ -14,6 +16,19 @@ public class CompileAssignment {
      * Handles all forms of assignment including my/our/local, scalars, arrays, hashes, and slices.
      */
     public static void compileAssignmentOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        // Ensure compile-time lvalue checks match JVM behavior.
+        // In particular, this detects invalid lvalues like:
+        //   ($a ? $x : ($y)) = 5
+        // which must throw "Assignment to both a list and a scalar".
+        try {
+            LValueVisitor.getContext(node.left);
+        } catch (PerlCompilerException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            // LValueVisitor may throw other runtime exceptions; preserve message as a compile error.
+            throw new PerlCompilerException(node.getIndex(), e.getMessage(), bytecodeCompiler.errorUtil, e);
+        }
+
         // Determine the calling context for the RHS based on LHS type
         int rhsContext = RuntimeContextType.LIST; // Default
 

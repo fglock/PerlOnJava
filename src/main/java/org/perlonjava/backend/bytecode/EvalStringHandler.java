@@ -45,11 +45,12 @@ public class EvalStringHandler {
      * @param sourceLine    Source line for error messages
      * @return RuntimeScalar result of evaluation (undef on error)
      */
-    public static RuntimeScalar evalString(String perlCode,
-                                          InterpretedCode currentCode,
-                                          RuntimeBase[] registers,
-                                          String sourceName,
-                                          int sourceLine) {
+    public static RuntimeList evalString(String perlCode,
+                                         InterpretedCode currentCode,
+                                         RuntimeBase[] registers,
+                                         String sourceName,
+                                         int sourceLine,
+                                         int callContext) {
         try {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -95,7 +96,7 @@ public class EvalStringHandler {
                 symbolTable,
                 null, // mv
                 null, // cw
-                RuntimeContextType.SCALAR,
+                callContext,
                 false, // isBoxed
                 errorUtil,
                 opts,
@@ -202,15 +203,14 @@ public class EvalStringHandler {
 
             // Step 6: Execute the compiled code
             RuntimeArray args = new RuntimeArray();  // Empty @_
-            RuntimeList result = evalCode.apply(args, RuntimeContextType.SCALAR);
-
-            // Step 7: Return scalar result
-            return result.scalar();
+            return evalCode.apply(args, callContext);
 
         } catch (Exception e) {
             // Step 8: Handle errors - set $@ and return undef
             WarnDie.catchEval(e);
-            return RuntimeScalarCache.scalarUndef;
+            return (callContext == RuntimeContextType.LIST)
+                    ? new RuntimeList()
+                    : new RuntimeList(RuntimeScalarCache.scalarUndef);
         }
     }
 
