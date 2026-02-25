@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.operators.ScalarGlobOperator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1659,27 +1660,32 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("<>")) {
-            // Diamond operator: read from @ARGV files or STDIN (like Perl's <>)
-            // Mirrors JVM EmitOperator.handleDiamondBuiltin: evaluates operand in SCALAR context
-            // then calls DiamondIO.readline(arg, ctx).
-            // We reuse the READLINE opcode; executeReadline detects non-glob scalars and
-            // routes to DiamondIO.readline.
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            try {
+            // Diamond operator — mirrors JVM EmitOperator.handleDiamondBuiltin exactly.
+            // Extract the string argument to decide between DiamondIO and glob.
+            String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
+            if (argument.isEmpty() || argument.equals("<>")) {
+                // True diamond <>  or  <<>> : read from @ARGV / STDIN via DiamondIO.readline
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
                 node.operand.accept(bytecodeCompiler);
-            } finally {
                 bytecodeCompiler.currentCallContext = savedContext;
+                int fhReg = bytecodeCompiler.lastResultReg;
+
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.READLINE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(fhReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                // Non-empty argument: it's a glob pattern — rewrite as "glob" operator
+                // and compile that, exactly as the JVM compiler does.
+                OperatorNode globNode = new OperatorNode("glob", node.operand, node.tokenIndex);
+                globNode.id = node.id;
+                globNode.annotations = node.annotations;
+                globNode.accept(bytecodeCompiler);
             }
-            int fhReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.READLINE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(fhReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("open")) {
             // open(filehandle, mode, filename) or open(filehandle, expr)
             if (node.operand == null || !(node.operand instanceof ListNode)) {
@@ -2834,6 +2840,26 @@ public class CompileOperator {
             bytecodeCompiler.emitWithToken(opcode, node.getIndex());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argsReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+            bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("glob")) {
+            // File glob operator: ScalarGlobOperator.evaluate(globId, pattern, ctx)
+            // Mirrors JVM EmitOperator.handleGlobBuiltin exactly: allocate a unique
+            // per-call-site globId for scalar-context iteration state, compile operand
+            // in SCALAR context, then emit GLOB_OP.
+            int globId = ScalarGlobOperator.currentId++;
+
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            node.operand.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
+            int patternReg = bytecodeCompiler.lastResultReg;
+
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.GLOB_OP);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emit(globId);
+            bytecodeCompiler.emitReg(patternReg);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.lastResultReg = rd;
         } else {

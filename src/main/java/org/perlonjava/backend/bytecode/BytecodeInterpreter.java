@@ -197,6 +197,17 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.GLOB_OP: {
+                        // File glob: ScalarGlobOperator.evaluate(globId, pattern, ctx)
+                        // Mirrors JVM EmitOperator.handleGlobBuiltin.
+                        int rd = bytecode[pc++];
+                        int globId = bytecode[pc++];
+                        int patternReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = ScalarGlobOperator.evaluate(globId, (RuntimeScalar) registers[patternReg], ctx);
+                        break;
+                    }
+
                     case Opcodes.LOAD_UNDEF: {
                         // Load undef: rd = new RuntimeScalar()
                         int rd = bytecode[pc++];
