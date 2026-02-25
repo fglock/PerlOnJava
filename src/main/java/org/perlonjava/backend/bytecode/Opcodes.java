@@ -1111,5 +1111,10 @@ public class Opcodes {
      * Format: GLOB_OP rd globId patternReg ctx */
     public static final short GLOB_OP = 339;
 
+    /** Execute a file: rd = ModuleOperators.doFile(fileReg, ctx)
+     * Implements Perl's do FILE operator.
+     * Format: DO_FILE rd fileReg ctx */
+    public static final short DO_FILE = 340;
+
     private Opcodes() {} // Utility class - no instantiation
 }

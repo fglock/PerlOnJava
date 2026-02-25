@@ -2083,6 +2083,25 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.POP_PACKAGE: {
+                        // Scoped package block exit: closing } of package Foo { ...
+                        // Restore the previously saved package name.
+                        // PUSH_PACKAGE called DynamicVariableManager.pushLocalVariable, so
+                        // POP_LOCAL_LEVEL (emitted by exitScope) handles the actual restore.
+                        // This opcode just needs to exist for completeness.
+                        break;
+                    }
+
+                    case Opcodes.DO_FILE: {
+                        // do FILE: read and execute a file
+                        int rd = bytecode[pc++];
+                        int fileReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeScalar file = ((RuntimeBase) registers[fileReg]).scalar();
+                        registers[rd] = ModuleOperators.doFile(file, ctx);
+                        break;
+                    }
+
                     default:
                         // Unknown opcode
                         int opcodeInt = opcode;

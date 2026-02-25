@@ -3567,18 +3567,29 @@ public class BytecodeCompiler implements Visitor {
         // Handle bare blocks (simple blocks) differently - they execute once, not loop
         if (node.isSimpleBlock) {
             // Simple bare block: { statements; }
-            // Create a new scope for the block
+            // Allocate a result register before entering scope when in non-VOID context,
+            // so the value is accessible after the scope exits (same pattern as BlockNode).
+            int outerResultReg = -1;
+            if (currentCallContext != RuntimeContextType.VOID) {
+                outerResultReg = allocateRegister();
+            }
             enterScope();
             try {
                 // Just execute the body once, no loop
                 if (node.body != null) {
                     node.body.accept(this);
                 }
-                lastResultReg = -1;  // Block returns empty
+                // Save last statement result into outer register before exiting scope
+                if (outerResultReg >= 0 && lastResultReg >= 0) {
+                    emit(Opcodes.MOVE);
+                    emitReg(outerResultReg);
+                    emitReg(lastResultReg);
+                }
             } finally {
                 // Exit scope to clean up lexical variables
                 exitScope();
             }
+            lastResultReg = outerResultReg;
             return;
         }
 
