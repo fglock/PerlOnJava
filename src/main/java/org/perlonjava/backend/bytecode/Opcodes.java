@@ -998,6 +998,11 @@ public class Opcodes {
      * Format: POP_LOCAL_LEVEL rs */
     public static final short POP_LOCAL_LEVEL = 303;
 
+    /** Save current DynamicVariableManager local level into register rd.
+     * Used to bracket scoped package blocks so local pushes (PUSH_PACKAGE etc) are restored.
+     * Format: GET_LOCAL_LEVEL rd */
+    public static final short GET_LOCAL_LEVEL = 341;
+
     /** Superinstruction: foreach loop step for a global loop variable (e.g. $_).
      * Combines: hasNext check, next() into varReg, aliasGlobalVariable(name, varReg), conditional exit.
      * If iterator has next: varReg = next(), aliasGlobalVariable(name, varReg), fall through.
