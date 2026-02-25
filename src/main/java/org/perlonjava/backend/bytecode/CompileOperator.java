@@ -1,16 +1,26 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.runtime.runtimetypes.ClassRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.app.cli.CompilerOptions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+
 
 public class CompileOperator {
+    /** Counter for generating unique eval tags, matching JVM compiler's evalTag scheme. */
+    private static final AtomicInteger EVAL_TAG_COUNTER = new AtomicInteger(0);
+
     public static void visitOperator(BytecodeCompiler bytecodeCompiler, OperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
@@ -835,12 +845,27 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Emit EVAL_STRING with calling context.
-                // Package is determined at runtime via RuntimeCode.getCurrentPackage().
+                // Store a compile-time EmitterContext snapshot in RuntimeCode.evalContext,
+                // exactly as the JVM compiler does via EmitEval/evalTag.
+                // The evalTag is unique per eval site and baked into the string pool.
+                String evalTag = "interp_eval_" + EVAL_TAG_COUNTER.incrementAndGet();
+                EmitterContext snapCtx = new EmitterContext(
+                    new JavaClassInfo(),
+                    bytecodeCompiler.symbolTable.snapShot(), // compile-time scope snapshot
+                    null, null,
+                    bytecodeCompiler.currentCallContext,
+                    false,
+                    null,
+                    new CompilerOptions(),
+                    null
+                );
+                RuntimeCode.evalContext.put(evalTag, snapCtx);
+                int tagIdx = bytecodeCompiler.addToStringPool(evalTag);
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(tagIdx);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {

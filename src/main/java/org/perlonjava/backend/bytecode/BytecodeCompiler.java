@@ -37,7 +37,8 @@ public class BytecodeCompiler implements Visitor {
 
     // Symbol table for package/class tracking
     // Tracks current package, class flag, and package versions like the compiler does
-    final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+    // Initialized to a fresh table; overwritten in compile() from ctx.symbolTable when available.
+    ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
     // Stack to save/restore register state when entering/exiting scopes
     private final Stack<Integer> savedNextRegister = new Stack<>();
@@ -480,6 +481,21 @@ public class BytecodeCompiler implements Visitor {
             currentCallContext = (ctx.contextType == RuntimeContextType.VOID)
                     ? RuntimeContextType.SCALAR
                     : ctx.contextType;
+
+            // Sync package, pragmas, warnings, and features from ctx.symbolTable.
+            // ctx.symbolTable is the compile-time scope snapshot at the eval call site —
+            // it has the correct package (e.g. FOO3) and pragma state.
+            if (ctx.symbolTable != null) {
+                symbolTable.setCurrentPackage(
+                        ctx.symbolTable.getCurrentPackage(),
+                        ctx.symbolTable.currentPackageIsClass());
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+                symbolTable.warningFlagsStack.pop();
+                symbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
+            }
         }
 
         // If we have captured variables, allocate registers for them
