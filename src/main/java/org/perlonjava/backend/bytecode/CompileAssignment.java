@@ -21,7 +21,7 @@ public class CompileAssignment {
         // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
         if (node.left instanceof OperatorNode) {
             OperatorNode leftOp = (OperatorNode) node.left;
-            if ((leftOp.operator.equals("my") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode) {
+            if ((leftOp.operator.equals("my") || leftOp.operator.equals("state") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode) {
                 OperatorNode sigilOp = (OperatorNode) leftOp.operand;
                 if (sigilOp.operator.equals("$")) {
                     // Scalar assignment: use SCALAR context for RHS
@@ -41,8 +41,8 @@ public class CompileAssignment {
             // Special case: my $x = value
             if (node.left instanceof OperatorNode) {
                 OperatorNode leftOp = (OperatorNode) node.left;
-                if (leftOp.operator.equals("my")) {
-                    // Extract variable name from "my" operand
+                if (leftOp.operator.equals("my") || leftOp.operator.equals("state")) {
+                    // Extract variable name from "my"/"state" operand
                     Node myOperand = leftOp.operand;
 
                     // Handle my $x (where $x is OperatorNode("$", IdentifierNode("x")))
