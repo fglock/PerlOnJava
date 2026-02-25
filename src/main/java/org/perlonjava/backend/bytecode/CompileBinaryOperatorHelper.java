@@ -419,6 +419,20 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
+            case "..." -> {
+                // Flip-flop operator (.. and ...) - per-call-site state via unique ID
+                // Note: numeric range (..) is handled earlier in visitBinaryOperator for list context;
+                // this case handles scalar-context flip-flop.
+                int flipFlopId = org.perlonjava.runtime.operators.ScalarFlipFlopOperator.currentId++;
+                org.perlonjava.runtime.operators.ScalarFlipFlopOperator op =
+                    new org.perlonjava.runtime.operators.ScalarFlipFlopOperator(operator.equals("..."));
+                org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops.putIfAbsent(flipFlopId, op);
+                bytecodeCompiler.emit(Opcodes.FLIP_FLOP);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emit(flipFlopId);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
             default -> bytecodeCompiler.throwCompilerException("Unsupported operator: " + operator, tokenIndex);
         }
 
