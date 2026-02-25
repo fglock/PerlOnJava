@@ -1440,6 +1440,17 @@ public class InterpretedCode extends RuntimeCode {
                     break;
                 // GENERATED_DISASM_END
 
+                case Opcodes.FLIP_FLOP: {
+                    int ffRd = bytecode[pc++];
+                    int ffId = bytecode[pc++];
+                    int ffRs1 = bytecode[pc++];
+                    int ffRs2 = bytecode[pc++];
+                    sb.append("FLIP_FLOP r").append(ffRd).append(" = flipFlop(").append(ffId).append(", r").append(ffRs1).append(", r").append(ffRs2).append(")\n");
+                    break;
+                }
+                case Opcodes.LOCAL_GLOB:
+                    sb.append("LOCAL_GLOB r").append(bytecode[pc++]).append(" = pushLocalVariable(glob '").append(stringPool[bytecode[pc++]]).append("')\n");
+                    break;
                 case Opcodes.GET_LOCAL_LEVEL:
                     sb.append("GET_LOCAL_LEVEL r").append(bytecode[pc++]).append("\n");
                     break;

@@ -639,6 +639,16 @@ public class Opcodes {
      * Format: STORE_GLOB globReg valueReg */
     public static final short STORE_GLOB = 164;
 
+    /** Localize a typeglob: rd = DynamicVariableManager.pushLocalVariable(LOAD_GLOB(nameIdx))
+     * Saves current glob state and returns the glob for potential assignment.
+     * Format: LOCAL_GLOB rd nameIdx */
+    public static final short LOCAL_GLOB = 342;
+
+    /** Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
+     * flipFlopId is a unique per-call-site int constant.
+     * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive */
+    public static final short FLIP_FLOP = 343;
+
     /** Open file: rd = IOOperator.open(ctx, args...)
      * Format: OPEN rd ctx argsReg */
     public static final short OPEN = 165;

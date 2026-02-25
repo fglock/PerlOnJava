@@ -2481,6 +2481,19 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = resultReg;
                 return;
             }
+            // local *GLOB - localize a typeglob
+            if (node.operand instanceof OperatorNode sigilOp2
+                    && sigilOp2.operator.equals("*")
+                    && sigilOp2.operand instanceof IdentifierNode idNode2) {
+                String globalName = NameNormalizer.normalizeVariableName(idNode2.name, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
+                int rd = allocateRegister();
+                emit(Opcodes.LOCAL_GLOB);
+                emitReg(rd);
+                emit(nameIdx);
+                lastResultReg = rd;
+                return;
+            }
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
         throwCompilerException("Unsupported variable declaration operator: " + op);
