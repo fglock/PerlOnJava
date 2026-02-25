@@ -354,7 +354,7 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDeref();
+        registers[rd] = registers[rs].scalar().scalarDeref();
         return pc;
     }
 
@@ -373,7 +373,7 @@ public class SlowOpcodeHandler {
         int rs = bytecode[pc++];
         int pkgIdx = bytecode[pc++];
         String pkg = code.stringPool[pkgIdx];
-        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDerefNonStrict(pkg);
+        registers[rd] = registers[rs].scalar().scalarDerefNonStrict(pkg);
         return pc;
     }
 
