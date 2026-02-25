@@ -889,19 +889,21 @@ public class BytecodeInterpreter {
 
                     case Opcodes.HASH_KEYS: {
                         // Get hash keys: rd = keys %hash
+                        // Call .keys() on RuntimeBase so that scalars/undef throw the proper
+                        // "Type of arg 1 to keys must be hash or array" Perl error.
                         int rd = bytecode[pc++];
                         int hashReg = bytecode[pc++];
-                        RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                        registers[rd] = hash.keys();
+                        registers[rd] = registers[hashReg].keys();
                         break;
                     }
 
                     case Opcodes.HASH_VALUES: {
                         // Get hash values: rd = values %hash
+                        // Call .values() on RuntimeBase so that scalars/undef throw the proper
+                        // "Type of arg 1 to values must be hash or array" Perl error.
                         int rd = bytecode[pc++];
                         int hashReg = bytecode[pc++];
-                        RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                        registers[rd] = hash.values();
+                        registers[rd] = registers[hashReg].values();
                         break;
                     }
 

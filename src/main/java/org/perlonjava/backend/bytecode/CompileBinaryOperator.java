@@ -599,12 +599,22 @@ public class CompileBinaryOperator {
             }
         }
 
-        // Compile left and right operands (for non-short-circuit operators)
+        // Compile left and right operands (for non-short-circuit operators).
+        // For =~ and !~, force SCALAR context so sub calls like constant regex
+        // subs emit ctx=SCALAR and CALL_SUB converts the result to scalar.
+        boolean isBindOp = node.operator.equals("=~") || node.operator.equals("!~");
+        int savedCtx = bytecodeCompiler.currentCallContext;
+        if (isBindOp) {
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+        }
         node.left.accept(bytecodeCompiler);
         int rs1 = bytecodeCompiler.lastResultReg;
 
         node.right.accept(bytecodeCompiler);
         int rs2 = bytecodeCompiler.lastResultReg;
+        if (isBindOp) {
+            bytecodeCompiler.currentCallContext = savedCtx;
+        }
 
         // Emit opcode based on operator (delegated to helper method)
         int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());

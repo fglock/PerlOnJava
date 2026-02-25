@@ -741,10 +741,9 @@ public class OpcodeHandlerExtended {
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
-        // stringReg may be a RuntimeList (e.g. from ($_ = "x") =~ s/.../e) — coerce to scalar
         registers[rd] = RuntimeRegex.matchRegex(
-            (RuntimeScalar) registers[regexReg],  // quotedRegex first
-            registers[stringReg].scalar(),        // string second (coerce to scalar)
+            (RuntimeScalar) registers[regexReg],
+            (RuntimeScalar) registers[stringReg],
             ctx
         );
         return pc;
@@ -759,10 +758,9 @@ public class OpcodeHandlerExtended {
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
-        // stringReg may be a RuntimeList — coerce to scalar
         RuntimeBase matchResult = RuntimeRegex.matchRegex(
-            (RuntimeScalar) registers[regexReg],  // quotedRegex first
-            registers[stringReg].scalar(),        // string second (coerce to scalar)
+            (RuntimeScalar) registers[regexReg],
+            (RuntimeScalar) registers[stringReg],
             ctx
         );
         // Negate the boolean result
