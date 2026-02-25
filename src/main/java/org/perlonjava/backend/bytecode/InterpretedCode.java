@@ -1236,7 +1236,12 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.EVAL_STRING:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
-                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(")\n");
+                    int evalCtx = bytecode[pc++];
+                    int evalTagIdx = bytecode[pc++];
+                    sb.append("EVAL_STRING r").append(rd)
+                      .append(" = eval(r").append(rs)
+                      .append(", ctx=").append(evalCtx)
+                      .append(", tag=").append(stringPool[evalTagIdx]).append(")\n");
                     break;
                 case Opcodes.SELECT_OP:
                     rd = bytecode[pc++];

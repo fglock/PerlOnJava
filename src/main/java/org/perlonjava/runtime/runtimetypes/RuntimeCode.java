@@ -842,7 +842,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         1,
                         evalCtx.errorUtil,
                         adjustedRegistry);
-                compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
+                // BytecodeCompiler.compile() snapshots evalCtx.symbolTable (= capturedSymbolTable
+                // snapshot with correct compile-time package, pragmas, and flags) — no need
+                // to call setCompilePackage() separately.
                 interpretedCode = compiler.compile(ast, evalCtx);
                 if (DISASSEMBLE) {
                     System.out.println(interpretedCode.disassemble());

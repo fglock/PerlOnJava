@@ -45,11 +45,13 @@ public class EvalStringHandler {
      * @param sourceLine    Source line for error messages
      * @return RuntimeScalar result of evaluation (undef on error)
      */
-    public static RuntimeScalar evalString(String perlCode,
-                                          InterpretedCode currentCode,
-                                          RuntimeBase[] registers,
-                                          String sourceName,
-                                          int sourceLine) {
+    public static RuntimeList evalString(String perlCode,
+                                         InterpretedCode currentCode,
+                                         RuntimeBase[] registers,
+                                         String sourceName,
+                                         int sourceLine,
+                                         int callContext,
+                                         String evalTag) {
         try {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -58,31 +60,18 @@ public class EvalStringHandler {
             Lexer lexer = new Lexer(perlCode);
             List<LexerToken> tokens = lexer.tokenize();
 
-            // Create minimal EmitterContext for parsing
-            // IMPORTANT: Inherit strict/feature/warning flags from parent scope
-            // This matches Perl's eval STRING semantics where eval inherits lexical pragmas
+            // Retrieve compile-time EmitterContext from RuntimeCode.evalContext —
+            // exactly as evalStringWithInterpreter does. The context was stored by
+            // CompileOperator when the EVAL_STRING opcode was emitted, capturing the
+            // exact scope manager state (package, pragmas, warnings) at that call site.
+            EmitterContext savedCtx = (evalTag != null) ? RuntimeCode.evalContext.get(evalTag) : null;
+            ScopedSymbolTable callSiteScope = (savedCtx != null) ? savedCtx.symbolTable : null;
+
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = sourceName + " (eval)";
-            ScopedSymbolTable symbolTable = new ScopedSymbolTable();
-
-            // Inherit lexical pragma flags from parent if available
-            if (currentCode != null) {
-                // Replace default values with parent's flags
-                symbolTable.strictOptionsStack.pop();
-                symbolTable.strictOptionsStack.push(currentCode.strictOptions);
-                symbolTable.featureFlagsStack.pop();
-                symbolTable.featureFlagsStack.push(currentCode.featureFlags);
-                symbolTable.warningFlagsStack.pop();
-                symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
-            }
-
-            // Inherit the compile-time package from the calling code, matching what
-            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
-            // Using the compile-time package (not InterpreterState.currentPackage which is
-            // the runtime package) ensures bare names like *named resolve to FOO3::named
-            // when the eval call site is inside "package FOO3".
-            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
-            symbolTable.setCurrentPackage(compilePackage, false);
+            ScopedSymbolTable symbolTable = (callSiteScope != null)
+                    ? callSiteScope.snapShot()
+                    : new ScopedSymbolTable();
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
@@ -90,7 +79,7 @@ public class EvalStringHandler {
                 symbolTable,
                 null, // mv
                 null, // cw
-                RuntimeContextType.SCALAR,
+                callContext,
                 false, // isBoxed
                 errorUtil,
                 opts,
@@ -164,15 +153,14 @@ public class EvalStringHandler {
             }
 
             // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
-            // The compile-time package is already propagated via ctx.symbolTable (set above
-            // from currentCode.compilePackage), so BytecodeCompiler will use it for name
-            // resolution (e.g. *named -> FOO3::named) without needing setCompilePackage().
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
                 sourceLine,
                 errorUtil,
                 adjustedRegistry  // Pass adjusted registry for variable capture
             );
+            // BytecodeCompiler.compile() will snapshot ctx.symbolTable (which already
+            // has the correct package set above) — no need to call setCompilePackage().
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
             if (RuntimeCode.DISASSEMBLE) {
                 System.out.println(evalCode.disassemble());
@@ -197,15 +185,14 @@ public class EvalStringHandler {
 
             // Step 6: Execute the compiled code
             RuntimeArray args = new RuntimeArray();  // Empty @_
-            RuntimeList result = evalCode.apply(args, RuntimeContextType.SCALAR);
-
-            // Step 7: Return scalar result
-            return result.scalar();
+            return evalCode.apply(args, callContext);
 
         } catch (Exception e) {
             // Step 8: Handle errors - set $@ and return undef
             WarnDie.catchEval(e);
-            return RuntimeScalarCache.scalarUndef;
+            return (callContext == RuntimeContextType.LIST)
+                    ? new RuntimeList()
+                    : new RuntimeList(RuntimeScalarCache.scalarUndef);
         }
     }
 

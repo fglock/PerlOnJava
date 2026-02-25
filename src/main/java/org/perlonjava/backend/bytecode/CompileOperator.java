@@ -1,16 +1,26 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.runtime.runtimetypes.ClassRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.app.cli.CompilerOptions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+
 
 public class CompileOperator {
+    /** Counter for generating unique eval tags, matching JVM compiler's evalTag scheme. */
+    private static final AtomicInteger EVAL_TAG_COUNTER = new AtomicInteger(0);
+
     public static void visitOperator(BytecodeCompiler bytecodeCompiler, OperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
@@ -835,10 +845,27 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Emit direct opcode EVAL_STRING
+                // Store a compile-time EmitterContext snapshot in RuntimeCode.evalContext,
+                // exactly as the JVM compiler does via EmitEval/evalTag.
+                // The evalTag is unique per eval site and baked into the string pool.
+                String evalTag = "interp_eval_" + EVAL_TAG_COUNTER.incrementAndGet();
+                EmitterContext snapCtx = new EmitterContext(
+                    new JavaClassInfo(),
+                    bytecodeCompiler.symbolTable.snapShot(), // compile-time scope snapshot
+                    null, null,
+                    bytecodeCompiler.currentCallContext,
+                    false,
+                    null,
+                    new CompilerOptions(),
+                    null
+                );
+                RuntimeCode.evalContext.put(evalTag, snapCtx);
+                int tagIdx = bytecodeCompiler.addToStringPool(evalTag);
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(tagIdx);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
@@ -883,14 +910,27 @@ public class CompileOperator {
             // undef operator - returns undefined value
             // Can be used standalone: undef
             // Or with an operand to undef a variable: undef $x (not implemented yet)
-            int undefReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-            bytecodeCompiler.emitReg(undefReg);
-            bytecodeCompiler.lastResultReg = undefReg;
+            //
+            // Special case: in VOID context with no operand, this is a no-op placeholder
+            // emitted by the parser for END/BEGIN/INIT/CHECK/UNITCHECK blocks that have
+            // already been executed. Emitting LOAD_UNDEF here would overwrite the previous
+            // statement's result (e.g. `eval '1; END { }'` must return 1, not undef).
+            if (node.operand == null
+                    && bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
+                bytecodeCompiler.lastResultReg = -1;
+            } else {
+                int undefReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                bytecodeCompiler.emitReg(undefReg);
+                bytecodeCompiler.lastResultReg = undefReg;
+            }
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
-            // Compile operand
+            // Compile operand in scalar context
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
             node.operand.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
             int operandReg = bytecodeCompiler.lastResultReg;
 
             // Allocate result register

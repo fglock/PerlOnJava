@@ -240,6 +240,9 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
+        int callContext = bytecode[pc++];
+        // Compile-time evalTag baked by CompileOperator — retrieve scope from RuntimeCode.evalContext
+        String evalTag = code.stringPool[bytecode[pc++]];
 
         // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
         RuntimeBase codeValue = registers[stringReg];
@@ -253,15 +256,19 @@ public class SlowOpcodeHandler {
         String perlCode = codeScalar.toString();
 
         // Call EvalStringHandler to parse, compile, and execute
-        RuntimeScalar result = EvalStringHandler.evalString(
+        RuntimeList result = EvalStringHandler.evalString(
             perlCode,
             code,           // Current InterpretedCode for context
             registers,      // Current registers for variable access
             code.sourceName,
-            code.sourceLine
+            code.sourceLine,
+            callContext,
+            evalTag         // Compile-time evalTag — EvalStringHandler retrieves scope via RuntimeCode.evalContext
         );
 
-        registers[rd] = result;
+        registers[rd] = (callContext == RuntimeContextType.SCALAR)
+                ? result.scalar()
+                : result;
         return pc;
     }
 

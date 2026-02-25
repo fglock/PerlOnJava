@@ -794,6 +794,10 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int operandReg = bytecode[pc++];
                         RuntimeBase operand = registers[operandReg];
+                        if (operand == null) {
+                            registers[rd] = RuntimeScalarCache.scalarUndef;
+                            break;
+                        }
                         if (operand instanceof RuntimeList) {
                             // For RuntimeList in list assignment context, return the count
                             registers[rd] = new RuntimeScalar(((RuntimeList) operand).size());
@@ -2052,6 +2056,16 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.POP_PACKAGE: {
+                        // Scoped package block exit: closing } of package Foo { ... }
+                        // Restore the previous package by popping exactly one saved dynamic state.
+                        int level = DynamicVariableManager.getLocalLevel();
+                        if (level > 0) {
+                            DynamicVariableManager.popToLocalLevel(level - 1);
+                        }
+                        break;
+                    }
+
                     default:
                         // Unknown opcode
                         int opcodeInt = opcode;
@@ -2386,6 +2400,10 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int operandReg = bytecode[pc++];
                 RuntimeBase operand = registers[operandReg];
+                if (operand == null) {
+                    registers[rd] = RuntimeScalarCache.scalarUndef;
+                    return pc;
+                }
                 if (operand instanceof RuntimeList) {
                     registers[rd] = new RuntimeScalar(((RuntimeList) operand).size());
                 } else {

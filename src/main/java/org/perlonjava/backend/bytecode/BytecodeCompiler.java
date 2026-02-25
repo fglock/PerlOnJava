@@ -37,7 +37,8 @@ public class BytecodeCompiler implements Visitor {
 
     // Symbol table for package/class tracking
     // Tracks current package, class flag, and package versions like the compiler does
-    final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+    // Initialized to a fresh table; overwritten in compile() from ctx.symbolTable when available.
+    ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
     // Stack to save/restore register state when entering/exiting scopes
     private final Stack<Integer> savedNextRegister = new Stack<>();
@@ -472,9 +473,29 @@ public class BytecodeCompiler implements Visitor {
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
-            // Use the calling context from EmitterContext for top-level expressions
-            // This is crucial for eval STRING to propagate context correctly
-            currentCallContext = ctx.contextType;
+            // Use the calling context from EmitterContext for top-level expressions.
+            // Exception: eval STRING body always produces the value of its last expression,
+            // even when the caller uses it in void context. Compiling the body in VOID
+            // context would discard the result (e.g. `INIT { eval '1' or die }` would
+            // fail because eval returns undef). Use SCALAR as the minimum context.
+            currentCallContext = (ctx.contextType == RuntimeContextType.VOID)
+                    ? RuntimeContextType.SCALAR
+                    : ctx.contextType;
+
+            // Sync package, pragmas, warnings, and features from ctx.symbolTable.
+            // ctx.symbolTable is the compile-time scope snapshot at the eval call site —
+            // it has the correct package (e.g. FOO3) and pragma state.
+            if (ctx.symbolTable != null) {
+                symbolTable.setCurrentPackage(
+                        ctx.symbolTable.getCurrentPackage(),
+                        ctx.symbolTable.currentPackageIsClass());
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+                symbolTable.warningFlagsStack.pop();
+                symbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
+            }
         }
 
         // If we have captured variables, allocate registers for them
@@ -489,17 +510,6 @@ public class BytecodeCompiler implements Visitor {
 
         // Visit the node to generate bytecode
         node.accept(this);
-
-        // Convert result to scalar context if needed (for eval STRING)
-        if (currentCallContext == RuntimeContextType.SCALAR && lastResultReg >= 0) {
-            RuntimeBase lastResult = null; // Can't access at compile time
-            // Use ARRAY_SIZE to convert arrays/lists to scalar count
-            int scalarReg = allocateRegister();
-            emit(Opcodes.ARRAY_SIZE);
-            emitReg(scalarReg);
-            emitReg(lastResultReg);
-            lastResultReg = scalarReg;
-        }
 
         // Emit RETURN with last result register
         // If no result was produced, return undef instead of register 0 ("this")
@@ -697,6 +707,26 @@ public class BytecodeCompiler implements Visitor {
             outerResultReg = allocateRegister();
         }
 
+        // Detect scoped package/class blocks: parseOptionalPackageBlock inserts the
+        // package/class OperatorNode as the first element and marks it with isScoped=true.
+        // The package node itself emits PUSH_PACKAGE; we emit POP_PACKAGE here so normal
+        // fallthrough restores the previous package.
+        boolean isScopedPackageBlock = !node.elements.isEmpty()
+                && node.elements.getFirst() instanceof OperatorNode pkgOp
+                && (pkgOp.operator.equals("package") || pkgOp.operator.equals("class"))
+                && Boolean.TRUE.equals(pkgOp.getAnnotation("isScoped"));
+
+        // Scoped package/class blocks change the compiler's symbolTable current package when
+        // compiling the leading package/class OperatorNode. Restore it after the block so
+        // subsequent name resolution (notably eval STRING compilation) uses the correct
+        // call-site package.
+        String savedCompilePackage = null;
+        boolean savedCompilePackageIsClass = false;
+        if (isScopedPackageBlock) {
+            savedCompilePackage = symbolTable.getCurrentPackage();
+            savedCompilePackageIsClass = symbolTable.currentPackageIsClass();
+        }
+
         // Detect the BlockNode([local $_, For1Node(needsArrayOfAlias)]) pattern produced
         // by the parser for implicit-$_ foreach loops. For1Node emits LOCAL_SCALAR_SAVE_LEVEL
         // itself, so the 'local $_' child must be skipped here to avoid double-emission.
@@ -711,6 +741,25 @@ public class BytecodeCompiler implements Visitor {
 
         // Visit each statement in the block
         int numStatements = node.elements.size();
+
+        // Pre-scan to find the last value-producing statement index.
+        // Special blocks (END/BEGIN/INIT/CHECK/UNITCHECK) parse to OperatorNode("undef")
+        // and produce no return value. They must not be treated as the last statement
+        // for return-value purposes (e.g. `eval '1; END { }'` must return 1, not undef).
+        int lastValueProducingIndex = numStatements - 1;
+        for (int i = numStatements - 1; i >= 0; i--) {
+            Node stmt = node.elements.get(i);
+            // OperatorNode("undef") with no operand is how the parser represents special
+            // blocks that have already been executed (BEGIN/END/INIT/CHECK/UNITCHECK).
+            boolean isSpecialBlockPlaceholder = stmt instanceof OperatorNode op
+                    && "undef".equals(op.operator)
+                    && op.operand == null;
+            if (!isSpecialBlockPlaceholder) {
+                lastValueProducingIndex = i;
+                break;
+            }
+        }
+
         for (int i = 0; i < numStatements; i++) {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
@@ -727,8 +776,8 @@ public class BytecodeCompiler implements Visitor {
             int savedContext = currentCallContext;
 
             // If this is not an assignment or other value-using construct, use VOID context
-            // EXCEPT for the last statement in a block, which should use the block's context
-            boolean isLastStatement = (i == numStatements - 1);
+            // EXCEPT for the last value-producing statement in a block, which uses the block's context
+            boolean isLastStatement = (i == lastValueProducingIndex);
             if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
                 currentCallContext = RuntimeContextType.VOID;
             }
@@ -736,6 +785,30 @@ public class BytecodeCompiler implements Visitor {
             stmt.accept(this);
 
             currentCallContext = savedContext;
+
+            // After the last value-producing statement, preserve its lastResultReg.
+            // Subsequent void-context statements (e.g. END/BEGIN placeholders) must
+            // not overwrite it, even if they set lastResultReg = -1.
+            if (isLastStatement) {
+                // Freeze the result here; nothing after this should change it
+                int frozenResult = lastResultReg;
+                // Recycle temporaries, then restore
+                recycleTemporaryRegisters();
+                lastResultReg = frozenResult;
+                // Continue visiting remaining statements (e.g. END placeholders) as void
+                for (int j = i + 1; j < numStatements; j++) {
+                    Node trailing = node.elements.get(j);
+                    if (trailing == null) continue;
+                    int savedCtx2 = currentCallContext;
+                    currentCallContext = RuntimeContextType.VOID;
+                    trailing.accept(this);
+                    currentCallContext = savedCtx2;
+                    recycleTemporaryRegisters();
+                }
+                // Restore frozen result and break out of outer loop
+                lastResultReg = frozenResult;
+                break;
+            }
 
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
@@ -747,6 +820,14 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.MOVE);
             emitReg(outerResultReg);
             emitReg(lastResultReg);
+        }
+
+        // Restore previous package for scoped package/class blocks.
+        if (isScopedPackageBlock) {
+            emit(Opcodes.POP_PACKAGE);
+
+            // Restore compile-time package tracking.
+            symbolTable.setCurrentPackage(savedCompilePackage, savedCompilePackageIsClass);
         }
 
         // Exit scope restores register state
@@ -1243,7 +1324,12 @@ public class BytecodeCompiler implements Visitor {
                     // Global variable - need to load it first
                     isGlobal = true;
                     targetReg = allocateRegister();
-                    String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    // NameNormalizer expects a variable name WITHOUT the sigil.
+                    // Using "$main::x" here would create a different global key than
+                    // regular assignments (which normalize "main::x"), so compound
+                    // assigns would update the wrong global.
+                    String bareVarName = varName.substring(1);
+                    String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
                     int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emitReg(targetReg);
@@ -1313,7 +1399,9 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
             }
 
-            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+            // NameNormalizer expects a variable name WITHOUT the sigil.
+            String bareVarName = varName.substring(1);
+            String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
             emit(nameIdx);
@@ -3902,9 +3990,13 @@ public class BytecodeCompiler implements Visitor {
         // List elements should be evaluated in LIST context
         if (node.elements.size() == 1) {
             int savedContext = currentCallContext;
-            currentCallContext = RuntimeContextType.LIST;
             try {
-                node.elements.get(0).accept(this);
+                Node element = node.elements.get(0);
+                String argContext = (String) element.getAnnotation("context");
+                currentCallContext = (argContext != null && argContext.equals("SCALAR"))
+                        ? RuntimeContextType.SCALAR
+                        : RuntimeContextType.LIST;
+                element.accept(this);
                 int elemReg = lastResultReg;
 
                 int listReg = allocateRegister();
@@ -3923,11 +4015,15 @@ public class BytecodeCompiler implements Visitor {
         // Evaluate each element into a register
         // List elements should be evaluated in LIST context
         int savedContext = currentCallContext;
-        currentCallContext = RuntimeContextType.LIST;
         try {
             int[] elementRegs = new int[node.elements.size()];
             for (int i = 0; i < node.elements.size(); i++) {
-                node.elements.get(i).accept(this);
+                Node element = node.elements.get(i);
+                String argContext = (String) element.getAnnotation("context");
+                currentCallContext = (argContext != null && argContext.equals("SCALAR"))
+                        ? RuntimeContextType.SCALAR
+                        : RuntimeContextType.LIST;
+                element.accept(this);
                 elementRegs[i] = lastResultReg;
             }
 
