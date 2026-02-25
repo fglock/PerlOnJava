@@ -186,6 +186,17 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.LOAD_VSTRING: {
+                        // Load v-string literal with VSTRING type (e.g. v5.5.640)
+                        // Mirrors JVM EmitLiteral isVString handling.
+                        int rd = bytecode[pc++];
+                        int strIndex = bytecode[pc++];
+                        RuntimeScalar vs = new RuntimeScalar(code.stringPool[strIndex]);
+                        vs.type = RuntimeScalarType.VSTRING;
+                        registers[rd] = vs;
+                        break;
+                    }
+
                     case Opcodes.LOAD_UNDEF: {
                         // Load undef: rd = new RuntimeScalar()
                         int rd = bytecode[pc++];
@@ -1458,8 +1469,8 @@ public class BytecodeInterpreter {
                     // LIST OPERATIONS
                     // =================================================================
 
-                    case Opcodes.LIST_TO_SCALAR: {
-                        // Convert list to scalar context (returns size)
+                    case Opcodes.LIST_TO_COUNT: {
+                        // Convert list/array to its count in scalar context (e.g. @arr used as number)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
@@ -1468,9 +1479,16 @@ public class BytecodeInterpreter {
                         } else if (val instanceof RuntimeArray) {
                             registers[rd] = new RuntimeScalar(((RuntimeArray) val).size());
                         } else {
-                            // Already a scalar
                             registers[rd] = val.scalar();
                         }
+                        break;
+                    }
+
+                    case Opcodes.LIST_TO_SCALAR: {
+                        // Convert list to scalar context: returns last element (Perl list-in-scalar semantics)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = registers[rs].scalar();
                         break;
                     }
 

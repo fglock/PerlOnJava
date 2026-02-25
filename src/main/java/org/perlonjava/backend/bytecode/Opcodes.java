@@ -254,8 +254,9 @@ public class Opcodes {
     // CONTEXT OPERATIONS (60-61)
     // =================================================================
 
-    /** List to scalar: rd = list_reg.scalar() */
-    public static final short LIST_TO_SCALAR = 60;
+    /** Convert list/array to count in scalar context: rd = list.size()
+     * Format: LIST_TO_COUNT rd rs */
+    public static final short LIST_TO_COUNT = 60;
 
     /** Scalar to list: rd = new RuntimeList(scalar_reg) */
     public static final short SCALAR_TO_LIST = 61;
@@ -1092,6 +1093,17 @@ public class Opcodes {
      * Matches JVM path: scalarDerefNonStrict(pkg) — used when strict refs is disabled.
      * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx */
     public static final short DEREF_SCALAR_NONSTRICT = 336;
+
+    /** Load v-string literal: rd = new RuntimeScalar(stringPool[index]) with type=VSTRING
+     * Mirrors JVM EmitLiteral handling of isVString nodes.
+     * Format: LOAD_VSTRING rd strIndex */
+    public static final short LOAD_VSTRING = 337;
+
+    /** Convert list/array to its last element in scalar context: rd = list.scalar()
+     * A list in scalar context returns its last element (Perl semantics).
+     * Contrast with LIST_TO_COUNT which returns list size.
+     * Format: LIST_TO_SCALAR rd rs */
+    public static final short LIST_TO_SCALAR = 338;
 
     private Opcodes() {} // Utility class - no instantiation
 }

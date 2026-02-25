@@ -743,7 +743,12 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(Opcodes.STORE_GLOBAL_SCALAR);
                         bytecodeCompiler.emit(nameIdx);
                         bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.lastResultReg = valueReg;
+                        // Return the global lvalue so ($_ = "x") =~ s/// modifies $_ in-place
+                        int lvalReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        bytecodeCompiler.emitReg(lvalReg);
+                        bytecodeCompiler.emit(nameIdx);
+                        bytecodeCompiler.lastResultReg = lvalReg;
                     }
                 } else if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
                     // Array assignment: @array = ...
@@ -986,6 +991,10 @@ public class CompileAssignment {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
                     }
                 } else {
+                    // chop/chomp cannot be used as lvalues (matches JVM compiler message)
+                    if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
+                        bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");
+                    }
                     bytecodeCompiler.throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);
                 }
             } else if (node.left instanceof IdentifierNode) {
@@ -1011,7 +1020,13 @@ public class CompileAssignment {
                     bytecodeCompiler.emit(Opcodes.STORE_GLOBAL_SCALAR);
                     bytecodeCompiler.emit(nameIdx);
                     bytecodeCompiler.emitReg(valueReg);
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    // Return the global variable lvalue (not the rhs copy) so that
+                    // ($_ = "x") =~ s/// can modify $_ in-place via the lvalue.
+                    int lvalueReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    bytecodeCompiler.emitReg(lvalueReg);
+                    bytecodeCompiler.emit(nameIdx);
+                    bytecodeCompiler.lastResultReg = lvalueReg;
                 }
             } else if (node.left instanceof BinaryOperatorNode) {
                 BinaryOperatorNode leftBin = (BinaryOperatorNode) node.left;

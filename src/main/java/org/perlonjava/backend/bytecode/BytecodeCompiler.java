@@ -804,11 +804,12 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        // Emit LOAD_STRING: rd = new RuntimeScalar(stringPool[index])
+        // Emit LOAD_STRING or LOAD_VSTRING depending on whether this is a v-string literal.
+        // LOAD_VSTRING sets type=VSTRING so that ModuleOperators.require() recognises version strings.
         int rd = allocateRegister();
         int strIndex = addToStringPool(node.value);
 
-        emit(Opcodes.LOAD_STRING);
+        emit(node.isVString ? Opcodes.LOAD_VSTRING : Opcodes.LOAD_STRING);
         emitReg(rd);
         emit(strIndex);
 
@@ -1266,7 +1267,7 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 // May need to convert list to scalar
                 int scalarReg = allocateRegister();
-                emit(Opcodes.LIST_TO_SCALAR);
+                emit(Opcodes.LIST_TO_COUNT);
                 emitReg(scalarReg);
                 emitReg(targetReg);
                 targetReg = scalarReg;

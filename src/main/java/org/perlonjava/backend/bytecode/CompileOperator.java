@@ -1658,6 +1658,28 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(stringReg);
 
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("<>")) {
+            // Diamond operator: read from @ARGV files or STDIN (like Perl's <>)
+            // Mirrors JVM EmitOperator.handleDiamondBuiltin: evaluates operand in SCALAR context
+            // then calls DiamondIO.readline(arg, ctx).
+            // We reuse the READLINE opcode; executeReadline detects non-glob scalars and
+            // routes to DiamondIO.readline.
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(bytecodeCompiler);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedContext;
+            }
+            int fhReg = bytecodeCompiler.lastResultReg;
+
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.READLINE);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(fhReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("open")) {
             // open(filehandle, mode, filename) or open(filehandle, expr)
             if (node.operand == null || !(node.operand instanceof ListNode)) {
@@ -1748,8 +1770,12 @@ public class CompileOperator {
 
             // Check if a string was provided (from =~ binding)
             if (args.elements.size() > 2) {
-                // String provided - perform the match
+                // String provided - perform the match in SCALAR context so that
+                // ($_ = "x") =~ m/.../ returns the lvalue, not a RuntimeList.
+                int savedCtx = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
                 args.elements.get(2).accept(bytecodeCompiler);
+                bytecodeCompiler.currentCallContext = savedCtx;
                 int stringReg = bytecodeCompiler.lastResultReg;
 
                 // Call MATCH_REGEX to perform the match
@@ -1762,8 +1788,24 @@ public class CompileOperator {
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
-                // No string provided - just return the regex object
-                bytecodeCompiler.lastResultReg = regexReg;
+                // No string provided - match against $_ (Perl default)
+                int stringReg;
+                if (bytecodeCompiler.hasVariable("$_")) {
+                    stringReg = bytecodeCompiler.getVariableRegister("$_");
+                } else {
+                    stringReg = bytecodeCompiler.allocateRegister();
+                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
+                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    bytecodeCompiler.emitReg(stringReg);
+                    bytecodeCompiler.emit(nameIdx);
+                }
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(stringReg);
+                bytecodeCompiler.emitReg(regexReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.lastResultReg = rd;
             }
         } else if (op.equals("replaceRegex")) {
             // s/pattern/replacement/flags - regex substitution
@@ -1800,8 +1842,13 @@ public class CompileOperator {
             // Get the string to operate on (element 3 if provided, else $_)
             int stringReg;
             if (args.elements.size() > 3) {
-                // String provided in operand list (from =~ binding)
+                // String provided in operand list (from =~ binding).
+                // Must compile in SCALAR context: a list like ($_ = "x") must yield
+                // the last element as a scalar lvalue, not a RuntimeList.
+                int savedCtx = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
                 args.elements.get(3).accept(bytecodeCompiler);
+                bytecodeCompiler.currentCallContext = savedCtx;
                 stringReg = bytecodeCompiler.lastResultReg;
             } else {
                 // Use $_ as default

@@ -548,8 +548,29 @@ public class CompileBinaryOperator {
                         || rightOp.operator.equals("tr")
                         || rightOp.operator.equals("transliterate")) {
 
-                    // Create a copy of the operand list and add the left side (string)
                     ListNode originalList = (ListNode) rightOp.operand;
+
+                    // For !~, check for s///r and y///r which don't make sense (mirrors JVM handleNotBindRegex)
+                    if (node.operator.equals("!~")) {
+                        if ((rightOp.operator.equals("tr") || rightOp.operator.equals("transliterate"))
+                                && originalList.elements.size() >= 3
+                                && originalList.elements.get(2) instanceof StringNode) {
+                            String mods = ((StringNode) originalList.elements.get(2)).value;
+                            if (mods.contains("r")) {
+                                bytecodeCompiler.throwCompilerException("Using !~ with tr///r doesn't make sense");
+                            }
+                        }
+                        if (rightOp.operator.equals("replaceRegex")
+                                && originalList.elements.size() >= 2
+                                && originalList.elements.get(1) instanceof StringNode) {
+                            String mods = ((StringNode) originalList.elements.get(1)).value;
+                            if (mods.contains("r")) {
+                                bytecodeCompiler.throwCompilerException("Using !~ with s///r doesn't make sense");
+                            }
+                        }
+                    }
+
+                    // Create a copy of the operand list and add the left side (string)
                     ListNode boundList = new ListNode(new java.util.ArrayList<>(originalList.elements), originalList.tokenIndex);
                     boundList.elements.add(node.left);
 

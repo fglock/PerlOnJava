@@ -721,7 +721,14 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int fhReg = bytecode[pc++];
         int ctx = bytecode[pc++];
-        registers[rd] = Readline.readline((RuntimeScalar) registers[fhReg], ctx);
+        RuntimeScalar fh = (RuntimeScalar) registers[fhReg];
+        // Diamond operator <> passes a plain string scalar (not a glob/IO).
+        // Route to DiamondIO.readline which manages @ARGV / STDIN iteration.
+        if (fh.getRuntimeIO() == null) {
+            registers[rd] = DiamondIO.readline(fh, ctx);
+        } else {
+            registers[rd] = Readline.readline(fh, ctx);
+        }
         return pc;
     }
 
@@ -734,9 +741,10 @@ public class OpcodeHandlerExtended {
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        // stringReg may be a RuntimeList (e.g. from ($_ = "x") =~ s/.../e) — coerce to scalar
         registers[rd] = RuntimeRegex.matchRegex(
             (RuntimeScalar) registers[regexReg],  // quotedRegex first
-            (RuntimeScalar) registers[stringReg], // string second
+            registers[stringReg].scalar(),        // string second (coerce to scalar)
             ctx
         );
         return pc;
@@ -751,9 +759,10 @@ public class OpcodeHandlerExtended {
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        // stringReg may be a RuntimeList — coerce to scalar
         RuntimeBase matchResult = RuntimeRegex.matchRegex(
             (RuntimeScalar) registers[regexReg],  // quotedRegex first
-            (RuntimeScalar) registers[stringReg], // string second
+            registers[stringReg].scalar(),        // string second (coerce to scalar)
             ctx
         );
         // Negate the boolean result

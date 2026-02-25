@@ -329,6 +329,15 @@ public class InterpretedCode extends RuntimeCode {
                     }
                     sb.append("\"\n");
                     break;
+                case Opcodes.LOAD_VSTRING:
+                    rd = bytecode[pc++];
+                    strIdx = bytecode[pc++];
+                    sb.append("LOAD_VSTRING r").append(rd).append(" = v\"");
+                    if (stringPool != null && strIdx < stringPool.length) {
+                        sb.append(stringPool[strIdx]);
+                    }
+                    sb.append("\"\n");
+                    break;
                 case Opcodes.LOAD_UNDEF:
                     rd = bytecode[pc++];
                     sb.append("LOAD_UNDEF r").append(rd).append("\n");
@@ -1223,10 +1232,15 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];
                     sb.append("RIGHT_SHIFT r").append(rd).append(" = r").append(rs1).append(" >> r").append(rs2).append("\n");
                     break;
+                case Opcodes.LIST_TO_COUNT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LIST_TO_COUNT r").append(rd).append(" = count(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
-                    sb.append("LIST_TO_SCALAR r").append(rd).append(" = last_element(r").append(rs).append(")\n");
+                    sb.append("LIST_TO_SCALAR r").append(rd).append(" = scalar(r").append(rs).append(")\n");
                     break;
                 case Opcodes.SCALAR_TO_LIST:
                     rd = bytecode[pc++];
