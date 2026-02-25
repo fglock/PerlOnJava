@@ -1440,6 +1440,9 @@ public class InterpretedCode extends RuntimeCode {
                     break;
                 // GENERATED_DISASM_END
 
+                case Opcodes.GET_LOCAL_LEVEL:
+                    sb.append("GET_LOCAL_LEVEL r").append(bytecode[pc++]).append("\n");
+                    break;
                 case Opcodes.SET_PACKAGE:
                     sb.append("SET_PACKAGE '").append(stringPool[bytecode[pc++]]).append("'\n");
                     break;

@@ -2083,6 +2083,13 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.GET_LOCAL_LEVEL: {
+                        // Save DynamicVariableManager local level into register rd
+                        int rd = bytecode[pc++];
+                        registers[rd] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
+                        break;
+                    }
+
                     case Opcodes.POP_PACKAGE:
                         // Scoped package block exit — restore handled by POP_LOCAL_LEVEL.
                         break;

@@ -707,6 +707,18 @@ public class BytecodeCompiler implements Visitor {
                 && node.elements.get(0) instanceof OperatorNode localOp
                 && localOp.operator.equals("local");
 
+        // If the first statement is a scoped package (package Foo { }),
+        // save the DynamicVariableManager level before the block body so PUSH_PACKAGE is restored.
+        int scopedPackageLevelReg = -1;
+        if (!node.elements.isEmpty()
+                && node.elements.get(0) instanceof OperatorNode firstOp
+                && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
+                && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"))) {
+            scopedPackageLevelReg = allocateRegister();
+            emit(Opcodes.GET_LOCAL_LEVEL);
+            emitReg(scopedPackageLevelReg);
+        }
+
         enterScope();
 
         // Visit each statement in the block
@@ -751,6 +763,13 @@ public class BytecodeCompiler implements Visitor {
 
         // Exit scope restores register state
         exitScope();
+
+        // Restore DynamicVariableManager level after scoped package block
+        // (undoes PUSH_PACKAGE emitted by the package operator inside the block)
+        if (scopedPackageLevelReg >= 0) {
+            emit(Opcodes.POP_LOCAL_LEVEL);
+            emitReg(scopedPackageLevelReg);
+        }
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
         lastResultReg = outerResultReg;
@@ -1244,7 +1263,9 @@ public class BytecodeCompiler implements Visitor {
                     // Global variable - need to load it first
                     isGlobal = true;
                     targetReg = allocateRegister();
-                    String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    // Strip sigil before normalizing (varName is "$x", need "x" for normalize)
+                    String normalizedName = NameNormalizer.normalizeVariableName(
+                        varName.substring(1), getCurrentPackage());
                     int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emitReg(targetReg);
@@ -1313,12 +1334,8 @@ public class BytecodeCompiler implements Visitor {
             if (shouldBlockGlobalUnderStrictVars(varName)) {
                 throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
             }
-
-            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
-            int nameIdx = addToStringPool(normalizedName);
-            emit(Opcodes.STORE_GLOBAL_SCALAR);
-            emit(nameIdx);
-            emitReg(targetReg);
+            // LOAD_GLOBAL_SCALAR loaded the live object; the compound-assign opcode
+            // already mutated it in-place via .set(), so no STORE_GLOBAL_SCALAR needed.
         }
 
         // The result is stored in targetReg
