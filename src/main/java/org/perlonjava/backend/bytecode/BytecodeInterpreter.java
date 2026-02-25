@@ -2083,6 +2083,37 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.FLIP_FLOP: {
+                        // Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(id, left, right)
+                        int rd = bytecode[pc++];
+                        int flipFlopId = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = ScalarFlipFlopOperator.evaluate(
+                            flipFlopId,
+                            ((RuntimeBase) registers[rs1]).scalar(),
+                            ((RuntimeBase) registers[rs2]).scalar());
+                        break;
+                    }
+
+                    case Opcodes.LOCAL_GLOB: {
+                        // Localize a typeglob: save state, return glob
+                        int rd = bytecode[pc++];
+                        int nameIdx = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+                        RuntimeGlob glob = GlobalVariable.getGlobalIO(name);
+                        DynamicVariableManager.pushLocalVariable(glob);
+                        registers[rd] = glob;
+                        break;
+                    }
+
+                    case Opcodes.GET_LOCAL_LEVEL: {
+                        // Save DynamicVariableManager local level into register rd
+                        int rd = bytecode[pc++];
+                        registers[rd] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
+                        break;
+                    }
+
                     case Opcodes.POP_PACKAGE:
                         // Scoped package block exit — restore handled by POP_LOCAL_LEVEL.
                         break;

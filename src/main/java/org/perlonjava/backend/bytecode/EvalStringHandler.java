@@ -78,12 +78,11 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Inherit the compile-time package from the calling code, matching what
-            // evalStringHelper (JVM path) does via capturedSymbolTable.snapShot().
-            // Using the compile-time package (not InterpreterState.currentPackage which is
-            // the runtime package) ensures bare names like *named resolve to FOO3::named
-            // when the eval call site is inside "package FOO3".
-            String compilePackage = (currentCode != null) ? currentCode.compilePackage : "main";
+            // Use the runtime package at the eval call site.
+            // InterpreterState.currentPackage tracks runtime package changes from SET_PACKAGE/
+            // PUSH_PACKAGE opcodes, so it correctly reflects the package active when eval is called.
+            // This matches Perl's behaviour: eval("__PACKAGE__") returns the package at call site.
+            String compilePackage = InterpreterState.currentPackage.get().toString();
             symbolTable.setCurrentPackage(compilePackage, false);
 
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);

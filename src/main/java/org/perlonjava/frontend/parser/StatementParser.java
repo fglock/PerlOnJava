@@ -879,6 +879,11 @@ public class StatementParser {
                 parser.isInClassBlock = wasInClassBlock;
             }
 
+            // Mark as scoped so BytecodeCompiler emits PUSH_PACKAGE (not SET_PACKAGE)
+            // and BlockNode.visit() brackets the block with GET_LOCAL_LEVEL/POP_LOCAL_LEVEL
+            // to restore the runtime package after the block exits.
+            packageNode.setAnnotation("isScoped", Boolean.TRUE);
+
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);
 
