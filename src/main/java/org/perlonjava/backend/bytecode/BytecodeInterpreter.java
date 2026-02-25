@@ -1405,15 +1405,10 @@ public class BytecodeInterpreter {
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
-                        // Only dereference if it's a RuntimeScalar with REFERENCE type
-                        if (value instanceof RuntimeScalar) {
-                            RuntimeScalar scalar = (RuntimeScalar) value;
-                            if (scalar.type == RuntimeScalarType.REFERENCE) {
-                                registers[rd] = scalar.scalarDeref();
-                            } else {
-                                // Non-reference scalar, just copy
-                                registers[rd] = value;
-                            }
+                        if (value instanceof RuntimeScalar scalar) {
+                            // Always go through scalarDeref() so non-reference types throw
+                            // "Not a SCALAR reference" (matches JVM path behaviour)
+                            registers[rd] = scalar.scalarDeref();
                         } else {
                             // RuntimeList or other types, pass through
                             registers[rd] = value;

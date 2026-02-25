@@ -991,6 +991,22 @@ public class CompileAssignment {
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
                     }
+                } else if (leftOp.operator.equals("*")) {
+                    // Glob assignment: *foo = *bar  or  'foo'->** = ...
+                    // Compile LHS glob, compile RHS, emit STORE_GLOB
+                    int savedCtx = bytecodeCompiler.currentCallContext;
+                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+                    node.left.accept(bytecodeCompiler);
+                    bytecodeCompiler.currentCallContext = savedCtx;
+                    int globReg = bytecodeCompiler.lastResultReg;
+
+                    node.right.accept(bytecodeCompiler);
+                    int valueReg2 = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(valueReg2);
+                    bytecodeCompiler.lastResultReg = globReg;
                 } else {
                     // chop/chomp cannot be used as lvalues (matches JVM compiler message)
                     if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
