@@ -90,6 +90,10 @@ public class BytecodeCompiler implements Visitor {
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
 
+    // The original caller context before eval STRING body promotion (VOID→SCALAR).
+    // wantarray inside eval STRING must reflect the TRUE outer context, not the promoted one.
+    int outerCallContext = RuntimeContextType.LIST;
+
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
     private String[] capturedVarNames;            // Parallel array of names
@@ -473,14 +477,11 @@ public class BytecodeCompiler implements Visitor {
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
-            // Use the calling context from EmitterContext for top-level expressions.
-            // Exception: eval STRING body always produces the value of its last expression,
-            // even when the caller uses it in void context. Compiling the body in VOID
-            // context would discard the result (e.g. `INIT { eval '1' or die }` would
-            // fail because eval returns undef). Use SCALAR as the minimum context.
-            currentCallContext = (ctx.contextType == RuntimeContextType.VOID)
-                    ? RuntimeContextType.SCALAR
-                    : ctx.contextType;
+            // Use the calling context from EmitterContext, exactly as the JVM compiler does.
+            // The true outer context is passed through unchanged so wantarray inside the
+            // eval body reflects the real call site context.
+            outerCallContext = ctx.contextType;
+            currentCallContext = ctx.contextType;
 
             // Sync package, pragmas, warnings, and features from ctx.symbolTable.
             // ctx.symbolTable is the compile-time scope snapshot at the eval call site —
