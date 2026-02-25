@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -1457,6 +1458,9 @@ public class CompileAssignment {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS
                 // In list context, returns the RHS list
+                // Validate lvalue context - throws PerlCompilerException for invalid LHS
+                // (e.g. "($a ? $x : ($y)) = 5" -> "Assignment to both a list and a scalar")
+                LValueVisitor.getContext(node.left);
                 ListNode listNode = (ListNode) node.left;
 
                 // Compile RHS in LIST context to get all elements
