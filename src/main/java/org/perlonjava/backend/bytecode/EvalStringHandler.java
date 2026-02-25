@@ -43,13 +43,15 @@ public class EvalStringHandler {
      * @param registers     Current register array (for variable access)
      * @param sourceName    Source name for error messages
      * @param sourceLine    Source line for error messages
+     * @param callContext   The calling context (VOID/SCALAR/LIST) for wantarray inside eval
      * @return RuntimeScalar result of evaluation (undef on error)
      */
     public static RuntimeScalar evalString(String perlCode,
                                           InterpretedCode currentCode,
                                           RuntimeBase[] registers,
                                           String sourceName,
-                                          int sourceLine) {
+                                          int sourceLine,
+                                          int callContext) {
         try {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -196,8 +198,10 @@ public class EvalStringHandler {
             }
 
             // Step 6: Execute the compiled code
+            // Use the true outer call context so wantarray() inside the eval body
+            // returns the correct value (undef for void, false for scalar, true for list).
             RuntimeArray args = new RuntimeArray();  // Empty @_
-            RuntimeList result = evalCode.apply(args, RuntimeContextType.SCALAR);
+            RuntimeList result = evalCode.apply(args, callContext);
 
             // Step 7: Return scalar result
             return result.scalar();
