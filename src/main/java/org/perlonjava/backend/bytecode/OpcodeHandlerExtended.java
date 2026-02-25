@@ -49,8 +49,7 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int scalarReg = bytecode[pc++];
 
-        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
-        registers[rd] = StringOperators.chopScalar(scalar);
+        registers[rd] = registers[scalarReg].chop();
         return pc;
     }
 

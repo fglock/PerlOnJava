@@ -26,6 +26,12 @@ public class MiscOpcodeHandler {
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
 
+        // EACH receives the container directly (RuntimeHash or RuntimeArray), not a RuntimeList
+        if (opcode == Opcodes.EACH) {
+            registers[rd] = registers[argsReg].each(ctx);
+            return pc;
+        }
+
         RuntimeList args = (RuntimeList) registers[argsReg];
         RuntimeBase[] argsArray = args.elements.toArray(new RuntimeBase[0]);
 
@@ -45,17 +51,7 @@ public class MiscOpcodeHandler {
             }
             case Opcodes.SYSTEM -> SystemOperator.system(args, false, ctx);
             case Opcodes.CALLER -> RuntimeCode.caller(args, ctx);
-            case Opcodes.EACH -> {
-                // EACH needs the container directly, not wrapped in a list
-                // The argsReg should contain a list with one element (the container)
-                if (!args.elements.isEmpty()) {
-                    RuntimeBase container = args.elements.get(0);
-                    // Call each on the container
-                    yield container.each(ctx);
-                } else {
-                    throw new RuntimeException("each requires a hash or array argument");
-                }
-            }
+            // EACH is handled above before the RuntimeList cast
             case Opcodes.PACK -> Pack.pack(args);
             case Opcodes.UNPACK -> Unpack.unpack(ctx, argsArray);
             case Opcodes.VEC -> Vec.vec(args);
