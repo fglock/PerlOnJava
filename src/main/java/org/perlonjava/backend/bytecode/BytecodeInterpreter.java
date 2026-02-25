@@ -1755,6 +1755,7 @@ public class BytecodeInterpreter {
                     case Opcodes.HASH_SLICE:
                     case Opcodes.HASH_SLICE_SET:
                     case Opcodes.HASH_SLICE_DELETE:
+                    case Opcodes.HASH_KEYVALUE_SLICE:
                     case Opcodes.LIST_SLICE_FROM:
                         pc = executeSliceOps(opcode, bytecode, pc, registers, code);
                         break;
@@ -3061,6 +3062,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeHashSliceSet(bytecode, pc, registers);
             case Opcodes.HASH_SLICE_DELETE:
                 return SlowOpcodeHandler.executeHashSliceDelete(bytecode, pc, registers);
+            case Opcodes.HASH_KEYVALUE_SLICE:
+                return SlowOpcodeHandler.executeHashKeyValueSlice(bytecode, pc, registers);
             case Opcodes.LIST_SLICE_FROM:
                 return SlowOpcodeHandler.executeListSliceFrom(bytecode, pc, registers);
             default:

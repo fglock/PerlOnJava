@@ -821,6 +821,78 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = rd;
     }
 
+    void handleArrayKeyValueSlice(BinaryOperatorNode node, OperatorNode leftOp) {
+        int arrayReg;
+
+        // Index/value slice: %array[indices] returns alternating index/value pairs.
+        // Postfix ->%[...] is parsed into this form by the parser.
+
+        if (leftOp.operand instanceof IdentifierNode) {
+            String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+            if (hasVariable(varName)) {
+                arrayReg = getVariableRegister(varName);
+            } else {
+                arrayReg = allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
+                int nameIdx = addToStringPool(globalArrayName);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(arrayReg);
+                emit(nameIdx);
+            }
+        } else {
+            // %$arrayref[...] / %{expr}[...] / $aref->%[...] / ['a'..'z']->%[...]
+            leftOp.operand.accept(this);
+            int scalarRefReg = lastResultReg;
+            arrayReg = allocateRegister();
+            emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+            emitReg(arrayReg);
+            emitReg(scalarRefReg);
+        }
+
+        if (!(node.right instanceof ArrayLiteralNode indicesNode)) {
+            throwCompilerException("Index/value slice requires ArrayLiteralNode");
+            return;
+        }
+        if (indicesNode.elements.isEmpty()) {
+            throwCompilerException("Index/value slice requires at least one index");
+            return;
+        }
+
+        // Compile indices into a list
+        List<Integer> pairRegs = new ArrayList<>();
+        for (Node indexElement : indicesNode.elements) {
+            indexElement.accept(this);
+            int indexReg = lastResultReg;
+
+            int valueReg = allocateRegister();
+            emit(Opcodes.ARRAY_GET);
+            emitReg(valueReg);
+            emitReg(arrayReg);
+            emitReg(indexReg);
+
+            pairRegs.add(indexReg);
+            pairRegs.add(valueReg);
+        }
+
+        int listReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(listReg);
+        emit(pairRegs.size());
+        for (int r : pairRegs) {
+            emitReg(r);
+        }
+
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            int rd = allocateRegister();
+            emit(Opcodes.LIST_TO_SCALAR);
+            emitReg(rd);
+            emitReg(listReg);
+            lastResultReg = rd;
+        } else {
+            lastResultReg = listReg;
+        }
+    }
+
     @Override
     public void visit(StringNode node) {
         // Emit LOAD_STRING or LOAD_VSTRING depending on whether this is a v-string literal.
@@ -1229,6 +1301,81 @@ public class BytecodeCompiler implements Visitor {
         emitReg(keysListReg);
 
         lastResultReg = rdSlice;
+    }
+
+    void handleHashKeyValueSlice(BinaryOperatorNode node, OperatorNode leftOp) {
+        int hashReg;
+
+        // Key/value slice: %hash{keys} returns alternating key/value pairs.
+        // Postfix ->%{...} is parsed into this form by the parser.
+
+        if (leftOp.operand instanceof IdentifierNode) {
+            // Direct key/value slice: %hash{keys}
+            String varName = ((IdentifierNode) leftOp.operand).name;
+            String hashVarName = "%" + varName;
+
+            if (hasVariable(hashVarName)) {
+                hashReg = getVariableRegister(hashVarName);
+            } else {
+                hashReg = allocateRegister();
+                String globalHashName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                int nameIdx = addToStringPool(globalHashName);
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(hashReg);
+                emit(nameIdx);
+            }
+        } else {
+            // %$hashref{keys} / %{expr}{keys} / $hashref->%{keys}
+            // Compile operand to a scalar and then dereference as hash.
+            leftOp.operand.accept(this);
+            int scalarRefReg = lastResultReg;
+            hashReg = allocateRegister();
+            emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+            emitReg(hashReg);
+            emitReg(scalarRefReg);
+        }
+
+        if (!(node.right instanceof HashLiteralNode)) {
+            throwCompilerException("Key/value slice requires HashLiteralNode");
+            return;
+        }
+
+        HashLiteralNode keysNode = (HashLiteralNode) node.right;
+        if (keysNode.elements.isEmpty()) {
+            throwCompilerException("Key/value slice requires at least one key");
+            return;
+        }
+
+        List<Integer> keyRegs = new ArrayList<>();
+        for (Node keyElement : keysNode.elements) {
+            if (keyElement instanceof IdentifierNode) {
+                String keyString = ((IdentifierNode) keyElement).name;
+                int keyReg = allocateRegister();
+                int keyIdx = addToStringPool(keyString);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(keyReg);
+                emit(keyIdx);
+                keyRegs.add(keyReg);
+            } else {
+                keyElement.accept(this);
+                keyRegs.add(lastResultReg);
+            }
+        }
+
+        int keysListReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(keysListReg);
+        emit(keyRegs.size());
+        for (int keyReg : keyRegs) {
+            emitReg(keyReg);
+        }
+
+        int rd = allocateRegister();
+        emit(Opcodes.HASH_KEYVALUE_SLICE);
+        emitReg(rd);
+        emitReg(hashReg);
+        emitReg(keysListReg);
+        lastResultReg = rd;
     }
 
     /**
@@ -2573,11 +2720,19 @@ public class BytecodeCompiler implements Visitor {
                 int refReg = lastResultReg;
 
                 // Dereference the result
+                // Use strict/non-strict variants to match JVM behavior and strict refs semantics.
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
-
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
                 lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
