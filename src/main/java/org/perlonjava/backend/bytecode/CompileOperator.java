@@ -885,10 +885,20 @@ public class CompileOperator {
             // undef operator - returns undefined value
             // Can be used standalone: undef
             // Or with an operand to undef a variable: undef $x (not implemented yet)
-            int undefReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-            bytecodeCompiler.emitReg(undefReg);
-            bytecodeCompiler.lastResultReg = undefReg;
+            //
+            // Special case: in VOID context with no operand, this is a no-op placeholder
+            // emitted by the parser for END/BEGIN/INIT/CHECK/UNITCHECK blocks that have
+            // already been executed. Emitting LOAD_UNDEF here would overwrite the previous
+            // statement's result (e.g. `eval '1; END { }'` must return 1, not undef).
+            if (node.operand == null
+                    && bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
+                bytecodeCompiler.lastResultReg = -1;
+            } else {
+                int undefReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                bytecodeCompiler.emitReg(undefReg);
+                bytecodeCompiler.lastResultReg = undefReg;
+            }
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
             // Compile operand in scalar context
