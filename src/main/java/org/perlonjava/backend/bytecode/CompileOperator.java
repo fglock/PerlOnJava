@@ -2862,6 +2862,20 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(patternReg);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("doFile")) {
+            // do FILE: executes a Perl file
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            node.operand.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
+            int fileReg = bytecodeCompiler.lastResultReg;
+
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.DO_FILE);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(fileReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+            bytecodeCompiler.lastResultReg = rd;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
