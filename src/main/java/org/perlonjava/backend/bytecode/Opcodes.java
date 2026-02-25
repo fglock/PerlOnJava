@@ -1105,5 +1105,11 @@ public class Opcodes {
      * Format: LIST_TO_SCALAR rd rs */
     public static final short LIST_TO_SCALAR = 338;
 
+    /** Glob operator: rd = ScalarGlobOperator.evaluate(globId, patternReg, ctx)
+     * Mirrors JVM EmitOperator.handleGlobBuiltin — uses a per-call-site globId for
+     * scalar-context iteration state across calls.
+     * Format: GLOB_OP rd globId patternReg ctx */
+    public static final short GLOB_OP = 339;
+
     private Opcodes() {} // Utility class - no instantiation
 }

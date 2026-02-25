@@ -338,6 +338,15 @@ public class InterpretedCode extends RuntimeCode {
                     }
                     sb.append("\"\n");
                     break;
+                case Opcodes.GLOB_OP: {
+                    int globRd = bytecode[pc++];
+                    int globId = bytecode[pc++];
+                    int globPattern = bytecode[pc++];
+                    int globCtx = bytecode[pc++];
+                    sb.append("GLOB_OP r").append(globRd).append(" = glob(id=").append(globId)
+                      .append(", r").append(globPattern).append(", ctx=").append(globCtx).append(")\n");
+                    break;
+                }
                 case Opcodes.LOAD_UNDEF:
                     rd = bytecode[pc++];
                     sb.append("LOAD_UNDEF r").append(rd).append("\n");
