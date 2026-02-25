@@ -252,13 +252,19 @@ public class SlowOpcodeHandler {
         }
         String perlCode = codeScalar.toString();
 
+        // Read outer wantarray from register 2 (set by BytecodeInterpreter from the call site context).
+        // This is the true calling context (VOID/SCALAR/LIST) that wantarray() inside the
+        // eval body must reflect — exactly as evalStringWithInterpreter receives callContext.
+        int callContext = ((RuntimeScalar) registers[2]).getInt();
+
         // Call EvalStringHandler to parse, compile, and execute
         RuntimeScalar result = EvalStringHandler.evalString(
             perlCode,
             code,           // Current InterpretedCode for context
             registers,      // Current registers for variable access
             code.sourceName,
-            code.sourceLine
+            code.sourceLine,
+            callContext     // True outer context for wantarray inside eval body
         );
 
         registers[rd] = result;
