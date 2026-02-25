@@ -2693,51 +2693,24 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
             }
         } else if (op.equals("each")) {
-            // each %hash or each @array - needs the container itself, not flattened
-            // Format: OPCODE rd argsReg ctx
-
+            // each %hash or each @array - needs the container itself, not flattened.
+            // Compile operand in LIST context so %h stays a RuntimeHash (not scalar size).
+            // Mirrors JVM handleEach which uses RuntimeContextType.LIST.
             if (node.operand == null) {
                 bytecodeCompiler.throwCompilerException("each requires an argument");
             }
 
-            int containerReg;
-            // Check if operand is a hash/array variable dereference (% or @)
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode opNode = (OperatorNode) node.operand;
-                String varOp = opNode.operator;
-                if ((varOp.equals("%") || varOp.equals("@")) && opNode.operand instanceof IdentifierNode) {
-                    // Direct hash/array variable: %h or @a
-                    // Load the variable container directly
-                    IdentifierNode varName = (IdentifierNode) opNode.operand;
-                    String fullVarName = varOp + varName.name;
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+            node.operand.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
+            int containerReg = bytecodeCompiler.lastResultReg;
 
-                    if (bytecodeCompiler.hasVariable(fullVarName)) {
-                        containerReg = bytecodeCompiler.getVariableRegister(fullVarName);
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Variable " + fullVarName + " not found");
-                        return; // unreachable
-                    }
-                } else {
-                    // Complex expression - compile normally
-                    node.operand.accept(bytecodeCompiler);
-                    containerReg = bytecodeCompiler.lastResultReg;
-                }
-            } else {
-                // Not an operator node - compile normally
-                node.operand.accept(bytecodeCompiler);
-                containerReg = bytecodeCompiler.lastResultReg;
-            }
-
-            // Wrap container in a list for the handler
-            int argsReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
-            bytecodeCompiler.emitReg(argsReg);
-            bytecodeCompiler.emitReg(containerReg);
-
+            // Pass container directly to EACH
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emitWithToken(Opcodes.EACH, node.getIndex());
             bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argsReg);
+            bytecodeCompiler.emitReg(containerReg);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
