@@ -278,7 +278,41 @@ public class CompileAssignment {
                                 OperatorNode sigilOp = (OperatorNode) element;
                                 String sigil = sigilOp.operator;
 
-                                if (sigilOp.operand instanceof IdentifierNode) {
+                                // Handle backslash-declared ref: my (\$f, $g) = (...)
+                                // \$f means: declare $f as a lexical scalar, assign i-th RHS
+                                // element to it via SET_SCALAR so any ref taken earlier stays valid.
+                                if (sigil.equals("\\") &&
+                                        sigilOp.operand instanceof OperatorNode varNode &&
+                                        varNode.operator.equals("$") &&
+                                        varNode.operand instanceof IdentifierNode idNode) {
+                                    String varName = "$" + idNode.name;
+                                    int varReg;
+                                    if (bytecodeCompiler.hasVariable(varName)) {
+                                        varReg = bytecodeCompiler.getVariableRegister(varName);
+                                    } else {
+                                        varReg = bytecodeCompiler.addVariable(varName, "my");
+                                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                                        bytecodeCompiler.emitReg(varReg);
+                                    }
+
+                                    int indexReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                                    bytecodeCompiler.emitReg(indexReg);
+                                    bytecodeCompiler.emitInt(i);
+
+                                    int elemReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                                    bytecodeCompiler.emitReg(elemReg);
+                                    bytecodeCompiler.emitReg(rhsListReg);
+                                    bytecodeCompiler.emitReg(indexReg);
+
+                                    // SET_SCALAR mutates varReg in place so any ref captured
+                                    // from LOAD_UNDEF above (via CREATE_REF in the declaration
+                                    // visitor) keeps pointing at the correct object.
+                                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                                    bytecodeCompiler.emitReg(varReg);
+                                    bytecodeCompiler.emitReg(elemReg);
+                                } else if (sigilOp.operand instanceof IdentifierNode) {
                                     String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
                                     int varReg;
