@@ -472,9 +472,14 @@ public class BytecodeCompiler implements Visitor {
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
-            // Use the calling context from EmitterContext for top-level expressions
-            // This is crucial for eval STRING to propagate context correctly
-            currentCallContext = ctx.contextType;
+            // Use the calling context from EmitterContext for top-level expressions.
+            // Exception: eval STRING body always produces the value of its last expression,
+            // even when the caller uses it in void context. Compiling the body in VOID
+            // context would discard the result (e.g. `INIT { eval '1' or die }` would
+            // fail because eval returns undef). Use SCALAR as the minimum context.
+            currentCallContext = (ctx.contextType == RuntimeContextType.VOID)
+                    ? RuntimeContextType.SCALAR
+                    : ctx.contextType;
         }
 
         // If we have captured variables, allocate registers for them
@@ -720,6 +725,25 @@ public class BytecodeCompiler implements Visitor {
 
         // Visit each statement in the block
         int numStatements = node.elements.size();
+
+        // Pre-scan to find the last value-producing statement index.
+        // Special blocks (END/BEGIN/INIT/CHECK/UNITCHECK) parse to OperatorNode("undef")
+        // and produce no return value. They must not be treated as the last statement
+        // for return-value purposes (e.g. `eval '1; END { }'` must return 1, not undef).
+        int lastValueProducingIndex = numStatements - 1;
+        for (int i = numStatements - 1; i >= 0; i--) {
+            Node stmt = node.elements.get(i);
+            // OperatorNode("undef") with no operand is how the parser represents special
+            // blocks that have already been executed (BEGIN/END/INIT/CHECK/UNITCHECK).
+            boolean isSpecialBlockPlaceholder = stmt instanceof OperatorNode op
+                    && "undef".equals(op.operator)
+                    && op.operand == null;
+            if (!isSpecialBlockPlaceholder) {
+                lastValueProducingIndex = i;
+                break;
+            }
+        }
+
         for (int i = 0; i < numStatements; i++) {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
@@ -736,8 +760,8 @@ public class BytecodeCompiler implements Visitor {
             int savedContext = currentCallContext;
 
             // If this is not an assignment or other value-using construct, use VOID context
-            // EXCEPT for the last statement in a block, which should use the block's context
-            boolean isLastStatement = (i == numStatements - 1);
+            // EXCEPT for the last value-producing statement in a block, which uses the block's context
+            boolean isLastStatement = (i == lastValueProducingIndex);
             if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
                 currentCallContext = RuntimeContextType.VOID;
             }
@@ -745,6 +769,30 @@ public class BytecodeCompiler implements Visitor {
             stmt.accept(this);
 
             currentCallContext = savedContext;
+
+            // After the last value-producing statement, preserve its lastResultReg.
+            // Subsequent void-context statements (e.g. END/BEGIN placeholders) must
+            // not overwrite it, even if they set lastResultReg = -1.
+            if (isLastStatement) {
+                // Freeze the result here; nothing after this should change it
+                int frozenResult = lastResultReg;
+                // Recycle temporaries, then restore
+                recycleTemporaryRegisters();
+                lastResultReg = frozenResult;
+                // Continue visiting remaining statements (e.g. END placeholders) as void
+                for (int j = i + 1; j < numStatements; j++) {
+                    Node trailing = node.elements.get(j);
+                    if (trailing == null) continue;
+                    int savedCtx2 = currentCallContext;
+                    currentCallContext = RuntimeContextType.VOID;
+                    trailing.accept(this);
+                    currentCallContext = savedCtx2;
+                    recycleTemporaryRegisters();
+                }
+                // Restore frozen result and break out of outer loop
+                lastResultReg = frozenResult;
+                break;
+            }
 
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
