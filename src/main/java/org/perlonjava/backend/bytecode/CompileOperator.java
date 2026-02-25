@@ -849,11 +849,16 @@ public class CompileOperator {
                 // exactly as the JVM compiler does via EmitEval/evalTag.
                 // The evalTag is unique per eval site and baked into the string pool.
                 String evalTag = "interp_eval_" + EVAL_TAG_COUNTER.incrementAndGet();
+                // currentCallContext is the TRUE outer context (e.g. VOID for a statement eval).
+                // This is what wantarray inside the eval body must see.
+                // The VOID→SCALAR promotion in BytecodeCompiler.compile() affects only how the
+                // eval BODY's last expression is compiled, not the runtime call context.
+                int outerCtx = bytecodeCompiler.currentCallContext;
                 EmitterContext snapCtx = new EmitterContext(
                     new JavaClassInfo(),
                     bytecodeCompiler.symbolTable.snapShot(), // compile-time scope snapshot
                     null, null,
-                    bytecodeCompiler.currentCallContext,
+                    outerCtx,
                     false,
                     null,
                     new CompilerOptions(),
@@ -864,7 +869,7 @@ public class CompileOperator {
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(outerCtx);
                 bytecodeCompiler.emit(tagIdx);
 
                 bytecodeCompiler.lastResultReg = rd;
