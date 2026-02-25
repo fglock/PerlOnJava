@@ -2083,6 +2083,19 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.POP_PACKAGE:
+                        // Scoped package block exit — restore handled by POP_LOCAL_LEVEL.
+                        break;
+
+                    case Opcodes.DO_FILE: {
+                        int rd = bytecode[pc++];
+                        int fileReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeScalar file = ((RuntimeBase) registers[fileReg]).scalar();
+                        registers[rd] = ModuleOperators.doFile(file, ctx);
+                        break;
+                    }
+
                     default:
                         // Unknown opcode
                         int opcodeInt = opcode;
