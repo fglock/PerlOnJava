@@ -233,6 +233,24 @@ public class ParseInfix {
                         } else {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                         }
+                    case "%":
+                        // ->%{key-list} or ->%[index-list]
+                        // Parse similar to ->@{}/->@[] but using % as the sigil.
+                        TokenUtils.consume(parser);
+                        right = ParsePrimary.parsePrimary(parser);
+                        if (right instanceof HashLiteralNode) {
+                            return new BinaryOperatorNode("{",
+                                    new OperatorNode("%", left, parser.tokenIndex),
+                                    right,
+                                    parser.tokenIndex);
+                        } else if (right instanceof ArrayLiteralNode) {
+                            return new BinaryOperatorNode("[",
+                                    new OperatorNode("%", left, parser.tokenIndex),
+                                    right,
+                                    parser.tokenIndex);
+                        } else {
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+                        }
                     case "&":
                         // Handle lexical method calls: $obj->&priv()
                         TokenUtils.consume(parser); // consume '&'

@@ -236,6 +236,8 @@ public class InterpretedCode extends RuntimeCode {
         while (pc < bytecode.length) {
             int startPc = pc;
             int opcode = bytecode[pc++];
+            int rs1;
+            int rs2;
             sb.append(String.format("%4d: ", startPc));
 
             switch (opcode) {
@@ -354,43 +356,94 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.LOAD_GLOBAL_SCALAR:
                     rd = bytecode[pc++];
                     int nameIdx = bytecode[pc++];
-                    sb.append("LOAD_GLOBAL_SCALAR r").append(rd).append(" = $").append(stringPool[nameIdx]).append("\n");
+                    sb.append("LOAD_GLOBAL_SCALAR r").append(rd).append(" = $");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_ARRAY:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    sb.append("LOAD_GLOBAL_ARRAY r").append(rd).append(" = @").append(stringPool[nameIdx]).append("\n");
+                    sb.append("LOAD_GLOBAL_ARRAY r").append(rd).append(" = @");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append("\n");
                     break;
                 case Opcodes.STORE_GLOBAL_ARRAY:
                     nameIdx = bytecode[pc++];
                     int storeArraySrcReg = bytecode[pc++];
-                    sb.append("STORE_GLOBAL_ARRAY @").append(stringPool[nameIdx]).append(" = r").append(storeArraySrcReg).append("\n");
+                    sb.append("STORE_GLOBAL_ARRAY @");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append(" = r").append(storeArraySrcReg).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_HASH:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    sb.append("LOAD_GLOBAL_HASH r").append(rd).append(" = %").append(stringPool[nameIdx]).append("\n");
+                    sb.append("LOAD_GLOBAL_HASH r").append(rd).append(" = %");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append("\n");
                     break;
                 case Opcodes.STORE_GLOBAL_HASH:
                     nameIdx = bytecode[pc++];
                     int storeHashSrcReg = bytecode[pc++];
-                    sb.append("STORE_GLOBAL_HASH %").append(stringPool[nameIdx]).append(" = r").append(storeHashSrcReg).append("\n");
+                    sb.append("STORE_GLOBAL_HASH %");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append(" = r").append(storeHashSrcReg).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_CODE:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    sb.append("LOAD_GLOBAL_CODE r").append(rd).append(" = &").append(stringPool[nameIdx]).append("\n");
+                    sb.append("LOAD_GLOBAL_CODE r").append(rd).append(" = &");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append("\n");
                     break;
                 case Opcodes.STORE_GLOBAL_SCALAR:
                     nameIdx = bytecode[pc++];
                     int srcReg = bytecode[pc++];
-                    sb.append("STORE_GLOBAL_SCALAR $").append(stringPool[nameIdx]).append(" = r").append(srcReg).append("\n");
+                    sb.append("STORE_GLOBAL_SCALAR $");
+                    if (stringPool != null && nameIdx >= 0 && nameIdx < stringPool.length) {
+                        sb.append(stringPool[nameIdx]);
+                    } else {
+                        sb.append("<bad_string_idx:").append(nameIdx).append(">");
+                    }
+                    sb.append(" = r").append(srcReg).append("\n");
                     break;
+                case Opcodes.HASH_KEYVALUE_SLICE: {
+                    rd = bytecode[pc++];
+                    int kvRs1 = bytecode[pc++];  // hash register
+                    int kvRs2 = bytecode[pc++];  // keys list register
+                    sb.append("HASH_KEYVALUE_SLICE r").append(rd)
+                            .append(" = r").append(kvRs1)
+                            .append(".getKeyValueSlice(r").append(kvRs2).append(")\n");
+                    break;
+                }
                 case Opcodes.ADD_SCALAR:
                     rd = bytecode[pc++];
-                    int rs1 = bytecode[pc++];
-                    int rs2 = bytecode[pc++];
-                    sb.append("ADD_SCALAR r").append(rd).append(" = r").append(rs1).append(" + r").append(rs2).append("\n");
+                    int addRs1 = bytecode[pc++];
+                    int addRs2 = bytecode[pc++];
+                    sb.append("ADD_SCALAR r").append(rd).append(" = r").append(addRs1).append(" + r").append(addRs2).append("\n");
                     break;
                 case Opcodes.SUB_SCALAR:
                     rd = bytecode[pc++];
@@ -1286,6 +1339,11 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     sb.append("DEREF_ARRAY r").append(rd).append(" = @{r").append(rs).append("}\n");
+                    break;
+                case Opcodes.DEREF_HASH:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DEREF_HASH r").append(rd).append(" = %{r").append(rs).append("}\n");
                     break;
                 case Opcodes.RETRIEVE_BEGIN_SCALAR:
                     rd = bytecode[pc++];
