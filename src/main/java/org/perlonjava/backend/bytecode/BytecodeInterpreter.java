@@ -534,9 +534,11 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
+                        RuntimeBase concatLeft = registers[rs1];
+                        RuntimeBase concatRight = registers[rs2];
                         registers[rd] = StringOperators.stringConcat(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
+                            concatLeft instanceof RuntimeScalar ? (RuntimeScalar) concatLeft : concatLeft.scalar(),
+                            concatRight instanceof RuntimeScalar ? (RuntimeScalar) concatRight : concatRight.scalar()
                         );
                         break;
                     }
@@ -706,6 +708,12 @@ public class BytecodeInterpreter {
                         pc = OpcodeHandlerExtended.executeLogicalOrAssign(bytecode, pc, registers);
                         break;
 
+                    case Opcodes.DEFINED_OR_ASSIGN:
+                        // Compound assignment: rd //= rs (short-circuit)
+                        // Format: DEFINED_OR_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeDefinedOrAssign(bytecode, pc, registers);
+                        break;
+
                     // =================================================================
                     // SHIFT OPERATIONS
                     // =================================================================
@@ -826,6 +834,14 @@ public class BytecodeInterpreter {
                         } else {
                             registers[rd] = operand.scalar();
                         }
+                        break;
+                    }
+
+                    case Opcodes.SET_ARRAY_LAST_INDEX: {
+                        int arrayReg = bytecode[pc++];
+                        int valueReg = bytecode[pc++];
+                        RuntimeArray.indexLastElem((RuntimeArray) registers[arrayReg])
+                                .set(((RuntimeScalar) registers[valueReg]));
                         break;
                     }
 
@@ -1198,6 +1214,14 @@ public class BytecodeInterpreter {
                         // Format: STRING_BITWISE_XOR rd rs1 rs2
                         pc = OpcodeHandlerExtended.executeStringBitwiseXor(bytecode, pc, registers);
                         break;
+
+                    case Opcodes.XOR_LOGICAL: {
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = Operator.xor((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
+                        break;
+                    }
 
                     case Opcodes.BITWISE_NOT_BINARY:
                         // Numeric bitwise NOT: rd = binary~ rs

@@ -1032,8 +1032,13 @@ public class CompileAssignment {
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
                     }
+                } else if (leftOp.operator.equals("$#")) {
+                    int arrayReg = CompileAssignment.resolveArrayForDollarHash(bytecodeCompiler, leftOp);
+                    bytecodeCompiler.emit(Opcodes.SET_ARRAY_LAST_INDEX);
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(valueReg);
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else {
-                    // chop/chomp cannot be used as lvalues (matches JVM compiler message)
                     if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
                         bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");
                     }
@@ -1663,4 +1668,44 @@ public class CompileAssignment {
             bytecodeCompiler.currentCallContext = savedContext;
         }
     }
+
+    static int resolveArrayForDollarHash(BytecodeCompiler bytecodeCompiler, OperatorNode dollarHashOp) {
+        if (dollarHashOp.operand instanceof OperatorNode operandOp
+                && operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode idNode) {
+            String varName = "@" + idNode.name;
+            if (bytecodeCompiler.hasVariable(varName)) {
+                return bytecodeCompiler.getVariableRegister(varName);
+            }
+            int arrayReg = bytecodeCompiler.allocateRegister();
+            String globalName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
+            int nameIdx = bytecodeCompiler.addToStringPool(globalName);
+            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            bytecodeCompiler.emitReg(arrayReg);
+            bytecodeCompiler.emit(nameIdx);
+            return arrayReg;
+        } else if (dollarHashOp.operand instanceof IdentifierNode idNode) {
+            String varName = "@" + idNode.name;
+            if (bytecodeCompiler.hasVariable(varName)) {
+                return bytecodeCompiler.getVariableRegister(varName);
+            }
+            int arrayReg = bytecodeCompiler.allocateRegister();
+            String globalName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
+            int nameIdx = bytecodeCompiler.addToStringPool(globalName);
+            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            bytecodeCompiler.emitReg(arrayReg);
+            bytecodeCompiler.emit(nameIdx);
+            return arrayReg;
+        } else if (dollarHashOp.operand instanceof OperatorNode operandOp && operandOp.operator.equals("$")) {
+            operandOp.accept(bytecodeCompiler);
+            int refReg = bytecodeCompiler.lastResultReg;
+            int arrayReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, dollarHashOp.getIndex());
+            bytecodeCompiler.emitReg(arrayReg);
+            bytecodeCompiler.emitReg(refReg);
+            return arrayReg;
+        }
+        bytecodeCompiler.throwCompilerException("$# assignment requires array variable");
+        return -1;
+    }
 }
+
