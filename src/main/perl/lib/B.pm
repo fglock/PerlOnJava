@@ -11,6 +11,11 @@ our $VERSION = '1.00_perlonjava';
 # Flag indicating this is a stub implementation with limited introspection
 our $INCOMPLETE = 1;
 
+# SV flags (very partial)
+use constant {
+    SVf_IOK => 0x0001,
+};
+
 # CV flags
 use constant {
     CVf_ANON      => 0x0004,
@@ -25,6 +30,24 @@ package B::SV {
         my ($class, $ref) = @_;
         return bless { ref => $ref }, $class;
     }
+
+    sub FLAGS {
+        my $self = shift;
+        my $r = $self->{ref};
+
+        # For the debugger source arrays (@{"_<..."}), perl stores lines as PVIV with IOK.
+        # This stub implementation marks any defined, non-empty scalar as having IOK.
+        if (ref($r) eq 'SCALAR') {
+            my $v = $$r;
+            return (defined($v) && length($v)) ? B::SVf_IOK() : 0;
+        }
+
+        return 0;
+    }
+}
+
+package B::PVIV {
+    our @ISA = ('B::SV');
 }
 
 package B::CV {
@@ -129,11 +152,18 @@ sub svref_2object {
         return B::CV->new($ref);
     }
 
+    if ($type eq 'SCALAR') {
+        return B::PVIV->new($ref);
+    }
+
     return B::SV->new($ref);
 }
 
 # Export CVf_ANON as a function
 sub CVf_ANON() { return 0x0004; }
+
+# Export SVf_IOK as a function
+sub SVf_IOK() { return 0x0001; }
 
 # Special SV names
 our @specialsv_name = ('Nullsv', '&PL_sv_undef', '&PL_sv_yes', '&PL_sv_no');

@@ -20,6 +20,15 @@ import static org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops;
  */
 public class EmitLogicalOperator {
 
+    private static final boolean EVAL_TRACE =
+            System.getenv("JPERL_EVAL_TRACE") != null;
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
+
     /**
      * Emits bytecode for the flip-flop operator, which is used in range-like conditions.
      *
@@ -277,6 +286,7 @@ public class EmitLogicalOperator {
         Label endLabel = new Label();
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            evalTrace("EmitLogicalOperatorSimple VOID op=" + node.operator + " emit LHS in SCALAR; RHS in SCALAR");
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", getBoolean, "()Z", false);
             mv.visitJumpInsn(compareOpcode, endLabel);

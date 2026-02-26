@@ -65,8 +65,9 @@ public class EmitterVisitor implements Visitor {
     public void pushCallContext() {
         // push call context to stack
         if (ctx.contextType == RuntimeContextType.RUNTIME) {
-            // Retrieve wantarray value from JVM local vars
-            ctx.mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
+            // Retrieve callContext from apply(@_, callContext) method argument.
+            // Slot 0=this, 1=@_, 2=callContext.
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
         } else {
             ctx.mv.visitLdcInsn(ctx.contextType);
         }
