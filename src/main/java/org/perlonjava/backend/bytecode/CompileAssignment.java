@@ -945,6 +945,18 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = globReg;
+                } else if (leftOp.operator.equals("*")) {
+                    // Glob assignment where the glob comes from an expression, e.g. $ref->** = ...
+                    // or 'name'->** = ...
+                    // Compile the glob expression to obtain the RuntimeGlob, then store through it.
+                    leftOp.accept(bytecodeCompiler);
+                    int globReg = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                    bytecodeCompiler.emitReg(globReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = globReg;
                 } else if (leftOp.operator.equals("pos")) {
                     // pos($var) = value - lvalue assignment to regex position
                     // pos() returns a PosLvalueScalar that can be assigned to

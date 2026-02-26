@@ -306,6 +306,12 @@ public class CompileBinaryOperator {
                     return;
                 }
 
+                // Index/value slice: %array[indices] (and postfix ->%[...] parses into this form)
+                if (leftOp.operator.equals("%")) {
+                    bytecodeCompiler.handleArrayKeyValueSlice(node, leftOp);
+                    return;
+                }
+
                 // Handle normal array element access: $array[index]
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                     bytecodeCompiler.handleArrayElementAccess(node, leftOp);
@@ -330,6 +336,12 @@ public class CompileBinaryOperator {
                 if (leftOp.operator.equals("@")) {
                     // This is a hash slice - handle it specially
                     bytecodeCompiler.handleHashSlice(node, leftOp);
+                    return;
+                }
+
+                // Key/value slice: %hash{keys} (and postfix ->%{...} parses into this form)
+                if (leftOp.operator.equals("%")) {
+                    bytecodeCompiler.handleHashKeyValueSlice(node, leftOp);
                     return;
                 }
 

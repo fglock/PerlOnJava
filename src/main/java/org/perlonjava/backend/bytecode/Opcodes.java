@@ -1131,5 +1131,10 @@ public class Opcodes {
      * Format: DO_FILE rd fileReg ctx */
     public static final short DO_FILE = 340;
 
+    /** Hash key/value slice: rd = hash.getKeyValueSlice(keys_list)
+     * Perl: %hash{keys} returns alternating key/value pairs.
+     * Format: HASH_KEYVALUE_SLICE rd hashReg keysListReg */
+    public static final short HASH_KEYVALUE_SLICE = 344;
+
     private Opcodes() {} // Utility class - no instantiation
 }

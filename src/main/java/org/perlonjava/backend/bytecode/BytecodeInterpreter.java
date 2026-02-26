@@ -1382,17 +1382,21 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_REF: {
                         // Create reference: rd = rs.createReference()
-                        // For multi-element lists, create references to each element
+                        // For lists, create a list of references to each element
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
-                        // Special handling for RuntimeList
-                        if (value instanceof RuntimeList list && list.elements.size() != 1) {
-                            // Multi-element or empty list: create list of references
-                            registers[rd] = list.createListReference();
+                        if (value == null) {
+                            // Null value - return undef
+                            registers[rd] = RuntimeScalarCache.scalarUndef;
+                        } else if (value instanceof RuntimeList list) {
+                            if (list.size() == 1) {
+                                registers[rd] = list.getFirst().createReference();
+                            } else {
+                                registers[rd] = list.createListReference();
+                            }
                         } else {
-                            // Single value or single-element list: create single reference
                             registers[rd] = value.createReference();
                         }
                         break;
@@ -1755,6 +1759,7 @@ public class BytecodeInterpreter {
                     case Opcodes.HASH_SLICE:
                     case Opcodes.HASH_SLICE_SET:
                     case Opcodes.HASH_SLICE_DELETE:
+                    case Opcodes.HASH_KEYVALUE_SLICE:
                     case Opcodes.LIST_SLICE_FROM:
                         pc = executeSliceOps(opcode, bytecode, pc, registers, code);
                         break;
@@ -2281,13 +2286,17 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
-
-                // Special handling for RuntimeList
-                if (value instanceof RuntimeList list && list.elements.size() != 1) {
-                    // Multi-element or empty list: create list of references
-                    registers[rd] = list.createListReference();
+                if (value instanceof RuntimeList list) {
+                    if (list.size() == 1) {
+                        registers[rd] = list.getFirst().createReference();
+                    } else {
+                        RuntimeList refs = new RuntimeList();
+                        for (RuntimeScalar element : list) {
+                            refs.add(element.createReference());
+                        }
+                        registers[rd] = refs;
+                    }
                 } else {
-                    // Single value or single-element list: create single reference
                     registers[rd] = value.createReference();
                 }
                 return pc;
@@ -3061,6 +3070,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeHashSliceSet(bytecode, pc, registers);
             case Opcodes.HASH_SLICE_DELETE:
                 return SlowOpcodeHandler.executeHashSliceDelete(bytecode, pc, registers);
+            case Opcodes.HASH_KEYVALUE_SLICE:
+                return SlowOpcodeHandler.executeHashKeyValueSlice(bytecode, pc, registers);
             case Opcodes.LIST_SLICE_FROM:
                 return SlowOpcodeHandler.executeListSliceFrom(bytecode, pc, registers);
             default:

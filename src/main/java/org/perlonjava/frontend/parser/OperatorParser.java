@@ -342,6 +342,7 @@ public class OperatorParser {
                             scalarVarNode = new OperatorNode("$", varNode.operand, varNode.tokenIndex);
                         }
                         scalarVarNode.setAnnotation("isDeclaredReference", true);
+                        scalarVarNode.setAnnotation("declaredReferenceOriginalSigil", varNode.operator);
                         addVariableToScope(parser.ctx, operator, scalarVarNode);
                         // Also mark the original nodes
                         varNode.setAnnotation("isDeclaredReference", true);

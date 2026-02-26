@@ -821,6 +821,78 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = rd;
     }
 
+    void handleArrayKeyValueSlice(BinaryOperatorNode node, OperatorNode leftOp) {
+        int arrayReg;
+
+        // Index/value slice: %array[indices] returns alternating index/value pairs.
+        // Postfix ->%[...] is parsed into this form by the parser.
+
+        if (leftOp.operand instanceof IdentifierNode) {
+            String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+            if (hasVariable(varName)) {
+                arrayReg = getVariableRegister(varName);
+            } else {
+                arrayReg = allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
+                int nameIdx = addToStringPool(globalArrayName);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(arrayReg);
+                emit(nameIdx);
+            }
+        } else {
+            // %$arrayref[...] / %{expr}[...] / $aref->%[...] / ['a'..'z']->%[...]
+            leftOp.operand.accept(this);
+            int scalarRefReg = lastResultReg;
+            arrayReg = allocateRegister();
+            emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+            emitReg(arrayReg);
+            emitReg(scalarRefReg);
+        }
+
+        if (!(node.right instanceof ArrayLiteralNode indicesNode)) {
+            throwCompilerException("Index/value slice requires ArrayLiteralNode");
+            return;
+        }
+        if (indicesNode.elements.isEmpty()) {
+            throwCompilerException("Index/value slice requires at least one index");
+            return;
+        }
+
+        // Compile indices into a list
+        List<Integer> pairRegs = new ArrayList<>();
+        for (Node indexElement : indicesNode.elements) {
+            indexElement.accept(this);
+            int indexReg = lastResultReg;
+
+            int valueReg = allocateRegister();
+            emit(Opcodes.ARRAY_GET);
+            emitReg(valueReg);
+            emitReg(arrayReg);
+            emitReg(indexReg);
+
+            pairRegs.add(indexReg);
+            pairRegs.add(valueReg);
+        }
+
+        int listReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(listReg);
+        emit(pairRegs.size());
+        for (int r : pairRegs) {
+            emitReg(r);
+        }
+
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            int rd = allocateRegister();
+            emit(Opcodes.LIST_TO_SCALAR);
+            emitReg(rd);
+            emitReg(listReg);
+            lastResultReg = rd;
+        } else {
+            lastResultReg = listReg;
+        }
+    }
+
     @Override
     public void visit(StringNode node) {
         // Emit LOAD_STRING or LOAD_VSTRING depending on whether this is a v-string literal.
@@ -1229,6 +1301,81 @@ public class BytecodeCompiler implements Visitor {
         emitReg(keysListReg);
 
         lastResultReg = rdSlice;
+    }
+
+    void handleHashKeyValueSlice(BinaryOperatorNode node, OperatorNode leftOp) {
+        int hashReg;
+
+        // Key/value slice: %hash{keys} returns alternating key/value pairs.
+        // Postfix ->%{...} is parsed into this form by the parser.
+
+        if (leftOp.operand instanceof IdentifierNode) {
+            // Direct key/value slice: %hash{keys}
+            String varName = ((IdentifierNode) leftOp.operand).name;
+            String hashVarName = "%" + varName;
+
+            if (hasVariable(hashVarName)) {
+                hashReg = getVariableRegister(hashVarName);
+            } else {
+                hashReg = allocateRegister();
+                String globalHashName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                int nameIdx = addToStringPool(globalHashName);
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(hashReg);
+                emit(nameIdx);
+            }
+        } else {
+            // %$hashref{keys} / %{expr}{keys} / $hashref->%{keys}
+            // Compile operand to a scalar and then dereference as hash.
+            leftOp.operand.accept(this);
+            int scalarRefReg = lastResultReg;
+            hashReg = allocateRegister();
+            emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+            emitReg(hashReg);
+            emitReg(scalarRefReg);
+        }
+
+        if (!(node.right instanceof HashLiteralNode)) {
+            throwCompilerException("Key/value slice requires HashLiteralNode");
+            return;
+        }
+
+        HashLiteralNode keysNode = (HashLiteralNode) node.right;
+        if (keysNode.elements.isEmpty()) {
+            throwCompilerException("Key/value slice requires at least one key");
+            return;
+        }
+
+        List<Integer> keyRegs = new ArrayList<>();
+        for (Node keyElement : keysNode.elements) {
+            if (keyElement instanceof IdentifierNode) {
+                String keyString = ((IdentifierNode) keyElement).name;
+                int keyReg = allocateRegister();
+                int keyIdx = addToStringPool(keyString);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(keyReg);
+                emit(keyIdx);
+                keyRegs.add(keyReg);
+            } else {
+                keyElement.accept(this);
+                keyRegs.add(lastResultReg);
+            }
+        }
+
+        int keysListReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(keysListReg);
+        emit(keyRegs.size());
+        for (int keyReg : keyRegs) {
+            emitReg(keyReg);
+        }
+
+        int rd = allocateRegister();
+        emit(Opcodes.HASH_KEYVALUE_SLICE);
+        emitReg(rd);
+        emitReg(hashReg);
+        emitReg(keysListReg);
+        lastResultReg = rd;
     }
 
     /**
@@ -1671,10 +1818,20 @@ public class BytecodeCompiler implements Visitor {
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     if (isDeclaredReference) {
-                        // This is my \\$x which means: create a declared reference and then take a reference to it
-                        // The operand is \$x, so we recursively compile it
-                        sigilOp.accept(this);
-                        // The result is now in lastResultReg
+                        // my \\$x means: declare a reference variable (my \$x) and then take a reference to that.
+                        // Compile the inner declared-ref my in current context, then wrap with CREATE_REF.
+                        OperatorNode innerMy = new OperatorNode(op, sigilOp.operand, node.getIndex());
+                        innerMy.setAnnotation("isDeclaredReference", true);
+                        innerMy.accept(this);
+                        int innerReg = lastResultReg;
+
+                        if (currentCallContext != RuntimeContextType.VOID && innerReg != -1) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(innerReg);
+                            lastResultReg = refReg;
+                        }
                         return;
                     }
                 }
@@ -1682,12 +1839,14 @@ public class BytecodeCompiler implements Visitor {
                 // my ($x, $y, @rest) - list of variable declarations
                 ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
+                List<Boolean> wrapWithRef = new ArrayList<>();
 
                 // Check if this is a declared reference (my \($x, $y))
                 boolean isDeclaredReference = node.annotations != null &&
                         Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                 // Track if we found any backslash operators inside the list (my (\($x, $y)))
+                // Note: backslash inside the list should only affect that element, not the whole list.
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
@@ -1697,6 +1856,59 @@ public class BytecodeCompiler implements Visitor {
 
                         // Handle backslash operator (reference constructor): my (\$x) or my (\($x, $y))
                         if (sigil.equals("\\")) {
+                            // Parser may represent element-level double-backslash (\\$i) as a single backslash
+                            // node annotated with declaredReferenceOriginalSigil="\\".
+                            Object elementOriginalSigilObj = sigilOp.annotations != null
+                                    ? sigilOp.annotations.get("declaredReferenceOriginalSigil")
+                                    : null;
+                            if ("\\".equals(elementOriginalSigilObj) && sigilOp.getBooleanAnnotation("isDeclaredReference")
+                                    && sigilOp.operand instanceof OperatorNode varNode
+                                    && "$@%".contains(varNode.operator)
+                                    && varNode.operand instanceof IdentifierNode idNode) {
+                                String baseName = idNode.name;
+
+                                // Declare the scalar reference variable $name
+                                String scalarName = "$" + baseName;
+                                int scalarReg = addVariable(scalarName, op);
+                                emit(Opcodes.LOAD_UNDEF);
+                                emitReg(scalarReg);
+
+                                // Allocate/initialize the underlying storage and create a reference to it
+                                int declaredReg;
+                                if ("$".equals(varNode.operator)) {
+                                    declaredReg = allocateRegister();
+                                    emit(Opcodes.LOAD_UNDEF);
+                                    emitReg(declaredReg);
+                                } else {
+                                    String declaredVarName = varNode.operator + baseName;
+                                    declaredReg = addVariable(declaredVarName, op);
+                                    if ("@".equals(varNode.operator)) {
+                                        emit(Opcodes.NEW_ARRAY);
+                                        emitReg(declaredReg);
+                                    } else {
+                                        emit(Opcodes.NEW_HASH);
+                                        emitReg(declaredReg);
+                                    }
+                                }
+
+                                int refReg = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(refReg);
+                                emitReg(declaredReg);
+                                emit(Opcodes.SET_SCALAR);
+                                emitReg(scalarReg);
+                                emitReg(refReg);
+
+                                // Return a reference to $name (ref-to-ref semantics)
+                                int scalarRefReg = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(scalarRefReg);
+                                emitReg(scalarReg);
+                                varRegs.add(scalarRefReg);
+                                wrapWithRef.add(false);
+                                continue;
+                            }
+
                             // Check if it's a double backslash first: my (\\$x)
                             if (sigilOp.operand instanceof OperatorNode innerBackslash &&
                                        innerBackslash.operator.equals("\\")) {
@@ -1720,11 +1932,12 @@ public class BytecodeCompiler implements Visitor {
                                     emitReg(refReg);
                                     emitReg(lastResultReg);
                                     varRegs.add(refReg);
+                                    wrapWithRef.add(false);
                                 }
                                 continue;
                             }
 
-                            // Single backslash - mark that we need to create references later
+                            // Single backslash - this element should become a reference
                             foundBackslashInList = true;
 
                             // Check if it's a nested list: my (\($d, $e))
@@ -1735,32 +1948,37 @@ public class BytecodeCompiler implements Visitor {
                                         "$@%".contains(nestedVarNode.operator)) {
                                         // Get the variable name
                                         if (nestedVarNode.operand instanceof IdentifierNode idNode) {
-                                            // For declared refs, variable is always scalar holding a ref
-                                            String varName = "$" + idNode.name;
-
-                                            // Declare the variable
-                                            int reg = addVariable(varName, op);
-
-                                            // Initialize based on original sigil
+                                            // Initialize based on original sigil.
+                                            // Declared refs declare the underlying variable and return a reference to it.
+                                            // We keep the underlying variable with its original sigil ($/@/%) and later
+                                            // create references when building the return list.
                                             String originalSigil = nestedVarNode.operator;
+                                            String declaredVarName = originalSigil + idNode.name;
+
+                                            // Declare the underlying variable (not $-renamed)
+                                            int declaredReg = addVariable(declaredVarName, op);
+
                                             switch (originalSigil) {
                                                 case "$" -> {
                                                     emit(Opcodes.LOAD_UNDEF);
-                                                    emitReg(reg);
+                                                    emitReg(declaredReg);
                                                 }
                                                 case "@" -> {
-                                                    // Create an array ref
                                                     emit(Opcodes.NEW_ARRAY);
-                                                    emitReg(reg);
+                                                    emitReg(declaredReg);
                                                 }
                                                 case "%" -> {
-                                                    // Create a hash ref
                                                     emit(Opcodes.NEW_HASH);
-                                                    emitReg(reg);
+                                                    emitReg(declaredReg);
                                                 }
                                             }
 
-                                            varRegs.add(reg);
+                                            int refReg = allocateRegister();
+                                            emit(Opcodes.CREATE_REF);
+                                            emitReg(refReg);
+                                            emitReg(declaredReg);
+                                            varRegs.add(refReg);
+                                            wrapWithRef.add(false);
                                         }
                                     }
                                 }
@@ -1768,32 +1986,33 @@ public class BytecodeCompiler implements Visitor {
                                        "$@%".contains(varNode.operator)) {
                                 // Single variable: my (\$x) or state (\$x) or my (\@x) or my (\%x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
-                                    // For declared refs, variable is always scalar holding a ref
-                                    String varName = "$" + idNode.name;
-
-                                    // Declare the variable
-                                    int reg = addVariable(varName, op);
-
-                                    // Initialize based on original sigil
                                     String originalSigil = varNode.operator;
+                                    String declaredVarName = originalSigil + idNode.name;
+
+                                    // Declare the underlying variable (not $-renamed)
+                                    int reg = addVariable(declaredVarName, op);
+
                                     switch (originalSigil) {
                                         case "$" -> {
                                             emit(Opcodes.LOAD_UNDEF);
                                             emitReg(reg);
                                         }
                                         case "@" -> {
-                                            // Create an array ref
                                             emit(Opcodes.NEW_ARRAY);
                                             emitReg(reg);
                                         }
                                         case "%" -> {
-                                            // Create a hash ref
                                             emit(Opcodes.NEW_HASH);
                                             emitReg(reg);
                                         }
                                     }
 
-                                    varRegs.add(reg);
+                                    int refReg = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(refReg);
+                                    emitReg(reg);
+                                    varRegs.add(refReg);
+                                    wrapWithRef.add(false);
                                 }
                             }
                             continue;
@@ -1801,6 +2020,64 @@ public class BytecodeCompiler implements Visitor {
 
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Parser may rewrite list elements like \$f/\@f/\%f into a scalar $f (dropping the backslash node).
+                            // Preserve semantics here by initializing $f to a reference to the underlying storage and
+                            // returning the reference value from the declaration expression.
+                            boolean elementIsDeclaredReference = sigilOp.getBooleanAnnotation("isDeclaredReference");
+                            Object originalSigilObj = sigilOp.annotations != null ? sigilOp.annotations.get("declaredReferenceOriginalSigil") : null;
+                            if (elementIsDeclaredReference && "$".equals(sigil) && ("$".equals(originalSigilObj) || "@".equals(originalSigilObj) || "%".equals(originalSigilObj))) {
+                                String originalSigil = (String) originalSigilObj;
+                                String baseName = ((IdentifierNode) sigilOp.operand).name;
+                                String declaredVarName = originalSigil + baseName;
+
+                                // Declare the scalar variable $name
+                                int scalarReg = addVariable(varName, op);
+                                emit(Opcodes.LOAD_UNDEF);
+                                emitReg(scalarReg);
+
+                                // Declare and initialize the underlying storage
+                                int declaredReg;
+                                if ("$".equals(originalSigil)) {
+                                    // For declared scalar refs: allocate a fresh scalar lvalue and store a reference to it in $name
+                                    declaredReg = allocateRegister();
+                                    emit(Opcodes.LOAD_UNDEF);
+                                    emitReg(declaredReg);
+                                } else {
+                                    declaredReg = addVariable(declaredVarName, op);
+                                    if ("@".equals(originalSigil)) {
+                                        emit(Opcodes.NEW_ARRAY);
+                                        emitReg(declaredReg);
+                                    } else {
+                                        emit(Opcodes.NEW_HASH);
+                                        emitReg(declaredReg);
+                                    }
+                                }
+
+                                // Set $name to a reference to the underlying variable
+                                int refReg = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(refReg);
+                                emitReg(declaredReg);
+                                emit(Opcodes.SET_SCALAR);
+                                emitReg(scalarReg);
+                                emitReg(refReg);
+
+                                // Element-level declared refs:
+                                // - \$f expects a REF value (\$f)
+                                // - \@f/\%f expect the referent ARRAY/HASH ref value
+                                if ("$".equals(originalSigil)) {
+                                    int scalarRefReg = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(scalarRefReg);
+                                    emitReg(scalarReg);
+                                    varRegs.add(scalarRefReg);
+                                } else {
+                                    varRegs.add(refReg);
+                                }
+                                wrapWithRef.add(false);
+                                continue;
+                            }
 
                             // Check if this variable is captured by closures or is a state variable
                             if (sigilOp.id != 0 || op.equals("state")) {
@@ -1837,6 +2114,7 @@ public class BytecodeCompiler implements Visitor {
                                 }
 
                                 varRegs.add(reg);
+                                wrapWithRef.add(isDeclaredReference);
                             } else {
                                 // Regular lexical variable (not captured, not state)
                                 int reg = addVariable(varName, op);
@@ -1859,6 +2137,7 @@ public class BytecodeCompiler implements Visitor {
                                 }
 
                                 varRegs.add(reg);
+                                wrapWithRef.add(isDeclaredReference);
                             }
                         } else if (sigilOp.operand instanceof OperatorNode) {
                             // Handle declared references with backslash: my (\$x)
@@ -1877,35 +2156,45 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
 
-                // Return a list of the declared variables (or their references if isDeclaredReference)
+                // Return a list of the declared variables (or their references if isDeclaredReference).
                 int resultReg = allocateRegister();
 
-                if ((isDeclaredReference || foundBackslashInList) && currentCallContext != RuntimeContextType.VOID) {
-                    // Create references to all variables first
-                    List<Integer> refRegs = new ArrayList<>();
-                    for (int varReg : varRegs) {
-                        int refReg = allocateRegister();
-                        emit(Opcodes.CREATE_REF);
-                        emitReg(refReg);
-                        emitReg(varReg);
-                        refRegs.add(refReg);
+                if (currentCallContext != RuntimeContextType.VOID) {
+                    // Build the return list, optionally wrapping only selected elements with CREATE_REF.
+                    List<Integer> outRegs = new ArrayList<>();
+                    for (int i = 0; i < varRegs.size(); i++) {
+                        int vReg = varRegs.get(i);
+                        if (isDeclaredReference && i < wrapWithRef.size() && Boolean.TRUE.equals(wrapWithRef.get(i))) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(vReg);
+                            outRegs.add(refReg);
+                        } else {
+                            outRegs.add(vReg);
+                        }
                     }
 
-                    // Create a list of the references
+                    if (currentCallContext == RuntimeContextType.SCALAR) {
+                        // In scalar context, declaration lists return the last element.
+                        if (outRegs.isEmpty()) {
+                            lastResultReg = -1;
+                            return;
+                        }
+                        lastResultReg = outRegs.get(outRegs.size() - 1);
+                        return;
+                    }
+
                     emit(Opcodes.CREATE_LIST);
                     emitReg(resultReg);
-                    emit(refRegs.size());
-                    for (int refReg : refRegs) {
-                        emitReg(refReg);
+                    emit(outRegs.size());
+                    for (int outReg : outRegs) {
+                        emitReg(outReg);
                     }
                 } else {
-                    // Regular list of variables
                     emit(Opcodes.CREATE_LIST);
                     emitReg(resultReg);
-                    emit(varRegs.size());
-                    for (int varReg : varRegs) {
-                        emitReg(varReg);
-                    }
+                    emit(0);
                 }
 
                 lastResultReg = resultReg;
@@ -2009,6 +2298,7 @@ public class BytecodeCompiler implements Visitor {
                         Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                 // Track if we found any backslash operators inside the list
+                // Note: backslash inside the list should only affect that element, not the whole list.
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
@@ -2040,7 +2330,7 @@ public class BytecodeCompiler implements Visitor {
                                 continue;
                             }
 
-                            // Single backslash - mark that we need to create references later
+                            // Single backslash - this element should become a reference
                             foundBackslashInList = true;
 
                             // Check if it's a nested list: our (\($d, $e))
@@ -2050,8 +2340,8 @@ public class BytecodeCompiler implements Visitor {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
                                         "$@%".contains(nestedVarNode.operator)) {
                                         if (nestedVarNode.operand instanceof IdentifierNode idNode) {
-                                            // For declared refs, variable is always scalar holding a ref
-                                            String varName = "$" + idNode.name;
+                                            String originalSigil = nestedVarNode.operator;
+                                            String varName = originalSigil + idNode.name;
 
                                             // Declare and load the package variable
                                             int reg = addVariable(varName, "our");
@@ -2062,7 +2352,6 @@ public class BytecodeCompiler implements Visitor {
                                             int nameIdx = addToStringPool(globalVarName);
 
                                             // Load based on original sigil
-                                            String originalSigil = nestedVarNode.operator;
                                             switch (originalSigil) {
                                                 case "$" -> {
                                                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
@@ -2081,7 +2370,11 @@ public class BytecodeCompiler implements Visitor {
                                                 }
                                             }
 
-                                            varRegs.add(reg);
+                                            int refReg = allocateRegister();
+                                            emit(Opcodes.CREATE_REF);
+                                            emitReg(refReg);
+                                            emitReg(reg);
+                                            varRegs.add(refReg);
                                         }
                                     }
                                 }
@@ -2089,8 +2382,8 @@ public class BytecodeCompiler implements Visitor {
                                        "$@%".contains(varNode.operator)) {
                                 // Single variable: our (\$x) or our (\@x) or our (\%x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
-                                    // For declared refs, variable is always scalar holding a ref
-                                    String varName = "$" + idNode.name;
+                                    String originalSigil = varNode.operator;
+                                    String varName = originalSigil + idNode.name;
 
                                     // Declare and load the package variable
                                     int reg = addVariable(varName, "our");
@@ -2101,7 +2394,6 @@ public class BytecodeCompiler implements Visitor {
                                     int nameIdx = addToStringPool(globalVarName);
 
                                     // Load based on original sigil
-                                    String originalSigil = varNode.operator;
                                     switch (originalSigil) {
                                         case "$" -> {
                                             emit(Opcodes.LOAD_GLOBAL_SCALAR);
@@ -2120,7 +2412,11 @@ public class BytecodeCompiler implements Visitor {
                                         }
                                     }
 
-                                    varRegs.add(reg);
+                                    int refReg = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(refReg);
+                                    emitReg(reg);
+                                    varRegs.add(refReg);
                                 }
                             }
                             continue;
@@ -2177,15 +2473,24 @@ public class BytecodeCompiler implements Visitor {
                 // Return a list of the declared variables (or their references if isDeclaredReference)
                 int resultReg = allocateRegister();
 
-                if ((isDeclaredReference || foundBackslashInList) && currentCallContext != RuntimeContextType.VOID) {
+                if (currentCallContext != RuntimeContextType.VOID) {
                     // Create references to all variables first
                     List<Integer> refRegs = new ArrayList<>();
                     for (int varReg : varRegs) {
-                        int refReg = allocateRegister();
-                        emit(Opcodes.CREATE_REF);
-                        emitReg(refReg);
-                        emitReg(varReg);
-                        refRegs.add(refReg);
+                        if (isDeclaredReference) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(varReg);
+                            refRegs.add(refReg);
+                        } else {
+                            refRegs.add(varReg);
+                        }
+                    }
+
+                    if (currentCallContext == RuntimeContextType.SCALAR) {
+                        lastResultReg = refRegs.isEmpty() ? -1 : refRegs.get(refRegs.size() - 1);
+                        return;
                     }
 
                     // Create a list of the references
@@ -2573,11 +2878,19 @@ public class BytecodeCompiler implements Visitor {
                 int refReg = lastResultReg;
 
                 // Dereference the result
+                // Use strict/non-strict variants to match JVM behavior and strict refs semantics.
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
-
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
                 lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());

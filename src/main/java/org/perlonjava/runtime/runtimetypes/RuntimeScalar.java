@@ -1269,7 +1269,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
-            case GLOBREFERENCE -> (RuntimeGlob) value;
+            case GLOBREFERENCE -> {
+                // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
+                if (value instanceof RuntimeIO io) {
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    tmp.setIO(io);
+                    yield tmp;
+                }
+                yield (RuntimeGlob) value;
+            }
             case GLOB -> {
                 // PVIO (like *STDOUT{IO}) is stored as type GLOB with a RuntimeIO value.
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
@@ -1305,7 +1313,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
+            case GLOBREFERENCE -> {
+                // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
+                if (value instanceof RuntimeIO io) {
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    tmp.setIO(io);
+                    yield tmp;
+                }
+                yield (RuntimeGlob) value;
+            }
+            case GLOB -> {
+                // PVIO (like *STDOUT{IO}) is stored as type GLOB with a RuntimeIO value.
+                // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
+                // with the IO slot set to that handle.
+                if (value instanceof RuntimeIO io) {
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    tmp.setIO(io);
+                    yield tmp;
+                }
+                yield (RuntimeGlob) value;
+            }
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 // Use the canonical glob object for this symbol name.

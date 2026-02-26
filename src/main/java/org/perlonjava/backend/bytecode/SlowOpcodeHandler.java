@@ -76,6 +76,27 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * HASH_KEYVALUE_SLICE: rd = hash.getKeyValueSlice(keys_list)
+     * Format: [HASH_KEYVALUE_SLICE] [rd] [hashReg] [keysListReg]
+     * Effect: Returns alternating key/value pairs for the given keys.
+     */
+    public static int executeHashKeyValueSlice(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        registers[rd] = hash.getKeyValueSlice(keysList);
+        return pc;
+    }
+
+    /**
      * SLOW_FORK: rd = fork()
      * Format: [SLOW_FORK] [rd]
      * Effect: Forks process (not supported in Java)
@@ -354,7 +375,7 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDeref();
+        registers[rd] = registers[rs].scalar().scalarDeref();
         return pc;
     }
 
@@ -373,7 +394,7 @@ public class SlowOpcodeHandler {
         int rs = bytecode[pc++];
         int pkgIdx = bytecode[pc++];
         String pkg = code.stringPool[pkgIdx];
-        registers[rd] = ((RuntimeScalar) registers[rs]).scalarDerefNonStrict(pkg);
+        registers[rd] = registers[rs].scalar().scalarDerefNonStrict(pkg);
         return pc;
     }
 
@@ -392,20 +413,9 @@ public class SlowOpcodeHandler {
         int rs = bytecode[pc++];
         int nameIdx = bytecode[pc++];  // currentPackage (unused at runtime, consumed for alignment)
 
-        RuntimeBase val = registers[rs];
-
-        // PVIO case: *STDOUT{IO} returns RuntimeIO directly — wrap in a temporary glob
-        if (val instanceof RuntimeIO io) {
-            RuntimeGlob tmp = new RuntimeGlob("__ANON__");
-            tmp.setIO(io);
-            registers[rd] = tmp;
-            return pc;
-        }
-
-        // General case: use globDeref() — throws "Not a GLOB reference" for invalid refs.
-        // Matches JVM path (EmitVariable.java: globDeref()).
-        RuntimeScalar scalar = (RuntimeScalar) val;
-        registers[rd] = scalar.globDeref();
+        // Delegate to RuntimeScalar.globDeref() (after scalar context coercion).
+        // This centralizes PVIO / GLOBREFERENCE handling and matches the JVM path.
+        registers[rd] = registers[rs].scalar().globDeref();
         return pc;
     }
 
