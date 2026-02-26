@@ -370,9 +370,8 @@ public class RuntimeList extends RuntimeBase {
     public RuntimeList createListReference() {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> resultList = result.elements;
-        Iterator<RuntimeScalar> iterator = this.iterator();
-        while (iterator.hasNext()) {
-            resultList.add(iterator.next().createReference());
+        for (RuntimeBase element : this.elements) {
+            resultList.add(element.createReference());
         }
         return result;
     }
