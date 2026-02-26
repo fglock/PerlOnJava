@@ -318,18 +318,18 @@ public class InheritanceResolver {
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
                 // Perl method lookup should ignore undefined CODE slots (e.g. after `undef *pkg::method`).
-                if (!codeRef.getDefinedBoolean()) {
-                    continue;
+                // But don't skip to next class — fall through to AUTOLOAD check for this class.
+                if (codeRef.getDefinedBoolean()) {
+                    // Cache the found method
+                    cacheMethod(cacheKey, codeRef);
+                    
+                    if (TRACE_METHOD_RESOLUTION) {
+                        System.err.println("  FOUND method!");
+                        System.err.flush();
+                    }
+                    
+                    return codeRef;
                 }
-                // Cache the found method
-                cacheMethod(cacheKey, codeRef);
-                
-                if (TRACE_METHOD_RESOLUTION) {
-                    System.err.println("  FOUND method!");
-                    System.err.flush();
-                }
-                
-                return codeRef;
             }
 
             // Method not found in current class, check AUTOLOAD
