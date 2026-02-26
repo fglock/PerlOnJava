@@ -63,6 +63,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final boolean EVAL_VERBOSE =
             System.getenv("JPERL_EVAL_VERBOSE") != null;
 
+    public static final boolean EVAL_TRACE =
+            System.getenv("JPERL_EVAL_TRACE") != null;
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
+
     /**
      * Flag to enable disassembly of eval STRING bytecode.
      * When set, prints the interpreter bytecode for each eval STRING compilation.
@@ -711,6 +720,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray args,
             int callContext) throws Throwable {
 
+        evalTrace("evalStringWithInterpreter enter tag=" + evalTag + " ctx=" + callContext +
+                " codeType=" + code.type + " codeLen=" + (code.toString() != null ? code.toString().length() : -1));
+
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
 
@@ -734,6 +746,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         try {
             String evalString = code.toString();
+            evalTrace("evalStringWithInterpreter parse start tag=" + evalTag + " ctx=" + callContext +
+                    " fileName=" + ctx.compilerOptions.fileName);
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
             if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
@@ -857,6 +871,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         adjustedRegistry);
                 compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
                 interpretedCode = compiler.compile(ast, evalCtx);
+                evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
+                        " bytecodeLen=" + (interpretedCode != null ? interpretedCode.bytecode.length : -1) +
+                        " src=" + (interpretedCode != null ? interpretedCode.sourceName : "null"));
                 if (DISASSEMBLE) {
                     System.out.println(interpretedCode.disassemble());
                 }
@@ -940,6 +957,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 result = interpretedCode.apply(args, callContext);
 
+                evalTrace("evalStringWithInterpreter exec ok tag=" + evalTag + " ctx=" + callContext +
+                        " resultClass=" + (result != null ? result.getClass().getSimpleName() : "null") +
+                        " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
+                        " resultBool=" + (result != null && result.scalar() != null ? result.scalar().getBoolean() : false));
+
                 // Clear $@ on successful execution
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
                 err.set("");
@@ -947,6 +969,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return result;
 
             } catch (PerlDieException e) {
+                evalTrace("evalStringWithInterpreter exec die tag=" + evalTag + " ctx=" + callContext +
+                        " payload=" + (e.getPayload() != null ? e.getPayload().getFirst().toString() : "null"));
                 // Runtime error - set $@ and return undef/empty list
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
                 RuntimeBase payload = e.getPayload();
@@ -976,6 +1000,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
             } catch (Throwable e) {
+                evalTrace("evalStringWithInterpreter exec throwable tag=" + evalTag + " ctx=" + callContext +
+                        " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
                 // Other runtime errors - set $@ and return undef/empty list
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
                 String message = e.getMessage();
@@ -993,6 +1019,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
         } finally {
+            evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
+                    " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
 
