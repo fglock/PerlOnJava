@@ -72,6 +72,10 @@ public class BytecodeInterpreter {
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
+                // Update current PC for caller()/stack trace reporting.
+                // This allows ExceptionFormatter to map pc->tokenIndex->line using code.errorUtil,
+                // which also honors #line directives inside eval strings.
+                InterpreterState.setCurrentPc(pc);
                 int opcode = bytecode[pc++];
 
                 switch (opcode) {

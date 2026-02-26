@@ -105,42 +105,8 @@ Tool prints list of operators needing emit cases. Add between markers:
 // GENERATED_OPERATORS_END
 ```
 
-### Critical: LASTOP Management
-
-Tool reads `LASTOP` from Opcodes.java to determine starting opcode:
-
-```java
-// In Opcodes.java
-public static final short REDO = 220;
-
-// Last manually-assigned opcode (for tool reference)
-private static final short LASTOP = 220;  // ← UPDATE WHEN ADDING MANUAL OPCODES
-```
-
-**When adding manual opcodes:**
-1. Add constant BEFORE generated section
-2. Update `LASTOP = <your new opcode number>`
-3. Run tool - it starts at LASTOP + 1
-
 ### Gotchas
 
-**1. Don't Edit Generated Sections**
-- Between `// GENERATED_*_START` and `// GENERATED_*_END`
-- Tool overwrites on regeneration
-- Your changes will be lost!
-
-**2. LASTOP Drift**
-```java
-// WRONG: Forgot to update LASTOP
-public static final short MY_NEW_OP = 221;
-private static final short LASTOP = 220;  // ← Still 220!
-
-// Tool starts at 221, collides with MY_NEW_OP!
-
-// RIGHT: Always update LASTOP
-public static final short MY_NEW_OP = 221;
-private static final short LASTOP = 221;  // ← Updated!
-```
 
 **3. Import Path Conversion**
 - Tool auto-converts: `org/perlonjava/operators/...` → `org.perlonjava.operators....`
