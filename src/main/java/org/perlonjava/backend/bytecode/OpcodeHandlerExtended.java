@@ -223,6 +223,18 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
+    public static int executeDefinedOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+        if (s1.getDefinedBoolean()) {
+            return pc;
+        }
+        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+        ((RuntimeScalar) registers[rd]).set(s2);
+        return pc;
+    }
+
     /**
      * Execute string concatenation assign operation.
      * Format: STRING_CONCAT_ASSIGN rd rs

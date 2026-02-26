@@ -1477,6 +1477,7 @@ public class BytecodeCompiler implements Visitor {
             case ">>=" -> emit(Opcodes.RIGHT_SHIFT_ASSIGN);             // Right shift
             case "&&=" -> emit(Opcodes.LOGICAL_AND_ASSIGN);             // Logical AND
             case "||=" -> emit(Opcodes.LOGICAL_OR_ASSIGN);              // Logical OR
+            case "//=" -> emit(Opcodes.DEFINED_OR_ASSIGN);              // Defined-or
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
                 currentCallContext = savedContext;
