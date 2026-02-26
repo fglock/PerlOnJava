@@ -1002,13 +1002,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } catch (Throwable e) {
                 evalTrace("evalStringWithInterpreter exec throwable tag=" + evalTag + " ctx=" + callContext +
                         " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
-                // Other runtime errors - set $@ and return undef/empty list
-                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                String message = e.getMessage();
-                if (message == null || message.isEmpty()) {
-                    message = e.getClass().getSimpleName();
-                }
-                err.set(message);
+                WarnDie.catchEval(e);
 
                 // Return undef/empty list
                 if (callContext == RuntimeContextType.LIST) {
