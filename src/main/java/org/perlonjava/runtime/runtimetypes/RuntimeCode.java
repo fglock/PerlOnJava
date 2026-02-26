@@ -476,7 +476,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // ast = ConstantFoldingVisitor.foldConstants(ast);
 
             // Create a new instance of ErrorMessageUtil, resetting the line counter
-            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            evalCtx.errorUtil = new ErrorMessageUtil(evalCompilerOptions.fileName, tokens);
             ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
             evalCtx.symbolTable = capturedSymbolTable;
             evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);

@@ -3,8 +3,10 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -205,7 +207,34 @@ public class SignatureParser {
 
     private Node createParameterVariable(String sigil, String name) {
         if (name != null) {
-            return new OperatorNode(sigil, new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex);
+            OperatorNode varNode = new OperatorNode(sigil, new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex);
+
+            // Signature parameters are lexicals that must be visible while parsing the sub body
+            // so nested subs can close over them. The subroutine parser ensures we're already
+            // in the body scope when signatures are enabled.
+            String var = sigil + name;
+            if (parser.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                // Route through WarnDie.warn so $SIG{__WARN__} can intercept.
+                // This matches how perl5 reports duplicate signature parameter names.
+                try {
+                    WarnDie.warn(
+                            new RuntimeScalar("\"my\" variable " + var + " masks earlier declaration in same scope"),
+                            new RuntimeScalar(parser.ctx.errorUtil.errorMessage(varNode.getIndex(), ""))
+                    );
+                } catch (Exception e) {
+                    // If warning system isn't initialized yet, fall back to stderr.
+                    System.err.println(parser.ctx.errorUtil.errorMessage(
+                            varNode.getIndex(),
+                            "\"my\" variable " + var + " masks earlier declaration in same scope"));
+                }
+            }
+            // CRITICAL: store the sigil node itself as the symbol table AST.
+            // The closure capture code uses entry.ast().id to derive the BEGIN package for
+            // lexicals; storing a wrapper `my` node here would split identity from the
+            // nodes that appear in the generated signature assignment.
+            parser.ctx.symbolTable.addVariable(var, "my", varNode);
+
+            return varNode;
         } else {
             return new OperatorNode("undef", null, parser.tokenIndex);
         }
@@ -440,7 +469,7 @@ public class SignatureParser {
                                     atUnderscore(parser),
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
-                    dieWarnNode(parser, "die", new ListNode(List.of(
+                    new OperatorNode("die", new ListNode(List.of(
                             generateTooFewArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
         } else {
@@ -456,7 +485,7 @@ public class SignatureParser {
                                     atUnderscore(parser),
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
-                    dieWarnNode(parser, "die", new ListNode(List.of(
+                    new OperatorNode("die", new ListNode(List.of(
                             generateTooFewArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
             
@@ -469,7 +498,7 @@ public class SignatureParser {
                                     new NumberNode(Integer.toString(maxParams), parser.tokenIndex),
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
-                    dieWarnNode(parser, "die", new ListNode(List.of(
+                    new OperatorNode("die", new ListNode(List.of(
                             generateTooManyArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
             

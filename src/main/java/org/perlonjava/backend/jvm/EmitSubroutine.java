@@ -88,12 +88,18 @@ public class EmitSubroutine {
         // Alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         
-        // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
-        // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
-        // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
-        // 'our sub foo' from incorrectly capturing the 'our sub' as a closure variable.
-        boolean isPackageSub = node.name != null && !node.name.equals("<anon>");
-        if (isPackageSub) {
+        // IMPORTANT: A named subroutine defined at top level should NOT capture closure variables.
+        // However, named subs defined inside a subroutine body *do* form closures in perl5 and
+        // must capture lexicals from the enclosing scope.
+        //
+        // Example (op/signatures.t):
+        //   sub outer ($a = inner(), @b) { sub inner { @b = ... } ... }
+        // Here `inner` must capture `@b`.
+        boolean isTopLevelPackageSub =
+                node.name != null &&
+                !node.name.equals("<anon>") &&
+                !ctx.symbolTable.isInSubroutineBody();
+        if (isTopLevelPackageSub) {
             // Package subs should not capture any closure variables
             // They can only access global variables and their parameters
             visibleVariables.clear();

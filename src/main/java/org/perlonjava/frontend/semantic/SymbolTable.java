@@ -26,13 +26,18 @@ public class SymbolTable {
      * @return The index of the variable in the symbol table.
      */
     public int addVariable(String name, String variableDeclType, String perlPackage, OperatorNode ast) {
-        // Check if the variable is not already in the table
-        // XXX TODO under 'no strict', we may need to allow variable redeclaration
-        if (!variableIndex.containsKey(name)) {
-            // Add the variable with a unique index
-            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+        // Lexical redeclaration in the same scope masks the earlier declaration.
+        // Perl may warn, but the new variable must become the visible one.
+        if (variableIndex.containsKey(name)) {
+            if ("my".equals(variableDeclType) || "state".equals(variableDeclType)) {
+                variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+                return variableIndex.get(name).index;
+            }
+            return variableIndex.get(name).index;
         }
-        // Return the index of the variable
+
+        // Add the variable with a unique index
+        variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
         return variableIndex.get(name).index;
     }
 

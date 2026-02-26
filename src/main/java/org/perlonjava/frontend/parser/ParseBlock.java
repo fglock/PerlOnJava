@@ -47,6 +47,65 @@ public class ParseBlock {
     public static BlockNode parseBlock(Parser parser) {
         return parseBlock(parser, true).block;
     }
+
+    /**
+     * Parse a block without creating a new lexical scope.
+     *
+     * The caller is responsible for scope management.
+     */
+    public static BlockNode parseBlockNoScope(Parser parser) {
+        int currentIndex = parser.tokenIndex;
+
+        List<Node> statements = new ArrayList<>();
+        List<String> blockLabels = new ArrayList<>();
+
+        LexerToken token = peek(parser);
+        while (token.type != LexerTokenType.EOF
+                && !(token.type == LexerTokenType.OPERATOR && token.text.equals("}"))) {
+
+            String label = null;
+            if (token.type == LexerTokenType.IDENTIFIER) {
+                label = parseLabel(parser, statements, blockLabels);
+
+                token = peek(parser);
+                String nextLabel = label;
+                while (nextLabel != null && token.type == LexerTokenType.IDENTIFIER) {
+                    nextLabel = parseLabel(parser, statements, blockLabels);
+                    token = peek(parser);
+                    if (nextLabel != null) {
+                        label = nextLabel;
+                    }
+                }
+
+                if (label != null && token.type == LexerTokenType.OPERATOR && token.text.equals("}")) {
+                    continue;
+                }
+            }
+
+            if (token.text.equals(";")) {
+                TokenUtils.consume(parser);
+                token = peek(parser);
+                continue;
+            }
+
+            Node statement = StatementResolver.parseStatement(parser, label);
+            if (statement != null) {
+                statements.add(statement);
+            } else {
+                parser.ctx.logDebug("WARNING: parseStatement returned null at token: " + token.text);
+            }
+
+            token = peek(parser);
+        }
+
+        if (statements.isEmpty()) {
+            statements.add(new ListNode(parser.tokenIndex));
+        }
+
+        BlockNode blockNode = new BlockNode(statements, currentIndex, parser);
+        blockNode.labels = blockLabels;
+        return blockNode;
+    }
     
     /**
      * Parses a block with optional delayed scope exit.

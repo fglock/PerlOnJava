@@ -392,12 +392,18 @@ public class BytecodeInterpreter {
                         break;
 
                     case Opcodes.SET_SCALAR: {
-                        // Set scalar value: registers[rd] = registers[rs]
-                        // Use addToScalar which properly handles special variables like $&
-                        // addToScalar calls getValueAsScalar() for ScalarSpecialVariable
+                        // Set scalar value: ((RuntimeScalar)registers[rd]).set((RuntimeScalar)registers[rs])
+                        // without overwriting the destination reference.
+                        //
+                        // This is used for lexical scalar assignment so the lexical's RuntimeScalar
+                        // object stays mutable and can be used as an lvalue.
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rs].addToScalar((RuntimeScalar) registers[rd]);
+
+                        RuntimeBase src = registers[rs];
+                        RuntimeScalar dst = (RuntimeScalar) registers[rd];
+                        RuntimeScalar srcScalar = (src instanceof RuntimeScalar s) ? s : src.scalar();
+                        dst.set(srcScalar);
                         break;
                     }
 
@@ -1360,6 +1366,36 @@ public class BytecodeInterpreter {
                         int locationReg = bytecode[pc++];
                         RuntimeBase message = registers[msgReg];
                         RuntimeScalar where = (RuntimeScalar) registers[locationReg];
+
+                        // Signature argument mismatch errors should be attributed to the eval STRING
+                        // call site when they occur inside eval("..."). Our signature prologue emits
+                        // a DIE opcode with a location precomputed from the sub definition file,
+                        // but perl5 tests expect "at (eval N) line 1".
+                        try {
+                            String msgStr = message.toString();
+                            boolean isSignatureArgMismatch =
+                                    msgStr.startsWith("Too many arguments for subroutine") ||
+                                    msgStr.startsWith("Too few arguments for subroutine") ||
+                                    msgStr.startsWith("Too many arguments for ") ||
+                                    msgStr.startsWith("Too few arguments for ") ||
+                                    msgStr.startsWith("Not enough arguments for ");
+                            if (isSignatureArgMismatch) {
+                                var stack = org.perlonjava.runtime.runtimetypes.ExceptionFormatter
+                                        .formatException(new Throwable());
+                                for (var entry : stack) {
+                                    if (entry.size() >= 3) {
+                                        String f = entry.get(1);
+                                        String l = entry.get(2);
+                                        if (f != null && f.startsWith("(eval ") && l != null) {
+                                            where = new RuntimeScalar(" at " + f + " line " + l);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Throwable ignored) {
+                            // Best-effort only
+                        }
 
                         // Call WarnDie.die() with precomputed location (zero overhead!)
                         WarnDie.die(message, where, code.sourceName, code.sourceLine);

@@ -461,11 +461,21 @@ public class SubroutineParser {
         }
 
         ListNode signature = null;
+        int signatureScopeIndex = -1;
+        boolean signatureScopeActive = false;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek(parser).text.equals("(")) {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                 parser.ctx.logDebug("Signatures feature enabled");
+                // IMPORTANT: Signature parameters must live in the same lexical scope as the
+                // subroutine body so nested subs can close over them and so the signature's
+                // own `my (...) = @_` binds the correct variables.
+                //
+                // ParseBlock normally creates the scope for the body. When signatures are
+                // present, we need the scope *before* parsing the signature.
+                signatureScopeIndex = parser.ctx.symbolTable.enterScope();
+                signatureScopeActive = true;
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser, subName);
                 parser.ctx.logDebug("Signature AST: " + signature);
@@ -521,7 +531,13 @@ public class SubroutineParser {
 
         try {
             // Parse the block of the subroutine, which contains the actual code.
-            BlockNode block = ParseBlock.parseBlock(parser);
+            BlockNode block;
+            if (signatureScopeActive) {
+                // Scope already entered above; do not create another nested scope.
+                block = ParseBlock.parseBlockNoScope(parser);
+            } else {
+                block = ParseBlock.parseBlock(parser);
+            }
 
             // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
             // Check if we reached EOF instead of finding the closing brace
@@ -542,6 +558,9 @@ public class SubroutineParser {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
         } finally {
+            if (signatureScopeActive) {
+                parser.ctx.symbolTable.exitScope(signatureScopeIndex);
+            }
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
@@ -581,7 +600,7 @@ public class SubroutineParser {
     public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, String declaration) {
         return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false, declaration);
     }
-    
+
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
         // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
         String lexicalKey = "&" + subName;
