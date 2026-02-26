@@ -321,10 +321,10 @@ public class EmitLogicalOperator {
                 rewritten = true;
             }
 
-            // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation
-            int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-                    ? RuntimeContextType.RUNTIME
-                    : RuntimeContextType.SCALAR;
+            // Logical operators always evaluate their operands in scalar context for truthiness.
+            // Even when the enclosing context is RUNTIME, evaluating operands in RUNTIME can
+            // propagate VOID into constructs like `eval STRING`, breaking `eval "1" or die`.
+            int operandContext = RuntimeContextType.SCALAR;
 
             resultRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
 
