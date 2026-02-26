@@ -548,6 +548,17 @@ public class StatementResolver {
             Node result = switch (token.text) {
                 case "..." -> {
                     TokenUtils.consume(parser);
+                    // The yadayada operator `...` is only valid as a standalone statement.
+                    // In expression contexts (e.g. "... + 0", "... if 1", "my $a = ..."), perl5
+                    // reports a syntax error at compile time.
+                    LexerToken next = TokenUtils.peek(parser);
+                    boolean isStatementTerminator =
+                            next.type == LexerTokenType.EOF ||
+                            next.text.equals(";") ||
+                            next.text.equals("}");
+                    if (!isStatementTerminator) {
+                        throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+                    }
                     yield dieWarnNode(parser, "die", new ListNode(List.of(
                             new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex), parser.tokenIndex);
                 }
