@@ -3,6 +3,7 @@ package org.perlonjava.runtime.runtimetypes;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.Iterator;
+import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -541,29 +542,50 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return this;
     }
 
-    /**
-     * Saves the current state of the typeglob.
-     */
+    private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
+
+    private record GlobSlotSnapshot(
+            String globName,
+            RuntimeScalar scalar,
+            RuntimeArray array,
+            RuntimeHash hash,
+            RuntimeScalar code) {}
+
     @Override
     public void dynamicSaveState() {
-        GlobalVariable.getGlobalCodeRef(this.globName).dynamicSaveState();
-        GlobalVariable.getGlobalArray(this.globName).dynamicSaveState();
-        GlobalVariable.getGlobalHash(this.globName).dynamicSaveState();
-        GlobalVariable.getGlobalVariable(this.globName).dynamicSaveState();
+        RuntimeScalar savedScalar = GlobalVariable.getGlobalVariable(this.globName);
+        RuntimeArray savedArray = GlobalVariable.getGlobalArray(this.globName);
+        RuntimeHash savedHash = GlobalVariable.getGlobalHash(this.globName);
+        RuntimeScalar savedCode = GlobalVariable.getGlobalCodeRef(this.globName);
+        globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode));
+
+        savedCode.dynamicSaveState();
+        savedArray.dynamicSaveState();
+        savedHash.dynamicSaveState();
+        savedScalar.dynamicSaveState();
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
         this.IO.dynamicSaveState();
     }
 
-    /**
-     * Restores the most recently saved state of the typeglob.
-     */
     @Override
     public void dynamicRestoreState() {
         this.IO.dynamicRestoreState();
-        GlobalVariable.getGlobalVariable(this.globName).dynamicRestoreState();
-        GlobalVariable.getGlobalHash(this.globName).dynamicRestoreState();
-        GlobalVariable.getGlobalArray(this.globName).dynamicRestoreState();
-        GlobalVariable.getGlobalCodeRef(this.globName).dynamicRestoreState();
-        GlobalVariable.getGlobalFormatRef(this.globName).dynamicRestoreState();
+
+        GlobSlotSnapshot snap = globSlotStack.pop();
+
+        GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
+        snap.scalar.dynamicRestoreState();
+
+        GlobalVariable.globalHashes.put(snap.globName, snap.hash);
+        snap.hash.dynamicRestoreState();
+
+        GlobalVariable.globalArrays.put(snap.globName, snap.array);
+        snap.array.dynamicRestoreState();
+
+        GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
+        snap.code.dynamicRestoreState();
+        InheritanceResolver.invalidateCache();
+
+        GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();
     }
 }
