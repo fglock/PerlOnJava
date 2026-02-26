@@ -818,7 +818,11 @@ public class SubroutineParser {
                     field.set(placeholder.codeObject, codeRef);
 
                 } else if (runtimeCode instanceof InterpretedCode) {
-                    // InterpretedCode path - replace codeRef.value entirely
+                    // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
+                    // This is critical: hash assignments copy RuntimeScalar but share the same
+                    // RuntimeCode value object. If we replace codeRef.value, hash copies won't see
+                    // the update. By setting methodHandle/codeObject on the placeholder, ALL
+                    // references (including hash copies) will see the compiled code.
                     InterpretedCode interpretedCode =
                         (InterpretedCode) runtimeCode;
 
@@ -839,8 +843,10 @@ public class SubroutineParser {
                     interpretedCode.subName = placeholder.subName;
                     interpretedCode.packageName = placeholder.packageName;
 
-                    // REPLACE the global reference
-                    codeRef.value = interpretedCode;
+                    // Update placeholder in-place: set methodHandle to delegate to InterpretedCode
+                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(
+                        InterpretedCode.class, "apply", RuntimeCode.methodType);
+                    placeholder.codeObject = interpretedCode;
                 }
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
