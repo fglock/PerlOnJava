@@ -839,14 +839,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // (see BytecodeInterpreter's `System.arraycopy(code.capturedVars, 0, registers, 3, ...)`).
                 // Therefore the variable registry must map captured variable names to packed
                 // register indices 3+(i-skipVariables), in the same order as runtimeValues[].
+                // Do NOT pack indices: runtimeValues[] is sized for the full capturedEnv range
+                // and may contain null gaps, so the corresponding registers must keep the same
+                // slot numbering.
                 if (ctx.capturedEnv != null) {
-                    int captureIndex = 3;
                     for (int i = 3; i < ctx.capturedEnv.length; i++) {
                         String varName = ctx.capturedEnv[i];
                         if (varName == null) {
                             continue;
                         }
-                        adjustedRegistry.put(varName, captureIndex++);
+                        adjustedRegistry.put(varName, i);
                     }
                 }
 
