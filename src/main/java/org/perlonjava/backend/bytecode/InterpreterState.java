@@ -18,6 +18,9 @@ public class InterpreterState {
     private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    private static final ThreadLocal<Deque<Integer>> pcStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
     /**
      * Thread-local RuntimeScalar holding the runtime current package name.
      *
@@ -60,6 +63,7 @@ public class InterpreterState {
      */
     public static void push(InterpretedCode code, String packageName, String subroutineName) {
         frameStack.get().push(new InterpreterFrame(code, packageName, subroutineName));
+        pcStack.get().push(0);
     }
 
     /**
@@ -70,6 +74,19 @@ public class InterpreterState {
         Deque<InterpreterFrame> stack = frameStack.get();
         if (!stack.isEmpty()) {
             stack.pop();
+        }
+
+        Deque<Integer> pcs = pcStack.get();
+        if (!pcs.isEmpty()) {
+            pcs.pop();
+        }
+    }
+
+    public static void setCurrentPc(int pc) {
+        Deque<Integer> pcs = pcStack.get();
+        if (!pcs.isEmpty()) {
+            pcs.pop();
+            pcs.push(pc);
         }
     }
 
@@ -92,5 +109,9 @@ public class InterpreterState {
      */
     public static List<InterpreterFrame> getStack() {
         return new ArrayList<>(frameStack.get());
+    }
+
+    public static List<Integer> getPcStack() {
+        return new ArrayList<>(pcStack.get());
     }
 }

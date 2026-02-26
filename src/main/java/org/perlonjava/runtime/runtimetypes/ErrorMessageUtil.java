@@ -18,6 +18,9 @@ public class ErrorMessageUtil {
     private int tokenIndex;
     private int lastLineNumber;
 
+    public record SourceLocation(String fileName, int lineNumber) {
+    }
+
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
      *
@@ -251,6 +254,78 @@ public class ErrorMessageUtil {
             }
         }
         return lineNumber;
+    }
+
+    public SourceLocation getSourceLocationAccurate(int index) {
+        String currentFileName = fileName;
+        int lineNumber = 1;
+
+        boolean atBeginningOfLine = true;
+        int i = 0;
+        while (i <= index && i < tokens.size()) {
+            LexerToken tok = tokens.get(i);
+            if (tok.type == LexerTokenType.EOF) {
+                break;
+            }
+
+            if (tok.type == LexerTokenType.NEWLINE) {
+                lineNumber++;
+                atBeginningOfLine = true;
+                i++;
+                continue;
+            }
+
+            if (atBeginningOfLine && tok.type == LexerTokenType.OPERATOR && tok.text.equals("#")) {
+                int j = i + 1;
+                while (j < tokens.size() && tokens.get(j).type == LexerTokenType.WHITESPACE) {
+                    j++;
+                }
+                if (j < tokens.size() && tokens.get(j).type == LexerTokenType.IDENTIFIER && tokens.get(j).text.equals("line")) {
+                    j++;
+                    while (j < tokens.size() && tokens.get(j).type == LexerTokenType.WHITESPACE) {
+                        j++;
+                    }
+                    if (j < tokens.size() && tokens.get(j).type == LexerTokenType.NUMBER) {
+                        int directiveLine = -1;
+                        try {
+                            directiveLine = Integer.parseInt(tokens.get(j).text);
+                        } catch (NumberFormatException e) {
+                            directiveLine = -1;
+                        }
+                        j++;
+                        while (j < tokens.size() && tokens.get(j).type == LexerTokenType.WHITESPACE) {
+                            j++;
+                        }
+                        if (j < tokens.size() && tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\"")) {
+                            j++;
+                            StringBuilder filenameBuilder = new StringBuilder();
+                            while (j < tokens.size() && !(tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\""))) {
+                                filenameBuilder.append(tokens.get(j).text);
+                                j++;
+                            }
+                            if (j < tokens.size() && tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\"")) {
+                                String directiveFile = filenameBuilder.toString();
+                                if (!directiveFile.isEmpty()) {
+                                    currentFileName = directiveFile;
+                                }
+                            }
+                        }
+
+                        if (directiveLine >= 1) {
+                            // The directive applies to the following line.
+                            lineNumber = directiveLine - 1;
+                        }
+                    }
+                }
+            }
+
+            if (tok.type != LexerTokenType.WHITESPACE) {
+                atBeginningOfLine = false;
+            }
+            i++;
+        }
+
+        return new SourceLocation(currentFileName, lineNumber);
     }
 }
 
