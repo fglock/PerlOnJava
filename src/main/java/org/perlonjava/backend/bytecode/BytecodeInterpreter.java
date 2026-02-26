@@ -1382,17 +1382,21 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_REF: {
                         // Create reference: rd = rs.createReference()
-                        // For multi-element lists, create references to each element
+                        // For lists, create a list of references to each element
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
 
-                        // Special handling for RuntimeList
-                        if (value instanceof RuntimeList list && list.elements.size() != 1) {
-                            // Multi-element or empty list: create list of references
-                            registers[rd] = list.createListReference();
+                        if (value == null) {
+                            // Null value - return undef
+                            registers[rd] = RuntimeScalarCache.scalarUndef;
+                        } else if (value instanceof RuntimeList list) {
+                            if (list.size() == 1) {
+                                registers[rd] = list.getFirst().createReference();
+                            } else {
+                                registers[rd] = list.createListReference();
+                            }
                         } else {
-                            // Single value or single-element list: create single reference
                             registers[rd] = value.createReference();
                         }
                         break;
@@ -2282,13 +2286,17 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
-
-                // Special handling for RuntimeList
-                if (value instanceof RuntimeList list && list.elements.size() != 1) {
-                    // Multi-element or empty list: create list of references
-                    registers[rd] = list.createListReference();
+                if (value instanceof RuntimeList list) {
+                    if (list.size() == 1) {
+                        registers[rd] = list.getFirst().createReference();
+                    } else {
+                        RuntimeList refs = new RuntimeList();
+                        for (RuntimeScalar element : list) {
+                            refs.add(element.createReference());
+                        }
+                        registers[rd] = refs;
+                    }
                 } else {
-                    // Single value or single-element list: create single reference
                     registers[rd] = value.createReference();
                 }
                 return pc;
