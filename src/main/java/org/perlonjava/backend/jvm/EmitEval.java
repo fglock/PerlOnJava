@@ -546,14 +546,18 @@ public class EmitEval {
         // Stack: [RuntimeScalar(String), String, Object[]]
 
         // Fill the runtime values array with actual variable values from local variables
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            if (index >= skipVariables) {
-                String varName = newEnv[index];
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
-                mv.visitInsn(Opcodes.AASTORE);
+        // IMPORTANT: Fill in capturedEnv index order so runtimeValues[] matches newEnv[] ordering.
+        // Iterating a Map keySet() is not guaranteed to be deterministic and can break
+        // lexical capture across nested eval boundaries.
+        for (int index = skipVariables; index < newEnv.length; index++) {
+            String varName = newEnv[index];
+            if (varName == null) {
+                continue;
             }
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
+            mv.visitInsn(Opcodes.AASTORE);
         }
         // Stack: [RuntimeScalar(String), String, Object[]]
 

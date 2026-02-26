@@ -377,6 +377,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // call site is looking up via reflection.
         ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
 
+        // %^H is the compile-time hints hash. eval STRING must not leak modifications to the
+        // caller scope, so snapshot and restore it across compilation.
+        RuntimeHash capturedHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        Map<String, RuntimeScalar> savedHintHash = new HashMap<>(capturedHintHash.elements);
+
         // eval may include lexical pragmas (use strict/warnings/features). We need those flags
         // during codegen of the eval body, but they must NOT leak back into the caller scope.
         BitSet savedWarningFlags = (BitSet) capturedSymbolTable.warningFlagsStack.peek().clone();
@@ -544,6 +549,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             capturedSymbolTable.strictOptionsStack.pop();
             capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
+
+            // Restore %^H (compile-time hints hash) to the caller snapshot.
+            capturedHintHash.elements.clear();
+            capturedHintHash.elements.putAll(savedHintHash);
 
             setCurrentScope(capturedSymbolTable);
 
@@ -726,11 +735,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             String evalString = code.toString();
 
-            // Ensure a final line terminator so EOF parsing behaves consistently with file input.
-            // This prevents edge-case parse errors in eval STRING when the last statement ends
-            // with constructs like declaration attributes and lacks a trailing semicolon.
+            // Work around EOF parsing edge cases in eval STRING when the last statement ends
+            // with declaration attributes (e.g. `my ($x) :attr`), by adding a virtual line
+            // terminator. Do NOT do this unconditionally, because it shifts reported line
+            // numbers for syntax errors at EOF (op/eval.t expects exact line numbers).
             if (!evalString.endsWith("\n")) {
-                evalString = evalString + "\n";
+                String trimmed = evalString.trim();
+                boolean looksLikeAttributeAtEof = trimmed.matches("(?s).*\\)\\s*:[A-Za-z_]\\w*\\s*$");
+                if (looksLikeAttributeAtEof) {
+                    evalString = evalString + "\n";
+                }
             }
 
             // Handle Unicode source detection (same logic as evalStringHelper)
@@ -821,15 +835,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 adjustedRegistry.put("@_", 1);
                 adjustedRegistry.put("wantarray", 2);
 
-                // Add captured variables starting at register 3
-                int captureIndex = 3;
-                Map<Integer, SymbolTable.SymbolEntry> capturedVariables = capturedSymbolTable.getAllVisibleVariables();
-                for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : capturedVariables.entrySet()) {
-                    int index = entry.getKey();
-                    if (index >= 3) {  // Skip reserved registers
-                        String varName = entry.getValue().name();
-                        adjustedRegistry.put(varName, captureIndex);
-                        captureIndex++;
+                // IMPORTANT: Captured variables are loaded into registers starting at 3
+                // (see BytecodeInterpreter's `System.arraycopy(code.capturedVars, 0, registers, 3, ...)`).
+                // Therefore the variable registry must map captured variable names to packed
+                // register indices 3+(i-skipVariables), in the same order as runtimeValues[].
+                if (ctx.capturedEnv != null) {
+                    int captureIndex = 3;
+                    for (int i = 3; i < ctx.capturedEnv.length; i++) {
+                        String varName = ctx.capturedEnv[i];
+                        if (varName == null) {
+                            continue;
+                        }
+                        adjustedRegistry.put(varName, captureIndex++);
                     }
                 }
 
