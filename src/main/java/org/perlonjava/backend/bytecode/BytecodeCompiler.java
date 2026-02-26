@@ -150,6 +150,10 @@ public class BytecodeCompiler implements Visitor {
             // Add parent scope variables (for eval STRING variable capture)
             globalScope.putAll(parentRegistry);
 
+            // Preserve parent scope variables in the compiled code's variableRegistry so that
+            // nested eval STRING can capture lexicals from this eval scope.
+            allDeclaredVariables.putAll(parentRegistry);
+
             // Mark parent scope variables as captured so assignments use SET_SCALAR
             capturedVarIndices = new HashMap<>();
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
@@ -3720,22 +3724,36 @@ public class BytecodeCompiler implements Visitor {
      * interoperate seamlessly with interpreted code via the shared RuntimeCode.apply() API.
      */
     private void visitNamedSubroutine(SubroutineNode node) {
-        // Step 1: Collect outer variables used by this subroutine
-        Set<String> usedVars = new HashSet<>();
-        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
-        node.block.accept(collector);
-
-        // Step 2: Filter to only include lexical variables that exist in current scope
-        List<String> closureVarNames = new ArrayList<>();
-        List<Integer> closureVarIndices = new ArrayList<>();
-
-        for (String varName : usedVars) {
-            int varIndex = getVariableRegister(varName);
-            if (varIndex != -1 && varIndex >= 3) {
-                closureVarNames.add(varName);
-                closureVarIndices.add(varIndex);
+        // Step 1: Collect closure variables.
+        //
+        // IMPORTANT: For named subs defined in eval STRING, the body may contain nested
+        // eval STRING that references outer lexicals that are NOT referenced directly
+        // in the AST (because they're inside a string). Perl still expects those outer
+        // lexicals to be visible from inside the sub.
+        //
+        // Therefore capture all visible Perl variables (scalars/arrays/hashes) from the
+        // current scope, not just variables referenced directly in the sub AST.
+        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            for (Map.Entry<String, Integer> e : scope.entrySet()) {
+                String varName = e.getKey();
+                Integer reg = e.getValue();
+                if (reg == null || reg < 3) {
+                    continue;
+                }
+                if (varName == null || varName.isEmpty()) {
+                    continue;
+                }
+                char sigil = varName.charAt(0);
+                if (sigil != '$' && sigil != '@' && sigil != '%') {
+                    continue;
+                }
+                closureVarsByReg.put(reg, varName);
             }
         }
+
+        List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
+        List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
 
         // If there are closure variables, we need to store them in PersistentVariable globals
         // so the named sub can retrieve them using RETRIEVE_BEGIN opcodes
@@ -3776,11 +3794,22 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 3: Create a new BytecodeCompiler for the subroutine body
+        // Step 3: Compile the subroutine body with a packed registry for captured variables.
+        // The closure created at runtime packs capturedVars sequentially into registers 3..,
+        // so the compiled sub body must use the same packed register layout.
+        Map<String, Integer> packedRegistry = new HashMap<>();
+        packedRegistry.put("this", 0);
+        packedRegistry.put("@_", 1);
+        packedRegistry.put("wantarray", 2);
+        for (int i = 0; i < closureVarNames.size(); i++) {
+            packedRegistry.put(closureVarNames.get(i), 3 + i);
+        }
+
         BytecodeCompiler subCompiler = new BytecodeCompiler(
             this.sourceName,
             node.getIndex(),
-            this.errorUtil
+            this.errorUtil,
+            packedRegistry
         );
 
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
@@ -3801,12 +3830,15 @@ public class BytecodeCompiler implements Visitor {
             emitReg(codeReg);
             emit(constIdx);
         } else {
-            // Store the InterpretedCode directly (closures are handled via PersistentVariable)
-            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
-            int constIdx = addToConstantPool(codeScalar);
-            emit(Opcodes.LOAD_CONST);
+            // Create a closure capturing the current register values.
+            int templateIdx = addToConstantPool(subCode);
+            emit(Opcodes.CREATE_CLOSURE);
             emitReg(codeReg);
-            emit(constIdx);
+            emit(templateIdx);
+            emit(closureVarIndices.size());
+            for (int regIdx : closureVarIndices) {
+                emit(regIdx);
+            }
         }
 
         // Step 6: Store in global namespace
@@ -3838,22 +3870,33 @@ public class BytecodeCompiler implements Visitor {
      * Anonymous subs capture lexical variables from the enclosing scope.
      */
     private void visitAnonymousSubroutine(SubroutineNode node) {
-        // Step 1: Collect outer variables used by this subroutine
-        Set<String> usedVars = new HashSet<>();
-        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
-        node.block.accept(collector);
-
-        // Step 2: Filter to only include lexical variables that exist in current scope
-        List<String> closureVarNames = new ArrayList<>();
-        List<Integer> closureVarIndices = new ArrayList<>();
-
-        for (String varName : usedVars) {
-            int varIndex = getVariableRegister(varName);
-            if (varIndex != -1 && varIndex >= 3) {
-                closureVarNames.add(varName);
-                closureVarIndices.add(varIndex);
+        // Step 1: Collect closure variables.
+        //
+        // IMPORTANT: Anonymous subs can contain nested eval STRING that references outer
+        // lexicals only inside strings (so they won't appear as IdentifierNodes in the AST).
+        // Perl still expects those lexicals to be visible to eval STRING at runtime.
+        // Capture all visible Perl variables (scalars/arrays/hashes) from the current scope.
+        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            for (Map.Entry<String, Integer> e : scope.entrySet()) {
+                String varName = e.getKey();
+                Integer reg = e.getValue();
+                if (reg == null || reg < 3) {
+                    continue;
+                }
+                if (varName == null || varName.isEmpty()) {
+                    continue;
+                }
+                char sigil = varName.charAt(0);
+                if (sigil != '$' && sigil != '@' && sigil != '%') {
+                    continue;
+                }
+                closureVarsByReg.put(reg, varName);
             }
         }
+
+        List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
+        List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
 
         // Step 3: Create a new BytecodeCompiler for the subroutine body
         // Build a variable registry from current scope to pass to sub-compiler
