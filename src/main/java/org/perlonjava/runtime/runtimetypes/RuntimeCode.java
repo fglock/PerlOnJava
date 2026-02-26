@@ -734,19 +734,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         try {
             String evalString = code.toString();
-
-            // Work around EOF parsing edge cases in eval STRING when the last statement ends
-            // with declaration attributes (e.g. `my ($x) :attr`), by adding a virtual line
-            // terminator. Do NOT do this unconditionally, because it shifts reported line
-            // numbers for syntax errors at EOF (op/eval.t expects exact line numbers).
-            if (!evalString.endsWith("\n")) {
-                String trimmed = evalString.trim();
-                boolean looksLikeAttributeAtEof = trimmed.matches("(?s).*\\)\\s*:[A-Za-z_]\\w*\\s*$");
-                if (looksLikeAttributeAtEof) {
-                    evalString = evalString + "\n";
-                }
-            }
-
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
             if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
