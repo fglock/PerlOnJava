@@ -321,15 +321,18 @@ public class EmitLogicalOperator {
                 rewritten = true;
             }
 
-            // Logical operators always evaluate their operands in scalar context for truthiness.
-            // Even when the enclosing context is RUNTIME, evaluating operands in RUNTIME can
-            // propagate VOID into constructs like `eval STRING`, breaking `eval "1" or die`.
-            int operandContext = RuntimeContextType.SCALAR;
+            // LHS is always evaluated in SCALAR context for the boolean/truthiness test.
+            // RHS inherits the enclosing context (including RUNTIME) since its value
+            // becomes the result of the logical operator and must honour wantarray.
+            int lhsContext = RuntimeContextType.SCALAR;
+            int rhsContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                    ? RuntimeContextType.RUNTIME
+                    : RuntimeContextType.SCALAR;
 
             resultRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
 
             // Evaluate LHS and store it.
-            node.left.accept(emitterVisitor.with(operandContext));
+            node.left.accept(emitterVisitor.with(lhsContext));
             emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, resultRef);
 
             // Boolean test on the stored LHS.
@@ -338,7 +341,7 @@ public class EmitLogicalOperator {
             mv.visitJumpInsn(compareOpcode, endLabel);
 
             // LHS didn't short-circuit: evaluate RHS, overwrite result.
-            node.right.accept(emitterVisitor.with(operandContext));
+            node.right.accept(emitterVisitor.with(rhsContext));
             emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, resultRef);
 
             // Return whichever side won the short-circuit.
