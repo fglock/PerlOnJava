@@ -726,6 +726,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             String evalString = code.toString();
 
+            // Ensure a final line terminator so EOF parsing behaves consistently with file input.
+            // This prevents edge-case parse errors in eval STRING when the last statement ends
+            // with constructs like declaration attributes and lacks a trailing semicolon.
+            if (!evalString.endsWith("\n")) {
+                evalString = evalString + "\n";
+            }
+
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
             if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
@@ -866,6 +873,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
                     System.err.println("eval compilation error: " + e.getMessage());
+                    String src = evalString;
+                    if (src != null) {
+                        int maxLen = 4000;
+                        if (src.length() > maxLen) {
+                            src = src.substring(0, maxLen) + "\n...";
+                        }
+                        System.err.println("eval source:\n" + src);
+                    }
                     if (e.getCause() != null) {
                         System.err.println("Caused by: " + e.getCause().getMessage());
                     }
@@ -933,6 +948,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     err.set(payload.getFirst());
                 } else {
                     err.set("Died");
+                }
+
+                if (EVAL_VERBOSE) {
+                    System.err.println("eval runtime error: " + err);
+                    String src = evalString;
+                    if (src != null) {
+                        int maxLen = 4000;
+                        if (src.length() > maxLen) {
+                            src = src.substring(0, maxLen) + "\n...";
+                        }
+                        System.err.println("eval source:\n" + src);
+                    }
                 }
 
                 // Return undef/empty list
