@@ -126,8 +126,12 @@ public class Stat {
                 return res; // Return empty list
             }
 
+            // Try to stat via the stored file path
+            if (fh.filePath != null) {
+                return statPath(arg, fh.filePath, res, false);
+            }
+
             // For in-memory file handles (like PerlIO::scalar), we can't stat them
-            // They should return EBADF
             getGlobalVariable("main::!").set(9);
             updateLastStat(arg, false, 9, false);
             return res;
@@ -135,33 +139,34 @@ public class Stat {
 
         // Handle string arguments
         String filename = arg.toString();
+        Path path = resolvePath(filename);
+        return statPath(arg, path, res, false);
+    }
 
-        // Handle regular filenames
+    private static RuntimeList statPath(RuntimeScalar arg, Path path, RuntimeList res, boolean lstat) {
         try {
-            Path path = resolvePath(filename);
-
-            // Basic file attributes (similar to some Perl stat fields)
-            BasicFileAttributes basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
-
-            // POSIX file attributes (for Unix-like systems)
-            PosixFileAttributes posixAttr = Files.readAttributes(path, PosixFileAttributes.class);
+            BasicFileAttributes basicAttr;
+            PosixFileAttributes posixAttr;
+            if (lstat) {
+                basicAttr = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                posixAttr = Files.readAttributes(path, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            } else {
+                basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
+                posixAttr = Files.readAttributes(path, PosixFileAttributes.class);
+            }
 
             lastBasicAttr = basicAttr;
             lastPosixAttr = posixAttr;
 
             statInternal(res, basicAttr, posixAttr);
-            // Clear $! on success
             getGlobalVariable("main::!").set(0);
-            updateLastStat(arg, true, 0, false);
+            updateLastStat(arg, true, 0, lstat);
         } catch (NoSuchFileException e) {
-            // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
-            updateLastStat(arg, false, 2, false);
+            updateLastStat(arg, false, 2, lstat);
         } catch (IOException e) {
-            // Returns the empty list if "stat" fails.
-            // Set a generic error code for other IO errors
-            getGlobalVariable("main::!").set(5); // EIO (Input/output error)
-            updateLastStat(arg, false, 5, false);
+            getGlobalVariable("main::!").set(5);
+            updateLastStat(arg, false, 5, lstat);
         }
         return res;
     }
@@ -191,8 +196,12 @@ public class Stat {
                 return res; // Return empty list
             }
 
+            // Try to lstat via the stored file path
+            if (fh.filePath != null) {
+                return statPath(arg, fh.filePath, res, true);
+            }
+
             // For in-memory file handles (like PerlIO::scalar), we can't lstat them
-            // They should return EBADF
             getGlobalVariable("main::!").set(9);
             updateLastStat(arg, false, 9, true);
             return res;
@@ -200,37 +209,8 @@ public class Stat {
 
         // Handle string arguments
         String filename = arg.toString();
-
-        // Handle regular filenames
-        try {
-            Path path = resolvePath(filename);
-
-            // Basic attributes without following symlink
-            BasicFileAttributes basicAttr = Files.readAttributes(path,
-                    BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-
-            // POSIX attributes without following symlink
-            PosixFileAttributes posixAttr = Files.readAttributes(path,
-                    PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
-
-            statInternal(res, basicAttr, posixAttr);
-            // Clear $! on success
-            getGlobalVariable("main::!").set(0);
-            updateLastStat(arg, true, 0, true);
-        } catch (NoSuchFileException e) {
-            // Set $! to ENOENT (No such file or directory) = 2
-            getGlobalVariable("main::!").set(2);
-            updateLastStat(arg, false, 2, true);
-        } catch (IOException e) {
-            // Returns the empty list if "lstat" fails.
-            // Set a generic error code for other IO errors
-            getGlobalVariable("main::!").set(5); // EIO (Input/output error)
-            updateLastStat(arg, false, 5, true);
-        }
-        return res;
+        Path path = resolvePath(filename);
+        return statPath(arg, path, res, true);
     }
 
     public static void statInternal(RuntimeList res, BasicFileAttributes basicAttr, PosixFileAttributes posixAttr) {
