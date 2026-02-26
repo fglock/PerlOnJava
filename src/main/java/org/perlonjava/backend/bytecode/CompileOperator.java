@@ -894,8 +894,11 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = undefReg;
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
-            // Compile operand
+            // Compile operand in scalar context (negation always produces a scalar)
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
             node.operand.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
             int operandReg = bytecodeCompiler.lastResultReg;
 
             // Allocate result register

@@ -1541,19 +1541,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             // Does AUTOLOAD exist?
-            if (!subroutineName.isEmpty()) {
-                // Check if AUTOLOAD exists
-                String autoloadString = subroutineName.substring(0, subroutineName.lastIndexOf("::") + 2) + "AUTOLOAD";
-                // System.err.println("AUTOLOAD: " + fullName);
+            String fullSubName = subroutineName;
+            if (fullSubName.isEmpty() && code.packageName != null && code.subName != null) {
+                fullSubName = code.packageName + "::" + code.subName;
+            }
+
+            if (!fullSubName.isEmpty()) {
+                // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
+                if (code.sourcePackage != null && !code.sourcePackage.isEmpty()) {
+                    String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
+                    RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+                    if (sourceAutoload.getDefinedBoolean()) {
+                        String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
+                        getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
+                        return apply(sourceAutoload, a, callContext);
+                    }
+                }
+
+                // Check if AUTOLOAD exists in the current package
+                String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                 if (autoload.getDefinedBoolean()) {
-                    // System.err.println("AUTOLOAD exists: " + fullName);
-                    // Set $AUTOLOAD name
-                    getGlobalVariable(autoloadString).set(subroutineName);
-                    // Call AUTOLOAD
+                    getGlobalVariable(autoloadString).set(fullSubName);
                     return apply(autoload, a, callContext);
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+                throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
             }
         }
 

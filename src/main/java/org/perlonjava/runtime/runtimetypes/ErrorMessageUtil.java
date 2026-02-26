@@ -14,6 +14,7 @@ import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermo
  */
 public class ErrorMessageUtil {
     private final List<LexerToken> tokens;
+    private final String originalFileName;
     private String fileName;
     private int tokenIndex;
     private int lastLineNumber;
@@ -28,6 +29,7 @@ public class ErrorMessageUtil {
      * @param tokens   the list of tokens
      */
     public ErrorMessageUtil(String fileName, List<LexerToken> tokens) {
+        this.originalFileName = fileName;
         this.fileName = fileName;
         this.tokens = tokens;
         this.tokenIndex = -1;
@@ -257,7 +259,7 @@ public class ErrorMessageUtil {
     }
 
     public SourceLocation getSourceLocationAccurate(int index) {
-        String currentFileName = fileName;
+        String currentFileName = originalFileName;
         int lineNumber = 1;
 
         boolean atBeginningOfLine = true;
