@@ -44,7 +44,6 @@ public class EmitForeach {
         for (int i = 0; i < blockNode.labels.size(); i++) {
             emitterVisitor.ctx.javaClassInfo.pushGotoLabels(blockNode.labels.get(i), new Label());
         }
-
         // Some labels may appear as explicit LabelNode statements.
         for (Node element : blockNode.elements) {
             if (element instanceof LabelNode labelNode) {
@@ -63,6 +62,30 @@ public class EmitForeach {
         for (int i = 0; i < blockNode.labels.size(); i++) {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
+    }
+
+    private static String extractSimpleVariableName(Node node) {
+        // Handle wrappers introduced by declared_refs and/or refaliasing.
+        // Examples we need to support:
+        // - $x / @x / %x
+        // - \$x / \@x / \%x
+        // - my $x / state $x / our $x / local $x
+        // - my \$x (declared_refs)
+        if (node instanceof OperatorNode opNode) {
+            String op = opNode.operator;
+            if ("my".equals(op) || "state".equals(op) || "our".equals(op) || "local".equals(op)) {
+                return extractSimpleVariableName(opNode.operand);
+            }
+            if ("\\".equals(op)) {
+                return extractSimpleVariableName(opNode.operand);
+            }
+            if ("$".equals(op) || "@".equals(op) || "%".equals(op)) {
+                if (opNode.operand instanceof IdentifierNode idNode) {
+                    return op + idNode.name;
+                }
+            }
+        }
+        return null;
     }
 
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
@@ -388,7 +411,10 @@ public class EmitForeach {
                 // Assign to variable
                 Node varNode = varList.elements.get(i);
                 if (varNode instanceof OperatorNode operatorNode) {
-                    String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;
+                    String varName = extractSimpleVariableName(operatorNode);
+                    if (varName == null) {
+                        continue;
+                    }
                     int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                     emitterVisitor.ctx.logDebug("FOR1 multi var name:" + varName + " index:" + varIndex);
                     mv.visitVarInsn(Opcodes.ASTORE, varIndex);
@@ -459,10 +485,14 @@ public class EmitForeach {
                 }
             } else if (variableNode instanceof OperatorNode operatorNode) {
                 // Local variable case
-                String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;
-                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
-                emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + varIndex);
-                mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                String varName = extractSimpleVariableName(operatorNode);
+                if (varName == null) {
+                    // Unsupported variable shape; skip assignment rather than failing compilation.
+                } else {
+                    int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                    emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + varIndex);
+                    mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                }
             }
         }
 
