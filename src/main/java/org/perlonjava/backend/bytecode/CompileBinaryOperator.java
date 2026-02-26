@@ -108,7 +108,8 @@ public class CompileBinaryOperator {
                 node.operator.equals("&.=") || node.operator.equals("|.=") || node.operator.equals("^.=") ||
                 node.operator.equals("x=") || node.operator.equals("**=") ||
                 node.operator.equals("<<=") || node.operator.equals(">>=") ||
-                node.operator.equals("&&=") || node.operator.equals("||=") || node.operator.equals("//=") ||
+                node.operator.equals("&&=") || node.operator.equals("||=") ||
+                node.operator.equals("//=") ||
                 node.operator.startsWith("binary")) {  // Handle binary&=, binary|=, binary^=
             bytecodeCompiler.handleCompoundAssignment(node);
             return;
@@ -712,8 +713,24 @@ public class CompileBinaryOperator {
         node.left.accept(bytecodeCompiler);
         int separatorReg = bytecodeCompiler.lastResultReg;
 
-        node.right.accept(bytecodeCompiler);
-        int listReg = bytecodeCompiler.lastResultReg;
+        java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+        if (node.right instanceof ListNode listNode) {
+            for (Node arg : listNode.elements) {
+                arg.accept(bytecodeCompiler);
+                argRegs.add(bytecodeCompiler.lastResultReg);
+            }
+        } else {
+            node.right.accept(bytecodeCompiler);
+            argRegs.add(bytecodeCompiler.lastResultReg);
+        }
+
+        int listReg = bytecodeCompiler.allocateRegister();
+        bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+        bytecodeCompiler.emitReg(listReg);
+        bytecodeCompiler.emit(argRegs.size());
+        for (int argReg : argRegs) {
+            bytecodeCompiler.emitReg(argReg);
+        }
 
         int rd = bytecodeCompiler.allocateRegister();
         bytecodeCompiler.emit(Opcodes.JOIN);
