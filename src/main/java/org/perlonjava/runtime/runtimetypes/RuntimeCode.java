@@ -377,6 +377,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // call site is looking up via reflection.
         ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
 
+        // %^H is the compile-time hints hash. eval STRING must not leak modifications to the
+        // caller scope, so snapshot and restore it across compilation.
+        RuntimeHash capturedHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        Map<String, RuntimeScalar> savedHintHash = new HashMap<>(capturedHintHash.elements);
+
         // eval may include lexical pragmas (use strict/warnings/features). We need those flags
         // during codegen of the eval body, but they must NOT leak back into the caller scope.
         BitSet savedWarningFlags = (BitSet) capturedSymbolTable.warningFlagsStack.peek().clone();
@@ -544,6 +549,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             capturedSymbolTable.strictOptionsStack.pop();
             capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
+
+            // Restore %^H (compile-time hints hash) to the caller snapshot.
+            capturedHintHash.elements.clear();
+            capturedHintHash.elements.putAll(savedHintHash);
 
             setCurrentScope(capturedSymbolTable);
 
@@ -725,7 +734,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         try {
             String evalString = code.toString();
-
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
             if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
@@ -814,15 +822,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 adjustedRegistry.put("@_", 1);
                 adjustedRegistry.put("wantarray", 2);
 
-                // Add captured variables starting at register 3
-                int captureIndex = 3;
-                Map<Integer, SymbolTable.SymbolEntry> capturedVariables = capturedSymbolTable.getAllVisibleVariables();
-                for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : capturedVariables.entrySet()) {
-                    int index = entry.getKey();
-                    if (index >= 3) {  // Skip reserved registers
-                        String varName = entry.getValue().name();
-                        adjustedRegistry.put(varName, captureIndex);
-                        captureIndex++;
+                // IMPORTANT: Captured variables are loaded into registers starting at 3
+                // (see BytecodeInterpreter's `System.arraycopy(code.capturedVars, 0, registers, 3, ...)`).
+                // Therefore the variable registry must map captured variable names to packed
+                // register indices 3+(i-skipVariables), in the same order as runtimeValues[].
+                // Do NOT pack indices: runtimeValues[] is sized for the full capturedEnv range
+                // and may contain null gaps, so the corresponding registers must keep the same
+                // slot numbering.
+                if (ctx.capturedEnv != null) {
+                    for (int i = 3; i < ctx.capturedEnv.length; i++) {
+                        String varName = ctx.capturedEnv[i];
+                        if (varName == null) {
+                            continue;
+                        }
+                        adjustedRegistry.put(varName, i);
                     }
                 }
 
@@ -866,6 +879,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
                     System.err.println("eval compilation error: " + e.getMessage());
+                    String src = evalString;
+                    if (src != null) {
+                        int maxLen = 4000;
+                        if (src.length() > maxLen) {
+                            src = src.substring(0, maxLen) + "\n...";
+                        }
+                        System.err.println("eval source:\n" + src);
+                    }
                     if (e.getCause() != null) {
                         System.err.println("Caused by: " + e.getCause().getMessage());
                     }
@@ -933,6 +954,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     err.set(payload.getFirst());
                 } else {
                     err.set("Died");
+                }
+
+                if (EVAL_VERBOSE) {
+                    System.err.println("eval runtime error: " + err);
+                    String src = evalString;
+                    if (src != null) {
+                        int maxLen = 4000;
+                        if (src.length() > maxLen) {
+                            src = src.substring(0, maxLen) + "\n...";
+                        }
+                        System.err.println("eval source:\n" + src);
+                    }
                 }
 
                 // Return undef/empty list

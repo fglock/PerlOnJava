@@ -150,6 +150,10 @@ public class BytecodeCompiler implements Visitor {
             // Add parent scope variables (for eval STRING variable capture)
             globalScope.putAll(parentRegistry);
 
+            // Preserve parent scope variables in the compiled code's variableRegistry so that
+            // nested eval STRING can capture lexicals from this eval scope.
+            allDeclaredVariables.putAll(parentRegistry);
+
             // Mark parent scope variables as captured so assignments use SET_SCALAR
             capturedVarIndices = new HashMap<>();
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
@@ -2018,6 +2022,28 @@ public class BytecodeCompiler implements Visitor {
                             continue;
                         }
 
+                        // local @x / local %x in list form
+                        if ((sigil.equals("@") || sigil.equals("%")) && sigilOp.operand instanceof IdentifierNode idNode) {
+                            String varName = sigil + idNode.name;
+                            if (hasVariable(varName)) {
+                                throwCompilerException("Can't localize lexical variable " + varName);
+                            }
+
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                            int nameIdx = addToStringPool(globalVarName);
+
+                            int rd = allocateRegister();
+                            if (sigil.equals("@")) {
+                                emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                            } else {
+                                emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                            }
+                            emitReg(rd);
+                            emit(nameIdx);
+                            varRegs.add(rd);
+                            continue;
+                        }
+
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
@@ -2211,6 +2237,72 @@ public class BytecodeCompiler implements Visitor {
                 if (sigilOp.operand instanceof IdentifierNode) {
                     String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
+                    // Parser may rewrite element-level declared refs like \$h/\@h/\%h into a scalar $h
+                    // with annotations (isDeclaredReference + declaredReferenceOriginalSigil).
+                    // Handle that here for single-variable our declarations.
+                    if ("$".equals(sigil) && sigilOp.getBooleanAnnotation("isDeclaredReference") && sigilOp.annotations != null
+                            && sigilOp.annotations.get("declaredReferenceOriginalSigil") instanceof String originalSigil
+                            && ("$".equals(originalSigil) || "@".equals(originalSigil) || "%".equals(originalSigil))) {
+
+                        String baseName = ((IdentifierNode) sigilOp.operand).name;
+
+                        // Declare/load the package scalar $baseName
+                        String scalarVarName = "$" + baseName;
+                        int scalarReg = hasVariable(scalarVarName) ? getVariableRegister(scalarVarName) : addVariable(scalarVarName, "our");
+                        String globalScalarName = NameNormalizer.normalizeVariableName(baseName, getCurrentPackage());
+                        int scalarNameIdx = addToStringPool(globalScalarName);
+                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        emitReg(scalarReg);
+                        emit(scalarNameIdx);
+
+                        int declaredReg;
+                        if ("$".equals(originalSigil)) {
+                            // Hidden scalar storage for declared-ref scalars
+                            declaredReg = allocateRegister();
+                            emit(Opcodes.LOAD_UNDEF);
+                            emitReg(declaredReg);
+                        } else {
+                            // Underlying package @/%, declared reference points at the container
+                            String declaredVarName = originalSigil + baseName;
+                            declaredReg = hasVariable(declaredVarName) ? getVariableRegister(declaredVarName) : addVariable(declaredVarName, "our");
+                            String globalName = NameNormalizer.normalizeVariableName(baseName, getCurrentPackage());
+                            int nameIdx = addToStringPool(globalName);
+                            if ("@".equals(originalSigil)) {
+                                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            } else {
+                                emit(Opcodes.LOAD_GLOBAL_HASH);
+                            }
+                            emitReg(declaredReg);
+                            emit(nameIdx);
+                        }
+
+                        // Set $baseName to reference to underlying storage
+                        int refReg = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg);
+                        emitReg(declaredReg);
+                        emit(Opcodes.SET_SCALAR);
+                        emitReg(scalarReg);
+                        emitReg(refReg);
+
+                        if (currentCallContext != RuntimeContextType.VOID) {
+                            if ("$".equals(originalSigil)) {
+                                // Return \$h (a REF) for scalar declared-ref elements
+                                int scalarRefReg = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(scalarRefReg);
+                                emitReg(scalarReg);
+                                lastResultReg = scalarRefReg;
+                            } else {
+                                // Return the referent arrayref/hashref value
+                                lastResultReg = refReg;
+                            }
+                        } else {
+                            lastResultReg = -1;
+                        }
+                        return;
+                    }
+
                     // Check if this is a declared reference (our \$x)
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
@@ -2305,6 +2397,64 @@ public class BytecodeCompiler implements Visitor {
                     if (element instanceof OperatorNode) {
                         OperatorNode sigilOp = (OperatorNode) element;
                         String sigil = sigilOp.operator;
+
+                        // Parser may rewrite element-level declared refs like \$h/\@h/\%h into a scalar $h
+                        // with annotations (isDeclaredReference + declaredReferenceOriginalSigil).
+                        if ("$".equals(sigil) && sigilOp.operand instanceof IdentifierNode idNode
+                                && sigilOp.getBooleanAnnotation("isDeclaredReference")
+                                && sigilOp.annotations != null
+                                && sigilOp.annotations.get("declaredReferenceOriginalSigil") instanceof String originalSigil
+                                && ("$".equals(originalSigil) || "@".equals(originalSigil) || "%".equals(originalSigil))) {
+
+                            String baseName = idNode.name;
+
+                            // Declare/load the package scalar $baseName
+                            String scalarVarName = "$" + baseName;
+                            int scalarReg = hasVariable(scalarVarName) ? getVariableRegister(scalarVarName) : addVariable(scalarVarName, "our");
+                            String globalScalarName = NameNormalizer.normalizeVariableName(baseName, getCurrentPackage());
+                            int scalarNameIdx = addToStringPool(globalScalarName);
+                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                            emitReg(scalarReg);
+                            emit(scalarNameIdx);
+
+                            int declaredReg;
+                            if ("$".equals(originalSigil)) {
+                                declaredReg = allocateRegister();
+                                emit(Opcodes.LOAD_UNDEF);
+                                emitReg(declaredReg);
+                            } else {
+                                String declaredVarName = originalSigil + baseName;
+                                declaredReg = hasVariable(declaredVarName) ? getVariableRegister(declaredVarName) : addVariable(declaredVarName, "our");
+                                String globalName = NameNormalizer.normalizeVariableName(baseName, getCurrentPackage());
+                                int nameIdx = addToStringPool(globalName);
+                                if ("@".equals(originalSigil)) {
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                } else {
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                }
+                                emitReg(declaredReg);
+                                emit(nameIdx);
+                            }
+
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(declaredReg);
+                            emit(Opcodes.SET_SCALAR);
+                            emitReg(scalarReg);
+                            emitReg(refReg);
+
+                            if ("$".equals(originalSigil)) {
+                                int scalarRefReg = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(scalarRefReg);
+                                emitReg(scalarReg);
+                                varRegs.add(scalarRefReg);
+                            } else {
+                                varRegs.add(refReg);
+                            }
+                            continue;
+                        }
 
                         // Handle backslash operator (reference constructor): our (\$x) or our (\($x, $y))
                         if (sigil.equals("\\")) {
@@ -2556,6 +2706,47 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
+                // local @x / local %x - localize global array/hash
+                if ((sigil.equals("@") || sigil.equals("%")) && sigilOp.operand instanceof IdentifierNode idNode) {
+                    String varName = sigil + idNode.name;
+
+                    if (hasVariable(varName)) {
+                        throwCompilerException("Can't localize lexical variable " + varName);
+                        return;
+                    }
+
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+                    String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalVarName);
+
+                    int rd = allocateRegister();
+                    if (sigil.equals("@")) {
+                        emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                    } else {
+                        emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                    }
+                    emitReg(rd);
+                    emit(nameIdx);
+
+                    if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                        int refReg1 = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg1);
+                        emitReg(rd);
+
+                        int refReg2 = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg2);
+                        emitReg(refReg1);
+                        lastResultReg = refReg2;
+                    } else {
+                        lastResultReg = rd;
+                    }
+                    return;
+                }
+
                 // Handle local \$x or local \\$x - backslash operator
                 if (sigil.equals("\\")) {
                     boolean isDeclaredReference = node.annotations != null &&
@@ -2567,8 +2758,8 @@ public class BytecodeCompiler implements Visitor {
                             "$@%".contains(innerOp.operator) &&
                             innerOp.operand instanceof IdentifierNode idNode) {
 
-                            // For declared refs, always use scalar sigil
-                            String varName = "$" + idNode.name;
+                            String originalSigil = innerOp.operator;
+                            String varName = originalSigil + idNode.name;
 
                             // Check if it's a lexical variable
                             if (hasVariable(varName)) {
@@ -2581,9 +2772,19 @@ public class BytecodeCompiler implements Visitor {
                             int nameIdx = addToStringPool(globalVarName);
 
                             int rd = allocateRegister();
-                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                            emitReg(rd);
-                            emit(nameIdx);
+                            if (originalSigil.equals("$")) {
+                                emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                emitReg(rd);
+                                emit(nameIdx);
+                            } else if (originalSigil.equals("@")) {
+                                emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                emitReg(rd);
+                                emit(nameIdx);
+                            } else {
+                                emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                emitReg(rd);
+                                emit(nameIdx);
+                            }
 
                             // Create first reference
                             int refReg1 = allocateRegister();
@@ -2641,7 +2842,7 @@ public class BytecodeCompiler implements Visitor {
                                     "$@%".contains(varNode.operator) &&
                                     varNode.operand instanceof IdentifierNode idNode) {
 
-                                    String varName = "$" + idNode.name;
+                                    String varName = varNode.operator + idNode.name;
 
                                     // Check if it's a lexical variable
                                     if (hasVariable(varName)) {
@@ -2653,9 +2854,19 @@ public class BytecodeCompiler implements Visitor {
                                     int nameIdx = addToStringPool(globalVarName);
 
                                     int rd = allocateRegister();
-                                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                                    emitReg(rd);
-                                    emit(nameIdx);
+                                    if (varNode.operator.equals("$")) {
+                                        emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                        emitReg(rd);
+                                        emit(nameIdx);
+                                    } else if (varNode.operator.equals("@")) {
+                                        emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                        emitReg(rd);
+                                        emit(nameIdx);
+                                    } else {
+                                        emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                        emitReg(rd);
+                                        emit(nameIdx);
+                                    }
 
                                     // Create first reference
                                     int refReg1 = allocateRegister();
@@ -2683,8 +2894,7 @@ public class BytecodeCompiler implements Visitor {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
                                         "$@%".contains(nestedVarNode.operator) &&
                                         nestedVarNode.operand instanceof IdentifierNode idNode) {
-                                        // For declared refs, always use scalar sigil
-                                        String varName = "$" + idNode.name;
+                                        String varName = nestedVarNode.operator + idNode.name;
 
                                         // Check if it's a lexical variable
                                         if (hasVariable(varName)) {
@@ -2696,9 +2906,19 @@ public class BytecodeCompiler implements Visitor {
                                         int nameIdx = addToStringPool(globalVarName);
 
                                         int rd = allocateRegister();
-                                        emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                                        emitReg(rd);
-                                        emit(nameIdx);
+                                        if (nestedVarNode.operator.equals("$")) {
+                                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                            emitReg(rd);
+                                            emit(nameIdx);
+                                        } else if (nestedVarNode.operator.equals("@")) {
+                                            emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                            emitReg(rd);
+                                            emit(nameIdx);
+                                        } else {
+                                            emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                            emitReg(rd);
+                                            emit(nameIdx);
+                                        }
 
                                         varRegs.add(rd);
                                     }
@@ -2707,8 +2927,8 @@ public class BytecodeCompiler implements Visitor {
                                        "$@%".contains(varNode.operator) &&
                                        varNode.operand instanceof IdentifierNode idNode) {
                                 // Single variable: local (\$x), local (\@x), local (\%x)
-                                // For declared refs, always use scalar sigil
-                                String varName = "$" + idNode.name;
+                                String originalSigil = varNode.operator;
+                                String varName = originalSigil + idNode.name;
 
                                 // Check if it's a lexical variable
                                 if (hasVariable(varName)) {
@@ -2720,9 +2940,19 @@ public class BytecodeCompiler implements Visitor {
                                 int nameIdx = addToStringPool(globalVarName);
 
                                 int rd = allocateRegister();
-                                emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                                emitReg(rd);
-                                emit(nameIdx);
+                                if (originalSigil.equals("$")) {
+                                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                } else if (originalSigil.equals("@")) {
+                                    emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                } else {
+                                    emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                }
 
                                 varRegs.add(rd);
                             }
@@ -3494,22 +3724,36 @@ public class BytecodeCompiler implements Visitor {
      * interoperate seamlessly with interpreted code via the shared RuntimeCode.apply() API.
      */
     private void visitNamedSubroutine(SubroutineNode node) {
-        // Step 1: Collect outer variables used by this subroutine
-        Set<String> usedVars = new HashSet<>();
-        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
-        node.block.accept(collector);
-
-        // Step 2: Filter to only include lexical variables that exist in current scope
-        List<String> closureVarNames = new ArrayList<>();
-        List<Integer> closureVarIndices = new ArrayList<>();
-
-        for (String varName : usedVars) {
-            int varIndex = getVariableRegister(varName);
-            if (varIndex != -1 && varIndex >= 3) {
-                closureVarNames.add(varName);
-                closureVarIndices.add(varIndex);
+        // Step 1: Collect closure variables.
+        //
+        // IMPORTANT: For named subs defined in eval STRING, the body may contain nested
+        // eval STRING that references outer lexicals that are NOT referenced directly
+        // in the AST (because they're inside a string). Perl still expects those outer
+        // lexicals to be visible from inside the sub.
+        //
+        // Therefore capture all visible Perl variables (scalars/arrays/hashes) from the
+        // current scope, not just variables referenced directly in the sub AST.
+        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            for (Map.Entry<String, Integer> e : scope.entrySet()) {
+                String varName = e.getKey();
+                Integer reg = e.getValue();
+                if (reg == null || reg < 3) {
+                    continue;
+                }
+                if (varName == null || varName.isEmpty()) {
+                    continue;
+                }
+                char sigil = varName.charAt(0);
+                if (sigil != '$' && sigil != '@' && sigil != '%') {
+                    continue;
+                }
+                closureVarsByReg.put(reg, varName);
             }
         }
+
+        List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
+        List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
 
         // If there are closure variables, we need to store them in PersistentVariable globals
         // so the named sub can retrieve them using RETRIEVE_BEGIN opcodes
@@ -3550,11 +3794,22 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 3: Create a new BytecodeCompiler for the subroutine body
+        // Step 3: Compile the subroutine body with a packed registry for captured variables.
+        // The closure created at runtime packs capturedVars sequentially into registers 3..,
+        // so the compiled sub body must use the same packed register layout.
+        Map<String, Integer> packedRegistry = new HashMap<>();
+        packedRegistry.put("this", 0);
+        packedRegistry.put("@_", 1);
+        packedRegistry.put("wantarray", 2);
+        for (int i = 0; i < closureVarNames.size(); i++) {
+            packedRegistry.put(closureVarNames.get(i), 3 + i);
+        }
+
         BytecodeCompiler subCompiler = new BytecodeCompiler(
             this.sourceName,
             node.getIndex(),
-            this.errorUtil
+            this.errorUtil,
+            packedRegistry
         );
 
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
@@ -3575,12 +3830,15 @@ public class BytecodeCompiler implements Visitor {
             emitReg(codeReg);
             emit(constIdx);
         } else {
-            // Store the InterpretedCode directly (closures are handled via PersistentVariable)
-            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
-            int constIdx = addToConstantPool(codeScalar);
-            emit(Opcodes.LOAD_CONST);
+            // Create a closure capturing the current register values.
+            int templateIdx = addToConstantPool(subCode);
+            emit(Opcodes.CREATE_CLOSURE);
             emitReg(codeReg);
-            emit(constIdx);
+            emit(templateIdx);
+            emit(closureVarIndices.size());
+            for (int regIdx : closureVarIndices) {
+                emit(regIdx);
+            }
         }
 
         // Step 6: Store in global namespace
@@ -3612,22 +3870,33 @@ public class BytecodeCompiler implements Visitor {
      * Anonymous subs capture lexical variables from the enclosing scope.
      */
     private void visitAnonymousSubroutine(SubroutineNode node) {
-        // Step 1: Collect outer variables used by this subroutine
-        Set<String> usedVars = new HashSet<>();
-        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
-        node.block.accept(collector);
-
-        // Step 2: Filter to only include lexical variables that exist in current scope
-        List<String> closureVarNames = new ArrayList<>();
-        List<Integer> closureVarIndices = new ArrayList<>();
-
-        for (String varName : usedVars) {
-            int varIndex = getVariableRegister(varName);
-            if (varIndex != -1 && varIndex >= 3) {
-                closureVarNames.add(varName);
-                closureVarIndices.add(varIndex);
+        // Step 1: Collect closure variables.
+        //
+        // IMPORTANT: Anonymous subs can contain nested eval STRING that references outer
+        // lexicals only inside strings (so they won't appear as IdentifierNodes in the AST).
+        // Perl still expects those lexicals to be visible to eval STRING at runtime.
+        // Capture all visible Perl variables (scalars/arrays/hashes) from the current scope.
+        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            for (Map.Entry<String, Integer> e : scope.entrySet()) {
+                String varName = e.getKey();
+                Integer reg = e.getValue();
+                if (reg == null || reg < 3) {
+                    continue;
+                }
+                if (varName == null || varName.isEmpty()) {
+                    continue;
+                }
+                char sigil = varName.charAt(0);
+                if (sigil != '$' && sigil != '@' && sigil != '%') {
+                    continue;
+                }
+                closureVarsByReg.put(reg, varName);
             }
         }
+
+        List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
+        List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
 
         // Step 3: Create a new BytecodeCompiler for the subroutine body
         // Build a variable registry from current scope to pass to sub-compiler
@@ -4071,7 +4340,12 @@ public class BytecodeCompiler implements Visitor {
 
         // Mark position for forward jump to else/end
         int ifFalsePos = bytecode.size();
-        emit(Opcodes.GOTO_IF_FALSE);
+        // Invert condition for 'unless'
+        if ("unless".equals(node.operator)) {
+            emit(Opcodes.GOTO_IF_TRUE);
+        } else {
+            emit(Opcodes.GOTO_IF_FALSE);
+        }
         emitReg(condReg);
         emitInt(0); // Placeholder for else/end target
 

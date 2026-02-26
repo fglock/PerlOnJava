@@ -1365,6 +1365,16 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     sb.append("LOCAL_SCALAR r").append(rd).append(" = local $").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.LOCAL_ARRAY:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOCAL_ARRAY r").append(rd).append(" = local @").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.LOCAL_HASH:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOCAL_HASH r").append(rd).append(" = local %").append(stringPool[nameIdx]).append("\n");
+                    break;
                 case Opcodes.LOCAL_SCALAR_SAVE_LEVEL: {
                     rd = bytecode[pc++];
                     int levelReg = bytecode[pc++];
