@@ -231,6 +231,13 @@ public class BytecodeCompiler implements Visitor {
         savedBaseRegister.push(baseRegisterForStatement);
         // Update base to protect all registers allocated before this scope
         baseRegisterForStatement = nextRegister;
+        // Save current pragma state so use strict/no strict inside blocks is properly scoped
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            ScopedSymbolTable st = emitterContext.symbolTable;
+            st.strictOptionsStack.push(st.strictOptionsStack.peek());
+            st.featureFlagsStack.push(st.featureFlagsStack.peek());
+            st.warningFlagsStack.push((java.util.BitSet) st.warningFlagsStack.peek().clone());
+        }
     }
 
     /**
@@ -246,6 +253,13 @@ public class BytecodeCompiler implements Visitor {
             }
             if (!savedBaseRegister.isEmpty()) {
                 baseRegisterForStatement = savedBaseRegister.pop();
+            }
+            // Restore pragma state
+            if (emitterContext != null && emitterContext.symbolTable != null) {
+                ScopedSymbolTable st = emitterContext.symbolTable;
+                st.strictOptionsStack.pop();
+                st.featureFlagsStack.pop();
+                st.warningFlagsStack.pop();
             }
         }
     }
@@ -4671,12 +4685,18 @@ public class BytecodeCompiler implements Visitor {
 
         if (targetLoop == null) {
             // No matching loop found - non-local control flow
-            // For now, throw an error. Later we can implement RuntimeControlFlowList
-            if (labelStr != null) {
-                throwCompilerException("Can't find label \"" + labelStr + "\"", node.getIndex());
-            } else {
-                throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
-            }
+            // Emit CREATE_LAST/NEXT/REDO + RETURN to propagate via RuntimeControlFlowList
+            short createOp = op.equals("last") ? Opcodes.CREATE_LAST
+                           : op.equals("next") ? Opcodes.CREATE_NEXT
+                           : Opcodes.CREATE_REDO;
+            int rd = allocateRegister();
+            emit(createOp);
+            emitReg(rd);
+            int labelIdx = labelStr != null ? addToStringPool(labelStr) : 255;
+            emitReg(labelIdx);
+            emit(Opcodes.RETURN);
+            emitReg(rd);
+            return;
         }
 
         // Check if this is a pseudo-loop (do-while/bare block) which doesn't support last/next/redo
