@@ -500,6 +500,27 @@ public class CompileAssignment {
 
                             bytecodeCompiler.lastResultReg = hashReg;
                             return;
+                        } else if (sigilOp.operator.equals("*") && sigilOp.operand instanceof IdentifierNode) {
+                            // Handle local *glob = value
+                            node.right.accept(bytecodeCompiler);
+                            int valueReg = bytecodeCompiler.lastResultReg;
+
+                            String globalName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name,
+                                    bytecodeCompiler.getCurrentPackage());
+                            int nameIdx = bytecodeCompiler.addToStringPool(globalName);
+
+                            int globReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
+                            bytecodeCompiler.emitReg(globReg);
+                            bytecodeCompiler.emit(nameIdx);
+
+                            bytecodeCompiler.emit(Opcodes.STORE_GLOB);
+                            bytecodeCompiler.emitReg(globReg);
+                            bytecodeCompiler.emitReg(valueReg);
+
+                            bytecodeCompiler.lastResultReg = globReg;
+                            return;
                         }
                     } else if (localOperand instanceof ListNode) {
                         // Handle local($x) = value or local($x, $y) = (v1, v2)
@@ -723,8 +744,16 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         } else {
-                            // Regular lexical - use MOVE
-                            bytecodeCompiler.emit(Opcodes.MOVE);
+                            // Regular lexical - create a fresh RuntimeScalar, then copy the value into it.
+                            // LOAD_UNDEF allocates a new mutable RuntimeScalar in the target register;
+                            // SET_SCALAR copies the source value into it.
+                            // This avoids two bugs:
+                            //   - MOVE aliases constants from the pool, corrupting them on later mutation
+                            //   - SET_SCALAR alone modifies the existing object in-place, which breaks
+                            //     'local' variable restoration when the register was shared
+                            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         }

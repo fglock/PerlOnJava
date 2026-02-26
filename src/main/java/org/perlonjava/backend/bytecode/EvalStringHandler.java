@@ -28,6 +28,15 @@ import java.util.ArrayList;
  */
 public class EvalStringHandler {
 
+    private static final boolean EVAL_TRACE =
+            System.getenv("JPERL_EVAL_TRACE") != null;
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
+
     /**
      * Evaluate a Perl string dynamically.
      *
@@ -52,7 +61,18 @@ public class EvalStringHandler {
                                           String sourceName,
                                           int sourceLine,
                                           int callContext) {
+        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext).scalar();
+    }
+
+    public static RuntimeList evalStringList(String perlCode,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext) {
         try {
+            evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
+                    " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1));
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
 
@@ -85,17 +105,19 @@ public class EvalStringHandler {
             String compilePackage = InterpreterState.currentPackage.get().toString();
             symbolTable.setCurrentPackage(compilePackage, false);
 
+            evalTrace("EvalStringHandler compilePackage=" + compilePackage + " fileName=" + opts.fileName);
+
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
-                new JavaClassInfo(),
-                symbolTable,
-                null, // mv
-                null, // cw
-                RuntimeContextType.SCALAR,
-                false, // isBoxed
-                errorUtil,
-                opts,
-                null  // unitcheckBlocks
+                    new JavaClassInfo(),
+                    symbolTable,
+                    null, // mv
+                    null, // cw
+                    callContext,
+                    false, // isBoxed
+                    errorUtil,
+                    opts,
+                    null  // unitcheckBlocks
             );
 
             Parser parser = new Parser(ctx, tokens);
@@ -110,7 +132,7 @@ public class EvalStringHandler {
 
                 // Sort parent variables by register index for consistent ordering
                 List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(
-                    currentCode.variableRegistry.entrySet()
+                        currentCode.variableRegistry.entrySet()
                 );
                 sortedVars.sort(Map.Entry.comparingByValue());
 
@@ -149,8 +171,8 @@ public class EvalStringHandler {
                                 continue;
                             }
                         } else if (!(value instanceof RuntimeArray ||
-                                     value instanceof RuntimeHash ||
-                                     value instanceof RuntimeCode)) {
+                                value instanceof RuntimeHash ||
+                                value instanceof RuntimeCode)) {
                             // Skip this register - it contains an internal object
                             continue;
                         }
@@ -165,23 +187,22 @@ public class EvalStringHandler {
             }
 
             // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
-            // The compile-time package is already propagated via ctx.symbolTable (set above
-            // from currentCode.compilePackage), so BytecodeCompiler will use it for name
-            // resolution (e.g. *named -> FOO3::named) without needing setCompilePackage().
+            // The compile-time package is already propagated via ctx.symbolTable.
             BytecodeCompiler compiler = new BytecodeCompiler(
-                sourceName + " (eval)",
-                sourceLine,
-                errorUtil,
-                adjustedRegistry  // Pass adjusted registry for variable capture
+                    sourceName + " (eval)",
+                    sourceLine,
+                    errorUtil,
+                    adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+
+            evalTrace("EvalStringHandler compiled bytecodeLen=" + (evalCode != null ? evalCode.bytecode.length : -1) +
+                    " src=" + (evalCode != null ? evalCode.sourceName : "null"));
             if (RuntimeCode.DISASSEMBLE) {
                 System.out.println(evalCode.disassemble());
             }
 
             // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
-            // This implements Perl's eval source retention feature for debugging
-            // Generate eval filename and store lines in @{"_<(eval N)"}
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
             if (debugFlags != 0) {
                 String evalFilename = RuntimeCode.getNextEvalFilename();
@@ -197,18 +218,17 @@ public class EvalStringHandler {
             }
 
             // Step 6: Execute the compiled code
-            // Use the true outer call context so wantarray() inside the eval body
-            // returns the correct value (undef for void, false for scalar, true for list).
             RuntimeArray args = new RuntimeArray();  // Empty @_
             RuntimeList result = evalCode.apply(args, callContext);
-
-            // Step 7: Return scalar result
-            return result.scalar();
-
+            evalTrace("EvalStringHandler exec ok ctx=" + callContext +
+                    " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
+                    " resultBool=" + (result != null && result.scalar() != null ? result.scalar().getBoolean() : false) +
+                    " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
+            return result;
         } catch (Exception e) {
-            // Step 8: Handle errors - set $@ and return undef
+            evalTrace("EvalStringHandler exec exception ctx=" + callContext + " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
             WarnDie.catchEval(e);
-            return RuntimeScalarCache.scalarUndef;
+            return new RuntimeList(new RuntimeScalar());
         }
     }
 

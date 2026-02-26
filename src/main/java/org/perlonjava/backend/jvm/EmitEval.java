@@ -50,6 +50,15 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
  *
  */
 public class EmitEval {
+
+    private static final boolean EVAL_TRACE =
+            System.getenv("JPERL_EVAL_TRACE") != null;
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
     /**
      * Handles the emission of bytecode for the Perl 'eval' operator.
      *
@@ -88,6 +97,9 @@ public class EmitEval {
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
         MethodVisitor mv = ctx.mv;
+
+        evalTrace("EmitEval.handleEvalOperator op=" + node.operator + " ctx=" + emitterVisitor.ctx.contextType +
+                " file=" + emitterVisitor.ctx.compilerOptions.fileName + " token=" + node.tokenIndex);
 
         // Log current symbol table state for debugging
         emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
@@ -569,12 +581,14 @@ public class EmitEval {
         // For eval, use the context determined by how the eval result is used
         // This matches the compiler path which uses a compile-time constant
         if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
-            // If context is RUNTIME, load it from wantarray variable
-            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
+            // If context is RUNTIME, load it from apply(@_, callContext) method argument.
+            // Slot 0=this, 1=@_, 2=callContext.
+            mv.visitVarInsn(Opcodes.ILOAD, 2);
         } else {
             // Otherwise use the compile-time constant (LIST/SCALAR/VOID)
             mv.visitLdcInsn(emitterVisitor.ctx.contextType);
         }
+        evalTrace("EmitEval.emitEvalInterpreterPath tag=" + evalTag + " pushCtx=" + emitterVisitor.ctx.contextType);
         // Stack: [RuntimeScalar(String), String, Object[], RuntimeArray(@_), int]
 
         // Call evalStringWithInterpreter which returns RuntimeList directly
