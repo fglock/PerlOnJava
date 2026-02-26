@@ -287,14 +287,35 @@ public class EmitLogicalOperator {
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             evalTrace("EmitLogicalOperatorSimple VOID op=" + node.operator + " emit LHS in SCALAR; RHS in SCALAR");
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", getBoolean, "()Z", false);
-            mv.visitJumpInsn(compareOpcode, endLabel);
 
-            node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            mv.visitInsn(Opcodes.POP);
+            OperatorNode voidDeclaration = FindDeclarationVisitor.findOperator(node.right, "my");
+            String voidSavedOperator = null;
+            Node voidSavedOperand = null;
+            boolean voidRewritten = false;
+            try {
+                if (voidDeclaration != null && voidDeclaration.operand instanceof OperatorNode voidOperatorNode) {
+                    voidSavedOperator = voidDeclaration.operator;
+                    voidSavedOperand = voidDeclaration.operand;
+                    voidDeclaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    voidDeclaration.operator = voidOperatorNode.operator;
+                    voidDeclaration.operand = voidOperatorNode.operand;
+                    voidRewritten = true;
+                }
 
-            mv.visitLabel(endLabel);
+                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", getBoolean, "()Z", false);
+                mv.visitJumpInsn(compareOpcode, endLabel);
+
+                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                mv.visitInsn(Opcodes.POP);
+
+                mv.visitLabel(endLabel);
+            } finally {
+                if (voidRewritten) {
+                    voidDeclaration.operator = voidSavedOperator;
+                    voidDeclaration.operand = voidSavedOperand;
+                }
+            }
             return;
         }
 

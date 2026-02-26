@@ -1619,8 +1619,8 @@ public class EmitterMethodCreator implements Opcodes {
                 ctx.errorUtil
             );
 
-        // Compile AST to interpreter bytecode
-        InterpretedCode code = compiler.compile(ast);
+        // Compile AST to interpreter bytecode (pass ctx for package context and closure detection)
+        InterpretedCode code = compiler.compile(ast, ctx);
 
         // Handle captured variables if needed (for closures)
         if (ctx.capturedEnv != null && ctx.capturedEnv.length > skipVariables) {
