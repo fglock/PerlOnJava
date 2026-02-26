@@ -419,6 +419,12 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
+            case "xor", "^^" -> {
+                bytecodeCompiler.emit(Opcodes.XOR_LOGICAL);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
             case "..." -> {
                 // Flip-flop operator (.. and ...) - per-call-site state via unique ID
                 // Note: numeric range (..) is handled earlier in visitBinaryOperator for list context;

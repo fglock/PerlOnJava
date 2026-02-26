@@ -1140,5 +1140,14 @@ public class Opcodes {
      * Format: HASH_KEYVALUE_SLICE rd hashReg keysListReg */
     public static final short HASH_KEYVALUE_SLICE = 344;
 
+    /** Set $#array = value: Format: SET_ARRAY_LAST_INDEX arrayReg valueReg */
+    public static final short SET_ARRAY_LAST_INDEX = 347;
+
+    /** Logical xor: rd = left xor right. Format: XOR_LOGICAL rd rs1 rs2 */
+    public static final short XOR_LOGICAL = 348;
+
+    /** Defined-or assignment: rd //= rs. Format: DEFINED_OR_ASSIGN rd rs */
+    public static final short DEFINED_OR_ASSIGN = 349;
+
     private Opcodes() {} // Utility class - no instantiation
 }

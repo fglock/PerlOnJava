@@ -85,6 +85,21 @@ public class CompileBinaryOperator {
             return;
         }
 
+        // Handle I/O and misc binary operators that use MiscOpcodeHandler (filehandle + args → list)
+        switch (node.operator) {
+            case "binmode", "seek", "eof", "close", "fileno", "getc", "printf":
+                compileBinaryAsListOp(bytecodeCompiler, node);
+                return;
+            case "tell":
+                compileTellBinaryOp(bytecodeCompiler, node);
+                return;
+            case "join":
+                compileJoinBinaryOp(bytecodeCompiler, node);
+                return;
+            default:
+                break;
+        }
+
         // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=, x=, **=, <<=, >>=, &&=, ||=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
                 node.operator.equals("*=") || node.operator.equals("/=") ||
@@ -94,6 +109,7 @@ public class CompileBinaryOperator {
                 node.operator.equals("x=") || node.operator.equals("**=") ||
                 node.operator.equals("<<=") || node.operator.equals(">>=") ||
                 node.operator.equals("&&=") || node.operator.equals("||=") ||
+                node.operator.equals("//=") ||
                 node.operator.startsWith("binary")) {  // Handle binary&=, binary|=, binary^=
             bytecodeCompiler.handleCompoundAssignment(node);
             return;
@@ -632,6 +648,98 @@ public class CompileBinaryOperator {
         // Emit opcode based on operator (delegated to helper method)
         int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
 
+
+        bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static void compileBinaryAsListOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        node.left.accept(bytecodeCompiler);
+        int fhReg = bytecodeCompiler.lastResultReg;
+
+        java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+        argRegs.add(fhReg);
+
+        if (node.right instanceof ListNode argsList) {
+            for (Node arg : argsList.elements) {
+                arg.accept(bytecodeCompiler);
+                argRegs.add(bytecodeCompiler.lastResultReg);
+            }
+        } else {
+            node.right.accept(bytecodeCompiler);
+            argRegs.add(bytecodeCompiler.lastResultReg);
+        }
+
+        int argsListReg = bytecodeCompiler.allocateRegister();
+        bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+        bytecodeCompiler.emitReg(argsListReg);
+        bytecodeCompiler.emit(argRegs.size());
+        for (int argReg : argRegs) {
+            bytecodeCompiler.emitReg(argReg);
+        }
+
+        int opcode = switch (node.operator) {
+            case "binmode" -> Opcodes.BINMODE;
+            case "seek" -> Opcodes.SEEK;
+            case "eof" -> Opcodes.EOF_OP;
+            case "close" -> Opcodes.CLOSE;
+            case "fileno" -> Opcodes.FILENO;
+            case "getc" -> Opcodes.GETC;
+            case "printf" -> Opcodes.PRINTF;
+            default -> throw new RuntimeException("Unknown operator: " + node.operator);
+        };
+
+        int rd = bytecodeCompiler.allocateRegister();
+        bytecodeCompiler.emit(opcode);
+        bytecodeCompiler.emitReg(rd);
+        bytecodeCompiler.emitReg(argsListReg);
+        bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+        bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static void compileTellBinaryOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        node.left.accept(bytecodeCompiler);
+        int fhReg = bytecodeCompiler.lastResultReg;
+
+        int rd = bytecodeCompiler.allocateRegister();
+        bytecodeCompiler.emit(Opcodes.TELL);
+        bytecodeCompiler.emitReg(rd);
+        bytecodeCompiler.emitReg(fhReg);
+
+        bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static void compileJoinBinaryOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        node.left.accept(bytecodeCompiler);
+        int separatorReg = bytecodeCompiler.lastResultReg;
+
+        int listReg;
+        if (node.right instanceof ListNode listNode) {
+            java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+            for (Node arg : listNode.elements) {
+                arg.accept(bytecodeCompiler);
+                argRegs.add(bytecodeCompiler.lastResultReg);
+            }
+            listReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+            bytecodeCompiler.emitReg(listReg);
+            bytecodeCompiler.emit(argRegs.size());
+            for (int argReg : argRegs) {
+                bytecodeCompiler.emitReg(argReg);
+            }
+        } else {
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+            node.right.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
+            listReg = bytecodeCompiler.lastResultReg;
+        }
+
+        int rd = bytecodeCompiler.allocateRegister();
+        bytecodeCompiler.emit(Opcodes.JOIN);
+        bytecodeCompiler.emitReg(rd);
+        bytecodeCompiler.emitReg(separatorReg);
+        bytecodeCompiler.emitReg(listReg);
 
         bytecodeCompiler.lastResultReg = rd;
     }
