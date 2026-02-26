@@ -1447,6 +1447,45 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(keyReg);
 
                 bytecodeCompiler.lastResultReg = rd;
+            } else if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("->")) {
+                // Arrow dereference: delete $ref->{key}
+                BinaryOperatorNode arrowAccess = (BinaryOperatorNode) arg;
+                // Compile the reference expression
+                arrowAccess.left.accept(bytecodeCompiler);
+                int scalarReg = bytecodeCompiler.lastResultReg;
+
+                int hashReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                bytecodeCompiler.emitReg(hashReg);
+                bytecodeCompiler.emitReg(scalarReg);
+
+                // Compile key
+                int keyReg;
+                if (arrowAccess.right instanceof HashLiteralNode keyNode && !keyNode.elements.isEmpty()) {
+                    Node keyElement = keyNode.elements.get(0);
+                    if (keyElement instanceof IdentifierNode) {
+                        String keyString = ((IdentifierNode) keyElement).name;
+                        keyReg = bytecodeCompiler.allocateRegister();
+                        int keyIdx = bytecodeCompiler.addToStringPool(keyString);
+                        bytecodeCompiler.emit(Opcodes.LOAD_STRING);
+                        bytecodeCompiler.emitReg(keyReg);
+                        bytecodeCompiler.emit(keyIdx);
+                    } else {
+                        keyElement.accept(bytecodeCompiler);
+                        keyReg = bytecodeCompiler.lastResultReg;
+                    }
+                } else {
+                    arrowAccess.right.accept(bytecodeCompiler);
+                    keyReg = bytecodeCompiler.lastResultReg;
+                }
+
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.HASH_DELETE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(hashReg);
+                bytecodeCompiler.emitReg(keyReg);
+
+                bytecodeCompiler.lastResultReg = rd;
             } else {
                 // For now, use SLOW_OP for other cases (hash slice delete, array delete, etc.)
                 arg.accept(bytecodeCompiler);
