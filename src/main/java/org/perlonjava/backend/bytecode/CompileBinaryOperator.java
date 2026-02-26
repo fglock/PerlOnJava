@@ -1,9 +1,44 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class CompileBinaryOperator {
+
+    private static class DeclRewrite {
+        final OperatorNode declaration;
+        final String savedOperator;
+        final Node savedOperand;
+
+        DeclRewrite(OperatorNode declaration, String savedOperator, Node savedOperand) {
+            this.declaration = declaration;
+            this.savedOperator = savedOperator;
+            this.savedOperand = savedOperand;
+        }
+
+        void restore() {
+            declaration.operator = savedOperator;
+            declaration.operand = savedOperand;
+        }
+    }
+
+    private static DeclRewrite extractMyDeclaration(BytecodeCompiler bc, Node rightNode) {
+        OperatorNode decl = FindDeclarationVisitor.findOperator(rightNode, "my");
+        if (decl != null && decl.operand instanceof OperatorNode innerOp) {
+            String savedOp = decl.operator;
+            Node savedOperand = decl.operand;
+            int savedCtx = bc.currentCallContext;
+            bc.currentCallContext = RuntimeContextType.VOID;
+            decl.accept(bc);
+            bc.currentCallContext = savedCtx;
+            decl.operator = innerOp.operator;
+            decl.operand = innerOp.operand;
+            return new DeclRewrite(decl, savedOp, savedOperand);
+        }
+        return null;
+    }
+
     static void visitBinaryOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
@@ -430,134 +465,115 @@ public class CompileBinaryOperator {
 
         // Handle short-circuit operators specially - don't compile right operand yet!
         if (node.operator.equals("&&") || node.operator.equals("and")) {
-            // Logical AND with short-circuit evaluation
-            // Only evaluate right side if left side is true
+            DeclRewrite rewrite = extractMyDeclaration(bytecodeCompiler, node.right);
+            try {
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+                node.left.accept(bytecodeCompiler);
+                int rs1 = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.currentCallContext = savedContext;
 
-            // Compile left operand in scalar context (need boolean value)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
-            int rs1 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.MOVE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
 
-            // Allocate result register and move left value to it
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.MOVE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
+                int skipRightPos = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.emit(Opcodes.GOTO_IF_FALSE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitInt(0);
 
-            // Mark position for forward jump
-            int skipRightPos = bytecodeCompiler.bytecode.size();
+                node.right.accept(bytecodeCompiler);
+                int rs2 = bytecodeCompiler.lastResultReg;
 
-            // Emit conditional jump: if (!rd) skip right evaluation
-            bytecodeCompiler.emit(Opcodes.GOTO_IF_FALSE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
+                bytecodeCompiler.emit(Opcodes.MOVE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs2);
 
-            // NOW compile right operand (only executed if left was true)
-            node.right.accept(bytecodeCompiler);
-            int rs2 = bytecodeCompiler.lastResultReg;
+                int skipRightTarget = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
-            // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.MOVE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs2);
-
-            // Patch the forward jump offset
-            int skipRightTarget = bytecodeCompiler.bytecode.size();
-            bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
-
-            bytecodeCompiler.lastResultReg = rd;
+                bytecodeCompiler.lastResultReg = rd;
+            } finally {
+                if (rewrite != null) rewrite.restore();
+            }
             return;
         }
 
         if (node.operator.equals("||") || node.operator.equals("or")) {
-            // Logical OR with short-circuit evaluation
-            // Only evaluate right side if left side is false
+            DeclRewrite rewrite = extractMyDeclaration(bytecodeCompiler, node.right);
+            try {
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+                node.left.accept(bytecodeCompiler);
+                int rs1 = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.currentCallContext = savedContext;
 
-            // Compile left operand in scalar context (need boolean value)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
-            int rs1 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.MOVE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
 
-            // Allocate result register and move left value to it
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.MOVE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
+                int skipRightPos = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitInt(0);
 
-            // Mark position for forward jump
-            int skipRightPos = bytecodeCompiler.bytecode.size();
+                node.right.accept(bytecodeCompiler);
+                int rs2 = bytecodeCompiler.lastResultReg;
 
-            // Emit conditional jump: if (rd) skip right evaluation
-            bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
+                bytecodeCompiler.emit(Opcodes.MOVE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs2);
 
-            // NOW compile right operand (only executed if left was false)
-            node.right.accept(bytecodeCompiler);
-            int rs2 = bytecodeCompiler.lastResultReg;
+                int skipRightTarget = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
-            // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.MOVE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs2);
-
-            // Patch the forward jump offset
-            int skipRightTarget = bytecodeCompiler.bytecode.size();
-            bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
-
-            bytecodeCompiler.lastResultReg = rd;
+                bytecodeCompiler.lastResultReg = rd;
+            } finally {
+                if (rewrite != null) rewrite.restore();
+            }
             return;
         }
 
         if (node.operator.equals("//")) {
-            // Defined-OR with short-circuit evaluation
-            // Only evaluate right side if left side is undefined
+            DeclRewrite rewrite = extractMyDeclaration(bytecodeCompiler, node.right);
+            try {
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+                node.left.accept(bytecodeCompiler);
+                int rs1 = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.currentCallContext = savedContext;
 
-            // Compile left operand in scalar context (need to test definedness)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
-            int rs1 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.MOVE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
 
-            // Allocate result register and move left value to it
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.MOVE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
+                int definedReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.DEFINED);
+                bytecodeCompiler.emitReg(definedReg);
+                bytecodeCompiler.emitReg(rd);
 
-            // Check if left is defined
-            int definedReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.DEFINED);
-            bytecodeCompiler.emitReg(definedReg);
-            bytecodeCompiler.emitReg(rd);
+                int skipRightPos = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
+                bytecodeCompiler.emitReg(definedReg);
+                bytecodeCompiler.emitInt(0);
 
-            // Mark position for forward jump
-            int skipRightPos = bytecodeCompiler.bytecode.size();
+                node.right.accept(bytecodeCompiler);
+                int rs2 = bytecodeCompiler.lastResultReg;
 
-            // Emit conditional jump: if (defined) skip right evaluation
-            bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
-            bytecodeCompiler.emitReg(definedReg);
-            bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
+                bytecodeCompiler.emit(Opcodes.MOVE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs2);
 
-            // NOW compile right operand (only executed if left was undefined)
-            node.right.accept(bytecodeCompiler);
-            int rs2 = bytecodeCompiler.lastResultReg;
+                int skipRightTarget = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
-            // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.MOVE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs2);
-
-            // Patch the forward jump offset
-            int skipRightTarget = bytecodeCompiler.bytecode.size();
-            bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
-
-            bytecodeCompiler.lastResultReg = rd;
+                bytecodeCompiler.lastResultReg = rd;
+            } finally {
+                if (rewrite != null) rewrite.restore();
+            }
             return;
         }
 
