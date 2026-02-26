@@ -1519,6 +1519,12 @@ public class EmitterMethodCreator implements Opcodes {
 
             // If interpreter fallback disabled, re-throw to use existing AST splitter logic
             throw e;
+        } catch (VerifyError e) {
+            if (USE_INTERPRETER_FALLBACK) {
+                System.err.println("Note: JVM VerifyError (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
+                return compileToInterpreter(ast, ctx, useTryCatch);
+            }
+            throw new RuntimeException(e);
         }
     }
 
