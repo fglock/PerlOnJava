@@ -55,6 +55,7 @@ public class ExceptionFormatter {
         // Each BytecodeInterpreter.execute() JVM frame corresponds to one Perl call
         // level; consuming them in order gives the correct nested call stack.
         var interpreterFrames = InterpreterState.getStack();
+        var interpreterPcs = InterpreterState.getPcStack();
         int interpreterFrameIndex = 0;
 
         for (var element : t.getStackTrace()) {
@@ -86,6 +87,7 @@ public class ExceptionFormatter {
                         String pkg = (interpreterFrameIndex == 0)
                                 ? InterpreterState.currentPackage.get().toString()
                                 : frame.packageName;
+                        int currentInterpreterFrameIndex = interpreterFrameIndex;
                         interpreterFrameIndex++;
 
                         String subName = frame.subroutineName;
@@ -95,11 +97,28 @@ public class ExceptionFormatter {
 
                         var entry = new ArrayList<String>();
                         entry.add(pkg);
-                        entry.add(frame.code.sourceName);
-                        entry.add(String.valueOf(frame.code.sourceLine));
+                        String filename = frame.code.sourceName;
+                        String line = String.valueOf(frame.code.sourceLine);
+                        if (currentInterpreterFrameIndex < interpreterPcs.size()) {
+                            Integer tokenIndex = null;
+                            int pc = interpreterPcs.get(currentInterpreterFrameIndex);
+                            if (frame.code.pcToTokenIndex != null && !frame.code.pcToTokenIndex.isEmpty()) {
+                                var entryPc = frame.code.pcToTokenIndex.floorEntry(pc);
+                                if (entryPc != null) {
+                                    tokenIndex = entryPc.getValue();
+                                }
+                            }
+                            if (tokenIndex != null && frame.code.errorUtil != null) {
+                                ErrorMessageUtil.SourceLocation loc = frame.code.errorUtil.getSourceLocationAccurate(tokenIndex);
+                                filename = loc.fileName();
+                                line = String.valueOf(loc.lineNumber());
+                            }
+                        }
+                        entry.add(filename);
+                        entry.add(line);
                         entry.add(subName);
                         stackTrace.add(entry);
-                        lastFileName = frame.code.sourceName != null ? frame.code.sourceName : "";
+                        lastFileName = filename != null ? filename : "";
                     }
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||

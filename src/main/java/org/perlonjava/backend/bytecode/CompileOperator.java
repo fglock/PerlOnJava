@@ -840,6 +840,10 @@ public class CompileOperator {
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
+                // Encode the eval operator's own call context (VOID/SCALAR/LIST) so
+                // wantarray() inside the eval body and the eval return value follow
+                // the correct context even when the surrounding sub is VOID.
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {

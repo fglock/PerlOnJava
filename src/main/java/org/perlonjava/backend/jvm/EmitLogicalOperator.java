@@ -20,6 +20,15 @@ import static org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops;
  */
 public class EmitLogicalOperator {
 
+    private static final boolean EVAL_TRACE =
+            System.getenv("JPERL_EVAL_TRACE") != null;
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
+
     /**
      * Emits bytecode for the flip-flop operator, which is used in range-like conditions.
      *
@@ -277,6 +286,7 @@ public class EmitLogicalOperator {
         Label endLabel = new Label();
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            evalTrace("EmitLogicalOperatorSimple VOID op=" + node.operator + " emit LHS in SCALAR; RHS in SCALAR");
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", getBoolean, "()Z", false);
             mv.visitJumpInsn(compareOpcode, endLabel);
@@ -311,15 +321,18 @@ public class EmitLogicalOperator {
                 rewritten = true;
             }
 
-            // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation
-            int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+            // LHS is always evaluated in SCALAR context for the boolean/truthiness test.
+            // RHS inherits the enclosing context (including RUNTIME) since its value
+            // becomes the result of the logical operator and must honour wantarray.
+            int lhsContext = RuntimeContextType.SCALAR;
+            int rhsContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
                     ? RuntimeContextType.RUNTIME
                     : RuntimeContextType.SCALAR;
 
             resultRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
 
             // Evaluate LHS and store it.
-            node.left.accept(emitterVisitor.with(operandContext));
+            node.left.accept(emitterVisitor.with(lhsContext));
             emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, resultRef);
 
             // Boolean test on the stored LHS.
@@ -328,7 +341,7 @@ public class EmitLogicalOperator {
             mv.visitJumpInsn(compareOpcode, endLabel);
 
             // LHS didn't short-circuit: evaluate RHS, overwrite result.
-            node.right.accept(emitterVisitor.with(operandContext));
+            node.right.accept(emitterVisitor.with(rhsContext));
             emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, resultRef);
 
             // Return whichever side won the short-circuit.
