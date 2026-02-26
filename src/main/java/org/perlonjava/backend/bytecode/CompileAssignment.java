@@ -723,8 +723,10 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         } else {
-                            // Regular lexical - use MOVE
-                            bytecodeCompiler.emit(Opcodes.MOVE);
+                            // Regular lexical - use SET_SCALAR to avoid aliasing cached read-only scalars.
+                            // This keeps the lexical's RuntimeScalar object mutable, which is required for
+                            // lvalue uses like: ($x = expr) =~ s///
+                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         }
