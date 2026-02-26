@@ -1779,6 +1779,8 @@ public class BytecodeInterpreter {
                     case Opcodes.RETRIEVE_BEGIN_ARRAY:
                     case Opcodes.RETRIEVE_BEGIN_HASH:
                     case Opcodes.LOCAL_SCALAR:
+                    case Opcodes.LOCAL_ARRAY:
+                    case Opcodes.LOCAL_HASH:
                         pc = executeScopeOps(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -2213,381 +2215,6 @@ public class BytecodeInterpreter {
     }
 
     /**
-     * Handle type and reference operations (opcodes 62-70, 102-105).
-     * Separated to keep main execute() under JIT compilation limit.
-     *
-     * @return Updated program counter
-     */
-    private static int executeTypeOps(int opcode, int[] bytecode, int pc,
-                                      RuntimeBase[] registers, InterpretedCode code) {
-        switch (opcode) {
-            case Opcodes.CREATE_LAST: {
-                int rd = bytecode[pc++];
-                int labelIdx = bytecode[pc++];
-                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-                registers[rd] = new RuntimeControlFlowList(
-                    ControlFlowType.LAST, label,
-                    code.sourceName, code.sourceLine
-                );
-                return pc;
-            }
-
-            case Opcodes.CREATE_NEXT: {
-                int rd = bytecode[pc++];
-                int labelIdx = bytecode[pc++];
-                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-                registers[rd] = new RuntimeControlFlowList(
-                    ControlFlowType.NEXT, label,
-                    code.sourceName, code.sourceLine
-                );
-                return pc;
-            }
-
-            case Opcodes.CREATE_REDO: {
-                int rd = bytecode[pc++];
-                int labelIdx = bytecode[pc++];
-                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-                registers[rd] = new RuntimeControlFlowList(
-                    ControlFlowType.REDO, label,
-                    code.sourceName, code.sourceLine
-                );
-                return pc;
-            }
-
-            case Opcodes.CREATE_GOTO: {
-                int rd = bytecode[pc++];
-                int labelIdx = bytecode[pc++];
-                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
-                registers[rd] = new RuntimeControlFlowList(
-                    ControlFlowType.GOTO, label,
-                    code.sourceName, code.sourceLine
-                );
-                return pc;
-            }
-
-            case Opcodes.IS_CONTROL_FLOW: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                boolean isControlFlow = registers[rs] instanceof RuntimeControlFlowList;
-                registers[rd] = isControlFlow ?
-                    RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
-                return pc;
-            }
-
-            case Opcodes.GET_CONTROL_FLOW_TYPE: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                RuntimeControlFlowList cf = (RuntimeControlFlowList) registers[rs];
-                registers[rd] = new RuntimeScalar(cf.marker.type.ordinal());
-                return pc;
-            }
-
-            case Opcodes.CREATE_REF: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                RuntimeBase value = registers[rs];
-                if (value instanceof RuntimeList list) {
-                    if (list.size() == 1) {
-                        registers[rd] = list.getFirst().createReference();
-                    } else {
-                        RuntimeList refs = new RuntimeList();
-                        for (RuntimeScalar element : list) {
-                            refs.add(element.createReference());
-                        }
-                        registers[rd] = refs;
-                    }
-                } else {
-                    registers[rd] = value.createReference();
-                }
-                return pc;
-            }
-
-            case Opcodes.DEREF: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                RuntimeBase value = registers[rs];
-
-                // Only dereference if it's a RuntimeScalar with REFERENCE type
-                if (value instanceof RuntimeScalar) {
-                    RuntimeScalar scalar = (RuntimeScalar) value;
-                    if (scalar.type == RuntimeScalarType.REFERENCE) {
-                        registers[rd] = scalar.scalarDeref();
-                    } else {
-                        // Non-reference scalar, just copy
-                        registers[rd] = value;
-                    }
-                } else {
-                    // RuntimeList or other types, pass through
-                    registers[rd] = value;
-                }
-                return pc;
-            }
-
-            case Opcodes.GET_TYPE: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                RuntimeScalar value = (RuntimeScalar) registers[rs];
-                registers[rd] = new RuntimeScalar(value.type);
-                return pc;
-            }
-
-            case Opcodes.DEFINED: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                RuntimeBase val = registers[rs];
-                boolean isDefined = val != null && val.getDefinedBoolean();
-                registers[rd] = isDefined ?
-                    RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
-                return pc;
-            }
-
-            case Opcodes.REF: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                RuntimeBase val = registers[rs];
-                RuntimeScalar result;
-                if (val instanceof RuntimeScalar) {
-                    result = ReferenceOperators.ref((RuntimeScalar) val);
-                } else {
-                    result = ReferenceOperators.ref(val.scalar());
-                }
-                registers[rd] = result;
-                return pc;
-            }
-
-            case Opcodes.BLESS: {
-                int rd = bytecode[pc++];
-                int refReg = bytecode[pc++];
-                int packageReg = bytecode[pc++];
-                RuntimeScalar ref = (RuntimeScalar) registers[refReg];
-                RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
-                registers[rd] = ReferenceOperators.bless(ref, packageName);
-                return pc;
-            }
-
-            case Opcodes.ISA: {
-                int rd = bytecode[pc++];
-                int objReg = bytecode[pc++];
-                int packageReg = bytecode[pc++];
-                RuntimeScalar obj = (RuntimeScalar) registers[objReg];
-                RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
-                RuntimeArray isaArgs = new RuntimeArray();
-                isaArgs.push(obj);
-                isaArgs.push(packageName);
-                RuntimeList result = Universal.isa(isaArgs, RuntimeContextType.SCALAR);
-                registers[rd] = result.scalar();
-                return pc;
-            }
-
-            case Opcodes.PROTOTYPE: {
-                int rd = bytecode[pc++];
-                int rs = bytecode[pc++];
-                int packageIdx = readInt(bytecode, pc);
-                pc += 1;  // readInt reads 2 shorts
-                RuntimeScalar codeRef = (RuntimeScalar) registers[rs];
-                String packageName = code.stringPool[packageIdx];
-                registers[rd] = RuntimeCode.prototype(codeRef, packageName);
-                return pc;
-            }
-
-            case Opcodes.QUOTE_REGEX: {
-                int rd = bytecode[pc++];
-                int patternReg = bytecode[pc++];
-                int flagsReg = bytecode[pc++];
-                RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
-                RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
-
-                // Debug logging
-                if (DEBUG_REGEX) {
-                    System.err.println("BytecodeInterpreter.QUOTE_REGEX: pattern=" + pattern.toString() +
-                                       " flags=" + flags.toString());
-                }
-
-                registers[rd] = RuntimeRegex.getQuotedRegex(pattern, flags);
-                return pc;
-            }
-
-            default:
-                throw new RuntimeException("Unknown type opcode: " + opcode);
-        }
-    }
-
-    /**
-     * Handle array and hash operations (opcodes 43-49, 51-56, 93-96).
-     * Separated to keep main execute() under JIT compilation limit.
-     *
-     * @return Updated program counter
-     */
-    private static int executeCollections(int opcode, int[] bytecode, int pc,
-                                          RuntimeBase[] registers, InterpretedCode code) {
-        switch (opcode) {
-            case Opcodes.ARRAY_SET: {
-                int arrayReg = bytecode[pc++];
-                int indexReg = bytecode[pc++];
-                int valueReg = bytecode[pc++];
-                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
-                RuntimeScalar val = (RuntimeScalar) registers[valueReg];
-                arr.get(idx.getInt()).set(val);
-                return pc;
-            }
-
-            case Opcodes.ARRAY_PUSH: {
-                int arrayReg = bytecode[pc++];
-                int valueReg = bytecode[pc++];
-                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                RuntimeBase val = registers[valueReg];
-                arr.push(val);
-                return pc;
-            }
-
-            case Opcodes.ARRAY_POP: {
-                int rd = bytecode[pc++];
-                int arrayReg = bytecode[pc++];
-                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                registers[rd] = RuntimeArray.pop(arr);
-                return pc;
-            }
-
-            case Opcodes.ARRAY_SHIFT: {
-                int rd = bytecode[pc++];
-                int arrayReg = bytecode[pc++];
-                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                registers[rd] = RuntimeArray.shift(arr);
-                return pc;
-            }
-
-            case Opcodes.ARRAY_UNSHIFT: {
-                int arrayReg = bytecode[pc++];
-                int valueReg = bytecode[pc++];
-                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                RuntimeBase val = registers[valueReg];
-                RuntimeArray.unshift(arr, val);
-                return pc;
-            }
-
-            case Opcodes.ARRAY_SIZE: {
-                int rd = bytecode[pc++];
-                int operandReg = bytecode[pc++];
-                RuntimeBase operand = registers[operandReg];
-                if (operand instanceof RuntimeList) {
-                    registers[rd] = new RuntimeScalar(((RuntimeList) operand).size());
-                } else {
-                    registers[rd] = operand.scalar();
-                }
-                return pc;
-            }
-
-            case Opcodes.CREATE_ARRAY: {
-                int rd = bytecode[pc++];
-                int listReg = bytecode[pc++];
-                RuntimeBase source = registers[listReg];
-                RuntimeArray array;
-                if (source instanceof RuntimeArray) {
-                    array = (RuntimeArray) source;
-                } else {
-                    RuntimeList list = source.getList();
-                    array = new RuntimeArray(list);
-                }
-                registers[rd] = array.createReference();
-                return pc;
-            }
-
-            case Opcodes.HASH_SET: {
-                int hashReg = bytecode[pc++];
-                int keyReg = bytecode[pc++];
-                int valueReg = bytecode[pc++];
-                RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-                RuntimeScalar val = (RuntimeScalar) registers[valueReg];
-                hash.put(key.toString(), val);
-                return pc;
-            }
-
-            case Opcodes.HASH_EXISTS: {
-                int rd = bytecode[pc++];
-                int hashReg = bytecode[pc++];
-                int keyReg = bytecode[pc++];
-                RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-                registers[rd] = hash.exists(key);
-                return pc;
-            }
-
-            case Opcodes.HASH_DELETE: {
-                int rd = bytecode[pc++];
-                int hashReg = bytecode[pc++];
-                int keyReg = bytecode[pc++];
-                RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-                registers[rd] = hash.delete(key);
-                return pc;
-            }
-
-            case Opcodes.HASH_KEYS: {
-                int rd = bytecode[pc++];
-                int hashReg = bytecode[pc++];
-                RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                registers[rd] = hash.keys();
-                return pc;
-            }
-
-            case Opcodes.HASH_VALUES: {
-                int rd = bytecode[pc++];
-                int hashReg = bytecode[pc++];
-                RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                registers[rd] = hash.values();
-                return pc;
-            }
-
-            case Opcodes.CREATE_HASH: {
-                int rd = bytecode[pc++];
-                int listReg = bytecode[pc++];
-                RuntimeBase list = registers[listReg];
-                RuntimeHash hash = RuntimeHash.createHash(list);
-                registers[rd] = hash.createReference();
-                return pc;
-            }
-
-            case Opcodes.NEW_ARRAY: {
-                int rd = bytecode[pc++];
-                registers[rd] = new RuntimeArray();
-                return pc;
-            }
-
-            case Opcodes.NEW_HASH: {
-                int rd = bytecode[pc++];
-                registers[rd] = new RuntimeHash();
-                return pc;
-            }
-
-            case Opcodes.ARRAY_SET_FROM_LIST: {
-                int arrayReg = bytecode[pc++];
-                int listReg = bytecode[pc++];
-                RuntimeArray array = (RuntimeArray) registers[arrayReg];
-                RuntimeBase listBase = registers[listReg];
-                RuntimeList list = listBase.getList();
-                array.setFromList(list);
-                return pc;
-            }
-
-            case Opcodes.HASH_SET_FROM_LIST: {
-                int hashReg = bytecode[pc++];
-                int listReg = bytecode[pc++];
-                RuntimeHash hash = (RuntimeHash) registers[hashReg];
-                RuntimeBase listBase = registers[listReg];
-                RuntimeList list = listBase.getList();
-                hash.setFromList(list);
-                return pc;
-            }
-
-            default:
-                throw new RuntimeException("Unknown collection opcode: " + opcode);
-        }
-    }
-
-    /**
-     * Handle arithmetic and string operations (opcodes 19-30, 110-113).
      * Separated to keep main execute() under JIT compilation limit.
      *
      * @return Updated program counter
@@ -3048,6 +2675,68 @@ public class BytecodeInterpreter {
     }
 
     /**
+     * Execute type and reference operations.
+     * Handles: DEFINED, REF, BLESS, ISA, PROTOTYPE, QUOTE_REGEX
+     */
+    private static int executeTypeOps(int opcode, int[] bytecode, int pc,
+                                      RuntimeBase[] registers, InterpretedCode code) {
+        switch (opcode) {
+            case Opcodes.DEFINED: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase v = registers[rs];
+                boolean defined = v != null && v.scalar().getDefinedBoolean();
+                registers[rd] = defined ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+            case Opcodes.REF: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                registers[rd] = ReferenceOperators.ref(registers[rs].scalar());
+                return pc;
+            }
+            case Opcodes.BLESS: {
+                int rd = bytecode[pc++];
+                int refReg = bytecode[pc++];
+                int pkgReg = bytecode[pc++];
+                RuntimeScalar ref = registers[refReg].scalar();
+                RuntimeScalar pkg = registers[pkgReg].scalar();
+                registers[rd] = ReferenceOperators.bless(ref, pkg);
+                return pc;
+            }
+            case Opcodes.ISA: {
+                int rd = bytecode[pc++];
+                int objReg = bytecode[pc++];
+                int pkgReg = bytecode[pc++];
+                RuntimeScalar obj = registers[objReg].scalar();
+                RuntimeScalar pkg = registers[pkgReg].scalar();
+                registers[rd] = ReferenceOperators.isa(obj, pkg);
+                return pc;
+            }
+            case Opcodes.PROTOTYPE: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                int packageIdx = readInt(bytecode, pc);
+                pc += 1;
+                String packageName = (code.stringPool != null && packageIdx >= 0 && packageIdx < code.stringPool.length)
+                        ? code.stringPool[packageIdx]
+                        : "main";
+                registers[rd] = RuntimeCode.prototype(registers[rs].scalar(), packageName);
+                return pc;
+            }
+            case Opcodes.QUOTE_REGEX: {
+                int rd = bytecode[pc++];
+                int patternReg = bytecode[pc++];
+                int flagsReg = bytecode[pc++];
+                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), registers[flagsReg].scalar());
+                return pc;
+            }
+            default:
+                throw new RuntimeException("Unknown type opcode: " + opcode);
+        }
+    }
+
+    /**
      * Execute slice operations (opcodes 114-121).
      * Handles: DEREF_ARRAY, DEREF_HASH, *_SLICE, *_SLICE_SET, *_SLICE_DELETE, LIST_SLICE_FROM
      * Direct dispatch to SlowOpcodeHandler methods (Phase 2 complete).
@@ -3118,6 +2807,26 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeRetrieveBeginHash(bytecode, pc, registers, code);
             case Opcodes.LOCAL_SCALAR:
                 return SlowOpcodeHandler.executeLocalScalar(bytecode, pc, registers, code);
+            case Opcodes.LOCAL_ARRAY: {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                String fullName = code.stringPool[nameIdx];
+
+                RuntimeArray arr = GlobalVariable.getGlobalArray(fullName);
+                DynamicVariableManager.pushLocalVariable(arr);
+                registers[rd] = GlobalVariable.getGlobalArray(fullName);
+                return pc;
+            }
+            case Opcodes.LOCAL_HASH: {
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                String fullName = code.stringPool[nameIdx];
+
+                RuntimeHash hash = GlobalVariable.getGlobalHash(fullName);
+                DynamicVariableManager.pushLocalVariable(hash);
+                registers[rd] = GlobalVariable.getGlobalHash(fullName);
+                return pc;
+            }
             default:
                 throw new RuntimeException("Unknown scope opcode: " + opcode);
         }

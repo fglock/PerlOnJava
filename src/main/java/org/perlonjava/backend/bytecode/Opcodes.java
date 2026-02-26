@@ -545,6 +545,10 @@ public class Opcodes {
     public static final short RETRIEVE_BEGIN_HASH = 130;
     /** Localize global variable: rd = GlobalRuntimeScalar.makeLocal(var_name) */
     public static final short LOCAL_SCALAR = 131;
+    /** Localize global array: rd = GlobalVariable.getGlobalArray(var_name) (dynamicSaveState via DynamicVariableManager) */
+    public static final short LOCAL_ARRAY = 345;
+    /** Localize global hash: rd = GlobalVariable.getGlobalHash(var_name) (dynamicSaveState via DynamicVariableManager) */
+    public static final short LOCAL_HASH = 346;
 
     // Group 6: System Calls (132-141) - CONTIGUOUS
     /** chown(list, uid, gid) */
