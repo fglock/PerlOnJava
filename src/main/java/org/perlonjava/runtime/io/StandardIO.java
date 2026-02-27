@@ -285,13 +285,9 @@ public class StandardIO implements IOHandle {
                     return new RuntimeScalar("");
                 }
 
-                // Convert bytes to string representation
-                StringBuilder result = new StringBuilder(bytesRead);
-                for (int i = 0; i < bytesRead; i++) {
-                    result.append((char) (buffer[i] & 0xFF));
-                }
-
-                return new RuntimeScalar(result.toString());
+                byte[] readBytes = new byte[bytesRead];
+                System.arraycopy(buffer, 0, readBytes, 0, bytesRead);
+                return new RuntimeScalar(readBytes);
             } catch (IOException e) {
                 getGlobalVariable("main::!").set(e.getMessage());
                 return new RuntimeScalar(); // undef
