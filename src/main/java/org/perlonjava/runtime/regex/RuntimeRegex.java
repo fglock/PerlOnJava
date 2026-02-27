@@ -80,7 +80,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     // Indicates if \G assertion is used
-    private final boolean useGAssertion = false;
+    boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -133,6 +133,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
+            regex.useGAssertion = regex.regexFlags.useGAssertion();
 
             String javaPattern = null;
             try {
@@ -283,6 +284,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternString = originalRegex.patternString;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
+            regex.useGAssertion = regex.regexFlags.useGAssertion();
 
             return new RuntimeScalar(regex);
         }
@@ -308,6 +310,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternString = originalRegex.patternString;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
+                    regex.useGAssertion = regex.regexFlags.useGAssertion();
 
                     return new RuntimeScalar(regex);
                 }
@@ -373,6 +376,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
+        regex.useGAssertion = regex.regexFlags != null && regex.regexFlags.useGAssertion();
         regex.replacement = replacement;
         return new RuntimeScalar(regex);
     }
