@@ -1619,6 +1619,12 @@ public class EmitterMethodCreator implements Opcodes {
                 ctx.errorUtil
             );
 
+        // Inherit package from the JVM compiler context so unqualified sub calls
+        // resolve in the correct package (not main) in the interpreter fallback.
+        if (ctx.symbolTable != null) {
+            compiler.setCompilePackage(ctx.symbolTable.getCurrentPackage());
+        }
+
         // Compile AST to interpreter bytecode (pass ctx for package context and closure detection)
         InterpretedCode code = compiler.compile(ast, ctx);
 

@@ -493,12 +493,7 @@ public class BytecodeCompiler implements Visitor {
             // Use the calling context from EmitterContext for top-level expressions
             // This is crucial for eval STRING to propagate context correctly
             currentCallContext = ctx.contextType;
-            // Inherit package from the JVM compiler context so unqualified sub calls
-            // resolve in the correct package (not main)
-            if (ctx.symbolTable != null) {
-                symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
-                    ctx.symbolTable.currentPackageIsClass());
-            }
+
         }
 
         // If we have captured variables, allocate registers for them
