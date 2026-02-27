@@ -69,6 +69,10 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    // goto LABEL support: track label positions and pending forward goto patches
+    private final Map<String, Integer> gotoLabelPCs = new HashMap<>();  // label name → PC
+    private final Map<String, List<Integer>> pendingGotoPatches = new HashMap<>();  // label name → list of PCs to patch
+
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
@@ -4483,7 +4487,17 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        // Labels are tracked in loops, standalone labels are no-ops
+        int labelPc = bytecode.size();
+        gotoLabelPCs.put(node.label, labelPc);
+
+        // Patch any pending forward gotos to this label
+        List<Integer> patches = pendingGotoPatches.remove(node.label);
+        if (patches != null) {
+            for (int patchPc : patches) {
+                patchJump(patchPc, labelPc);
+            }
+        }
+
         lastResultReg = -1;
     }
 
@@ -4734,6 +4748,34 @@ public class BytecodeCompiler implements Visitor {
             targetLoop.nextPcs.add(patchPc);
         } else { // redo
             targetLoop.redoPcs.add(patchPc);
+        }
+    }
+
+    void handleGotoOperator(OperatorNode node) {
+        String labelStr = null;
+        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+            Node arg = labelNode.elements.getFirst();
+            if (arg instanceof IdentifierNode) {
+                labelStr = ((IdentifierNode) arg).name;
+            }
+        }
+
+        if (labelStr == null) {
+            throwCompilerException("goto without label is not supported", node.getIndex());
+            return;
+        }
+
+        // Check if label was already seen (backward goto)
+        Integer targetPc = gotoLabelPCs.get(labelStr);
+        if (targetPc != null) {
+            emit(Opcodes.GOTO);
+            emitInt(targetPc);
+        } else {
+            // Forward goto: emit GOTO with placeholder, patch later
+            emit(Opcodes.GOTO);
+            int patchPc = bytecode.size();
+            emitInt(0);
+            pendingGotoPatches.computeIfAbsent(labelStr, k -> new ArrayList<>()).add(patchPc);
         }
     }
 }

@@ -29,14 +29,12 @@ public class DynamicVariableManager {
      * @param variable the dynamic state to be pushed onto the stack.
      */
     public static RuntimeBase pushLocalVariable(RuntimeBase variable) {
-        // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
         variableStack.push(variable);
         return variable;
     }
 
     public static RuntimeScalar pushLocalVariable(RuntimeScalar variable) {
-        // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
         variableStack.push(variable);
         return variable;

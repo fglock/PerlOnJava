@@ -394,6 +394,9 @@ public class CompileOperator {
             // Loop control operators: last/next/redo [LABEL]
             bytecodeCompiler.handleLoopControlOperator(node, op);
             bytecodeCompiler.lastResultReg = -1; // No result after control flow
+        } else if (op.equals("goto")) {
+            bytecodeCompiler.handleGotoOperator(node);
+            bytecodeCompiler.lastResultReg = -1;
         } else if (op.equals("rand")) {
             // rand() or rand($max)
             // Calls Random.rand(max) where max defaults to 1
