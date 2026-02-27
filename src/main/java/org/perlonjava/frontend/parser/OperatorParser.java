@@ -694,22 +694,6 @@ public class OperatorParser {
             paren = true;
         }
 
-        // stat/lstat: bareword filehandle (typically ALLCAPS) should be treated as a typeglob.
-        // Consume it here, before generic expression parsing can turn it into a subroutine call.
-        if (nextToken.type == IDENTIFIER) {
-            String name = nextToken.text;
-            if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
-                TokenUtils.consume(parser);
-                // autovivify filehandle and convert to globref
-                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
-                Node fh = FileHandle.parseBarewordHandle(parser, name);
-                Node operand = fh != null ? fh : new IdentifierNode(name, parser.tokenIndex);
-                if (paren) {
-                    TokenUtils.consume(parser, OPERATOR, ")");
-                }
-                return new OperatorNode(token.text, operand, currentIndex);
-            }
-        }
         if (nextToken.text.equals("_")) {
             // Handle `stat _`
             TokenUtils.consume(parser);
@@ -718,6 +702,22 @@ public class OperatorParser {
             }
             return new OperatorNode(token.text,
                     new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+        }
+
+        // stat/lstat: bareword filehandle (typically ALLCAPS) should be treated as a typeglob.
+        // Consume it here, before generic expression parsing can turn it into a subroutine call.
+        if (nextToken.type == IDENTIFIER) {
+            String name = nextToken.text;
+            if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                TokenUtils.consume(parser);
+                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                Node fh = FileHandle.parseBarewordHandle(parser, name);
+                Node operand = fh != null ? fh : new IdentifierNode(name, parser.tokenIndex);
+                if (paren) {
+                    TokenUtils.consume(parser, OPERATOR, ")");
+                }
+                return new OperatorNode(token.text, operand, currentIndex);
+            }
         }
 
         // Parse optional single argument (or default to $_)
