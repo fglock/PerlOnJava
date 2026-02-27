@@ -88,7 +88,13 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         return super.set(value);
     }
 
-    // Add itself to a RuntimeArray.
+    @Override
+    public RuntimeList getList() {
+        RuntimeList list = new RuntimeList();
+        this.addToList(list);
+        return list;
+    }
+
     public void addToArray(RuntimeArray array) {
         array.elements.add(new RuntimeScalar(this.getValueAsScalar()));
     }
@@ -108,7 +114,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      *
      * @return The RuntimeScalar value of the special variable, or null if not available.
      */
-    private RuntimeScalar getValueAsScalar() {
+    RuntimeScalar getValueAsScalar() {
         try {
             RuntimeScalar result = switch (variableId) {
                 case CAPTURE -> {
