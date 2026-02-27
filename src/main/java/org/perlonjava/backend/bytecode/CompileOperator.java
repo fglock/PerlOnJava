@@ -855,6 +855,9 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
+                // Snapshot current variable scopes for this eval site
+                int evalSiteIdx = bytecodeCompiler.snapshotEvalSiteRegistry();
+
                 // Emit direct opcode EVAL_STRING
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
@@ -863,6 +866,7 @@ public class CompileOperator {
                 // wantarray() inside the eval body and the eval return value follow
                 // the correct context even when the surrounding sub is VOID.
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(evalSiteIdx);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
