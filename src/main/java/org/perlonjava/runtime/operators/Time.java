@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -116,7 +116,15 @@ public class Time {
     private static RuntimeList getTimeComponents(int ctx, ZonedDateTime date) {
         RuntimeList res = new RuntimeList();
         if (ctx == RuntimeContextType.SCALAR) {
-            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            String[] days = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+            String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+            int dow = date.getDayOfWeek().getValue(); // Mon=1..Sun=7
+            String dayStr = days[dow - 1];
+            String monStr = months[date.getMonth().getValue() - 1];
+            int mday = date.getDayOfMonth();
+            String timeStr = String.format("%02d:%02d:%02d", date.getHour(), date.getMinute(), date.getSecond());
+            res.add(new RuntimeScalar(String.format("%s %s %2d %s %d", dayStr, monStr, mday, timeStr, date.getYear())));
             return res;
         }
         //      0    1    2     3     4    5     6     7     8
