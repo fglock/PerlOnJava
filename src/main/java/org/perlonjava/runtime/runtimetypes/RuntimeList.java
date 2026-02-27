@@ -240,6 +240,15 @@ public class RuntimeList extends RuntimeBase {
         return this;
     }
 
+    public static void resolveMatchProxies(RuntimeList list) {
+        for (int i = 0; i < list.elements.size(); i++) {
+            RuntimeBase elem = list.elements.get(i);
+            if (elem instanceof ScalarSpecialVariable ssv) {
+                list.elements.set(i, ssv.getValueAsScalar());
+            }
+        }
+    }
+
     /**
      * Evaluates the boolean representation of the list.
      *

@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -546,7 +547,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Build InterpretedCode
-        return new InterpretedCode(
+        InterpretedCode result = new InterpretedCode(
             toShortArray(),
             constants.toArray(),
             stringPool.toArray(new String[0]),
@@ -562,6 +563,9 @@ public class BytecodeCompiler implements Visitor {
             warningFlags,  // Warning flags for eval STRING inheritance
             symbolTable.getCurrentPackage()  // Compile-time package for eval STRING name resolution
         );
+        result.containsRegex = FindDeclarationVisitor.findOperator(node, "matchRegex") != null
+                || FindDeclarationVisitor.findOperator(node, "replaceRegex") != null;
+        return result;
     }
 
     // =========================================================================
@@ -4102,6 +4106,12 @@ public class BytecodeCompiler implements Visitor {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
                     variableScopes.peek().put(varName, varReg);
                     allDeclaredVariables.put(varName, varReg);
+                }
+            } else if (varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode
+                    && globalLoopVarName == null) {
+                String varName = "$" + ((IdentifierNode) varOp.operand).name;
+                if (hasVariable(varName)) {
+                    variableScopes.peek().put(varName, varReg);
                 }
             }
         }

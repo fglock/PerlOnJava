@@ -35,6 +35,8 @@ public class InterpretedCode extends RuntimeCode {
     public final BitSet warningFlags;      // Warning flags at compile time
     public final String compilePackage;    // Package at compile time (for eval STRING name resolution)
 
+    public boolean containsRegex;          // Whether this code contains regex ops (for match var scoping)
+
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
     public final int sourceLine;           // Source line number
