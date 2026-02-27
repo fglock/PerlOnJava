@@ -1149,5 +1149,13 @@ public class Opcodes {
     /** Defined-or assignment: rd //= rs. Format: DEFINED_OR_ASSIGN rd rs */
     public static final short DEFINED_OR_ASSIGN = 349;
 
+    /** stat _ (use cached stat buffer): rd = Stat.statLastHandle()
+     * Format: STAT_LASTHANDLE rd ctx */
+    public static final short STAT_LASTHANDLE = 350;
+
+    /** lstat _ (use cached stat buffer): rd = Stat.lstatLastHandle()
+     * Format: LSTAT_LASTHANDLE rd ctx */
+    public static final short LSTAT_LASTHANDLE = 351;
+
     private Opcodes() {} // Utility class - no instantiation
 }

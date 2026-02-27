@@ -21,6 +21,7 @@ import java.util.Set;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastBasicAttr;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastFileHandle;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastPosixAttr;
+import static org.perlonjava.runtime.operators.FileTestOperator.lastStatOk;
 import static org.perlonjava.runtime.operators.FileTestOperator.updateLastStat;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.resolvePath;
@@ -63,12 +64,38 @@ public class Stat {
         return permissions;
     }
 
-    public static RuntimeList statLastHandle() {
-        return stat(lastFileHandle);
+    public static RuntimeBase statLastHandle(int ctx) {
+        if (!lastStatOk) {
+            getGlobalVariable("main::!").set(9);
+            RuntimeList empty = new RuntimeList();
+            if (ctx == RuntimeContextType.SCALAR) {
+                return empty.statScalar();
+            }
+            return empty;
+        }
+        RuntimeList res = new RuntimeList();
+        statInternal(res, lastBasicAttr, lastPosixAttr);
+        if (ctx == RuntimeContextType.SCALAR) {
+            return res.statScalar();
+        }
+        return res;
     }
 
-    public static RuntimeList lstatLastHandle() {
-        return lstat(lastFileHandle);
+    public static RuntimeBase lstatLastHandle(int ctx) {
+        if (!lastStatOk) {
+            getGlobalVariable("main::!").set(9);
+            RuntimeList empty = new RuntimeList();
+            if (ctx == RuntimeContextType.SCALAR) {
+                return empty.statScalar();
+            }
+            return empty;
+        }
+        RuntimeList res = new RuntimeList();
+        statInternal(res, lastBasicAttr, lastPosixAttr);
+        if (ctx == RuntimeContextType.SCALAR) {
+            return res.statScalar();
+        }
+        return res;
     }
 
     /**
