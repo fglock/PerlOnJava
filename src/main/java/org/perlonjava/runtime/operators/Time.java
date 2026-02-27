@@ -89,8 +89,8 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
-            long arg = args.getFirst().getInt();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
+            long epoch = (long) Math.floor(args.getFirst().getDouble());
+            date = Instant.ofEpochSecond(epoch).atZone(ZoneId.systemDefault());
         }
         return getTimeComponents(ctx, date);
     }
@@ -107,8 +107,8 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            long arg = args.getFirst().getInt();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
+            long epoch = (long) Math.floor(args.getFirst().getDouble());
+            date = Instant.ofEpochSecond(epoch).atZone(ZoneId.of("UTC"));
         }
         return getTimeComponents(ctx, date);
     }
@@ -127,7 +127,8 @@ public class Time {
         res.add(date.getDayOfMonth());
         res.add(date.getMonth().getValue() - 1);
         res.add(date.getYear() - 1900);
-        res.add(date.getDayOfWeek().getValue());
+        int dow = date.getDayOfWeek().getValue();  // Mon=1..Sun=7
+        res.add(dow == 7 ? 0 : dow);               // Sun=0, Mon=1..Sat=6
         res.add(date.getDayOfYear() - 1);
         res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
