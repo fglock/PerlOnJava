@@ -84,7 +84,8 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        throw new RuntimeException("Modification of a read-only value attempted");
+        RuntimeException ex = new RuntimeException("Modification of a read-only value attempted (value=" + this.toString() + " type=" + this.type + ")");
+        throw ex;
     }
 
     /**

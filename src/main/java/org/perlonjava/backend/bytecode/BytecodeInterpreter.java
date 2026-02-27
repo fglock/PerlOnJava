@@ -409,6 +409,23 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.MY_SCALAR: {
+                        // Mutable scalar assignment: allocate fresh scalar, then copy value
+                        // Superinstruction for LOAD_UNDEF rd + SET_SCALAR rd rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar target = new RuntimeScalar();
+                        registers[rs].addToScalar(target);
+                        registers[rd] = target;
+                        break;
+                    }
+
+                    case Opcodes.UNDEFINE_SCALAR: {
+                        int rd = bytecode[pc++];
+                        ((RuntimeScalar) registers[rd]).undefine();
+                        break;
+                    }
+
                     // =================================================================
                     // ARITHMETIC OPERATORS
                     // =================================================================
@@ -901,7 +918,7 @@ public class BytecodeInterpreter {
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         RuntimeBase rawVal = registers[valueReg];
                         RuntimeScalar val = (rawVal instanceof RuntimeScalar) ? (RuntimeScalar) rawVal : rawVal.scalar();
-                        hash.put(key.toString(), val);
+                        hash.put(key.toString(), new RuntimeScalar(val));
                         break;
                     }
 
@@ -2985,6 +3002,15 @@ public class BytecodeInterpreter {
               .append(" line ").append(lineNumber)
               .append(" (pc=").append(errorPc).append("): ")
               .append(e.getMessage());
+            // Debug: show opcode at error PC
+            if (errorPc >= 0 && errorPc < code.bytecode.length) {
+                int opAtError = code.bytecode[errorPc];
+                sb.append(" [opcode=0x").append(String.format("%04X", opAtError));
+                if (errorPc + 1 < code.bytecode.length) sb.append(" arg1=").append(code.bytecode[errorPc + 1]);
+                if (errorPc + 2 < code.bytecode.length) sb.append(" arg2=").append(code.bytecode[errorPc + 2]);
+                if (errorPc + 3 < code.bytecode.length) sb.append(" arg3=").append(code.bytecode[errorPc + 3]);
+                sb.append("]");
+            }
         } else if (tokenIndex != null) {
             // We have token index but no errorUtil
             sb.append("Interpreter error in ").append(code.sourceName)

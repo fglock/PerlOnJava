@@ -1157,5 +1157,13 @@ public class Opcodes {
      * Format: LSTAT_LASTHANDLE rd ctx */
     public static final short LSTAT_LASTHANDLE = 351;
 
+    /** Mutable scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
+     * Superinstruction combining LOAD_UNDEF + SET_SCALAR for lexical scalar assignment.
+     * Format: MY_SCALAR rd rs */
+    public static final short MY_SCALAR = 352;
+
+    /** Undefine a scalar variable in-place: rd.undefine(). Used by `undef $x`. */
+    public static final short UNDEFINE_SCALAR = 353;
+
     private Opcodes() {} // Utility class - no instantiation
 }

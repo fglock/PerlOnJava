@@ -211,7 +211,7 @@ public class PipeOutputChannel implements IOHandle {
             process.getOutputStream().write(bytes);
             process.getOutputStream().flush();
 
-            return new RuntimeScalar(bytes.length);
+            return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "Write to pipe failed");
         }
