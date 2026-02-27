@@ -725,6 +725,9 @@ public class MathOperators {
 
 
     public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            return getScalarBoolean(!runtimeScalar.getBoolean());
+        }
         return switch (runtimeScalar.type) {
             case INTEGER -> getScalarBoolean((int) runtimeScalar.value == 0);
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);

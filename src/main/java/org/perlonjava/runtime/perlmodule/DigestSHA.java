@@ -101,7 +101,7 @@ public class DigestSHA extends PerlModuleBase {
                 StringParser.assertNoWideCharacters(dataStr, "add");
 
                 if (data.type != RuntimeScalarType.UNDEF) {
-                    md.update(dataStr.getBytes(StandardCharsets.UTF_8));
+                    md.update(dataStr.getBytes(StandardCharsets.ISO_8859_1));
                 }
             }
 
@@ -199,7 +199,7 @@ public class DigestSHA extends PerlModuleBase {
                 int nbits = nbitsScalar.getInt();
 
                 // Convert data to bytes, but only use the specified number of bits
-                byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
+                byte[] dataBytes = data.getBytes(StandardCharsets.ISO_8859_1);
                 byte[] truncatedBytes = truncateToNBits(dataBytes, nbits);
                 md.update(truncatedBytes);
             }
