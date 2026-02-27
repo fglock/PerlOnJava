@@ -442,13 +442,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // hexPrinter(inputStr);
 
         // Use RuntimePosLvalue to get the current position
+        // In Perl, pos() only affects /g matches; non-/g matches always start from position 0
         RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
-        boolean isPosDefined = posScalar.getDefinedBoolean();
+        boolean isGlobal = regex.regexFlags.isGlobalMatch();
+        boolean isPosDefined = isGlobal && posScalar.getDefinedBoolean();
         int startPos = isPosDefined ? posScalar.getInt() : 0;
         
         // Check if previous call had zero-length match at this position (for SCALAR context)
         // This prevents infinite loops in: while ($str =~ /pat/g)  
-        if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
+        if (isGlobal && ctx == RuntimeContextType.SCALAR) {
             String patternKey = regex.patternString;
             if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
                 // Previous match was zero-length at this position - fail to break loop
@@ -457,7 +459,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        // Start matching from the current position if defined
+        // Start matching from the current position if defined (only for /g matches)
         if (isPosDefined) {
             matcher.region(startPos, inputStr.length());
         }
