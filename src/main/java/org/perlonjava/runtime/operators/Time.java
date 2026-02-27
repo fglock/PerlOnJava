@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -89,8 +89,8 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
-            long arg = args.getFirst().getInt();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
+            long epoch = (long) Math.floor(args.getFirst().getDouble());
+            date = Instant.ofEpochSecond(epoch).atZone(ZoneId.systemDefault());
         }
         return getTimeComponents(ctx, date);
     }
@@ -107,8 +107,8 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            long arg = args.getFirst().getInt();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
+            long epoch = (long) Math.floor(args.getFirst().getDouble());
+            date = Instant.ofEpochSecond(epoch).atZone(ZoneId.of("UTC"));
         }
         return getTimeComponents(ctx, date);
     }
@@ -116,7 +116,15 @@ public class Time {
     private static RuntimeList getTimeComponents(int ctx, ZonedDateTime date) {
         RuntimeList res = new RuntimeList();
         if (ctx == RuntimeContextType.SCALAR) {
-            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            String[] days = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+            String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+            int dow = date.getDayOfWeek().getValue(); // Mon=1..Sun=7
+            String dayStr = days[dow - 1];
+            String monStr = months[date.getMonth().getValue() - 1];
+            int mday = date.getDayOfMonth();
+            String timeStr = String.format("%02d:%02d:%02d", date.getHour(), date.getMinute(), date.getSecond());
+            res.add(new RuntimeScalar(String.format("%s %s %2d %s %d", dayStr, monStr, mday, timeStr, date.getYear())));
             return res;
         }
         //      0    1    2     3     4    5     6     7     8
@@ -127,7 +135,8 @@ public class Time {
         res.add(date.getDayOfMonth());
         res.add(date.getMonth().getValue() - 1);
         res.add(date.getYear() - 1900);
-        res.add(date.getDayOfWeek().getValue());
+        int dow = date.getDayOfWeek().getValue();  // Mon=1..Sun=7
+        res.add(dow == 7 ? 0 : dow);               // Sun=0, Mon=1..Sat=6
         res.add(date.getDayOfYear() - 1);
         res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
