@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.BitSet;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -36,6 +37,7 @@ public class InterpretedCode extends RuntimeCode {
     public final String compilePackage;    // Package at compile time (for eval STRING name resolution)
 
     public boolean containsRegex;          // Whether this code contains regex ops (for match var scoping)
+    public List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable snapshots
 
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
@@ -1323,7 +1325,9 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.EVAL_STRING:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
-                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(")\n");
+                    int evalCtx = bytecode[pc++];
+                    int evalSiteId = bytecode[pc++];
+                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(", ctx=").append(evalCtx).append(", site=").append(evalSiteId).append(")\n");
                     break;
                 case Opcodes.SELECT_OP:
                     rd = bytecode[pc++];

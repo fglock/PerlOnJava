@@ -246,6 +246,14 @@ public class CompileBinaryOperator {
             // Code reference call: $code->() or $code->(@args)
             // right is ListNode with arguments
             else if (node.right instanceof ListNode) {
+                // eval { BLOCK } is parsed as sub { ... }->() with useTryCatch.
+                // visitEvalBlock() already inlined the body and set lastResultReg
+                // to the block result, so skip the CALL_SUB.
+                if (node.left instanceof SubroutineNode && ((SubroutineNode) node.left).useTryCatch) {
+                    node.left.accept(bytecodeCompiler);
+                    return;
+                }
+
                 // This is a code reference call: $coderef->(args)
                 // Compile the code reference in scalar context
                 int savedContext = bytecodeCompiler.currentCallContext;

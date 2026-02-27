@@ -103,6 +103,9 @@ public class BytecodeCompiler implements Visitor {
     // This is needed because inner scopes get popped before variableRegistry is built
     final Map<String, Integer> allDeclaredVariables = new HashMap<>();
 
+    // Per-eval-site variable scope snapshots (for eval STRING variable capture)
+    final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
+
     // BEGIN support for named subroutine closures
     private int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
     private Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
@@ -267,6 +270,16 @@ public class BytecodeCompiler implements Visitor {
                 st.warningFlagsStack.pop();
             }
         }
+    }
+
+    int snapshotEvalSiteRegistry() {
+        Map<String, Integer> snapshot = new HashMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            snapshot.putAll(scope);
+        }
+        int index = evalSiteRegistries.size();
+        evalSiteRegistries.add(snapshot);
+        return index;
     }
 
     /**
@@ -569,6 +582,9 @@ public class BytecodeCompiler implements Visitor {
         );
         result.containsRegex = FindDeclarationVisitor.findOperator(node, "matchRegex") != null
                 || FindDeclarationVisitor.findOperator(node, "replaceRegex") != null;
+        if (!evalSiteRegistries.isEmpty()) {
+            result.evalSiteRegistries = evalSiteRegistries;
+        }
         return result;
     }
 
@@ -2763,6 +2779,31 @@ public class BytecodeCompiler implements Visitor {
                         emitReg(refReg1);
                         lastResultReg = refReg2;
                     } else {
+                        lastResultReg = rd;
+                    }
+                    return;
+                }
+
+                // Handle local our $x - compile `our` declaration then localize
+                if (sigil.equals("our")) {
+                    OperatorNode ourNode = new OperatorNode("our", sigilOp.operand, node.getIndex());
+                    compileVariableDeclaration(ourNode, "our");
+
+                    if (sigilOp.operand instanceof OperatorNode innerSigilOp
+                            && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                        String innerSigil = innerSigilOp.operator;
+                        String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                        int nameIdx = addToStringPool(globalVarName);
+                        int rd = allocateRegister();
+                        if (innerSigil.equals("$")) {
+                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                        } else if (innerSigil.equals("@")) {
+                            emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                        } else {
+                            emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                        }
+                        emitReg(rd);
+                        emit(nameIdx);
                         lastResultReg = rd;
                     }
                     return;
