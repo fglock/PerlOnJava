@@ -1244,6 +1244,14 @@ public class BytecodeInterpreter {
                         pc = OpcodeHandlerExtended.executeLstat(bytecode, pc, registers);
                         break;
 
+                    case Opcodes.STAT_LASTHANDLE:
+                        pc = OpcodeHandlerExtended.executeStatLastHandle(bytecode, pc, registers);
+                        break;
+
+                    case Opcodes.LSTAT_LASTHANDLE:
+                        pc = OpcodeHandlerExtended.executeLstatLastHandle(bytecode, pc, registers);
+                        break;
+
                     // File test operations (opcodes 190-216) - delegated to handler
                     case Opcodes.FILETEST_R:
                     case Opcodes.FILETEST_W:
