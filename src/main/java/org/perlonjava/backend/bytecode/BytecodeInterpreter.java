@@ -899,8 +899,9 @@ public class BytecodeInterpreter {
                         int valueReg = bytecode[pc++];
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
-                        hash.put(key.toString(), val);  // Convert key to String
+                        RuntimeBase rawVal = registers[valueReg];
+                        RuntimeScalar val = (rawVal instanceof RuntimeScalar) ? (RuntimeScalar) rawVal : rawVal.scalar();
+                        hash.put(key.toString(), val);
                         break;
                     }
 
@@ -2205,7 +2206,7 @@ public class BytecodeInterpreter {
                 if (i == errorPc) {
                     bcContext.append(" >>>");
                 }
-                bcContext.append(String.format(" %02X", bytecode[i] & 0xFF));
+                bcContext.append(String.format(" %04X", bytecode[i] & 0xFFFF));
                 if (i == errorPc) {
                     bcContext.append("<<<");
                 }
@@ -2677,9 +2678,9 @@ public class BytecodeInterpreter {
                 // Logical NOT: rd = !rs
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
-                RuntimeScalar val = (RuntimeScalar) registers[rs];
-                registers[rd] = val.getBoolean() ?
-                    RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                RuntimeBase val = registers[rs];
+                boolean b = (val instanceof RuntimeScalar) ? ((RuntimeScalar) val).getBoolean() : val.scalar().getBoolean();
+                registers[rd] = b ? RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
                 return pc;
             }
 
