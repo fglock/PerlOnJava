@@ -263,6 +263,23 @@ public class EmitForeach {
             variableNode = actualVariable;
         }
 
+        // Save pre-existing lexical variable before the loop so we can restore after
+        int savedLexicalVarIndex = -1;
+        int lexicalVarIndex = -1;
+        if (!isReferenceAliasing && !loopVariableIsGlobal
+                && variableNode instanceof OperatorNode saveOp) {
+            String saveName = extractSimpleVariableName(saveOp);
+            if (saveName != null) {
+                int idx = emitterVisitor.ctx.symbolTable.getVariableIndex(saveName);
+                if (idx != -1) {
+                    lexicalVarIndex = idx;
+                    savedLexicalVarIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    mv.visitVarInsn(Opcodes.ALOAD, lexicalVarIndex);
+                    mv.visitVarInsn(Opcodes.ASTORE, savedLexicalVarIndex);
+                }
+            }
+        }
+
         // For global $_ as loop variable, we need to:
         // 1. Evaluate the list first (before any localization takes effect)
         // 2. For statement modifiers: localize $_ ourselves
@@ -566,6 +583,12 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+
+        // Restore pre-existing lexical variable after the loop
+        if (savedLexicalVarIndex != -1) {
+            mv.visitVarInsn(Opcodes.ALOAD, savedLexicalVarIndex);
+            mv.visitVarInsn(Opcodes.ASTORE, lexicalVarIndex);
+        }
 
         // Restore the original value for reference aliasing: for \$x (...), for \@x (...), for \%x (...)
         if (isReferenceAliasing && savedValueIndex != -1) {

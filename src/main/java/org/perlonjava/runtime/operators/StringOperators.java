@@ -313,7 +313,24 @@ public class StringOperators {
             return new RuntimeScalar(out);
         }
 
-        return new RuntimeScalar(runtimeScalar + bStr);
+        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
+            boolean hasWide = false;
+            for (int i = 0; i < aStr.length() && !hasWide; i++) {
+                if (aStr.charAt(i) > 255) hasWide = true;
+            }
+            for (int i = 0; i < bStr.length() && !hasWide; i++) {
+                if (bStr.charAt(i) > 255) hasWide = true;
+            }
+            if (!hasWide) {
+                byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+                byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+                byte[] out = new byte[aBytes.length + bBytes.length];
+                System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+                System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+                return new RuntimeScalar(out);
+            }
+        }
+        return new RuntimeScalar(aStr + bStr);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -363,7 +380,24 @@ public class StringOperators {
             return new RuntimeScalar(out);
         }
 
-        return new RuntimeScalar(runtimeScalar + bStr);
+        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
+            boolean hasWide = false;
+            for (int i = 0; i < aStr.length() && !hasWide; i++) {
+                if (aStr.charAt(i) > 255) hasWide = true;
+            }
+            for (int i = 0; i < bStr.length() && !hasWide; i++) {
+                if (bStr.charAt(i) > 255) hasWide = true;
+            }
+            if (!hasWide) {
+                byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+                byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+                byte[] out = new byte[aBytes.length + bBytes.length];
+                System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+                System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+                return new RuntimeScalar(out);
+            }
+        }
+        return new RuntimeScalar(aStr + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
@@ -550,7 +584,7 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        boolean isByteString = runtimeScalar.type == BYTE_STRING;
+        boolean anyIsByteString = runtimeScalar.type == BYTE_STRING;
 
         String delimiter = runtimeScalar.toString();
         
@@ -576,12 +610,19 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString);
             }
 
-            isByteString = isByteString && scalar.type == BYTE_STRING;
+            anyIsByteString = anyIsByteString || scalar.type == BYTE_STRING;
             sb.append(scalar);
         }
         RuntimeScalar res = new RuntimeScalar(sb.toString());
-        if (isByteString) {
-            res.type = BYTE_STRING;
+        if (anyIsByteString) {
+            String resultStr = sb.toString();
+            boolean hasWide = false;
+            for (int i = 0; i < resultStr.length(); i++) {
+                if (resultStr.charAt(i) > 255) { hasWide = true; break; }
+            }
+            if (!hasWide) {
+                res.type = BYTE_STRING;
+            }
         }
         return res;
     }
