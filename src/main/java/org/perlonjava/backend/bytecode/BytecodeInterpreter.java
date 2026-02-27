@@ -48,6 +48,12 @@ public class BytecodeInterpreter {
         String frameSubName = subroutineName != null ? subroutineName : (code.subName != null ? code.subName : "(eval)");
         InterpreterState.push(code, framePackageName, frameSubName);
 
+        int regexLocalLevel = -1;
+        if (code.containsRegex) {
+            regexLocalLevel = DynamicVariableManager.getLocalLevel();
+            RuntimeRegexState.pushLocal();
+        }
+
         // Pure register file (NOT stack-based - matches compiler for control flow correctness)
         RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
 
@@ -88,14 +94,16 @@ public class BytecodeInterpreter {
                         break;
 
                     case Opcodes.RETURN: {
-                        // Return from subroutine: return rd
                         int retReg = bytecode[pc++];
                         RuntimeBase retVal = registers[retReg];
-
                         if (retVal == null) {
                             return new RuntimeList();
                         }
-                        return retVal.getList();
+                        RuntimeList retList = retVal.getList();
+                        if (code.containsRegex) {
+                            RuntimeList.resolveMatchProxies(retList);
+                        }
+                        return retList;
                     }
 
                     case Opcodes.GOTO: {
@@ -2245,7 +2253,9 @@ public class BytecodeInterpreter {
             String errorMessage = formatInterpreterError(code, pc, e);
             throw new RuntimeException(errorMessage, e);
         } finally {
-            // Always pop the interpreter state
+            if (regexLocalLevel >= 0) {
+                DynamicVariableManager.popToLocalLevel(regexLocalLevel);
+            }
             InterpreterState.pop();
         }
     }
