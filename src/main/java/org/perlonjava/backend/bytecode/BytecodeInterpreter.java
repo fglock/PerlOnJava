@@ -1718,13 +1718,7 @@ public class BytecodeInterpreter {
                         RuntimeList list = listBase.getList();
                         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
                         RuntimeList result = ListOperators.grep(list, closure, ctx);
-
-                        // In scalar context, return the count of elements
-                        if (ctx == RuntimeContextType.SCALAR) {
-                            registers[rd] = new RuntimeScalar(result.elements.size());
-                        } else {
-                            registers[rd] = result;
-                        }
+                        registers[rd] = result;
                         break;
                     }
 
