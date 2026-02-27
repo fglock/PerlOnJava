@@ -726,7 +726,7 @@ public class IOOperator {
         newValue.append(data);
 
         target.set(newValue.toString());
-        if (result.type == RuntimeScalarType.BYTE_STRING) {
+        if (result.type == RuntimeScalarType.BYTE_STRING && target.type != RuntimeScalarType.TIED_SCALAR) {
             target.type = RuntimeScalarType.BYTE_STRING;
         }
         return new RuntimeScalar(bytesRead);
@@ -2148,7 +2148,9 @@ public class IOOperator {
             RuntimeIO fh = fileHandle.getRuntimeIO();
             if (fh != null && hasUtf8Layer(fh)) {
                 RuntimeScalar target = args[1].scalar().scalarDeref();
-                target.type = RuntimeScalarType.STRING;
+                if (target.type != RuntimeScalarType.TIED_SCALAR) {
+                    target.type = RuntimeScalarType.STRING;
+                }
             }
         }
         return result;
