@@ -1163,6 +1163,15 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("SET_SCALAR r").append(rd).append(".set(r").append(rs).append(")\n");
                     break;
+                case Opcodes.MY_SCALAR:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("MY_SCALAR r").append(rd).append(" = new Scalar(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.UNDEFINE_SCALAR:
+                    rd = bytecode[pc++];
+                    sb.append("UNDEFINE_SCALAR r").append(rd).append(".undefine()\n");
+                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

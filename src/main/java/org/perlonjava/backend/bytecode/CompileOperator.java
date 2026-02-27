@@ -904,13 +904,29 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("undef")) {
-            // undef operator - returns undefined value
-            // Can be used standalone: undef
-            // Or with an operand to undef a variable: undef $x (not implemented yet)
-            int undefReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-            bytecodeCompiler.emitReg(undefReg);
-            bytecodeCompiler.lastResultReg = undefReg;
+            if (node.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
+                Node elem = listNode.elements.get(0);
+                if (elem instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                    int savedContext = bytecodeCompiler.currentCallContext;
+                    bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+                    elem.accept(bytecodeCompiler);
+                    bytecodeCompiler.currentCallContext = savedContext;
+                    int varReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
+                    bytecodeCompiler.emitReg(varReg);
+                    bytecodeCompiler.lastResultReg = varReg;
+                } else {
+                    int undefReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(undefReg);
+                    bytecodeCompiler.lastResultReg = undefReg;
+                }
+            } else {
+                int undefReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                bytecodeCompiler.emitReg(undefReg);
+                bytecodeCompiler.lastResultReg = undefReg;
+            }
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
             // Compile operand in scalar context (negation always produces a scalar)
