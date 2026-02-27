@@ -415,6 +415,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Then when "say @arr" is parsed in the BEGIN, it resolves to BEGIN_PKG_x::@arr
         // which is aliased to the runtime array with values (a, b).
         Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
+        List<String> evalAliasKeys = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
                 if (!entry.decl().equals("our")) {
@@ -434,6 +435,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // entry.name() is "@arr" but the key should be "packageName::arr"
                             String varNameWithoutSigil = entry.name().substring(1);  // Remove the sigil
                             String fullName = packageName + "::" + varNameWithoutSigil;
+                            evalAliasKeys.add(fullName);
 
                             // Alias the global to the runtime value
                             if (runtimeValue instanceof RuntimeArray) {
@@ -565,6 +567,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             capturedHintHash.elements.putAll(savedHintHash);
 
             setCurrentScope(capturedSymbolTable);
+
+            // Clean up eval STRING aliases from global namespace.
+            // These aliases were created before parsing so BEGIN blocks inside the eval
+            // could access outer lexicals. After compilation, they are no longer needed.
+            // Leaving them would cause `my` re-declarations in loops to pick up stale
+            // values via retrieveBeginScalar instead of creating fresh objects.
+            for (String key : evalAliasKeys) {
+                GlobalVariable.globalVariables.remove(key);
+                GlobalVariable.globalArrays.remove(key);
+                GlobalVariable.globalHashes.remove(key);
+            }
 
             // Store source lines in symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention
@@ -744,6 +757,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Save dynamic variable level to restore after eval
         int dynamicVarLevel = DynamicVariableManager.getLocalLevel();
+        List<String> evalAliasKeys = new ArrayList<>();
 
         try {
             String evalString = code.toString();
@@ -792,6 +806,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String packageName = PersistentVariable.beginPackage(operatorAst.id);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
+                                evalAliasKeys.add(fullName);
 
                                 if (runtimeValue instanceof RuntimeArray) {
                                     GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
@@ -1018,6 +1033,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
+
+            // Clean up eval STRING aliases from global namespace
+            for (String key : evalAliasKeys) {
+                GlobalVariable.globalVariables.remove(key);
+                GlobalVariable.globalArrays.remove(key);
+                GlobalVariable.globalHashes.remove(key);
+            }
 
             // Store source lines in debugger symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention
