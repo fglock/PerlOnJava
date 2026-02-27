@@ -49,6 +49,11 @@ public class DynamicVariableManager {
         return variable;
     }
 
+    public static void pushLocalDynamicState(DynamicState state) {
+        state.dynamicSaveState();
+        variableStack.push(state);
+    }
+
     /**
      * Pops dynamic variables from the stack until the stack size matches the specified target local level.
      * This is useful for restoring the stack to a previous state by removing any variables added after that state.

@@ -56,6 +56,29 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static String lastSuccessfulMatchString = null;
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
+
+    public static Object[] saveMatchState() {
+        return new Object[]{
+            globalMatcher, globalMatchString,
+            lastMatchedString, lastMatchStart, lastMatchEnd,
+            lastSuccessfulMatchedString, lastSuccessfulMatchStart, lastSuccessfulMatchEnd,
+            lastSuccessfulMatchString, lastSuccessfulPattern
+        };
+    }
+
+    public static void restoreMatchState(Object[] state) {
+        globalMatcher = (Matcher) state[0];
+        globalMatchString = (String) state[1];
+        lastMatchedString = (String) state[2];
+        lastMatchStart = (Integer) state[3];
+        lastMatchEnd = (Integer) state[4];
+        lastSuccessfulMatchedString = (String) state[5];
+        lastSuccessfulMatchStart = (Integer) state[6];
+        lastSuccessfulMatchEnd = (Integer) state[7];
+        lastSuccessfulMatchString = (String) state[8];
+        lastSuccessfulPattern = (RuntimeRegex) state[9];
+    }
+
     // Indicates if \G assertion is used
     private final boolean useGAssertion = false;
     // Compiled regex pattern

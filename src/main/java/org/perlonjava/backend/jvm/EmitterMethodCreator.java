@@ -741,6 +741,15 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
+            if (localRecord.containsRegex()) {
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "resolveMatchProxies",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V",
+                        false);
+            }
+
             // Phase 3: Check for control flow markers
             // RuntimeList is on stack after getList()
             
