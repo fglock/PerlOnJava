@@ -96,8 +96,11 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
             updatedValue.replace(startIndex, endIndex, newValue);
         }
 
-        // Update the parent RuntimeScalar with the modified string
-        lvalue.set(new RuntimeScalar(updatedValue.toString()));
+        RuntimeScalar newVal = new RuntimeScalar(updatedValue.toString());
+        if (lvalue.type == RuntimeScalarType.BYTE_STRING) {
+            newVal.type = RuntimeScalarType.BYTE_STRING;
+        }
+        lvalue.set(newVal);
 
         return this;
     }

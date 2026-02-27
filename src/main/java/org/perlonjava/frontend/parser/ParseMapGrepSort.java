@@ -2,6 +2,8 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
+import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.List;
@@ -20,6 +22,29 @@ public class ParseMapGrepSort {
     static BinaryOperatorNode parseSort(Parser parser, LexerToken token) {
         ListNode operand;
         int currentIndex = parser.tokenIndex;
+
+        LexerToken firstToken = peek(parser);
+        if (firstToken.type == LexerTokenType.IDENTIFIER
+                && !ParserTables.CORE_PROTOTYPES.containsKey(firstToken.text)
+                && !ParsePrimary.isIsQuoteLikeOperator(firstToken.text)) {
+            int savedIndex = parser.tokenIndex;
+            String subName = IdentifierParser.parseSubroutineIdentifier(parser);
+            if (subName != null && !subName.isEmpty()) {
+                LexerToken afterName = peek(parser);
+                if (!afterName.text.equals("(") && !afterName.text.equals("=>")) {
+                    String fullName = subName.contains("::")
+                            ? subName
+                            : NameNormalizer.normalizeVariableName(subName,
+                            parser.ctx.symbolTable.getCurrentPackage());
+                    operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+                    Node block = new OperatorNode("&",
+                            new IdentifierNode(fullName, currentIndex), currentIndex);
+                    return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
+                }
+            }
+            parser.tokenIndex = savedIndex;
+        }
+
         try {
             // Handle 'sort' keyword as a Binary operator with a Code and List operands
             operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
