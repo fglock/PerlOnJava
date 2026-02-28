@@ -130,6 +130,14 @@ public class Universal extends PerlModuleBase {
             return method.getList();
         }
 
+        // Forward declarations (sub foo;) exist in the stash but are not "defined" in the
+        // Perl sense, so findMethodInHierarchy skips them (falling through to AUTOLOAD).
+        // However, can() should still return the coderef for forward declarations.
+        String normalizedName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
+            return GlobalVariable.getGlobalCodeRef(normalizedName).getList();
+        }
+
         // Fallback: if either the class name or method name was stored as UTF-8 octets
         // (common when source/strings are treated as raw bytes), retry using a decoded form.
         String decodedMethodName = tryDecodeUtf8Octets(methodName);
