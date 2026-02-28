@@ -63,6 +63,7 @@ import java.nio.charset.StandardCharsets;
  */
 public class UnpackState {
     public final boolean isUTF8Data;
+    public final boolean isUTF8Flagged;
     private final String dataString;
     private final byte[] originalBytes;
     private final int[] codePoints;
@@ -126,10 +127,11 @@ public class UnpackState {
         }
 
         // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics).
-        // Also, if the original scalar was UTF-8 flagged, treat it as UTF-8 data even when
-        // all code points are <= 255. This matches Perl behavior and is required for
-        // A* trimming of Unicode whitespace.
-        this.isUTF8Data = utf8Flagged || hasHighUnicode || hasSurrogates || hasBeyondUnicode;
+        // Only use UTF-8 byte encoding when there are actual high-Unicode characters.
+        // The utf8Flagged hint only affects character-mode operations (like A* trimming),
+        // not the byte representation used by numeric formats (f, d, N, V, etc.).
+        this.isUTF8Flagged = utf8Flagged || hasHighUnicode || hasSurrogates || hasBeyondUnicode;
+        this.isUTF8Data = hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         if (isUTF8Data) {
             this.originalBytes = encodeUtf8Extended(this.codePoints);
         } else {

@@ -54,7 +54,7 @@ public class StringFormatHandler implements FormatHandler {
                 // Perl's behavior depends on whether the source scalar is UTF-8 flagged.
                 // For non-UTF8 (byte) strings, 'A' trims only ASCII whitespace and must
                 // not treat \xA0 (NBSP) as whitespace.
-                str = state.isUTF8Data ? processString(str) : processStringByteMode(str);
+                str = state.isUTF8Flagged ? processString(str) : processStringByteMode(str);
             }
 
             // Pad if needed and not star count
