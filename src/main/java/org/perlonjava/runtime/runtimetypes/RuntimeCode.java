@@ -742,7 +742,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         List<LexerToken> tokens = null;
 
         // Save dynamic variable level to restore after eval.
-        // Push currentPackage (used by caller()) so SET_PACKAGE inside eval doesn't leak.
+        // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
+        // This is the interpreter-side equivalent of the same scoping done in
+        // EvalStringHandler for the JVM bytecode path. Without this, SET_PACKAGE
+        // opcodes inside the eval permanently mutate the caller's package state,
+        // breaking caller() and subsequent eval compilations.
+        // See InterpreterState.currentPackage javadoc for the full design rationale.
         int dynamicVarLevel = DynamicVariableManager.getLocalLevel();
         DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
 
