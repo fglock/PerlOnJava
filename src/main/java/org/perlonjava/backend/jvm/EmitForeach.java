@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -517,6 +518,16 @@ public class EmitForeach {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv);
 
+            int regexStateLocal = -1;
+            if (RegexUsageDetector.containsRegexOperation(blockNode)) {
+                regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+                mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+            }
+
             pushGotoLabelsForBlock(emitterVisitor, blockNode);
 
             java.util.List<Node> list = blockNode.elements;
@@ -543,6 +554,12 @@ public class EmitForeach {
             }
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
+
+            if (regexStateLocal >= 0) {
+                mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+            }
 
             Local.localTeardown(bodyLocalRecord, mv);
             emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);

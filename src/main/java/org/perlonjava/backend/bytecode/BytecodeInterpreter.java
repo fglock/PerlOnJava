@@ -75,6 +75,8 @@ public class BytecodeInterpreter {
         java.util.Stack<int[]> labeledBlockStack = new java.util.Stack<>();
         // Each entry is [labelStringPoolIdx, exitPc]
 
+        java.util.ArrayList<RegexState> regexStateStack = null;
+
         try {
         outer:
         while (true) {
@@ -1585,6 +1587,27 @@ public class BytecodeInterpreter {
                     case Opcodes.POP_LABELED_BLOCK: {
                         if (!labeledBlockStack.isEmpty()) {
                             labeledBlockStack.pop();
+                        }
+                        break;
+                    }
+
+                    case Opcodes.SAVE_REGEX_STATE: {
+                        int rd = bytecode[pc++];
+                        if (regexStateStack == null) regexStateStack = new java.util.ArrayList<>();
+                        int level = regexStateStack.size();
+                        regexStateStack.add(new RegexState());
+                        registers[rd] = new RuntimeScalar(level);
+                        break;
+                    }
+
+                    case Opcodes.RESTORE_REGEX_STATE: {
+                        int rs = bytecode[pc++];
+                        int level = ((RuntimeScalar) registers[rs]).getInt();
+                        if (regexStateStack != null && level < regexStateStack.size()) {
+                            regexStateStack.get(level).restore();
+                            while (regexStateStack.size() > level) {
+                                regexStateStack.remove(regexStateStack.size() - 1);
+                            }
                         }
                         break;
                     }
