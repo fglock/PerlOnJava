@@ -218,8 +218,17 @@ public class EvalStringHandler {
             }
 
             // Step 6: Execute the compiled code
+            // Scope currentPackage (used only by caller()) so SET_PACKAGE
+            // inside the eval doesn't leak into the caller's state.
+            int pkgLevel = DynamicVariableManager.getLocalLevel();
+            DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
             RuntimeArray args = new RuntimeArray();  // Empty @_
-            RuntimeList result = evalCode.apply(args, callContext);
+            RuntimeList result;
+            try {
+                result = evalCode.apply(args, callContext);
+            } finally {
+                DynamicVariableManager.popToLocalLevel(pkgLevel);
+            }
             evalTrace("EvalStringHandler exec ok ctx=" + callContext +
                     " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
                     " resultBool=" + (result != null && result.scalar() != null ? result.scalar().getBoolean() : false) +
@@ -295,9 +304,15 @@ public class EvalStringHandler {
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
 
-            // Execute
+            int pkgLevel = DynamicVariableManager.getLocalLevel();
+            DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
             RuntimeArray args = new RuntimeArray();
-            RuntimeList result = evalCode.apply(args, RuntimeContextType.SCALAR);
+            RuntimeList result;
+            try {
+                result = evalCode.apply(args, RuntimeContextType.SCALAR);
+            } finally {
+                DynamicVariableManager.popToLocalLevel(pkgLevel);
+            }
 
             return result.scalar();
 
