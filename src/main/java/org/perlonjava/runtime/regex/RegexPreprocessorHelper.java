@@ -626,9 +626,14 @@ public class RegexPreprocessorHelper {
                                 sb.append(Character.toChars(c2));
                                 lastChar = octalValue;
                             } else {
-                                // Short octal or single digit, pass through
-                                sb.append(Character.toChars(c2));
-                                lastChar = c2;
+                                // Short octal (1-2 digits) — prepend 0 for Java
+                                // In Perl, \1-\7 inside [] are octal; in Java, \N is a backreference
+                                sb.append('0');
+                                for (int j = 0; j < octalLength; j++) {
+                                    sb.append(Character.toChars(s.codePointAt(offset + j)));
+                                }
+                                offset += octalLength - 1;
+                                lastChar = octalValue;
                             }
                         } else if (c2 == '8' || c2 == '9') {
                             // \8 and \9 are not valid octals - treat as literal digits
