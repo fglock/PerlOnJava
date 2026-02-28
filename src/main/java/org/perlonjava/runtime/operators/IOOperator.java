@@ -616,8 +616,13 @@ public class IOOperator {
             return new RuntimeScalar(); // undef
         }
 
-        if (fh instanceof TieHandle) {
-            throw new PerlCompilerException("sysread() is not supported on tied handles");
+        if (fh instanceof TieHandle tieHandle) {
+            RuntimeScalar target = args[1].scalar().scalarDeref();
+            RuntimeScalar length = args[2].scalar();
+            RuntimeList tieArgs = args.length > 3
+                    ? new RuntimeList(target, length, args[3].scalar())
+                    : new RuntimeList(target, length);
+            return TieHandle.tiedRead(tieHandle, tieArgs);
         }
 
         // Check for closed handle
@@ -754,8 +759,15 @@ public class IOOperator {
             return new RuntimeScalar(); // undef
         }
 
-        if (fh instanceof TieHandle) {
-            throw new PerlCompilerException("syswrite() is not supported on tied handles");
+        if (fh instanceof TieHandle tieHandle) {
+            RuntimeScalar data = args[1].scalar();
+            int dataLen = data.toString().length();
+            RuntimeScalar lengthArg = args.length > 2 ? args[2].scalar() : new RuntimeScalar(dataLen);
+            if (args.length > 3) {
+                return TieHandle.tiedWrite(tieHandle, data, lengthArg, args[3].scalar());
+            } else {
+                return TieHandle.tiedWrite(tieHandle, data, lengthArg, new RuntimeScalar(0));
+            }
         }
 
 //        // Check for closed handle - but based on the debug output,
