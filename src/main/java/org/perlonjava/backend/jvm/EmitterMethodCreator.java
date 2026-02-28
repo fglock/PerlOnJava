@@ -650,6 +650,16 @@ public class EmitterMethodCreator implements Opcodes {
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
+            // Subroutine-level regex state scoping (Perl 5 semantics): unconditionally save
+            // the caller's $1, $&, etc. on entry.  Restored at returnLabel before ARETURN.
+            // This is separate from block-level scoping (EmitBlock/EmitForeach + RegexUsageDetector).
+            int regexStateSlot = ctx.symbolTable.allocateLocalVariable();
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+            mv.visitVarInsn(Opcodes.ASTORE, regexStateSlot);
+
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
             // inconsistent stack map frames when multiple control-flow paths merge.
@@ -1041,6 +1051,20 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
             }
             
+            // Materialize $1, $&, etc. into concrete scalars BEFORE restoring regex state.
+            // The return list may contain lazy ScalarSpecialVariable references; if we
+            // restored first, they would resolve to the caller's (stale) values.
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "materializeSpecialVarsInResult",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
+
+            // Restore caller's regex state (counterpart to the save at method entry)
+            mv.visitVarInsn(Opcodes.ALOAD, regexStateSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+
             // Teardown local variables and environment after the return value is materialized
             Local.localTeardown(localRecord, mv);
 
@@ -1502,6 +1526,10 @@ public class EmitterMethodCreator implements Opcodes {
      */
     public static RuntimeCode createRuntimeCode(
             EmitterContext ctx, Node ast, boolean useTryCatch) {
+        // Ensure block-level regex save/restore is skipped for the outermost block of a sub/method.
+        // For anonymous subs this is set by SubroutineNode constructor, but for named subs the block
+        // is passed directly here without going through SubroutineNode.
+        ast.setAnnotation("blockIsSubroutine", true);
         try {
             // Try compiler path
             Class<?> generatedClass = createClassWithMethod(ctx, ast, useTryCatch);

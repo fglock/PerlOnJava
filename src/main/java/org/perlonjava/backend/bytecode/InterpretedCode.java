@@ -121,8 +121,11 @@ public class InterpretedCode extends RuntimeCode {
     /**
      * Override RuntimeCode.apply() to dispatch to interpreter.
      *
-     * This is the ONLY method that differs from compiled RuntimeCode.
+     * <p>This is the ONLY method that differs from compiled RuntimeCode.
      * The API signature is IDENTICAL, ensuring perfect compatibility.
+     *
+     * <p>Regex state save/restore is handled inside {@code BytecodeInterpreter.execute()}
+     * (via {@code savedRegexState}/finally), not here.
      *
      * @param args        The arguments array (@_)
      * @param callContext The calling context (VOID/SCALAR/LIST)
@@ -130,21 +133,11 @@ public class InterpretedCode extends RuntimeCode {
      */
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
-        // Dispatch to interpreter (not compiled bytecode)
         return BytecodeInterpreter.execute(this, args, callContext);
     }
 
-    /**
-     * Override RuntimeCode.apply() with subroutine name.
-     *
-     * @param subroutineName The subroutine name (for stack traces)
-     * @param args          The arguments array (@_)
-     * @param callContext   The calling context
-     * @return RuntimeList containing the result
-     */
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
-        // Dispatch to interpreter with subroutine name for stack traces
         return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
     }
 

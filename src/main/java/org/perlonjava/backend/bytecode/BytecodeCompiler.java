@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -726,6 +727,19 @@ public class BytecodeCompiler implements Visitor {
                 && node.elements.get(0) instanceof OperatorNode localOp
                 && localOp.operator.equals("local");
 
+        // Perl 5 block-level regex state scoping: save $1, $&, etc. on entry, restore on exit.
+        // Skip if blockIsSubroutine: the subroutine-level save in BytecodeInterpreter.execute()
+        // (savedRegexState + finally) already handles this, so block-level would be redundant.
+        // If last/next/redo jumps past the RESTORE opcode, the interpreter's truncation logic
+        // in RESTORE_REGEX_STATE handles cleanup of orphaned stack entries.
+        int regexStateReg = -1;
+        if (!(node instanceof AbstractNode an && an.getBooleanAnnotation("blockIsSubroutine"))
+                && RegexUsageDetector.containsRegexOperation(node)) {
+            regexStateReg = allocateRegister();
+            emit(Opcodes.SAVE_REGEX_STATE);
+            emitReg(regexStateReg);
+        }
+
         // If the first statement is a scoped package (package Foo { }),
         // save the DynamicVariableManager level before the block body so PUSH_PACKAGE is restored.
         int scopedPackageLevelReg = -1;
@@ -788,6 +802,11 @@ public class BytecodeCompiler implements Visitor {
         if (scopedPackageLevelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(scopedPackageLevelReg);
+        }
+
+        if (regexStateReg >= 0) {
+            emit(Opcodes.RESTORE_REGEX_STATE);
+            emitReg(regexStateReg);
         }
 
         // Set lastResultReg to the outer register (or -1 if VOID context)

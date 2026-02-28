@@ -75,6 +75,16 @@ public class BytecodeInterpreter {
         java.util.Stack<int[]> labeledBlockStack = new java.util.Stack<>();
         // Each entry is [labelStringPoolIdx, exitPc]
 
+        // Block-level regex state stack, used by SAVE_REGEX_STATE/RESTORE_REGEX_STATE opcodes.
+        // Each block containing regex ops pushes a snapshot; the matching restore pops it.
+        // Lazily initialized because most subroutines don't have nested regex-using blocks.
+        java.util.ArrayList<RegexState> regexStateStack = null;
+
+        // Subroutine-level regex state: unconditionally saved on entry, restored in the
+        // finally block.  This implements Perl 5 semantics where $1, $&, etc. are
+        // dynamically scoped per subroutine.  The finally block guarantees restoration
+        // even when the sub exits via return, die, or exception.
+        RegexState savedRegexState = new RegexState();
         try {
         outer:
         while (true) {
@@ -104,7 +114,13 @@ public class BytecodeInterpreter {
                         if (retVal == null) {
                             return new RuntimeList();
                         }
-                        return retVal.getList();
+                        RuntimeList retList = retVal.getList();
+                        // Materialize $1, $&, etc. into concrete scalars BEFORE returning.
+                        // The finally block will call savedRegexState.restore(), which overwrites
+                        // global regex state.  Any lazy ScalarSpecialVariable references in the
+                        // return list must be resolved while this sub's regex state is still active.
+                        RuntimeCode.materializeSpecialVarsInResult(retList);
+                        return retList;
                     }
 
                     case Opcodes.GOTO: {
@@ -1589,6 +1605,35 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.SAVE_REGEX_STATE: {
+                        // Block-level regex state save.  Snapshot current regex state and
+                        // store the stack level in register rd.  The level is used by
+                        // RESTORE_REGEX_STATE to find the correct snapshot and truncate
+                        // any orphaned entries (e.g., if inner blocks were skipped by
+                        // last/next/redo/die).
+                        int rd = bytecode[pc++];
+                        if (regexStateStack == null) regexStateStack = new java.util.ArrayList<>();
+                        int level = regexStateStack.size();
+                        regexStateStack.add(new RegexState());
+                        registers[rd] = new RuntimeScalar(level);
+                        break;
+                    }
+
+                    case Opcodes.RESTORE_REGEX_STATE: {
+                        // Block-level regex state restore.  Restore snapshot at the saved
+                        // level and discard all entries above it (handles cases where inner
+                        // RESTORE opcodes were skipped by last/next/redo/die).
+                        int rs = bytecode[pc++];
+                        int level = ((RuntimeScalar) registers[rs]).getInt();
+                        if (regexStateStack != null && level < regexStateStack.size()) {
+                            regexStateStack.get(level).restore();
+                            while (regexStateStack.size() > level) {
+                                regexStateStack.remove(regexStateStack.size() - 1);
+                            }
+                        }
+                        break;
+                    }
+
                     // =================================================================
                     // LIST OPERATIONS
                     // =================================================================
@@ -2318,7 +2363,9 @@ public class BytecodeInterpreter {
         }
         } // end outer while
         } finally {
-            // Always pop the interpreter state
+            // Restore the caller's regex state.  Runs after any return/die/exception,
+            // ensuring the caller sees its own $1, $&, etc. regardless of how the sub exited.
+            savedRegexState.restore();
             InterpreterState.pop();
         }
     }
