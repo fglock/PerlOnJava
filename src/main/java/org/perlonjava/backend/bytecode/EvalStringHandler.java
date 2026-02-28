@@ -226,7 +226,9 @@ public class EvalStringHandler {
             // We use DynamicVariableManager (same mechanism as PUSH_PACKAGE/POP_LOCAL_LEVEL)
             // to save and restore it automatically.
             int pkgLevel = DynamicVariableManager.getLocalLevel();
+            String savedPkg = InterpreterState.currentPackage.get().toString();
             DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+            InterpreterState.currentPackage.get().set(savedPkg);
             RuntimeArray args = new RuntimeArray();  // Empty @_
             RuntimeList result;
             try {
@@ -311,7 +313,9 @@ public class EvalStringHandler {
 
             // Scope currentPackage around eval — see Step 6 comment in evalStringHelper above.
             int pkgLevel = DynamicVariableManager.getLocalLevel();
+            String savedPkg = InterpreterState.currentPackage.get().toString();
             DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+            InterpreterState.currentPackage.get().set(savedPkg);
             RuntimeArray args = new RuntimeArray();
             RuntimeList result;
             try {
