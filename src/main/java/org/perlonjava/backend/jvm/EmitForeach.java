@@ -518,6 +518,8 @@ public class EmitForeach {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv);
 
+            // Perl 5 regex state scoping for foreach body.  Each iteration saves/restores
+            // independently.  No blockIsSubroutine check needed: foreach body is never a sub.
             int regexStateLocal = -1;
             if (RegexUsageDetector.containsRegexOperation(blockNode)) {
                 regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
@@ -555,6 +557,7 @@ public class EmitForeach {
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 
+            // Restore block-level regex state at end of each iteration
             if (regexStateLocal >= 0) {
                 mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,

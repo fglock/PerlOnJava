@@ -727,6 +727,11 @@ public class BytecodeCompiler implements Visitor {
                 && node.elements.get(0) instanceof OperatorNode localOp
                 && localOp.operator.equals("local");
 
+        // Perl 5 block-level regex state scoping: save $1, $&, etc. on entry, restore on exit.
+        // Skip if blockIsSubroutine: the subroutine-level save in BytecodeInterpreter.execute()
+        // (savedRegexState + finally) already handles this, so block-level would be redundant.
+        // If last/next/redo jumps past the RESTORE opcode, the interpreter's truncation logic
+        // in RESTORE_REGEX_STATE handles cleanup of orphaned stack entries.
         int regexStateReg = -1;
         if (!(node instanceof AbstractNode an && an.getBooleanAnnotation("blockIsSubroutine"))
                 && RegexUsageDetector.containsRegexOperation(node)) {

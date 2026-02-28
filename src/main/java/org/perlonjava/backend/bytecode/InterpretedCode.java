@@ -121,8 +121,11 @@ public class InterpretedCode extends RuntimeCode {
     /**
      * Override RuntimeCode.apply() to dispatch to interpreter.
      *
-     * This is the ONLY method that differs from compiled RuntimeCode.
+     * <p>This is the ONLY method that differs from compiled RuntimeCode.
      * The API signature is IDENTICAL, ensuring perfect compatibility.
+     *
+     * <p>Regex state save/restore is handled inside {@code BytecodeInterpreter.execute()}
+     * (via {@code savedRegexState}/finally), not here.
      *
      * @param args        The arguments array (@_)
      * @param callContext The calling context (VOID/SCALAR/LIST)
