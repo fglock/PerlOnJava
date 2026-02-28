@@ -56,31 +56,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static String lastSuccessfulMatchString = null;
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
-
-    public static Object[] saveMatchState() {
-        return new Object[]{
-            globalMatcher, globalMatchString,
-            lastMatchedString, lastMatchStart, lastMatchEnd,
-            lastSuccessfulMatchedString, lastSuccessfulMatchStart, lastSuccessfulMatchEnd,
-            lastSuccessfulMatchString, lastSuccessfulPattern
-        };
-    }
-
-    public static void restoreMatchState(Object[] state) {
-        globalMatcher = (Matcher) state[0];
-        globalMatchString = (String) state[1];
-        lastMatchedString = (String) state[2];
-        lastMatchStart = (Integer) state[3];
-        lastMatchEnd = (Integer) state[4];
-        lastSuccessfulMatchedString = (String) state[5];
-        lastSuccessfulMatchStart = (Integer) state[6];
-        lastSuccessfulMatchEnd = (Integer) state[7];
-        lastSuccessfulMatchString = (String) state[8];
-        lastSuccessfulPattern = (RuntimeRegex) state[9];
-    }
-
     // Indicates if \G assertion is used
-    boolean useGAssertion = false;
+    private final boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -133,7 +110,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
-            regex.useGAssertion = regex.regexFlags.useGAssertion();
 
             String javaPattern = null;
             try {
@@ -284,7 +260,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternString = originalRegex.patternString;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
-            regex.useGAssertion = regex.regexFlags.useGAssertion();
 
             return new RuntimeScalar(regex);
         }
@@ -310,7 +285,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternString = originalRegex.patternString;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
-                    regex.useGAssertion = regex.regexFlags.useGAssertion();
 
                     return new RuntimeScalar(regex);
                 }
@@ -376,7 +350,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        regex.useGAssertion = regex.regexFlags != null && regex.regexFlags.useGAssertion();
         regex.replacement = replacement;
         return new RuntimeScalar(regex);
     }
@@ -442,15 +415,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // hexPrinter(inputStr);
 
         // Use RuntimePosLvalue to get the current position
-        // In Perl, pos() only affects /g matches; non-/g matches always start from position 0
         RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
-        boolean isGlobal = regex.regexFlags.isGlobalMatch();
-        boolean isPosDefined = isGlobal && posScalar.getDefinedBoolean();
+        boolean isPosDefined = posScalar.getDefinedBoolean();
         int startPos = isPosDefined ? posScalar.getInt() : 0;
         
         // Check if previous call had zero-length match at this position (for SCALAR context)
         // This prevents infinite loops in: while ($str =~ /pat/g)  
-        if (isGlobal && ctx == RuntimeContextType.SCALAR) {
+        if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
             String patternKey = regex.patternString;
             if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
                 // Previous match was zero-length at this position - fail to break loop
@@ -459,7 +430,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        // Start matching from the current position if defined (only for /g matches)
+        // Start matching from the current position if defined
         if (isPosDefined) {
             matcher.region(startPos, inputStr.length());
         }

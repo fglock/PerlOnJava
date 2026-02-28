@@ -61,17 +61,7 @@ public class EvalStringHandler {
                                           String sourceName,
                                           int sourceLine,
                                           int callContext) {
-        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext, null).scalar();
-    }
-
-    public static RuntimeScalar evalString(String perlCode,
-                                          InterpretedCode currentCode,
-                                          RuntimeBase[] registers,
-                                          String sourceName,
-                                          int sourceLine,
-                                          int callContext,
-                                          Map<String, Integer> siteRegistry) {
-        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext, siteRegistry).scalar();
+        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext).scalar();
     }
 
     public static RuntimeList evalStringList(String perlCode,
@@ -80,16 +70,6 @@ public class EvalStringHandler {
                                              String sourceName,
                                              int sourceLine,
                                              int callContext) {
-        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext, null);
-    }
-
-    public static RuntimeList evalStringList(String perlCode,
-                                             InterpretedCode currentCode,
-                                             RuntimeBase[] registers,
-                                             String sourceName,
-                                             int sourceLine,
-                                             int callContext,
-                                             Map<String, Integer> siteRegistry) {
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1));
@@ -148,20 +128,20 @@ public class EvalStringHandler {
             RuntimeBase[] capturedVars = new RuntimeBase[0];
             Map<String, Integer> adjustedRegistry = null;
 
-            // Use per-eval-site registry if available (correct scoping), else fall back to global
-            Map<String, Integer> sourceRegistry = (siteRegistry != null) ? siteRegistry
-                    : (currentCode != null ? currentCode.variableRegistry : null);
+            if (currentCode != null && currentCode.variableRegistry != null && registers != null) {
 
-            if (sourceRegistry != null && registers != null) {
-
+                // Sort parent variables by register index for consistent ordering
                 List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(
-                        sourceRegistry.entrySet()
+                        currentCode.variableRegistry.entrySet()
                 );
                 sortedVars.sort(Map.Entry.comparingByValue());
 
+                // Build capturedVars array and adjusted registry
+                // Captured variables will be placed at registers 3+ in eval'd code
                 List<RuntimeBase> capturedList = new ArrayList<>();
                 adjustedRegistry = new HashMap<>();
 
+                // Always include reserved registers in adjusted registry
                 adjustedRegistry.put("this", 0);
                 adjustedRegistry.put("@_", 1);
                 adjustedRegistry.put("wantarray", 2);
@@ -171,6 +151,7 @@ public class EvalStringHandler {
                     String varName = entry.getKey();
                     int parentRegIndex = entry.getValue();
 
+                    // Skip reserved registers (they're handled separately in interpreter)
                     if (parentRegIndex < 3) {
                         continue;
                     }

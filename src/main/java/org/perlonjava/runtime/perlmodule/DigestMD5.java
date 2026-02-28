@@ -72,7 +72,7 @@ public class DigestMD5 extends PerlModuleBase {
                     // Check for wide characters using the utility method
                     StringParser.assertNoWideCharacters(dataStr, "add");
 
-                    byte[] bytes = dataStr.getBytes(StandardCharsets.ISO_8859_1);
+                    byte[] bytes = dataStr.getBytes(StandardCharsets.UTF_8);
                     md.update(bytes);
                     updateBlockCount(self, bytes.length);
                 }
@@ -176,7 +176,7 @@ public class DigestMD5 extends PerlModuleBase {
                 }
 
                 int numBytes = nbits / 8;
-                byte[] dataBytes = data.getBytes(StandardCharsets.ISO_8859_1);
+                byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
                 byte[] truncatedBytes = new byte[Math.min(numBytes, dataBytes.length)];
                 System.arraycopy(dataBytes, 0, truncatedBytes, 0, truncatedBytes.length);
 

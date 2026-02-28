@@ -3,7 +3,6 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.BitSet;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -35,9 +34,6 @@ public class InterpretedCode extends RuntimeCode {
     public final int featureFlags;         // Feature flags at compile time
     public final BitSet warningFlags;      // Warning flags at compile time
     public final String compilePackage;    // Package at compile time (for eval STRING name resolution)
-
-    public boolean containsRegex;          // Whether this code contains regex ops (for match var scoping)
-    public List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable snapshots
 
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
@@ -1165,15 +1161,6 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("SET_SCALAR r").append(rd).append(".set(r").append(rs).append(")\n");
                     break;
-                case Opcodes.MY_SCALAR:
-                    rd = bytecode[pc++];
-                    rs = bytecode[pc++];
-                    sb.append("MY_SCALAR r").append(rd).append(" = new Scalar(r").append(rs).append(")\n");
-                    break;
-                case Opcodes.UNDEFINE_SCALAR:
-                    rd = bytecode[pc++];
-                    sb.append("UNDEFINE_SCALAR r").append(rd).append(".undefine()\n");
-                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
@@ -1325,9 +1312,7 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.EVAL_STRING:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
-                    int evalCtx = bytecode[pc++];
-                    int evalSiteId = bytecode[pc++];
-                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(", ctx=").append(evalCtx).append(", site=").append(evalSiteId).append(")\n");
+                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(")\n");
                     break;
                 case Opcodes.SELECT_OP:
                     rd = bytecode[pc++];
@@ -1548,6 +1533,15 @@ public class InterpretedCode extends RuntimeCode {
                     break;
                 case Opcodes.DO_FILE:
                     sb.append("DO_FILE r").append(bytecode[pc++]).append(" = doFile(r").append(bytecode[pc++]).append(") ctx=").append(bytecode[pc++]).append("\n");
+                    break;
+                case Opcodes.PUSH_LABELED_BLOCK: {
+                    int labelIdx = bytecode[pc++];
+                    int exitPc = bytecode[pc++];
+                    sb.append("PUSH_LABELED_BLOCK \"").append(stringPool[labelIdx]).append("\" exitPc=").append(exitPc).append("\n");
+                    break;
+                }
+                case Opcodes.POP_LABELED_BLOCK:
+                    sb.append("POP_LABELED_BLOCK\n");
                     break;
                 default:
                     sb.append("UNKNOWN(").append(opcode).append(")\n");

@@ -794,11 +794,20 @@ public class Dereference {
 
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         
+        // Check if this is a true array literal (contains only literal elements like strings and numbers)
+        // and has a single range operator in the indices
+        boolean isArrayLiteral = node.left instanceof ArrayLiteralNode leftArray &&
+                              leftArray.elements.stream().allMatch(elem -> 
+                                  elem instanceof StringNode || 
+                                  elem instanceof NumberNode) &&
+                              leftArray.elements.size() > 1;  // Must have multiple literal elements
+        
         boolean isSingleRange = right.elements.size() == 1 &&
                               right.elements.getFirst() instanceof BinaryOperatorNode binOp &&
                               "..".equals(binOp.operator);
-
-        if (right.elements.size() == 1 && !isSingleRange) {
+        
+        // Only apply the fix to true array literals with range operators
+        if (right.elements.size() == 1 && !(isArrayLiteral && isSingleRange)) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));

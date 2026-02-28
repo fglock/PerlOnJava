@@ -394,9 +394,6 @@ public class CompileOperator {
             // Loop control operators: last/next/redo [LABEL]
             bytecodeCompiler.handleLoopControlOperator(node, op);
             bytecodeCompiler.lastResultReg = -1; // No result after control flow
-        } else if (op.equals("goto")) {
-            bytecodeCompiler.handleGotoOperator(node);
-            bytecodeCompiler.lastResultReg = -1;
         } else if (op.equals("rand")) {
             // rand() or rand($max)
             // Calls Random.rand(max) where max defaults to 1
@@ -557,37 +554,21 @@ public class CompileOperator {
             }
         } else if (op.equals("stat") || op.equals("lstat")) {
             // stat FILE or lstat FILE
-            boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
-                    && ((IdentifierNode) node.operand).name.equals("_");
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(bytecodeCompiler);
+                int operandReg = bytecodeCompiler.lastResultReg;
 
-            if (isUnderscoreOperand) {
-                int savedContext = bytecodeCompiler.currentCallContext;
-                try {
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT_LASTHANDLE : Opcodes.LSTAT_LASTHANDLE);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emit(savedContext);
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
-                }
-            } else {
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(operandReg);
+                bytecodeCompiler.emit(savedContext);  // Pass calling context
 
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
-                    bytecodeCompiler.emit(savedContext);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
-                }
+                bytecodeCompiler.lastResultReg = rd;
+            } finally {
+                bytecodeCompiler.currentCallContext = savedContext;
             }
         } else if (op.startsWith("-") && op.length() == 2) {
             // File test operators: -r, -w, -x, etc.
@@ -855,9 +836,6 @@ public class CompileOperator {
                 // Allocate register for result
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Snapshot current variable scopes for this eval site
-                int evalSiteIdx = bytecodeCompiler.snapshotEvalSiteRegistry();
-
                 // Emit direct opcode EVAL_STRING
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
@@ -866,7 +844,6 @@ public class CompileOperator {
                 // wantarray() inside the eval body and the eval return value follow
                 // the correct context even when the surrounding sub is VOID.
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-                bytecodeCompiler.emit(evalSiteIdx);
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
@@ -908,29 +885,13 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("undef")) {
-            if (node.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
-                Node elem = listNode.elements.get(0);
-                if (elem instanceof OperatorNode opNode && opNode.operator.equals("$")) {
-                    int savedContext = bytecodeCompiler.currentCallContext;
-                    bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                    elem.accept(bytecodeCompiler);
-                    bytecodeCompiler.currentCallContext = savedContext;
-                    int varReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
-                    bytecodeCompiler.emitReg(varReg);
-                    bytecodeCompiler.lastResultReg = varReg;
-                } else {
-                    int undefReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                    bytecodeCompiler.emitReg(undefReg);
-                    bytecodeCompiler.lastResultReg = undefReg;
-                }
-            } else {
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-                bytecodeCompiler.lastResultReg = undefReg;
-            }
+            // undef operator - returns undefined value
+            // Can be used standalone: undef
+            // Or with an operand to undef a variable: undef $x (not implemented yet)
+            int undefReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+            bytecodeCompiler.emitReg(undefReg);
+            bytecodeCompiler.lastResultReg = undefReg;
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
             // Compile operand in scalar context (negation always produces a scalar)

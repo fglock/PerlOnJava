@@ -1,6 +1,5 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -69,10 +68,6 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
-    // goto LABEL support: track label positions and pending forward goto patches
-    private final Map<String, Integer> gotoLabelPCs = new HashMap<>();  // label name → PC
-    private final Map<String, List<Integer>> pendingGotoPatches = new HashMap<>();  // label name → list of PCs to patch
-
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
@@ -102,9 +97,6 @@ public class BytecodeCompiler implements Visitor {
     // Track ALL variables ever declared (for variableRegistry)
     // This is needed because inner scopes get popped before variableRegistry is built
     final Map<String, Integer> allDeclaredVariables = new HashMap<>();
-
-    // Per-eval-site variable scope snapshots (for eval STRING variable capture)
-    final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
 
     // BEGIN support for named subroutine closures
     private int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
@@ -270,16 +262,6 @@ public class BytecodeCompiler implements Visitor {
                 st.warningFlagsStack.pop();
             }
         }
-    }
-
-    int snapshotEvalSiteRegistry() {
-        Map<String, Integer> snapshot = new HashMap<>();
-        for (Map<String, Integer> scope : variableScopes) {
-            snapshot.putAll(scope);
-        }
-        int index = evalSiteRegistries.size();
-        evalSiteRegistries.add(snapshot);
-        return index;
     }
 
     /**
@@ -511,7 +493,12 @@ public class BytecodeCompiler implements Visitor {
             // Use the calling context from EmitterContext for top-level expressions
             // This is crucial for eval STRING to propagate context correctly
             currentCallContext = ctx.contextType;
-
+            // Inherit package from the JVM compiler context so unqualified sub calls
+            // resolve in the correct package (not main)
+            if (ctx.symbolTable != null) {
+                symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
+                    ctx.symbolTable.currentPackageIsClass());
+            }
         }
 
         // If we have captured variables, allocate registers for them
@@ -564,7 +551,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Build InterpretedCode
-        InterpretedCode result = new InterpretedCode(
+        return new InterpretedCode(
             toShortArray(),
             constants.toArray(),
             stringPool.toArray(new String[0]),
@@ -580,12 +567,6 @@ public class BytecodeCompiler implements Visitor {
             warningFlags,  // Warning flags for eval STRING inheritance
             symbolTable.getCurrentPackage()  // Compile-time package for eval STRING name resolution
         );
-        result.containsRegex = FindDeclarationVisitor.findOperator(node, "matchRegex") != null
-                || FindDeclarationVisitor.findOperator(node, "replaceRegex") != null;
-        if (!evalSiteRegistries.isEmpty()) {
-            result.evalSiteRegistries = evalSiteRegistries;
-        }
-        return result;
     }
 
     // =========================================================================
@@ -2784,31 +2765,6 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // Handle local our $x - compile `our` declaration then localize
-                if (sigil.equals("our")) {
-                    OperatorNode ourNode = new OperatorNode("our", sigilOp.operand, node.getIndex());
-                    compileVariableDeclaration(ourNode, "our");
-
-                    if (sigilOp.operand instanceof OperatorNode innerSigilOp
-                            && innerSigilOp.operand instanceof IdentifierNode idNode) {
-                        String innerSigil = innerSigilOp.operator;
-                        String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
-                        int nameIdx = addToStringPool(globalVarName);
-                        int rd = allocateRegister();
-                        if (innerSigil.equals("$")) {
-                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                        } else if (innerSigil.equals("@")) {
-                            emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
-                        } else {
-                            emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
-                        }
-                        emitReg(rd);
-                        emit(nameIdx);
-                        lastResultReg = rd;
-                    }
-                    return;
-                }
-
                 // Handle local \$x or local \\$x - backslash operator
                 if (sigil.equals("\\")) {
                     boolean isDeclaredReference = node.annotations != null &&
@@ -4152,12 +4108,6 @@ public class BytecodeCompiler implements Visitor {
                     variableScopes.peek().put(varName, varReg);
                     allDeclaredVariables.put(varName, varReg);
                 }
-            } else if (varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode
-                    && globalLoopVarName == null) {
-                String varName = "$" + ((IdentifierNode) varOp.operand).name;
-                if (hasVariable(varName)) {
-                    variableScopes.peek().put(varName, varReg);
-                }
             }
         }
 
@@ -4253,6 +4203,17 @@ public class BytecodeCompiler implements Visitor {
             if (currentCallContext != RuntimeContextType.VOID) {
                 outerResultReg = allocateRegister();
             }
+
+            int labelIdx = -1;
+            int exitPcPlaceholder = -1;
+            if (node.labelName != null) {
+                labelIdx = addToStringPool(node.labelName);
+                emit(Opcodes.PUSH_LABELED_BLOCK);
+                emit(labelIdx);
+                exitPcPlaceholder = bytecode.size();
+                emitInt(0);
+            }
+
             enterScope();
             try {
                 // Just execute the body once, no loop
@@ -4269,6 +4230,13 @@ public class BytecodeCompiler implements Visitor {
                 // Exit scope to clean up lexical variables
                 exitScope();
             }
+
+            if (node.labelName != null) {
+                emit(Opcodes.POP_LABELED_BLOCK);
+                int exitPc = bytecode.size();
+                patchJump(exitPcPlaceholder, exitPc);
+            }
+
             lastResultReg = outerResultReg;
             return;
         }
@@ -4528,17 +4496,7 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        int labelPc = bytecode.size();
-        gotoLabelPCs.put(node.label, labelPc);
-
-        // Patch any pending forward gotos to this label
-        List<Integer> patches = pendingGotoPatches.remove(node.label);
-        if (patches != null) {
-            for (int patchPc : patches) {
-                patchJump(patchPc, labelPc);
-            }
-        }
-
+        // Labels are tracked in loops, standalone labels are no-ops
         lastResultReg = -1;
     }
 
@@ -4789,34 +4747,6 @@ public class BytecodeCompiler implements Visitor {
             targetLoop.nextPcs.add(patchPc);
         } else { // redo
             targetLoop.redoPcs.add(patchPc);
-        }
-    }
-
-    void handleGotoOperator(OperatorNode node) {
-        String labelStr = null;
-        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
-            Node arg = labelNode.elements.getFirst();
-            if (arg instanceof IdentifierNode) {
-                labelStr = ((IdentifierNode) arg).name;
-            }
-        }
-
-        if (labelStr == null) {
-            throwCompilerException("goto without label is not supported", node.getIndex());
-            return;
-        }
-
-        // Check if label was already seen (backward goto)
-        Integer targetPc = gotoLabelPCs.get(labelStr);
-        if (targetPc != null) {
-            emit(Opcodes.GOTO);
-            emitInt(targetPc);
-        } else {
-            // Forward goto: emit GOTO with placeholder, patch later
-            emit(Opcodes.GOTO);
-            int patchPc = bytecode.size();
-            emitInt(0);
-            pendingGotoPatches.computeIfAbsent(labelStr, k -> new ArrayList<>()).add(patchPc);
         }
     }
 }

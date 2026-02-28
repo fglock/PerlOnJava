@@ -157,9 +157,10 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // tryWholeBlockRefactoring is disabled: the interpreter fallback handles
-        // "Method too large" safely without breaking return/goto semantics.
-        return false;
+        // Fallback: Try whole-block refactoring
+        return tryWholeBlockRefactoring(emitterVisitor, node);  // Block was refactored and emitted
+
+        // No refactoring was possible
     }
 
     /**

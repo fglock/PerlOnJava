@@ -22,13 +22,13 @@ public class Local {
      * and the index of the dynamic variable stack.
      */
     static localRecord localSetup(EmitterContext ctx, Node ast, MethodVisitor mv) {
+        // Check if the code contains a 'local' operator
         boolean containsLocalOperator = FindDeclarationVisitor.findOperator(ast, "local") != null;
-        boolean containsRegex = FindDeclarationVisitor.findOperator(ast, "matchRegex") != null
-                || FindDeclarationVisitor.findOperator(ast, "replaceRegex") != null;
-        boolean needsDynamicSave = containsLocalOperator || containsRegex;
         int dynamicIndex = -1;
-        if (needsDynamicSave) {
+        if (containsLocalOperator) {
+            // Allocate a local variable to store the dynamic variable stack index
             dynamicIndex = ctx.symbolTable.allocateLocalVariable();
+            // Get the current level of the dynamic variable stack and store it
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                     "getLocalLevel",
@@ -36,18 +36,21 @@ public class Local {
                     false);
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         }
-        if (containsRegex) {
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeRegexState",
-                    "pushLocal",
-                    "()V",
-                    false);
-        }
-        return new localRecord(needsDynamicSave, containsRegex, dynamicIndex);
+        return new localRecord(containsLocalOperator, dynamicIndex);
     }
 
+    /**
+     * Tears down the local variable setup by restoring the dynamic variable stack
+     * to its previous level if a 'local' operator was present.
+     *
+     * @param localRecord The record containing information about the 'local' operator
+     *                    and the dynamic variable stack index.
+     * @param mv          The method visitor used to generate bytecode instructions.
+     */
     static void localTeardown(localRecord localRecord, MethodVisitor mv) {
-        if (localRecord.needsDynamicSave()) {
+        // Add `local` teardown logic
+        if (localRecord.containsLocalOperator()) {
+            // Restore the dynamic variable stack to the recorded level
             mv.visitVarInsn(Opcodes.ILOAD, localRecord.dynamicIndex());
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
@@ -57,6 +60,13 @@ public class Local {
         }
     }
 
-    record localRecord(boolean needsDynamicSave, boolean containsRegex, int dynamicIndex) {
+    /**
+     * A record to store information about the presence of a 'local' operator
+     * and the index of the dynamic variable stack.
+     *
+     * @param containsLocalOperator Indicates if a 'local' operator is present.
+     * @param dynamicIndex          The index of the dynamic variable stack.
+     */
+    record localRecord(boolean containsLocalOperator, int dynamicIndex) {
     }
 }

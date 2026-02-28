@@ -2,8 +2,6 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Function;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
@@ -65,7 +63,6 @@ public class OverloadContext {
      * The fallback method handler
      */
     final RuntimeScalar methodFallback;
-    private final Map<String, RuntimeScalar> resolvedMethods = new HashMap<>();
 
     /**
      * Private constructor to create an OverloadContext instance.
@@ -221,14 +218,12 @@ public class OverloadContext {
      * @return RuntimeScalar result from method execution, or null if method not found
      */
     public RuntimeScalar tryOverload(String methodName, RuntimeArray perlMethodArgs) {
-        if (resolvedMethods.containsKey(methodName)) {
-            RuntimeScalar perlMethod = resolvedMethods.get(methodName);
-            if (perlMethod == null) return null;
-            return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
-        }
+        // Look for method in class hierarchy
         RuntimeScalar perlMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
-        resolvedMethods.put(methodName, perlMethod);
-        if (perlMethod == null) return null;
+        if (perlMethod == null) {
+            return null;
+        }
+        // Execute found method with provided arguments
         return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
     }
 }
