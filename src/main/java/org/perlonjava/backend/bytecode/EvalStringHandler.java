@@ -217,9 +217,14 @@ public class EvalStringHandler {
                 evalCode = evalCode.withCapturedVars(currentCode.capturedVars);
             }
 
-            // Step 6: Execute the compiled code
-            // Scope currentPackage (used only by caller()) so SET_PACKAGE
-            // inside the eval doesn't leak into the caller's state.
+            // Step 6: Execute the compiled code.
+            // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
+            // currentPackage is a runtime-only field used by caller() — it does NOT
+            // affect name resolution (which is fully compile-time). However, if the
+            // eval contains SET_PACKAGE opcodes (e.g. "package Foo;"), those would
+            // permanently mutate the caller's currentPackage without this scoping.
+            // We use DynamicVariableManager (same mechanism as PUSH_PACKAGE/POP_LOCAL_LEVEL)
+            // to save and restore it automatically.
             int pkgLevel = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
             RuntimeArray args = new RuntimeArray();  // Empty @_
@@ -304,6 +309,7 @@ public class EvalStringHandler {
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
 
+            // Scope currentPackage around eval — see Step 6 comment in evalStringHelper above.
             int pkgLevel = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
             RuntimeArray args = new RuntimeArray();

@@ -493,8 +493,14 @@ public class BytecodeCompiler implements Visitor {
             // Use the calling context from EmitterContext for top-level expressions
             // This is crucial for eval STRING to propagate context correctly
             currentCallContext = ctx.contextType;
-            // Inherit package from the JVM compiler context so unqualified sub calls
-            // resolve in the correct package (not main)
+            // Inherit package from the JVM compiler context so that eval STRING
+            // compiles unqualified names in the caller's package, not "main".
+            // This is compile-time package propagation — it sets the symbol table's
+            // current package so the parser/emitter qualify names correctly.
+            // Note: the *runtime* package (InterpreterState.currentPackage) is a
+            // separate concern used only by caller(); it must be scoped via
+            // DynamicVariableManager around eval execution to prevent leaking.
+            // See InterpreterState.currentPackage javadoc for details.
             if (ctx.symbolTable != null) {
                 symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
                     ctx.symbolTable.currentPackageIsClass());

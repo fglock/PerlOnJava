@@ -24,15 +24,29 @@ public class InterpreterState {
     /**
      * Thread-local RuntimeScalar holding the runtime current package name.
      *
-     * This is the single source of truth for the current package at runtime.
-     * It is used by:
-     *   - caller() to return the correct calling package
-     *   - eval STRING to compile code in the right package
-     *   - SET_PACKAGE opcode (non-scoped: package Foo;) — sets it directly
-     *   - PUSH_PACKAGE opcode (scoped: package Foo { }) — saves via DynamicVariableManager then sets
+     * <p><b>Design principle:</b> Package is a <em>compile-time</em> concept for name
+     * resolution. All variable and subroutine names are fully qualified at compile time
+     * by the ScopedSymbolTable / BytecodeCompiler. This field exists only for
+     * <em>runtime introspection</em> — it does NOT affect name resolution.</p>
      *
-     * Scoped package blocks are automatically restored when the scope exits via
-     * the existing POP_LOCAL_LEVEL opcode (DynamicVariableManager.popToLocalLevel).
+     * <p>Used by:</p>
+     * <ul>
+     *   <li>{@code caller()} — to return the correct calling package</li>
+     *   <li>{@code eval STRING} — to compile code in the right package (via
+     *       BytecodeCompiler inheriting from ctx.symbolTable)</li>
+     *   <li>{@code SET_PACKAGE} opcode ({@code package Foo;}) — sets it directly</li>
+     *   <li>{@code PUSH_PACKAGE} opcode ({@code package Foo { }}) — saves via
+     *       DynamicVariableManager then sets</li>
+     * </ul>
+     *
+     * <p><b>Eval scoping:</b> Both eval STRING paths (EvalStringHandler for JVM bytecode,
+     * RuntimeCode for interpreter) must push/pop this field via DynamicVariableManager
+     * around eval execution. Without this, SET_PACKAGE opcodes inside the eval leak
+     * into the caller's package state, breaking caller() and subsequent eval compilations.
+     * This was the root cause of the signatures.t regression (601→446).</p>
+     *
+     * <p>Scoped package blocks ({@code package Foo { }}) are automatically restored
+     * when the scope exits via POP_LOCAL_LEVEL (DynamicVariableManager.popToLocalLevel).</p>
      */
     public static final ThreadLocal<RuntimeScalar> currentPackage =
             ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
