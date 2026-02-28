@@ -2905,6 +2905,25 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(fileReg);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("goto")) {
+            String labelStr = null;
+            if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+                Node arg = labelNode.elements.getFirst();
+                if (arg instanceof IdentifierNode) {
+                    labelStr = ((IdentifierNode) arg).name;
+                }
+            }
+            if (labelStr == null) {
+                bytecodeCompiler.throwCompilerException("goto must be given label");
+            }
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.CREATE_GOTO);
+            bytecodeCompiler.emitReg(rd);
+            int labelIdx = bytecodeCompiler.addToStringPool(labelStr);
+            bytecodeCompiler.emitReg(labelIdx);
+            bytecodeCompiler.emit(Opcodes.RETURN);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.lastResultReg = -1;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }

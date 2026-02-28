@@ -1113,6 +1113,17 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.CREATE_GOTO: {
+                        int rd = bytecode[pc++];
+                        int labelIdx = bytecode[pc++];
+                        String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                        registers[rd] = new RuntimeControlFlowList(
+                            ControlFlowType.GOTO, label,
+                            code.sourceName, code.sourceLine
+                        );
+                        break;
+                    }
+
                     case Opcodes.IS_CONTROL_FLOW: {
                         // Check if value is control flow: rd = (rs instanceof RuntimeControlFlowList)
                         int rd = bytecode[pc++];
