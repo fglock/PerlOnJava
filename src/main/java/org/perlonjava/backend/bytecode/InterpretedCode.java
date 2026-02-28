@@ -35,8 +35,6 @@ public class InterpretedCode extends RuntimeCode {
     public final BitSet warningFlags;      // Warning flags at compile time
     public final String compilePackage;    // Package at compile time (for eval STRING name resolution)
 
-    public boolean containsRegex;          // Whether this code contains regex ops (for match var scoping)
-
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
     public final int sourceLine;           // Source line number
@@ -1535,6 +1533,15 @@ public class InterpretedCode extends RuntimeCode {
                     break;
                 case Opcodes.DO_FILE:
                     sb.append("DO_FILE r").append(bytecode[pc++]).append(" = doFile(r").append(bytecode[pc++]).append(") ctx=").append(bytecode[pc++]).append("\n");
+                    break;
+                case Opcodes.PUSH_LABELED_BLOCK: {
+                    int labelIdx = bytecode[pc++];
+                    int exitPc = bytecode[pc++];
+                    sb.append("PUSH_LABELED_BLOCK \"").append(stringPool[labelIdx]).append("\" exitPc=").append(exitPc).append("\n");
+                    break;
+                }
+                case Opcodes.POP_LABELED_BLOCK:
+                    sb.append("POP_LABELED_BLOCK\n");
                     break;
                 default:
                     sb.append("UNKNOWN(").append(opcode).append(")\n");

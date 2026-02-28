@@ -730,7 +730,10 @@ public class SlowOpcodeHandler {
         int ctx = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
-        RuntimeList args = (RuntimeList) registers[argsReg];
+        RuntimeBase argsBase = registers[argsReg];
+        RuntimeList args = (argsBase instanceof RuntimeList)
+                ? (RuntimeList) argsBase
+                : new RuntimeList(argsBase.scalar());
 
         RuntimeList result = Operator.split(pattern, args, ctx);
 

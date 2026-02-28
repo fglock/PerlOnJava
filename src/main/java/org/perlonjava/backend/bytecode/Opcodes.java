@@ -1157,5 +1157,21 @@ public class Opcodes {
      * Format: LSTAT_LASTHANDLE rd ctx */
     public static final short LSTAT_LASTHANDLE = 351;
 
+    /** Mutable scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
+     * Superinstruction combining LOAD_UNDEF + SET_SCALAR for lexical scalar assignment.
+     * Format: MY_SCALAR rd rs */
+    public static final short MY_SCALAR = 352;
+
+    /** Undefine a scalar variable in-place: rd.undefine(). Used by `undef $x`. */
+    public static final short UNDEFINE_SCALAR = 353;
+
+    /** Push a labeled block entry for non-local last/next/redo handling.
+     * Format: PUSH_LABELED_BLOCK label_string_idx exit_pc(int) */
+    public static final short PUSH_LABELED_BLOCK = 354;
+
+    /** Pop a labeled block entry.
+     * Format: POP_LABELED_BLOCK */
+    public static final short POP_LABELED_BLOCK = 355;
+
     private Opcodes() {} // Utility class - no instantiation
 }

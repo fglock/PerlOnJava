@@ -354,10 +354,14 @@ public class CustomFileChannel implements IOHandle {
                 return new RuntimeScalar("");
             }
 
+            // Convert bytes to string representation
             buffer.flip();
-            byte[] readBytes = new byte[buffer.remaining()];
-            buffer.get(readBytes);
-            return new RuntimeScalar(readBytes);
+            StringBuilder result = new StringBuilder(bytesRead);
+            while (buffer.hasRemaining()) {
+                result.append((char) (buffer.get() & 0xFF));
+            }
+
+            return new RuntimeScalar(result.toString());
         } catch (IOException e) {
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef

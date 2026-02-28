@@ -217,9 +217,25 @@ public class EvalStringHandler {
                 evalCode = evalCode.withCapturedVars(currentCode.capturedVars);
             }
 
-            // Step 6: Execute the compiled code
+            // Step 6: Execute the compiled code.
+            // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
+            // currentPackage is a runtime-only field used by caller() — it does NOT
+            // affect name resolution (which is fully compile-time). However, if the
+            // eval contains SET_PACKAGE opcodes (e.g. "package Foo;"), those would
+            // permanently mutate the caller's currentPackage without this scoping.
+            // We use DynamicVariableManager (same mechanism as PUSH_PACKAGE/POP_LOCAL_LEVEL)
+            // to save and restore it automatically.
+            int pkgLevel = DynamicVariableManager.getLocalLevel();
+            String savedPkg = InterpreterState.currentPackage.get().toString();
+            DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+            InterpreterState.currentPackage.get().set(savedPkg);
             RuntimeArray args = new RuntimeArray();  // Empty @_
-            RuntimeList result = evalCode.apply(args, callContext);
+            RuntimeList result;
+            try {
+                result = evalCode.apply(args, callContext);
+            } finally {
+                DynamicVariableManager.popToLocalLevel(pkgLevel);
+            }
             evalTrace("EvalStringHandler exec ok ctx=" + callContext +
                     " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
                     " resultBool=" + (result != null && result.scalar() != null ? result.scalar().getBoolean() : false) +
@@ -295,9 +311,18 @@ public class EvalStringHandler {
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
 
-            // Execute
+            // Scope currentPackage around eval — see Step 6 comment in evalStringHelper above.
+            int pkgLevel = DynamicVariableManager.getLocalLevel();
+            String savedPkg = InterpreterState.currentPackage.get().toString();
+            DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+            InterpreterState.currentPackage.get().set(savedPkg);
             RuntimeArray args = new RuntimeArray();
-            RuntimeList result = evalCode.apply(args, RuntimeContextType.SCALAR);
+            RuntimeList result;
+            try {
+                result = evalCode.apply(args, RuntimeContextType.SCALAR);
+            } finally {
+                DynamicVariableManager.popToLocalLevel(pkgLevel);
+            }
 
             return result.scalar();
 

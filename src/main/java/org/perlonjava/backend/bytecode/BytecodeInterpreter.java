@@ -48,12 +48,6 @@ public class BytecodeInterpreter {
         String frameSubName = subroutineName != null ? subroutineName : (code.subName != null ? code.subName : "(eval)");
         InterpreterState.push(code, framePackageName, frameSubName);
 
-        int regexLocalLevel = -1;
-        if (code.containsRegex) {
-            regexLocalLevel = DynamicVariableManager.getLocalLevel();
-            RuntimeRegexState.pushLocal();
-        }
-
         // Pure register file (NOT stack-based - matches compiler for control flow correctness)
         RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
 
@@ -75,6 +69,15 @@ public class BytecodeInterpreter {
         // When exception occurs, pop from stack and jump to catch PC
         java.util.Stack<Integer> evalCatchStack = new java.util.Stack<>();
 
+        // Labeled block stack for non-local last/next/redo handling.
+        // When a function call returns a RuntimeControlFlowList, we check this stack
+        // to see if the label matches an enclosing labeled block.
+        java.util.Stack<int[]> labeledBlockStack = new java.util.Stack<>();
+        // Each entry is [labelStringPoolIdx, exitPc]
+
+        try {
+        outer:
+        while (true) {
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
@@ -94,16 +97,14 @@ public class BytecodeInterpreter {
                         break;
 
                     case Opcodes.RETURN: {
+                        // Return from subroutine: return rd
                         int retReg = bytecode[pc++];
                         RuntimeBase retVal = registers[retReg];
+
                         if (retVal == null) {
                             return new RuntimeList();
                         }
-                        RuntimeList retList = retVal.getList();
-                        if (code.containsRegex) {
-                            RuntimeList.resolveMatchProxies(retList);
-                        }
-                        return retList;
+                        return retVal.getList();
                     }
 
                     case Opcodes.GOTO: {
@@ -989,8 +990,25 @@ public class BytecodeInterpreter {
 
                         // Check for control flow (last/next/redo/goto/tail-call)
                         if (result.isNonLocalGoto()) {
-                            // Propagate control flow up the call stack
-                            return result;
+                            RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                            // Check labeled block stack for a matching label
+                            boolean handled = false;
+                            for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                int[] entry = labeledBlockStack.get(i);
+                                String blockLabel = code.stringPool[entry[0]];
+                                if (flow.matchesLabel(blockLabel)) {
+                                    // Pop entries down to and including the match
+                                    while (labeledBlockStack.size() > i) {
+                                        labeledBlockStack.pop();
+                                    }
+                                    pc = entry[1]; // jump to block exit
+                                    handled = true;
+                                    break;
+                                }
+                            }
+                            if (!handled) {
+                                return result;
+                            }
                         }
                         break;
                     }
@@ -1034,8 +1052,23 @@ public class BytecodeInterpreter {
 
                         // Check for control flow (last/next/redo/goto/tail-call)
                         if (result.isNonLocalGoto()) {
-                            // Propagate control flow up the call stack
-                            return result;
+                            RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                            boolean handled = false;
+                            for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                int[] entry = labeledBlockStack.get(i);
+                                String blockLabel = code.stringPool[entry[0]];
+                                if (flow.matchesLabel(blockLabel)) {
+                                    while (labeledBlockStack.size() > i) {
+                                        labeledBlockStack.pop();
+                                    }
+                                    pc = entry[1];
+                                    handled = true;
+                                    break;
+                                }
+                            }
+                            if (!handled) {
+                                return result;
+                            }
                         }
                         break;
                     }
@@ -1250,14 +1283,6 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LSTAT:
                         pc = OpcodeHandlerExtended.executeLstat(bytecode, pc, registers);
-                        break;
-
-                    case Opcodes.STAT_LASTHANDLE:
-                        pc = OpcodeHandlerExtended.executeStatLastHandle(bytecode, pc, registers);
-                        break;
-
-                    case Opcodes.LSTAT_LASTHANDLE:
-                        pc = OpcodeHandlerExtended.executeLstatLastHandle(bytecode, pc, registers);
                         break;
 
                     // File test operations (opcodes 190-216) - delegated to handler
@@ -1523,6 +1548,25 @@ public class BytecodeInterpreter {
                         // WarnDie.catchEval() should have already been called to set $@
                         // Just store undef as the eval result
                         registers[rd] = RuntimeScalarCache.scalarUndef;
+                        break;
+                    }
+
+                    // =================================================================
+                    // LABELED BLOCK SUPPORT
+                    // =================================================================
+
+                    case Opcodes.PUSH_LABELED_BLOCK: {
+                        int labelIdx = bytecode[pc++];
+                        int exitPc = readInt(bytecode, pc);
+                        pc += 1;
+                        labeledBlockStack.push(new int[]{labelIdx, exitPc});
+                        break;
+                    }
+
+                    case Opcodes.POP_LABELED_BLOCK: {
+                        if (!labeledBlockStack.isEmpty()) {
+                            labeledBlockStack.pop();
+                        }
                         break;
                     }
 
@@ -2196,9 +2240,10 @@ public class BytecodeInterpreter {
             // Special handling for ClassCastException to show which opcode is failing
             // Check if we're inside an eval block first
             if (!evalCatchStack.isEmpty()) {
-                evalCatchStack.pop();
+                int catchPc = evalCatchStack.pop();
                 WarnDie.catchEval(e);
-                return new RuntimeList();
+                pc = catchPc;
+                continue outer;
             }
 
             // Not in eval - show detailed error with bytecode context
@@ -2224,14 +2269,13 @@ public class BytecodeInterpreter {
             // Check if we're inside an eval block
             if (!evalCatchStack.isEmpty()) {
                 // Inside eval block - catch the exception
-                evalCatchStack.pop(); // Pop the catch handler
+                int catchPc = evalCatchStack.pop(); // Pop the catch handler
 
                 // Call WarnDie.catchEval() to set $@
                 WarnDie.catchEval(e);
 
-                // Eval block failed - return empty list
-                // (The result will be undef in scalar context, empty in list context)
-                return new RuntimeList();
+                pc = catchPc;
+                continue outer;
             }
 
             // Not in eval block - propagate exception
@@ -2252,10 +2296,10 @@ public class BytecodeInterpreter {
             // Wrap other exceptions with interpreter context including bytecode context
             String errorMessage = formatInterpreterError(code, pc, e);
             throw new RuntimeException(errorMessage, e);
+        }
+        } // end outer while
         } finally {
-            if (regexLocalLevel >= 0) {
-                DynamicVariableManager.popToLocalLevel(regexLocalLevel);
-            }
+            // Always pop the interpreter state
             InterpreterState.pop();
         }
     }

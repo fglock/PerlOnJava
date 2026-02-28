@@ -513,20 +513,6 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
-    public static int executeStatLastHandle(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++];
-        int ctx = bytecode[pc++];
-        registers[rd] = Stat.statLastHandle(ctx);
-        return pc;
-    }
-
-    public static int executeLstatLastHandle(int[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++];
-        int ctx = bytecode[pc++];
-        registers[rd] = Stat.lstatLastHandle(ctx);
-        return pc;
-    }
-
     /**
      * Execute print operation.
      * Format: PRINT contentReg filehandleReg
