@@ -61,9 +61,8 @@ public class CustomFileChannel implements IOHandle {
      */
     private final FileChannel fileChannel;
 
-    /**
-     * Tracks whether end-of-file has been reached during reading
-     */
+    private final Path filePath;
+
     private boolean isEOF;
 
     // When true, writes should always occur at end-of-file (Perl's append semantics).
@@ -82,6 +81,7 @@ public class CustomFileChannel implements IOHandle {
      * @throws IOException if an I/O error occurs opening the file
      */
     public CustomFileChannel(Path path, Set<StandardOpenOption> options) throws IOException {
+        this.filePath = path;
         this.fileChannel = FileChannel.open(path, options);
         this.isEOF = false;
         this.appendMode = false;
@@ -99,17 +99,20 @@ public class CustomFileChannel implements IOHandle {
      * @throws IllegalArgumentException if options don't contain READ or WRITE
      */
     public CustomFileChannel(FileDescriptor fd, Set<StandardOpenOption> options) throws IOException {
+        this.filePath = null;
         if (options.contains(StandardOpenOption.READ)) {
-            // Create a read channel from the file descriptor
             this.fileChannel = new FileInputStream(fd).getChannel();
         } else if (options.contains(StandardOpenOption.WRITE)) {
-            // Create a write channel from the file descriptor
             this.fileChannel = new FileOutputStream(fd).getChannel();
         } else {
             throw new IllegalArgumentException("Invalid options for FileDescriptor");
         }
         this.isEOF = false;
         this.appendMode = false;
+    }
+
+    public Path getFilePath() {
+        return filePath;
     }
 
     public void setAppendMode(boolean appendMode) {

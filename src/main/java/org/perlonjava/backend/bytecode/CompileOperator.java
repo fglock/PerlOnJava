@@ -554,21 +554,31 @@ public class CompileOperator {
             }
         } else if (op.equals("stat") || op.equals("lstat")) {
             // stat FILE or lstat FILE
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            try {
-                node.operand.accept(bytecodeCompiler);
-                int operandReg = bytecodeCompiler.lastResultReg;
+            boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
+                    && ((IdentifierNode) node.operand).name.equals("_");
 
+            if (isUnderscoreOperand) {
                 int rd = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
+                bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT_LASTHANDLE : Opcodes.LSTAT_LASTHANDLE);
                 bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(operandReg);
-                bytecodeCompiler.emit(savedContext);  // Pass calling context
-
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
                 bytecodeCompiler.lastResultReg = rd;
-            } finally {
-                bytecodeCompiler.currentCallContext = savedContext;
+            } else {
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    node.operand.accept(bytecodeCompiler);
+                    int operandReg = bytecodeCompiler.lastResultReg;
+
+                    int rd = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(operandReg);
+                    bytecodeCompiler.emit(savedContext);
+                    bytecodeCompiler.lastResultReg = rd;
+                } finally {
+                    bytecodeCompiler.currentCallContext = savedContext;
+                }
             }
         } else if (op.startsWith("-") && op.length() == 2) {
             // File test operators: -r, -w, -x, etc.
