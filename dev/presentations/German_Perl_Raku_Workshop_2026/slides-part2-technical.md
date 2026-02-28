@@ -10,13 +10,14 @@ German Perl/Raku Workshop 2026 — Flavio Glock
 
 # Section 1: Compilation Pipeline
 
+*How do you compile a language that wasn't designed to be compiled?*
+
 ---
 
 ## Compilation Approaches
 
 **Perl 5 (traditional):**
 - Builds OP tree → peephole optimizations → runs
-- No clean phase separation — organically evolved
 
 **PerlOnJava (dual backend):**
 ```
@@ -24,9 +25,10 @@ Perl Source → Compiler → JVM Bytecode → JVM Execution
                        ↘ Custom Bytecode → Internal VM
 ```
 
-A multi-backend compiler with shared frontend + shared runtime.
+Shared frontend + shared runtime, two execution paths.
 
-**Why not transpile to Java source?** Perlito5 (predecessor) compiled Perl → Java → bytecode. Efficient, but slower startup and `eval STRING` invokes the Java compiler at runtime. PerlOnJava generates bytecode directly.
+Note:
+Why not transpile to Java source? Perlito5 (predecessor) compiled Perl → Java → bytecode. Efficient, but slower startup and `eval STRING` invokes the Java compiler at runtime. PerlOnJava generates bytecode directly.
 
 ---
 
@@ -34,14 +36,17 @@ A multi-backend compiler with shared frontend + shared runtime.
 
 Breaks source into tokens: identifiers, operators, keywords.
 
-**Challenge:** Unicode identifiers
-
 ```perl
 my $café_123 = 42;        # Valid
 my $𝕦𝕟𝕚𝕔𝕠𝕕𝕖 = "test";      # Surrogate pairs
 ```
 
-**Solution:** IBM's ICU4J library for Unicode code points (not UTF-16 units). Perl limits identifiers to 251 code points; characters beyond U+FFFF need surrogate pair handling.
+**Challenge:** Characters beyond U+FFFF need surrogate pair handling.
+
+**Solution:** IBM's ICU4J library for Unicode code points.
+
+Note:
+Perl limits identifiers to 251 code points; ICU4J handles code points rather than UTF-16 units.
 
 ---
 
@@ -65,8 +70,6 @@ Produces AST nodes: `BlockNode`, `BinaryOperatorNode`, `ListNode`. Modular — e
 
 ## Special Blocks: BEGIN, END, INIT, CHECK
 
-**BEGIN blocks execute at compile time:**
-
 ```perl
 my @data;
 BEGIN {
@@ -76,21 +79,12 @@ BEGIN {
 say @data;  # Uses data set by BEGIN
 ```
 
-**Mechanism:** Parser encounters `BEGIN` → wraps as anonymous sub → **executes immediately** during parsing → captures lexical variables.
+Parser encounters `BEGIN` → wraps as anonymous sub → **executes immediately** → captures lexical variables.
 
-`use Module` is sugar for `BEGIN { require Module; Module->import() }` — so `use strict` runs at compile time.
+`use Module` is sugar for `BEGIN { require Module; Module->import() }`
 
----
-
-## Special Blocks (continued)
-
-**Other special blocks:**
-- **END** — runs at program exit (saved for later)
-- **INIT** — runs after compilation, before runtime
-- **CHECK** — runs after compilation (reverse order)
-- **UNITCHECK** — runs after each compilation unit
-
-Behavior follows the Perl test suite; some edge cases not yet implemented.
+Note:
+Other special blocks: END runs at program exit, INIT runs after compilation before runtime, CHECK runs after compilation in reverse order, UNITCHECK runs after each compilation unit. Behavior follows the Perl test suite; some edge cases not yet implemented.
 
 ---
 
@@ -117,7 +111,7 @@ Behavior follows the Perl test suite; some edge cases not yet implemented.
 4. Transliteration: `tr/a-z/A-Z/`
 5. String interpolation: `"Value: $x\n"`
 
-Each parser validates at compile time, generates optimized bytecode, and provides consistent error messages. Invoked by the main parser when context requires it.
+Each validates at compile time and generates optimized bytecode.
 
 ---
 
@@ -149,52 +143,52 @@ Compile-time validation catches errors early.
 
 # Section 2: Dual Execution Model
 
-You saw both bytecode outputs in Part 1. Now: *why* two backends, and *how* they're optimized.
+*Why would you need two execution engines?*
 
 ---
 
 ## Why Two Backends?
 
-**JVM bytecode is the primary path — maximum performance via JIT.**
+JVM bytecode is the primary path — but three problems need a second backend:
 
-**But three problems push us toward a second backend:**
+1. **64KB method size limit** — large Perl subs exceed it
+2. **CPU cache pressure** — sparse JVM bytecode overflows instruction caches
+3. **ClassLoader overhead** — `eval STRING` pays per-class cost
 
-1. **64KB method size limit** — large Perl subs can exceed it. The Internal VM has no such limit.
+The Internal VM solves all three.
 
-2. **CPU cache pressure** — very large JVM methods produce sparse bytecode that overflows instruction caches. Compact Internal VM bytecode is more cache-efficient.
-
-3. **ClassLoader bottleneck for `eval STRING`** — JVM class loader has overhead per class. The Internal VM avoids this, reducing eval latency.
-
-This is a common VM design pattern: HotSpot, V8, SpiderMonkey, CRuby all use tiered execution.
+Note:
+This is a common VM design pattern: HotSpot, V8, SpiderMonkey, CRuby all use tiered execution for similar reasons.
 
 ---
 
 ## JVM Backend: The Fast Path
 
-**Benchmark (loop increment, 1 billion iterations):**
-- Perl 5: 7.88s
-- PerlOnJava JVM Backend: **3.57s (2.2× faster)**
+**Loop increment, 1 billion iterations:**
+- Perl 5: **7.88s**
+- PerlOnJava: **3.57s** (2.2× faster)
 
-**Advantages:**
-- High throughput after JIT warmup
-- Native JVM stack frames
-- JVM optimizations (inlining, loop unrolling)
+After JIT warmup (~10K iterations), the JVM inlines and unrolls hot loops.
 
-**Pipeline:** AST → ASM → JVM bytecode → ClassLoader. After warmup (~10K iterations), reaches peak performance. Best for long-running code.
+Note:
+Pipeline: AST → ASM → JVM bytecode → ClassLoader. Best for long-running code with hot loops.
 
 ---
 
 ## JVM Tiered Compilation
 
-**HotSpot progressively optimizes hot code through 5 tiers:**
+**HotSpot progressively optimizes hot code:**
 
-- **Tier 0: Interpreter** — bytecode interpretation, collects profiling data
-- **Tier 1–3: C1 Compiler** — fast compilation, increasing profiling
-- **Tier 4: C2 Compiler** — aggressive inlining, loop optimizations, peak performance
+- **Tier 0:** Interpreter — collects profiling data
+- **Tier 1–3:** C1 Compiler — fast compilation
+- **Tier 4:** C2 Compiler — aggressive inlining, peak performance
 
-**Key insight for PerlOnJava:** Keep critical paths small (≤ 35 bytecodes) for aggressive inlining. This is why we split methods into fast/slow paths.
+**Key insight:** Keep critical paths ≤ 35 bytecodes for inlining.
 
-Default thresholds: `MaxInlineSize=35`, `FreqInlineSize=325`.
+This is why we split methods into fast/slow paths.
+
+Note:
+Default thresholds: MaxInlineSize=35, FreqInlineSize=325.
 
 ---
 
@@ -222,23 +216,24 @@ private int getIntLarge() {
 }
 ```
 
-90%+ calls hit INTEGER. Fast path: single-digit nanoseconds when inlined. Pattern used throughout: `getDouble()`, `toString()`, `getBoolean()`.
+90%+ calls hit INTEGER → single-digit nanoseconds when inlined.
+
+Note:
+This pattern is used throughout: getDouble(), toString(), getBoolean().
 
 ---
 
 ## Custom Bytecode Backend: Compact and Flexible
 
-**Characteristics:**
-- Lower startup overhead — no JVM class generation
-- Peak throughput lower than JVM backend
-- Good fit for eval-heavy scripts
-
-**Advantages:**
 - No method size limits
-- Compact bytecode footprint
+- Lower startup overhead — no class generation
 - 65,536 virtual registers
+- Good fit for `eval`-heavy scripts
 
-Switch-based VM with ~200 opcodes covering all Perl operations.
+Switch-based VM with ~200 opcodes.
+
+Note:
+Peak throughput is lower than the JVM backend, but startup is faster and there are no size constraints.
 
 ---
 
@@ -260,50 +255,66 @@ Perl's complex control flow — labeled loops, `goto`, `eval` — requires regis
 
 ---
 
-## eval STRING Performance
+## eval STRING: Avoiding the ClassLoader
 
-**Dynamic eval (1,000,000 unique strings, Internal VM):**
+**1,000,000 unique eval strings:**
 
-| Implementation | Time | vs Perl 5 |
-|----------------|------|-----------|
-| Perl 5 | 1.29s | baseline |
-| PerlOnJava | 2.78s | 2.16× slower |
+| Implementation | Time |
+|----------------|------|
+| Perl 5 | 1.29s |
+| PerlOnJava (Internal VM) | 2.78s |
 
-Each iteration evals a different string — compilation overhead dominates. Still functional for typical eval usage. Internal VM avoids classloader overhead (`JPERL_EVAL_USE_INTERPRETER=1`).
+The Internal VM avoids ClassLoader overhead — each eval compiles directly to register bytecode without generating a JVM class.
+
+Note:
+Set JPERL_EVAL_USE_INTERPRETER=1. Each iteration evals a different string, so compilation overhead dominates. For typical eval usage with repeated patterns, performance is much closer.
 
 ---
 
 # Section 3: Complex Language Features
 
-Perl *semantics* on the JVM — the hardest parts.
+*What makes Perl the hardest language to implement on the JVM?*
 
 ---
 
 ## Runtime Data Structures
 
-**Core classes (shared by both backends):**
+**Five core classes — shared by both backends:**
 
-1. **RuntimeScalar** — dynamically typed: integer, double, string, reference, undef, regex, glob, tied, dualvar
-2. **RuntimeArray** — dynamic list; plain, autovivifying, tied, read-only modes
-3. **RuntimeHash** — associative array; plain, autovivifying, tied modes
-4. **RuntimeCode** — compiled sub; holds JVM `MethodHandle` or `InterpretedCode`
-5. **RuntimeGlob** — typeglob; delegates slot access to global symbol table
+1. **RuntimeScalar** — dynamically typed value
+2. **RuntimeArray** — dynamic list with autovivification
+3. **RuntimeHash** — associative array
+4. **RuntimeCode** — compiled sub (`MethodHandle` or `InterpretedCode`)
+5. **RuntimeGlob** — typeglob with slot delegation
 
-Context tracking, auto-vivification, and string/number coercion implemented consistently across both backends.
+Note:
+RuntimeScalar supports: integer, double, string, reference, undef, regex, glob, tied, dualvar. RuntimeArray and RuntimeHash support plain, autovivifying, tied, and read-only modes. Context tracking, auto-vivification, and string/number coercion are implemented consistently across both backends.
 
 ---
 
-## RuntimeScalar Internals
+## RuntimeScalar: Three Fields
 
-**Three key fields:**
+1. **`int blessId`** — `0` unblessed, `> 0` blessed, `< 0` has overloads
+2. **`int type`** — `INTEGER`, `DOUBLE`, `STRING`, `UNDEF`, references…
+3. **`Object value`** — the actual data
 
-1. **`int blessId`** — `0` = unblessed, `> 0` = blessed, `< 0` = blessed with overloads (fast overload check)
+Type field determines how to interpret the value.
 
-2. **`int type`** — `INTEGER`, `DOUBLE`, `STRING`, `UNDEF`, `BOOLEAN`, `TIED_SCALAR`, `DUALVAR`, plus reference types (high bit set): `CODE`, `ARRAYREFERENCE`, `HASHREFERENCE`, `REGEX`, `GLOBREFERENCE`
+Note:
+Full type list: INTEGER, DOUBLE, STRING, UNDEF, BOOLEAN, TIED_SCALAR, DUALVAR, plus reference types with high bit set: CODE, ARRAYREFERENCE, HASHREFERENCE, REGEX, GLOBREFERENCE.
 
-3. **`Object value`** — the actual data; type field determines interpretation
+---
 
-**Overload optimization:** Negative `blessId` → class has overloads → check `OverloadContext`. Positive → skip expensive lookup (~10–20ns saved per operation). Detection happens at `bless` time.
+## RuntimeScalar: Overload Optimization
+
+**Negative `blessId`** → class has overloads → check `OverloadContext`
+
+**Positive `blessId`** → skip expensive lookup
+
+~10–20ns saved per operation. Detection happens once at `bless` time.
+
+Note:
+This is a critical optimization because overload checks happen on nearly every operation on blessed references.
 
 ---
 
@@ -365,14 +376,14 @@ OUTER: for my $i (1..10) {
 
 ## Control Flow: Why It's Hard
 
-**Technical approaches combined:**
-
 1. Block-level dispatchers with label tracking
-2. `die` → Java exceptions; `eval` → try-catch blocks
-3. Proper scope boundaries
-4. **Tagged return values** for cross-boundary control flow
+2. `die` → Java exceptions; `eval` → try-catch
+3. **Tagged return values** for cross-boundary jumps
 
-**Why register architecture helps:** Stack state would corrupt on non-local jumps. Registers maintain state explicitly. Label → bytecode offset mapping with shared handlers for multiple exits.
+Register architecture is essential — stack state would corrupt on non-local jumps.
+
+Note:
+Registers maintain state explicitly. Label → bytecode offset mapping with shared handlers for multiple exits.
 
 ---
 
@@ -447,58 +458,59 @@ say $x;    # prints "reading!" then 10
 
 ## Regular Expressions
 
-**Architecture:**
-- Uses **Java's regex engine** (`java.util.regex.Pattern`)
+Uses **Java's regex engine** with a Perl compatibility layer:
+
 - **RegexPreprocessor** translates Perl syntax → Java syntax
-- **RuntimeRegex** manages matching, captures, special variables
-
-**Compatibility layer handles:**
-- Octal escapes, named Unicode (`\N{name}`)
 - Character classes: `[:ascii:]` → `\p{ASCII}`
-- Multi-character case folds: `ß` → `(?:ß|ss|SS)`
-- Modifiers: `/i`, `/g`, `/x`, `/xx`, `/e`, `/ee`
+- Case folds: `ß` → `(?:ß|ss|SS)`
+- All modifiers: `/i`, `/g`, `/x`, `/xx`, `/e`, `/ee`
 
-Regex cache (1000 patterns). Unsupported: recursive patterns, variable-length lookbehind.
+Cache of 1000 compiled patterns.
+
+Note:
+Also handles octal escapes, named Unicode (\N{name}), and surrogate pairs. Unsupported: recursive patterns, variable-length lookbehind. RuntimeRegex manages matching, captures, and special variables ($1, $&, etc.).
 
 ---
 
-## Typeglobs: Emulation Strategy
-
-**Perl:** Single symbol with multiple slots. **PerlOnJava:** No materialized globs.
+## Typeglobs: No Materialized Globs
 
 **Separate global maps** for each slot type:
 - `globalVariables` → SCALAR, `globalArrays` → ARRAY
 - `globalHashes` → HASH, `globalCodeRefs` → CODE
-- `globalIORefs` → IO, `globalFormatRefs` → FORMAT
 
-**Glob assignment creates aliases** by sharing map entries:
+**Glob assignment creates aliases:**
 ```java
-// *foo = *bar creates aliases
-globalArrays.put("foo", globalArrays.get("bar"));  // Same object
+// *foo = *bar
+globalArrays.put("foo", globalArrays.get("bar"));
 ```
 
-**Slot access:** `*foo{CODE}` → `GlobalVariable.getGlobalCodeRef("foo")`
+Lazy initialization — only allocated slots consume memory.
 
-Lazy initialization — only allocated slots consume memory. Perl glob semantics without JVM Gv structures.
+Note:
+Also: globalIORefs → IO, globalFormatRefs → FORMAT. Slot access: *foo{CODE} → GlobalVariable.getGlobalCodeRef("foo"). Full Perl glob semantics without JVM Gv structures.
 
 ---
 
-## Module Loading and XSLoader
+## Module Loading
 
-**`require` mechanism:**
-1. Converts `Module::Name` → `Module/Name.pm`
-2. Searches `@INC`; executes once; caches in `%INC`
+`require` converts `Module::Name` → `Module/Name.pm`, searches `@INC`, caches in `%INC`.
 
-**300+ bundled modules live inside the JAR:**
+**300+ modules bundled inside the JAR:**
 ```
 %INC: 'Data/Dumper.pm' =>
   'file:/path/to/perlonjava.jar!/lib/Data/Dumper.pm'
 ```
 
-**XSLoader:** Loads Java extensions instead of C.
+---
+
+## XSLoader: Java Instead of C
+
+- Loads **Java extensions** instead of C shared libraries
+- **JNA** (Java Native Access) replaces XS for native calls
 - No C compiler needed
-- JNA (Java Native Access) replaces XS for native libraries
-- Java equivalents easier to write and maintain than C/XS
+
+Note:
+Java equivalents are easier to write and maintain than C/XS. The same API surface is exposed to Perl code.
 
 ---
 
@@ -524,20 +536,17 @@ Object result = perl.eval("process_data($data)");
 
 ---
 
-## JVM Ecosystem and Future Targets
+## Future Targets
 
-**Current:** Standard JVM (HotSpot) — Oracle JDK, OpenJDK
+**Current:** Standard JVM (HotSpot)
 
-**Future targets:**
+1. **GraalVM** — native executables, instant startup
+2. **Android DEX** — Perl on mobile devices
 
-1. **GraalVM** — native image compilation
-   - Standalone native executables, instant startup, smaller footprint
+The Internal VM is the key — custom bytecode is platform-independent and portable to any JVM derivative.
 
-2. **Android DEX** — mobile platform
-   - Convert JVM bytecode → Dalvik bytecode
-   - Run Perl on Android devices
-
-**The Internal VM is the key to multi-platform support.** Custom bytecode is platform-independent and portable to any JVM derivative. This is why the dual backend matters beyond performance.
+Note:
+This is why the dual backend matters beyond performance. GraalVM native image gives standalone executables with smaller footprint. Android DEX converts JVM bytecode to Dalvik bytecode.
 
 ---
 
@@ -545,33 +554,24 @@ Object result = perl.eval("process_data($data)");
 
 **JVM-incompatible:**
 - `fork` — not available on JVM
-- `DESTROY` — Perl uses reference counting; JVM uses non-deterministic GC
+- `DESTROY` — JVM uses non-deterministic GC
 - Threading — not yet implemented
-- XS modules — use Java equivalents
 
 **Partially implemented:**
-- Some regex features (recursive patterns, variable-length lookbehind)
-- Taint checks
+- Some regex features, taint checks
 
-**Workarounds:** JNA for native access, Java threading APIs, file auto-close at exit.
+Note:
+Workarounds: JNA for native access, Java threading APIs, file auto-close at exit. XS modules use Java equivalents.
 
 ---
 
-## Current Status and Roadmap
+## Roadmap
 
-**Recently Completed (v5.42.3):**
-- JVM Compiler backend stable for many workloads
-- Full Perl class features
-- System V IPC, socket operations
+**Stable now:** JVM backend, Perl class features, IPC, sockets
 
-**Active Development:**
-- Internal VM performance refinement
-- Automatic fallback for large methods
-- Optimizing eval STRING compilation
+**In progress:** Internal VM optimization, eval STRING performance
 
-**Future Plans:**
-- Replace regex engine with one more compatible with Perl
-- Add a Perl-like single-step debugger
+**Next:** More compatible regex engine, single-step debugger
 
 ---
 
@@ -579,67 +579,38 @@ Object result = perl.eval("process_data($data)");
 
 ---
 
-## Why This Matters
+## Perl Was Never Designed to Run on the JVM
 
-**PerlOnJava demonstrates:**
+We made it work anyway — and made it **2.2× faster**.
 
-- Compiler engineering at scale (392 files, 260K tests)
-- **Test-Driven Development** — no formal Perl spec; tests define behavior
-- Creative solutions to hard problems
-- Language interoperability on the JVM
-- Sustained engineering effort (10+ years, 5,741 commits)
+<span class="metric">260,000+ tests</span> · <span class="metric">392 files</span> · <span class="metric">5,741 commits</span>
 
-**Bringing Perl's expressiveness to the JVM's platform reach.**
+No formal spec exists. The tests **are** the specification.
 
----
-
-## How to Get Involved
-
-**Project:**
-- GitHub: github.com/fglock/PerlOnJava
-- License: Artistic 2.0 (same as Perl)
-
-**Ways to contribute:**
-1. **Testing** — run your scripts, report issues
-2. **Module porting** — help with CPAN modules
-3. **Documentation** — improve guides
-4. **Core development** — implement features
-5. **Performance** — identify bottlenecks
+Note:
+This is test-driven development at its most extreme — 260,000 tests define the language behavior.
 
 ---
 
-## Conclusion
+## Get Involved
 
-- **Production-oriented** Perl compiler for JVM (actively evolving)
-- **2.2× faster** than Perl 5 on loop benchmarks (JVM backend)
-- **260,000+ tests** in the suite
-- **Key integrations:** JDBC, JSR-223, Maven
-- **Dual backend** — performance + flexibility
+**GitHub:** github.com/fglock/PerlOnJava · **License:** Artistic 2.0
 
-**Proving that language ecosystems can be bridged.**
+- **Test** your scripts and report issues
+- **Port** CPAN modules
+- **Contribute** to core development
 
 ---
 
-## Questions?
-
-**Contact:**
-- GitHub: github.com/fglock/PerlOnJava
-- Issues: github.com/fglock/PerlOnJava/issues
-
-**Thank you!**
-
----
-
-## Acknowledgments
+## Thank You!
 
 **Special thanks to:**
 
-- **Larry Wall** — for creating Perl and its philosophy
-- **Perl test writers** — 260,000+ tests that made this project possible
-  - Without formal specification, these tests define Perl's behavior
-- **Perl community** — for decades of innovation and support
-- **Prior Perl-on-JVM pioneers** — JPL, perljvm, Perlito5
+- **Larry Wall** — for creating Perl
+- **Perl test writers** — 260,000+ tests that define Perl's behavior
+- **Perl community** — for decades of innovation
+- **Prior pioneers** — JPL, perljvm, Perlito5
 
-This project stands on the shoulders of giants.
+**Questions?** → github.com/fglock/PerlOnJava/issues
 
 ---
