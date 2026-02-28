@@ -41,14 +41,18 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the byte length of the input
      */
     public static RuntimeScalar lengthBytes(RuntimeScalar runtimeScalar) {
+        // If the scalar is undefined, return undef
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }
+        // Convert the RuntimeScalar to a string and return its byte length
         String str = runtimeScalar.toString();
-        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
-            return getScalarInt(str.length());
+        try {
+            return getScalarInt(str.getBytes(StandardCharsets.UTF_8).length);
+        } catch (Exception e) {
+            // If UTF-8 encoding fails, fall back to character count
+            return getScalarInt(str.codePointCount(0, str.length()));
         }
-        return getScalarInt(str.getBytes(StandardCharsets.UTF_8).length);
     }
 
     /**
@@ -277,34 +281,37 @@ public class StringOperators {
         boolean aIsString = runtimeScalar.type == RuntimeScalarType.STRING || runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
         boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
 
+        // Preserve Perl-like UTF-8 flag semantics only for string scalars.
+        // For other types, keep legacy behavior to avoid wide behavioral changes.
         if (aIsString && bIsString) {
-            boolean hasUnicode = false;
-            for (int i = 0; i < aStr.length(); i++) {
-                if (aStr.charAt(i) > 255) { hasUnicode = true; break; }
-            }
-            if (!hasUnicode) {
-                for (int i = 0; i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) { hasUnicode = true; break; }
-                }
-            }
-
-            if (hasUnicode) {
-                return new RuntimeScalar(aStr + bStr);
-            }
-
-            if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING || b.type == RuntimeScalarType.BYTE_STRING) {
-                byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] out = new byte[aBytes.length + bBytes.length];
-                System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                return new RuntimeScalar(out);
-            }
-
+            // If either operand is explicitly STRING type, return STRING
             if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
                 return new RuntimeScalar(aStr + bStr);
             }
 
+            // Both are BYTE_STRING - check if they actually contain only bytes 0-255
+            boolean hasUnicode = false;
+            for (int i = 0; i < aStr.length(); i++) {
+                if (aStr.charAt(i) > 255) {
+                    hasUnicode = true;
+                    break;
+                }
+            }
+            if (!hasUnicode) {
+                for (int i = 0; i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // If Unicode present, upgrade to STRING to preserve characters
+            if (hasUnicode) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Pure byte strings - concatenate as bytes
             byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] out = new byte[aBytes.length + bBytes.length];
@@ -313,24 +320,7 @@ public class StringOperators {
             return new RuntimeScalar(out);
         }
 
-        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
-            boolean hasWide = false;
-            for (int i = 0; i < aStr.length() && !hasWide; i++) {
-                if (aStr.charAt(i) > 255) hasWide = true;
-            }
-            for (int i = 0; i < bStr.length() && !hasWide; i++) {
-                if (bStr.charAt(i) > 255) hasWide = true;
-            }
-            if (!hasWide) {
-                byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] out = new byte[aBytes.length + bBytes.length];
-                System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                return new RuntimeScalar(out);
-            }
-        }
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -345,33 +335,34 @@ public class StringOperators {
         boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
 
         if (aIsString && bIsString) {
-            boolean hasUnicode = false;
-            for (int i = 0; i < aStr.length(); i++) {
-                if (aStr.charAt(i) > 255) { hasUnicode = true; break; }
-            }
-            if (!hasUnicode) {
-                for (int i = 0; i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) { hasUnicode = true; break; }
-                }
-            }
-
-            if (hasUnicode) {
-                return new RuntimeScalar(aStr + bStr);
-            }
-
-            if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING || b.type == RuntimeScalarType.BYTE_STRING) {
-                byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] out = new byte[aBytes.length + bBytes.length];
-                System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                return new RuntimeScalar(out);
-            }
-
+            // If either operand is explicitly STRING type, return STRING
             if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
                 return new RuntimeScalar(aStr + bStr);
             }
 
+            // Both are BYTE_STRING - check if they actually contain only bytes 0-255
+            boolean hasUnicode = false;
+            for (int i = 0; i < aStr.length(); i++) {
+                if (aStr.charAt(i) > 255) {
+                    hasUnicode = true;
+                    break;
+                }
+            }
+            if (!hasUnicode) {
+                for (int i = 0; i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // If Unicode present, upgrade to STRING to preserve characters
+            if (hasUnicode) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Pure byte strings - concatenate as bytes
             byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] out = new byte[aBytes.length + bBytes.length];
@@ -380,24 +371,7 @@ public class StringOperators {
             return new RuntimeScalar(out);
         }
 
-        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
-            boolean hasWide = false;
-            for (int i = 0; i < aStr.length() && !hasWide; i++) {
-                if (aStr.charAt(i) > 255) hasWide = true;
-            }
-            for (int i = 0; i < bStr.length() && !hasWide; i++) {
-                if (bStr.charAt(i) > 255) hasWide = true;
-            }
-            if (!hasWide) {
-                byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                byte[] out = new byte[aBytes.length + bBytes.length];
-                System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                return new RuntimeScalar(out);
-            }
-        }
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
@@ -584,7 +558,7 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        boolean anyIsByteString = runtimeScalar.type == BYTE_STRING;
+        boolean isByteString = runtimeScalar.type == BYTE_STRING;
 
         String delimiter = runtimeScalar.toString();
         
@@ -610,19 +584,12 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString);
             }
 
-            anyIsByteString = anyIsByteString || scalar.type == BYTE_STRING;
+            isByteString = isByteString && scalar.type == BYTE_STRING;
             sb.append(scalar);
         }
         RuntimeScalar res = new RuntimeScalar(sb.toString());
-        if (anyIsByteString) {
-            String resultStr = sb.toString();
-            boolean hasWide = false;
-            for (int i = 0; i < resultStr.length(); i++) {
-                if (resultStr.charAt(i) > 255) { hasWide = true; break; }
-            }
-            if (!hasWide) {
-                res.type = BYTE_STRING;
-            }
+        if (isByteString) {
+            res.type = BYTE_STRING;
         }
         return res;
     }

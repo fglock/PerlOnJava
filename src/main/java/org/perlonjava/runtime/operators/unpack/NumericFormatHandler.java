@@ -614,34 +614,24 @@ public abstract class NumericFormatHandler implements FormatHandler {
     public static class FloatHandler extends NumericFormatHandler {
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-            if (state.isUTF8Data() && state.isCharacterMode()) {
-                ByteBuffer buffer = state.getBuffer();
-                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
-                for (int i = 0; i < count; i++) {
-                    if (state.remainingCodePoints() < 4) break;
-                    int b1 = state.nextCodePoint() & 0xFF;
-                    int b2 = state.nextCodePoint() & 0xFF;
-                    int b3 = state.nextCodePoint() & 0xFF;
-                    int b4 = state.nextCodePoint() & 0xFF;
-                    int intBits = isBigEndian
-                            ? (b1 << 24) | (b2 << 16) | (b3 << 8) | b4
-                            : b1 | (b2 << 8) | (b3 << 16) | (b4 << 24);
-                    output.add(new RuntimeScalar((double) Float.intBitsToFloat(intBits)));
-                }
-                return;
-            }
-
+            // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
+
+            // Switch to byte mode for numeric reading
             if (wasCharacterMode) {
                 state.switchToByteMode();
             }
 
             ByteBuffer buffer = state.getBuffer();
+
             for (int i = 0; i < count; i++) {
-                if (buffer.remaining() < 4) break;
+                if (buffer.remaining() < 4) {
+                    break;
+                }
                 output.add(new RuntimeScalar(buffer.getFloat()));
             }
 
+            // Restore original mode
             if (wasCharacterMode) {
                 state.switchToCharacterMode();
             }
@@ -656,36 +646,24 @@ public abstract class NumericFormatHandler implements FormatHandler {
     public static class DoubleHandler extends NumericFormatHandler {
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-            if (state.isUTF8Data() && state.isCharacterMode()) {
-                ByteBuffer buffer = state.getBuffer();
-                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
-                for (int i = 0; i < count; i++) {
-                    if (state.remainingCodePoints() < 8) break;
-                    long bits = 0;
-                    for (int j = 0; j < 8; j++) {
-                        int b = state.nextCodePoint() & 0xFF;
-                        if (isBigEndian) {
-                            bits = (bits << 8) | b;
-                        } else {
-                            bits |= ((long) b) << (j * 8);
-                        }
-                    }
-                    output.add(new RuntimeScalar(Double.longBitsToDouble(bits)));
-                }
-                return;
-            }
-
+            // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
+
+            // Switch to byte mode for numeric reading
             if (wasCharacterMode) {
                 state.switchToByteMode();
             }
 
             ByteBuffer buffer = state.getBuffer();
+
             for (int i = 0; i < count; i++) {
-                if (buffer.remaining() < 8) break;
+                if (buffer.remaining() < 8) {
+                    break;
+                }
                 output.add(new RuntimeScalar(buffer.getDouble()));
             }
 
+            // Restore original mode
             if (wasCharacterMode) {
                 state.switchToCharacterMode();
             }

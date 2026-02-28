@@ -1165,5 +1165,13 @@ public class Opcodes {
     /** Undefine a scalar variable in-place: rd.undefine(). Used by `undef $x`. */
     public static final short UNDEFINE_SCALAR = 353;
 
+    /** Push a labeled block entry for non-local last/next/redo handling.
+     * Format: PUSH_LABELED_BLOCK label_string_idx exit_pc(int) */
+    public static final short PUSH_LABELED_BLOCK = 354;
+
+    /** Pop a labeled block entry.
+     * Format: POP_LABELED_BLOCK */
+    public static final short POP_LABELED_BLOCK = 355;
+
     private Opcodes() {} // Utility class - no instantiation
 }

@@ -90,7 +90,8 @@ public class CompileAssignment {
                             node.right.accept(bytecodeCompiler);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
-                            bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                            // Move to variable register
+                            bytecodeCompiler.emit(Opcodes.MOVE);
                             bytecodeCompiler.emitReg(reg);
                             bytecodeCompiler.emitReg(valueReg);
 
@@ -233,7 +234,8 @@ public class CompileAssignment {
                         node.right.accept(bytecodeCompiler);
                         int valueReg = bytecodeCompiler.lastResultReg;
 
-                        bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                        // Move to variable register
+                        bytecodeCompiler.emit(Opcodes.MOVE);
                         bytecodeCompiler.emitReg(reg);
                         bytecodeCompiler.emitReg(valueReg);
 
@@ -340,7 +342,8 @@ public class CompileAssignment {
                                             bytecodeCompiler.emitReg(varReg);
                                             bytecodeCompiler.emitReg(elemReg);
                                         } else {
-                                            bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                                            // Regular variable - use MOVE
+                                            bytecodeCompiler.emit(Opcodes.MOVE);
                                             bytecodeCompiler.emitReg(varReg);
                                             bytecodeCompiler.emitReg(elemReg);
                                         }
@@ -741,7 +744,16 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         } else {
-                            bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                            // Regular lexical - create a fresh RuntimeScalar, then copy the value into it.
+                            // LOAD_UNDEF allocates a new mutable RuntimeScalar in the target register;
+                            // SET_SCALAR copies the source value into it.
+                            // This avoids two bugs:
+                            //   - MOVE aliases constants from the pool, corrupting them on later mutation
+                            //   - SET_SCALAR alone modifies the existing object in-place, which breaks
+                            //     'local' variable restoration when the register was shared
+                            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         }
@@ -902,9 +914,9 @@ public class CompileAssignment {
                                     bytecodeCompiler.emitReg(rhsListReg);
                                     bytecodeCompiler.emitReg(indexReg);
 
-                                    // Assign to variable — our variables use SET_SCALAR to preserve global alias
+                                    // Assign to variable
                                     if (sigil.equals("$")) {
-                                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                                        bytecodeCompiler.emit(Opcodes.MOVE);
                                         bytecodeCompiler.emitReg(varReg);
                                         bytecodeCompiler.emitReg(elemReg);
                                     } else if (sigil.equals("@")) {
@@ -1036,12 +1048,9 @@ public class CompileAssignment {
                 String varName = ((IdentifierNode) node.left).name;
 
                 if (bytecodeCompiler.hasVariable(varName)) {
+                    // Lexical variable - copy to its register
                     int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                    if (bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName)) {
-                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                    } else {
-                        bytecodeCompiler.emit(Opcodes.MY_SCALAR);
-                    }
+                    bytecodeCompiler.emit(Opcodes.MOVE);
                     bytecodeCompiler.emitReg(targetReg);
                     bytecodeCompiler.emitReg(valueReg);
                     bytecodeCompiler.lastResultReg = targetReg;
@@ -1544,7 +1553,7 @@ public class CompileAssignment {
                                         bytecodeCompiler.emitReg(targetReg);
                                         bytecodeCompiler.emitReg(elementReg);
                                     } else {
-                                        bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                                        bytecodeCompiler.emit(Opcodes.MOVE);
                                         bytecodeCompiler.emitReg(targetReg);
                                         bytecodeCompiler.emitReg(elementReg);
                                     }

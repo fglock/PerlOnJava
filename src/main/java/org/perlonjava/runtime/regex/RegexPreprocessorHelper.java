@@ -626,15 +626,9 @@ public class RegexPreprocessorHelper {
                                 sb.append(Character.toChars(c2));
                                 lastChar = octalValue;
                             } else {
-                                // Short octal (1-2 digits) inside character class
-                                // In character classes, \1-\7 are always octals, not backrefs
-                                // Java requires leading zero: \4 → \04, \12 → \012
-                                sb.append('0');
-                                for (int i = 0; i < octalLength; i++) {
-                                    sb.append(s.charAt(offset + i));
-                                }
-                                offset += octalLength - 1;
-                                lastChar = octalValue;
+                                // Short octal or single digit, pass through
+                                sb.append(Character.toChars(c2));
+                                lastChar = c2;
                             }
                         } else if (c2 == '8' || c2 == '9') {
                             // \8 and \9 are not valid octals - treat as literal digits

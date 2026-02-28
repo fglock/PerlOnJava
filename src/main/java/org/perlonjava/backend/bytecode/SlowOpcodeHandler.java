@@ -7,8 +7,6 @@ import org.perlonjava.runtime.operators.Operator;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.util.Map;
-
 /**
  * Handler for rarely-used operations called directly by BytecodeInterpreter.
  *
@@ -273,18 +271,11 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int evalCallContext = RuntimeContextType.SCALAR;
+        // Newer bytecode encodes the eval operator's own call context (VOID/SCALAR/LIST)
+        // so eval semantics are correct even when the surrounding statement is compiled
+        // in VOID context.
         if (pc < bytecode.length) {
             evalCallContext = bytecode[pc++];
-        }
-        int evalSiteIdx = -1;
-        if (pc < bytecode.length) {
-            evalSiteIdx = bytecode[pc++];
-        }
-
-        // Resolve per-eval-site variable registry if available
-        Map<String, Integer> siteRegistry = null;
-        if (evalSiteIdx >= 0 && code.evalSiteRegistries != null && evalSiteIdx < code.evalSiteRegistries.size()) {
-            siteRegistry = code.evalSiteRegistries.get(evalSiteIdx);
         }
 
         // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
@@ -314,14 +305,28 @@ public class SlowOpcodeHandler {
         }
 
         if (callContext == RuntimeContextType.LIST) {
+            // Return list context result
             RuntimeList result = EvalStringHandler.evalStringList(
-                    perlCode, code, registers, code.sourceName, code.sourceLine, callContext, siteRegistry);
+                    perlCode,
+                    code,           // Current InterpretedCode for context
+                    registers,      // Current registers for variable access
+                    code.sourceName,
+                    code.sourceLine,
+                    callContext
+            );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " scalar=" + result.scalar().toString());
         } else {
+            // Scalar/void context: return scalar result
             RuntimeScalar result = EvalStringHandler.evalString(
-                    perlCode, code, registers, code.sourceName, code.sourceLine, callContext, siteRegistry);
+                    perlCode,
+                    code,           // Current InterpretedCode for context
+                    registers,      // Current registers for variable access
+                    code.sourceName,
+                    code.sourceLine,
+                    callContext
+            );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " val=" + result.toString() + " bool=" + result.getBoolean());
@@ -725,7 +730,10 @@ public class SlowOpcodeHandler {
         int ctx = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
-        RuntimeList args = (RuntimeList) registers[argsReg];
+        RuntimeBase argsBase = registers[argsReg];
+        RuntimeList args = (argsBase instanceof RuntimeList)
+                ? (RuntimeList) argsBase
+                : new RuntimeList(argsBase.scalar());
 
         RuntimeList result = Operator.split(pattern, args, ctx);
 

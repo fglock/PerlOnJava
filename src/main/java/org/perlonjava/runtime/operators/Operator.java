@@ -206,10 +206,10 @@ public class Operator {
                 }
             }
         } else {
-            // In Perl, split with a string variable compiles the string as a regex
-            String regexPattern = quotedRegex.toString();
+            // Treat quotedRegex as a literal string
+            String literalPattern = quotedRegex.toString();
 
-            if (regexPattern.isEmpty()) {
+            if (literalPattern.isEmpty()) {
                 // Special case: if the pattern is an empty string, split between characters
                 if (limit > 0) {
                     for (int i = 0; i < inputStr.length() && splitElements.size() < limit - 1; i++) {
@@ -224,35 +224,9 @@ public class Operator {
                     }
                 }
             } else {
-                Pattern pattern = Pattern.compile(regexPattern);
-                Matcher matcher = pattern.matcher(inputStr);
-                int lastEnd = 0;
-                int splitCount = 0;
-
-                while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
-                    if (lastEnd == 0 && matcher.end() == 0) {
-                        // Zero-width match at start never produces an empty field
-                    } else if (matcher.start() == matcher.end() && matcher.start() == lastEnd) {
-                        continue;
-                    } else {
-                        splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
-                    }
-                    for (int i = 1; i <= matcher.groupCount(); i++) {
-                        String group = matcher.group(i);
-                        splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
-                    }
-                    lastEnd = matcher.end();
-                    splitCount++;
-                }
-
-                if (lastEnd <= inputStr.length()) {
-                    splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd)));
-                }
-
-                if (limit == 0) {
-                    while (!splitElements.isEmpty() && splitElements.getLast().toString().isEmpty()) {
-                        splitElements.removeLast();
-                    }
+                String[] parts = inputStr.split(Pattern.quote(literalPattern), limit);
+                for (String part : parts) {
+                    splitElements.add(new RuntimeScalar(part));
                 }
             }
         }
@@ -316,11 +290,7 @@ public class Operator {
             String extractedSubstring = result;
             lvalue.set(replacement);
             // Return the extracted substring, not the lvalue (which now contains the replacement)
-            RuntimeScalar extracted = new RuntimeScalar(extractedSubstring);
-            if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
-                extracted.type = RuntimeScalarType.BYTE_STRING;
-            }
-            return extracted;
+            return new RuntimeScalar(extractedSubstring);
         }
 
         return lvalue;

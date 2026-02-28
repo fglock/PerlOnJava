@@ -864,20 +864,24 @@ public class EmitOperator {
         
         if (node.operand instanceof IdentifierNode identNode &&
                 identNode.name.equals("_")) {
-            // stat _ or lstat _ - use cached stat buffer with context
-            emitterVisitor.pushCallContext();
+            // stat _ or lstat _ - still use the old methods since they don't take args
             emitterVisitor.ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/Stat",
                     operator + "LastHandle",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
+            // Handle context - treat as list that needs conversion
             if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 handleVoidContext(emitterVisitor);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
-                emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                // Convert with stat's special semantics
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "statScalar",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
             }
         } else {
             // stat EXPR or lstat EXPR - use context-aware methods

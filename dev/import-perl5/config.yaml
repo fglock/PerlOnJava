@@ -400,15 +400,6 @@ imports:
     target: perl5_t/Term-Table
     type: directory
 
-  # From CPAN distribution
-  - source: perl5/cpan/Time-Local/lib/Time/Local.pm
-    target: src/main/perl/lib/Time/Local.pm
-
-  # Tests for distribution
-  - source: perl5/cpan/Time-Local/t
-    target: perl5_t/Time-Local
-    type: directory
-
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
