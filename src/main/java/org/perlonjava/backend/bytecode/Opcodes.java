@@ -1173,5 +1173,13 @@ public class Opcodes {
      * Format: POP_LABELED_BLOCK */
     public static final short POP_LABELED_BLOCK = 355;
 
+    /** Save regex state into register rd.
+     * Format: SAVE_REGEX_STATE rd */
+    public static final short SAVE_REGEX_STATE = 356;
+
+    /** Restore regex state from register rs.
+     * Format: RESTORE_REGEX_STATE rs */
+    public static final short RESTORE_REGEX_STATE = 357;
+
     private Opcodes() {} // Utility class - no instantiation
 }
