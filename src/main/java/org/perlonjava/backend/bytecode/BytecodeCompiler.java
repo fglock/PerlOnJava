@@ -4085,8 +4085,18 @@ public class BytecodeCompiler implements Visitor {
         emitReg(listReg);
 
         // Step 3: Allocate loop variable register BEFORE entering scope
-        // This ensures both iterReg and varReg are protected from recycling
-        int varReg = allocateRegister();
+        // For pre-existing lexical variables (e.g., `my $k; foreach $k (...)`),
+        // reuse the existing register so FOREACH_NEXT_OR_EXIT writes to the same
+        // slot the loop body reads from.
+        int varReg = -1;
+        if (globalLoopVarName == null && node.variable instanceof OperatorNode varOp
+                && varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode idNode) {
+            String varName = "$" + idNode.name;
+            varReg = getVariableRegister(varName);
+        }
+        if (varReg == -1) {
+            varReg = allocateRegister();
+        }
 
         // Step 3b: For global loop variable: emit LOCAL_SCALAR_SAVE_LEVEL.
         // This atomically saves getLocalLevel() into levelReg (pre-push), then calls makeLocal.
@@ -4106,9 +4116,9 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 5: If we have a named lexical loop variable, add it to the scope now
         if (node.variable != null && node.variable instanceof OperatorNode) {
-            OperatorNode varOp = (OperatorNode) node.variable;
-            if (varOp.operator.equals("my") && varOp.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) varOp.operand;
+            OperatorNode varOp2 = (OperatorNode) node.variable;
+            if (varOp2.operator.equals("my") && varOp2.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) varOp2.operand;
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
                     variableScopes.peek().put(varName, varReg);

@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.CustomFileChannel;
+import org.perlonjava.runtime.io.IOHandle;
+import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
@@ -21,6 +24,8 @@ import java.util.Set;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastBasicAttr;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastFileHandle;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastPosixAttr;
+import static org.perlonjava.runtime.operators.FileTestOperator.lastStatOk;
+import static org.perlonjava.runtime.operators.FileTestOperator.lastStatErrno;
 import static org.perlonjava.runtime.operators.FileTestOperator.updateLastStat;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.resolvePath;
@@ -64,11 +69,49 @@ public class Stat {
     }
 
     public static RuntimeList statLastHandle() {
-        return stat(lastFileHandle);
+        if (!lastStatOk) {
+            getGlobalVariable("main::!").set(9); // EBADF
+            return new RuntimeList();
+        }
+        RuntimeList res = new RuntimeList();
+        statInternal(res, lastBasicAttr, lastPosixAttr);
+        getGlobalVariable("main::!").set(0);
+        return res;
+    }
+
+    public static RuntimeBase statLastHandle(int ctx) {
+        if (ctx == RuntimeContextType.SCALAR) {
+            if (!lastStatOk) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return new RuntimeScalar("");
+            }
+            getGlobalVariable("main::!").set(0);
+            return scalarTrue;
+        }
+        return statLastHandle();
     }
 
     public static RuntimeList lstatLastHandle() {
-        return lstat(lastFileHandle);
+        if (!lastStatOk) {
+            getGlobalVariable("main::!").set(9); // EBADF
+            return new RuntimeList();
+        }
+        RuntimeList res = new RuntimeList();
+        statInternal(res, lastBasicAttr, lastPosixAttr);
+        getGlobalVariable("main::!").set(0);
+        return res;
+    }
+
+    public static RuntimeBase lstatLastHandle(int ctx) {
+        if (ctx == RuntimeContextType.SCALAR) {
+            if (!lastStatOk) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return new RuntimeScalar("");
+            }
+            getGlobalVariable("main::!").set(0);
+            return scalarTrue;
+        }
+        return lstatLastHandle();
     }
 
     /**
@@ -126,8 +169,18 @@ public class Stat {
                 return res; // Return empty list
             }
 
+            // Try to get the file path from the handle
+            IOHandle innerHandle = fh.ioHandle;
+            while (innerHandle instanceof LayeredIOHandle lh) {
+                innerHandle = lh.getDelegate();
+            }
+            if (innerHandle instanceof CustomFileChannel cfc) {
+                Path path = cfc.getFilePath();
+                if (path != null) {
+                    return stat(new RuntimeScalar(path.toString()));
+                }
+            }
             // For in-memory file handles (like PerlIO::scalar), we can't stat them
-            // They should return EBADF
             getGlobalVariable("main::!").set(9);
             updateLastStat(arg, false, 9, false);
             return res;

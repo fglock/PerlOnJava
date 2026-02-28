@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.CustomFileChannel;
+import org.perlonjava.runtime.io.IOHandle;
+import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -259,7 +262,18 @@ public class FileTestOperator {
                 return scalarUndef;
             }
 
-            // For file test operators on file handles, return undef and set EBADF
+            // Try to get the file path from the handle for stat-based file tests
+            IOHandle innerHandle = fh.ioHandle;
+            while (innerHandle instanceof LayeredIOHandle lh) {
+                innerHandle = lh.getDelegate();
+            }
+            if (innerHandle instanceof CustomFileChannel cfc) {
+                Path path = cfc.getFilePath();
+                if (path != null) {
+                    return fileTest(operator, new RuntimeScalar(path.toString()));
+                }
+            }
+            // Fallback for non-file handles (pipes, sockets, etc.)
             getGlobalVariable("main::!").set(9);
             updateLastStat(fileHandle, false, 9);
             return scalarUndef;

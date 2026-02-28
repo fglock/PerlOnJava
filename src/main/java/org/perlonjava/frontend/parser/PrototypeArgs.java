@@ -482,7 +482,7 @@ public class PrototypeArgs {
             parser.tokenIndex = saveIndex;
         }
 
-        ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         // @ and % consume remaining arguments in LIST context
 //        for (Node element : argList.elements) {
 //            element.setAnnotation("context", "LIST");

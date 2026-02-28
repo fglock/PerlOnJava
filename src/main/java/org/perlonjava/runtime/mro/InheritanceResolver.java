@@ -301,7 +301,8 @@ public class InheritanceResolver {
             System.err.flush();
         }
 
-        // Search through the class hierarchy starting from the specified index
+        // Perl MRO: first pass — search all classes (including UNIVERSAL) for the method.
+        // AUTOLOAD is only checked after the entire hierarchy has been searched.
         for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
             String className = linearizedClasses.get(i);
             String effectiveClassName = GlobalVariable.resolveStashAlias(className);
@@ -314,42 +315,33 @@ public class InheritanceResolver {
                 System.err.flush();
             }
 
-            // Check if method exists in current class
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-                // Perl method lookup should ignore undefined CODE slots (e.g. after `undef *pkg::method`).
                 if (!codeRef.getDefinedBoolean()) {
                     continue;
                 }
-                // Cache the found method
                 cacheMethod(cacheKey, codeRef);
-                
                 if (TRACE_METHOD_RESOLUTION) {
                     System.err.println("  FOUND method!");
                     System.err.flush();
                 }
-                
                 return codeRef;
             }
+        }
 
-            // Method not found in current class, check AUTOLOAD
-            if (!autoloadEnabled || methodName.startsWith("(")) {
-                // refuse to AUTOLOAD tie() flags and overload markers (all start with "(")
-            } else {
-                // Check for AUTOLOAD in current class
+        // Second pass — method not found anywhere, check AUTOLOAD in class hierarchy.
+        // This matches Perl semantics: AUTOLOAD is only tried after the full MRO
+        // search (including UNIVERSAL) fails to find the method.
+        if (autoloadEnabled && !methodName.startsWith("(")) {
+            for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
+                String className = linearizedClasses.get(i);
+                String effectiveClassName = GlobalVariable.resolveStashAlias(className);
                 String autoloadName = (effectiveClassName.endsWith("::") ? effectiveClassName : effectiveClassName + "::") + "AUTOLOAD";
                 if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
                     if (autoload.getDefinedBoolean()) {
-                        // System.out.println("AUTOLOAD: " + autoloadName + " looking for " + methodName);
-
-                        // The caller will need to set $AUTOLOAD before calling
                         ((RuntimeCode) autoload.value).autoloadVariableName = autoloadName;
-
-                        // Cache the found method;
-                        // In case AUTOLOAD creates the missing method, it will invalidate the cache
                         cacheMethod(cacheKey, autoload);
-
                         return autoload;
                     }
                 }
