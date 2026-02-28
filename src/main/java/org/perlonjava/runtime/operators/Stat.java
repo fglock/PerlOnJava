@@ -24,6 +24,8 @@ import java.util.Set;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastBasicAttr;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastFileHandle;
 import static org.perlonjava.runtime.operators.FileTestOperator.lastPosixAttr;
+import static org.perlonjava.runtime.operators.FileTestOperator.lastStatOk;
+import static org.perlonjava.runtime.operators.FileTestOperator.lastStatErrno;
 import static org.perlonjava.runtime.operators.FileTestOperator.updateLastStat;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.resolvePath;
@@ -67,19 +69,49 @@ public class Stat {
     }
 
     public static RuntimeList statLastHandle() {
-        return stat(lastFileHandle);
+        if (!lastStatOk) {
+            getGlobalVariable("main::!").set(9); // EBADF
+            return new RuntimeList();
+        }
+        RuntimeList res = new RuntimeList();
+        statInternal(res, lastBasicAttr, lastPosixAttr);
+        getGlobalVariable("main::!").set(0);
+        return res;
     }
 
     public static RuntimeBase statLastHandle(int ctx) {
-        return stat(lastFileHandle, ctx);
+        if (ctx == RuntimeContextType.SCALAR) {
+            if (!lastStatOk) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return new RuntimeScalar("");
+            }
+            getGlobalVariable("main::!").set(0);
+            return scalarTrue;
+        }
+        return statLastHandle();
     }
 
     public static RuntimeList lstatLastHandle() {
-        return lstat(lastFileHandle);
+        if (!lastStatOk) {
+            getGlobalVariable("main::!").set(9); // EBADF
+            return new RuntimeList();
+        }
+        RuntimeList res = new RuntimeList();
+        statInternal(res, lastBasicAttr, lastPosixAttr);
+        getGlobalVariable("main::!").set(0);
+        return res;
     }
 
     public static RuntimeBase lstatLastHandle(int ctx) {
-        return lstat(lastFileHandle, ctx);
+        if (ctx == RuntimeContextType.SCALAR) {
+            if (!lastStatOk) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return new RuntimeScalar("");
+            }
+            getGlobalVariable("main::!").set(0);
+            return scalarTrue;
+        }
+        return lstatLastHandle();
     }
 
     /**
