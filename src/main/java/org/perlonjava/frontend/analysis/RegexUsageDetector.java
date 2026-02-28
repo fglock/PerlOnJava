@@ -6,13 +6,32 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 
+/**
+ * Detects whether an AST subtree contains regex operations (=~, !~, split, m//, s///).
+ * Used as an optimization gate: block-level regex state save/restore is only emitted
+ * for blocks that actually use regex, avoiding unnecessary snapshots of {@code RegexState}.
+ *
+ * <p>The walk stops at {@link SubroutineNode} boundaries because nested subroutines
+ * get their own subroutine-level regex state save/restore (in {@code EmitterMethodCreator}
+ * / {@code BytecodeInterpreter}), so their regex usage should not trigger block-level
+ * save/restore in the enclosing scope.
+ *
+ * @see org.perlonjava.runtime.runtimetypes.RegexState
+ */
 public class RegexUsageDetector {
 
+    /** Unary operators that perform regex matching/substitution. */
     private static final java.util.Set<String> REGEX_OPERATORS =
             java.util.Set.of("matchRegex", "replaceRegex");
+    /** Binary operators that perform regex matching (=~, !~) or use regex internally (split). */
     private static final java.util.Set<String> REGEX_BINARY_OPERATORS =
             java.util.Set.of("=~", "!~", "split");
 
+    /**
+     * Returns true if the AST rooted at {@code root} contains any regex operation,
+     * excluding nested subroutine bodies (which have their own regex state scope).
+     * Uses iterative DFS to avoid StackOverflow on deeply nested ASTs.
+     */
     public static boolean containsRegexOperation(Node root) {
         if (root == null) return false;
         Deque<Node> stack = new ArrayDeque<>();
@@ -20,6 +39,7 @@ public class RegexUsageDetector {
         while (!stack.isEmpty()) {
             Node node = stack.pop();
             if (node == null) continue;
+            // Stop at subroutine boundaries: nested subs have their own regex state scope
             if (node instanceof SubroutineNode) continue;
             if (node instanceof OperatorNode op) {
                 if (REGEX_OPERATORS.contains(op.operator)) return true;

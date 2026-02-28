@@ -864,8 +864,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static String captureString(int group) {
         if (group <= 0) {
-            if (globalMatcher == null) return null;
-            return globalMatcher.group(0);
+            return lastMatchedString;
         }
         if (lastCaptureGroups == null || group > lastCaptureGroups.length) {
             return null;
@@ -881,35 +880,45 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static RuntimeScalar matcherStart(int group) {
+        if (group == 0) {
+            return lastMatchStart >= 0 ? getScalarInt(lastMatchStart) : scalarUndef;
+        }
         if (globalMatcher == null) {
             return scalarUndef;
         }
-        if (group < 0 || group > globalMatcher.groupCount()) {
+        try {
+            if (group < 0 || group > globalMatcher.groupCount()) {
+                return scalarUndef;
+            }
+            int start = globalMatcher.start(group);
+            if (start == -1) {
+                return scalarUndef;
+            }
+            return getScalarInt(start);
+        } catch (IllegalStateException e) {
             return scalarUndef;
         }
-        int start = globalMatcher.start(group);
-        // If the group didn't participate in the match, start() returns -1
-        // Perl returns undef in this case
-        if (start == -1) {
-            return scalarUndef;
-        }
-        return getScalarInt(start);
     }
 
     public static RuntimeScalar matcherEnd(int group) {
+        if (group == 0) {
+            return lastMatchEnd >= 0 ? getScalarInt(lastMatchEnd) : scalarUndef;
+        }
         if (globalMatcher == null) {
             return scalarUndef;
         }
-        if (group < 0 || group > globalMatcher.groupCount()) {
+        try {
+            if (group < 0 || group > globalMatcher.groupCount()) {
+                return scalarUndef;
+            }
+            int end = globalMatcher.end(group);
+            if (end == -1) {
+                return scalarUndef;
+            }
+            return getScalarInt(end);
+        } catch (IllegalStateException e) {
             return scalarUndef;
         }
-        int end = globalMatcher.end(group);
-        // If the group didn't participate in the match, end() returns -1
-        // Perl returns undef in this case
-        if (end == -1) {
-            return scalarUndef;
-        }
-        return getScalarInt(end);
     }
 
     public static int matcherSize() {

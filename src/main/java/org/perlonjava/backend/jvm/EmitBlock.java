@@ -145,6 +145,9 @@ public class EmitBlock {
         // Setup 'local' environment if needed
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
+        // Perl 5 block-level regex state scoping: save $1, $&, etc. on entry, restore on exit.
+        // Skip if blockIsSubroutine: EmitterMethodCreator already emits subroutine-level
+        // save/restore (regexStateSlot), so block-level would be redundant.
         int regexStateLocal = -1;
         if (!node.getBooleanAnnotation("blockIsSubroutine")
                 && RegexUsageDetector.containsRegexOperation(node)) {
@@ -262,6 +265,7 @@ public class EmitBlock {
 
         Local.localTeardown(localRecord, mv);
 
+        // Restore block-level regex state (counterpart to the save above)
         if (regexStateLocal >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
