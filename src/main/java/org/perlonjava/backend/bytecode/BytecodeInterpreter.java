@@ -422,7 +422,9 @@ public class BytecodeInterpreter {
                         // addToScalar calls getValueAsScalar() for ScalarSpecialVariable
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rs].addToScalar((RuntimeScalar) registers[rd]);
+                        RuntimeBase rdVal = registers[rd];
+                        RuntimeScalar rdScalar = (rdVal instanceof RuntimeScalar) ? (RuntimeScalar) rdVal : rdVal.scalar();
+                        registers[rs].addToScalar(rdScalar);
                         break;
                     }
 
@@ -916,7 +918,8 @@ public class BytecodeInterpreter {
                         int valueReg = bytecode[pc++];
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
+                        RuntimeBase valBase = registers[valueReg];
+                        RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
                         hash.put(key.toString(), val);  // Convert key to String
                         break;
                     }
@@ -2311,7 +2314,7 @@ public class BytecodeInterpreter {
             }
 
             // Not in eval - show detailed error with bytecode context
-            int errorPc = Math.max(0, pc - 1); // Go back one instruction
+            int errorPc = Math.max(0, pc - 1);
 
             // Show bytecode context (10 bytes before errorPc)
             StringBuilder bcContext = new StringBuilder();
@@ -2327,7 +2330,9 @@ public class BytecodeInterpreter {
             }
             bcContext.append(" ]");
 
-            String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage();
+            StackTraceElement[] st = e.getStackTrace();
+            String javaLine = (st.length > 0) ? " [java:" + st[0].getFileName() + ":" + st[0].getLineNumber() + "]" : "";
+            String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage() + javaLine;
             throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
         } catch (Throwable e) {
             // Check if we're inside an eval block
