@@ -40,6 +40,10 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             if (parent.type == RuntimeArray.READONLY_ARRAY) {
                 throw new PerlCompilerException("Modification of a read-only value attempted");
             }
+            if (key < 0) {
+                throw new PerlCompilerException(
+                        "Modification of non-creatable array value attempted, subscript " + key);
+            }
             lvalue = new RuntimeScalar();
 
             if (parent.type == RuntimeArray.AUTOVIVIFY_ARRAY) {
