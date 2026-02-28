@@ -749,7 +749,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // breaking caller() and subsequent eval compilations.
         // See InterpreterState.currentPackage javadoc for the full design rationale.
         int dynamicVarLevel = DynamicVariableManager.getLocalLevel();
+        String savedPkg = InterpreterState.currentPackage.get().toString();
         DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
+        InterpreterState.currentPackage.get().set(savedPkg);
 
         try {
             String evalString = code.toString();
