@@ -1,6 +1,5 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -494,7 +493,18 @@ public class BytecodeCompiler implements Visitor {
             // Use the calling context from EmitterContext for top-level expressions
             // This is crucial for eval STRING to propagate context correctly
             currentCallContext = ctx.contextType;
-
+            // Inherit package from the JVM compiler context so that eval STRING
+            // compiles unqualified names in the caller's package, not "main".
+            // This is compile-time package propagation — it sets the symbol table's
+            // current package so the parser/emitter qualify names correctly.
+            // Note: the *runtime* package (InterpreterState.currentPackage) is a
+            // separate concern used only by caller(); it must be scoped via
+            // DynamicVariableManager around eval execution to prevent leaking.
+            // See InterpreterState.currentPackage javadoc for details.
+            if (ctx.symbolTable != null) {
+                symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
+                    ctx.symbolTable.currentPackageIsClass());
+            }
         }
 
         // If we have captured variables, allocate registers for them
@@ -547,7 +557,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Build InterpretedCode
-        InterpretedCode result = new InterpretedCode(
+        return new InterpretedCode(
             toShortArray(),
             constants.toArray(),
             stringPool.toArray(new String[0]),
@@ -563,9 +573,6 @@ public class BytecodeCompiler implements Visitor {
             warningFlags,  // Warning flags for eval STRING inheritance
             symbolTable.getCurrentPackage()  // Compile-time package for eval STRING name resolution
         );
-        result.containsRegex = FindDeclarationVisitor.findOperator(node, "matchRegex") != null
-                || FindDeclarationVisitor.findOperator(node, "replaceRegex") != null;
-        return result;
     }
 
     // =========================================================================
@@ -4107,12 +4114,6 @@ public class BytecodeCompiler implements Visitor {
                     variableScopes.peek().put(varName, varReg);
                     allDeclaredVariables.put(varName, varReg);
                 }
-            } else if (varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode
-                    && globalLoopVarName == null) {
-                String varName = "$" + ((IdentifierNode) varOp.operand).name;
-                if (hasVariable(varName)) {
-                    variableScopes.peek().put(varName, varReg);
-                }
             }
         }
 
@@ -4208,6 +4209,17 @@ public class BytecodeCompiler implements Visitor {
             if (currentCallContext != RuntimeContextType.VOID) {
                 outerResultReg = allocateRegister();
             }
+
+            int labelIdx = -1;
+            int exitPcPlaceholder = -1;
+            if (node.labelName != null) {
+                labelIdx = addToStringPool(node.labelName);
+                emit(Opcodes.PUSH_LABELED_BLOCK);
+                emit(labelIdx);
+                exitPcPlaceholder = bytecode.size();
+                emitInt(0);
+            }
+
             enterScope();
             try {
                 // Just execute the body once, no loop
@@ -4224,6 +4236,13 @@ public class BytecodeCompiler implements Visitor {
                 // Exit scope to clean up lexical variables
                 exitScope();
             }
+
+            if (node.labelName != null) {
+                emit(Opcodes.POP_LABELED_BLOCK);
+                int exitPc = bytecode.size();
+                patchJump(exitPcPlaceholder, exitPc);
+            }
+
             lastResultReg = outerResultReg;
             return;
         }

@@ -360,9 +360,6 @@ public class Readline {
 
         // Update the scalar with the new value
         scalar.set(scalarValue.toString());
-        if (!IOOperator.hasUtf8Layer(fh)) {
-            scalar.type = RuntimeScalarType.BYTE_STRING;
-        }
 
         // Return the number of characters read
         return new RuntimeScalar(charsRead);

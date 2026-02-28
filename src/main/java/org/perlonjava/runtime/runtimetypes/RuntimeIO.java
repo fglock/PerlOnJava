@@ -155,13 +155,6 @@ public class RuntimeIO extends RuntimeScalar {
     public DirectoryIO directoryIO;
 
     /**
-     * The file system path associated with this I/O handle, if opened from a file.
-     * Used by stat() and file test operators (-f, -s, etc.) on filehandles.
-     * Null for non-file handles (STDIN/STDOUT/STDERR, pipes, sockets, in-memory).
-     */
-    public Path filePath;
-
-    /**
      * The name of the glob that owns this IO handle (e.g., "main::STDOUT").
      * Used for stringification when the filehandle is used in string context.
      * Null if this handle is not associated with a named glob.
@@ -380,7 +373,6 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
-            fh.filePath = filePath;
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);

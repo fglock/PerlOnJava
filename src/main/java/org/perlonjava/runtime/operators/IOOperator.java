@@ -726,9 +726,6 @@ public class IOOperator {
         newValue.append(data);
 
         target.set(newValue.toString());
-        if (result.type == RuntimeScalarType.BYTE_STRING && target.type != RuntimeScalarType.TIED_SCALAR) {
-            target.type = RuntimeScalarType.BYTE_STRING;
-        }
         return new RuntimeScalar(bytesRead);
     }
 
@@ -877,7 +874,7 @@ public class IOOperator {
     /**
      * Checks if the handle has a :utf8 layer.
      */
-    public static boolean hasUtf8Layer(RuntimeIO fh) {
+    private static boolean hasUtf8Layer(RuntimeIO fh) {
         IOHandle handle = fh.ioHandle;
         while (handle instanceof LayeredIOHandle layered) {
             String layers = layered.getCurrentLayers();
@@ -2142,18 +2139,7 @@ public class IOOperator {
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {
-        RuntimeScalar result = sysread(ctx, args);
-        if (args.length >= 2) {
-            RuntimeScalar fileHandle = args[0].scalar();
-            RuntimeIO fh = fileHandle.getRuntimeIO();
-            if (fh != null && hasUtf8Layer(fh)) {
-                RuntimeScalar target = args[1].scalar().scalarDeref();
-                if (target.type != RuntimeScalarType.TIED_SCALAR) {
-                    target.type = RuntimeScalarType.STRING;
-                }
-            }
-        }
-        return result;
+        return sysread(ctx, args);
     }
 
 }

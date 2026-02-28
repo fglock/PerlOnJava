@@ -290,11 +290,7 @@ public class Operator {
             String extractedSubstring = result;
             lvalue.set(replacement);
             // Return the extracted substring, not the lvalue (which now contains the replacement)
-            RuntimeScalar extracted = new RuntimeScalar(extractedSubstring);
-            if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
-                extracted.type = RuntimeScalarType.BYTE_STRING;
-            }
-            return extracted;
+            return new RuntimeScalar(extractedSubstring);
         }
 
         return lvalue;
