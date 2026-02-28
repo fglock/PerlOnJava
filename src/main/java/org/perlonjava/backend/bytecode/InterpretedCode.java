@@ -130,26 +130,12 @@ public class InterpretedCode extends RuntimeCode {
      */
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
-        RegexState savedRegexState = new RegexState();
-        try {
-            RuntimeList result = BytecodeInterpreter.execute(this, args, callContext);
-            RuntimeCode.materializeSpecialVarsInResult(result);
-            return result;
-        } finally {
-            savedRegexState.restore();
-        }
+        return BytecodeInterpreter.execute(this, args, callContext);
     }
 
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
-        RegexState savedRegexState = new RegexState();
-        try {
-            RuntimeList result = BytecodeInterpreter.execute(this, args, callContext, subroutineName);
-            RuntimeCode.materializeSpecialVarsInResult(result);
-            return result;
-        } finally {
-            savedRegexState.restore();
-        }
+        return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
     }
 
     /**
