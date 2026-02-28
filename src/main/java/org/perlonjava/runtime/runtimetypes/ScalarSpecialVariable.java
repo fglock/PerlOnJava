@@ -270,6 +270,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         list.add(this.getValueAsScalar());
     }
 
+    @Override
+    public RuntimeList getList() {
+        return new RuntimeList(this.getValueAsScalar());
+    }
+
     /**
      * Saves the current state of the RuntimeScalar instance.
      *
