@@ -1717,20 +1717,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public RuntimeList apply(RuntimeArray a, int callContext) {
         if (constantValue != null) {
-            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
+        RegexState savedRegexState = new RegexState();
         try {
-            // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                this.compilerSupplier.get(); // Wait for the task to finish
+                this.compilerSupplier.get();
             }
 
+            RuntimeList result;
             if (isStatic) {
-                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
+            materializeSpecialVarsInResult(result);
+            return result;
         } catch (NullPointerException e) {
 
             if (this.methodHandle == null) {
@@ -1738,11 +1740,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else if (this.codeObject == null && !isStatic) {
                 throw new PerlCompilerException("Subroutine exists but has null code object at ");
             } else {
-                // Original NPE from somewhere else
                 throw new PerlCompilerException("Null pointer exception in subroutine call: " + e.getMessage() + " at ");
             }
-
-            //throw new PerlCompilerException("Undefined subroutine called at ");
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {
@@ -1751,26 +1750,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        } finally {
+            savedRegexState.restore();
         }
     }
 
     public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
         if (constantValue != null) {
-            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
+        RegexState savedRegexState = new RegexState();
         try {
-            // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                // System.out.println("Waiting for compiler thread to finish...");
-                this.compilerSupplier.get(); // Wait for the task to finish
+                this.compilerSupplier.get();
             }
 
+            RuntimeList result;
             if (isStatic) {
-                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
+            materializeSpecialVarsInResult(result);
+            return result;
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
@@ -1781,6 +1783,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        } finally {
+            savedRegexState.restore();
+        }
+    }
+
+    public static void materializeSpecialVarsInResult(RuntimeList result) {
+        List<RuntimeBase> elems = result.elements;
+        for (int i = 0; i < elems.size(); i++) {
+            RuntimeBase elem = elems.get(i);
+            if (elem instanceof ScalarSpecialVariable ssv) {
+                RuntimeScalar resolved = ssv.getValueAsScalar();
+                RuntimeScalar concrete = new RuntimeScalar();
+                concrete.type = resolved.type;
+                concrete.value = resolved.value;
+                elems.set(i, concrete);
+            }
         }
     }
 

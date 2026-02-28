@@ -130,22 +130,26 @@ public class InterpretedCode extends RuntimeCode {
      */
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
-        // Dispatch to interpreter (not compiled bytecode)
-        return BytecodeInterpreter.execute(this, args, callContext);
+        RegexState savedRegexState = new RegexState();
+        try {
+            RuntimeList result = BytecodeInterpreter.execute(this, args, callContext);
+            RuntimeCode.materializeSpecialVarsInResult(result);
+            return result;
+        } finally {
+            savedRegexState.restore();
+        }
     }
 
-    /**
-     * Override RuntimeCode.apply() with subroutine name.
-     *
-     * @param subroutineName The subroutine name (for stack traces)
-     * @param args          The arguments array (@_)
-     * @param callContext   The calling context
-     * @return RuntimeList containing the result
-     */
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
-        // Dispatch to interpreter with subroutine name for stack traces
-        return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
+        RegexState savedRegexState = new RegexState();
+        try {
+            RuntimeList result = BytecodeInterpreter.execute(this, args, callContext, subroutineName);
+            RuntimeCode.materializeSpecialVarsInResult(result);
+            return result;
+        } finally {
+            savedRegexState.restore();
+        }
     }
 
     /**
