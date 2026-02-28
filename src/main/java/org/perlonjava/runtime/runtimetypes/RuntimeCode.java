@@ -1708,8 +1708,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Method to apply (execute) a subroutine reference.
-     * Invokes the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments.
+     * Invokes the JVM-compiled method associated with this code object.
+     *
+     * <p>Regex state scoping ($1, $&amp;, etc.) is NOT handled here.  For JVM-compiled code
+     * it is emitted directly into the generated method by {@code EmitterMethodCreator}
+     * ({@code regexStateSlot} save/restore).  For interpreted code, {@code InterpretedCode}
+     * overrides this method and delegates to {@code BytecodeInterpreter.execute()}.
      *
      * @param a           the RuntimeArray containing the arguments for the subroutine
      * @param callContext the context in which the subroutine is called
@@ -1717,20 +1721,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public RuntimeList apply(RuntimeArray a, int callContext) {
         if (constantValue != null) {
-            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
         try {
-            // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                this.compilerSupplier.get(); // Wait for the task to finish
+                this.compilerSupplier.get();
             }
 
+            RuntimeList result;
             if (isStatic) {
-                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
+            return result;
         } catch (NullPointerException e) {
 
             if (this.methodHandle == null) {
@@ -1738,11 +1742,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else if (this.codeObject == null && !isStatic) {
                 throw new PerlCompilerException("Subroutine exists but has null code object at ");
             } else {
-                // Original NPE from somewhere else
                 throw new PerlCompilerException("Null pointer exception in subroutine call: " + e.getMessage() + " at ");
             }
-
-            //throw new PerlCompilerException("Undefined subroutine called at ");
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {
@@ -1756,21 +1757,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
         if (constantValue != null) {
-            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
         try {
-            // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                // System.out.println("Waiting for compiler thread to finish...");
-                this.compilerSupplier.get(); // Wait for the task to finish
+                this.compilerSupplier.get();
             }
 
+            RuntimeList result;
             if (isStatic) {
-                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
+            return result;
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
@@ -1781,6 +1781,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Replace lazy {@link ScalarSpecialVariable} references ($1, $&amp;, etc.) in a return list
+     * with concrete {@link RuntimeScalar} copies.  Must be called BEFORE {@link RegexState#restore()}
+     * so that the values reflect the subroutine's regex state, not the caller's.
+     */
+    public static void materializeSpecialVarsInResult(RuntimeList result) {
+        List<RuntimeBase> elems = result.elements;
+        for (int i = 0; i < elems.size(); i++) {
+            RuntimeBase elem = elems.get(i);
+            if (elem instanceof ScalarSpecialVariable ssv) {
+                RuntimeScalar resolved = ssv.getValueAsScalar();
+                RuntimeScalar concrete = new RuntimeScalar();
+                concrete.type = resolved.type;
+                concrete.value = resolved.value;
+                elems.set(i, concrete);
+            }
         }
     }
 

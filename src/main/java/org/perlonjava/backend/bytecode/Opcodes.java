@@ -1173,5 +1173,19 @@ public class Opcodes {
      * Format: POP_LABELED_BLOCK */
     public static final short POP_LABELED_BLOCK = 355;
 
+    /** Save regex state (Perl 5 dynamic scoping of $1, $&amp;, etc.) into register rd.
+     *  The register receives an integer index into the interpreter's regexStateStack.
+     *  Emitted at block entry for blocks containing regex operations.
+     *  @see org.perlonjava.runtime.runtimetypes.RegexState
+     *  Format: SAVE_REGEX_STATE rd */
+    public static final short SAVE_REGEX_STATE = 356;
+
+    /** Restore regex state from the level stored in register rs, undoing all
+     *  regex state changes made within the block.  Also truncates any orphaned
+     *  stack entries (from inner blocks skipped by last/next/redo/die).
+     *  Emitted at block exit.
+     *  Format: RESTORE_REGEX_STATE rs */
+    public static final short RESTORE_REGEX_STATE = 357;
+
     private Opcodes() {} // Utility class - no instantiation
 }

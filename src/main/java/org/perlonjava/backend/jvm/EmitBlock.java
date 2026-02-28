@@ -3,7 +3,9 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
+import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -143,6 +145,20 @@ public class EmitBlock {
         // Setup 'local' environment if needed
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
+        // Perl 5 block-level regex state scoping: save $1, $&, etc. on entry, restore on exit.
+        // Skip if blockIsSubroutine: EmitterMethodCreator already emits subroutine-level
+        // save/restore (regexStateSlot), so block-level would be redundant.
+        int regexStateLocal = -1;
+        if (!node.getBooleanAnnotation("blockIsSubroutine")
+                && RegexUsageDetector.containsRegexOperation(node)) {
+            regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+            mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+        }
+
         // Add redo label
         mv.visitLabel(redoLabel);
 
@@ -248,6 +264,13 @@ public class EmitBlock {
         mv.visitLabel(nextLabel);
 
         Local.localTeardown(localRecord, mv);
+
+        // Restore block-level regex state (counterpart to the save above)
+        if (regexStateLocal >= 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        }
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
