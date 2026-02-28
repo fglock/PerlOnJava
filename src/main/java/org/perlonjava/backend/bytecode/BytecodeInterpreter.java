@@ -76,6 +76,9 @@ public class BytecodeInterpreter {
         // Each entry is [labelStringPoolIdx, exitPc]
 
         try {
+        outer:
+        while (true) {
+        try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
                 // Update current PC for caller()/stack trace reporting.
@@ -2237,9 +2240,10 @@ public class BytecodeInterpreter {
             // Special handling for ClassCastException to show which opcode is failing
             // Check if we're inside an eval block first
             if (!evalCatchStack.isEmpty()) {
-                evalCatchStack.pop();
+                int catchPc = evalCatchStack.pop();
                 WarnDie.catchEval(e);
-                return new RuntimeList();
+                pc = catchPc;
+                continue outer;
             }
 
             // Not in eval - show detailed error with bytecode context
@@ -2265,14 +2269,13 @@ public class BytecodeInterpreter {
             // Check if we're inside an eval block
             if (!evalCatchStack.isEmpty()) {
                 // Inside eval block - catch the exception
-                evalCatchStack.pop(); // Pop the catch handler
+                int catchPc = evalCatchStack.pop(); // Pop the catch handler
 
                 // Call WarnDie.catchEval() to set $@
                 WarnDie.catchEval(e);
 
-                // Eval block failed - return empty list
-                // (The result will be undef in scalar context, empty in list context)
-                return new RuntimeList();
+                pc = catchPc;
+                continue outer;
             }
 
             // Not in eval block - propagate exception
@@ -2293,6 +2296,8 @@ public class BytecodeInterpreter {
             // Wrap other exceptions with interpreter context including bytecode context
             String errorMessage = formatInterpreterError(code, pc, e);
             throw new RuntimeException(errorMessage, e);
+        }
+        } // end outer while
         } finally {
             // Always pop the interpreter state
             InterpreterState.pop();
