@@ -655,6 +655,16 @@ public class InterpretedCode extends RuntimeCode {
                     int lstatCtx = bytecode[pc++];
                     sb.append("LSTAT r").append(rd).append(" = lstat(r").append(rs).append(", ctx=").append(lstatCtx).append(")\n");
                     break;
+                case Opcodes.STAT_LASTHANDLE:
+                    rd = bytecode[pc++];
+                    int slhCtx = bytecode[pc++];
+                    sb.append("STAT_LASTHANDLE r").append(rd).append(" = stat(_, ctx=").append(slhCtx).append(")\n");
+                    break;
+                case Opcodes.LSTAT_LASTHANDLE:
+                    rd = bytecode[pc++];
+                    int llhCtx = bytecode[pc++];
+                    sb.append("LSTAT_LASTHANDLE r").append(rd).append(" = lstat(_, ctx=").append(llhCtx).append(")\n");
+                    break;
                 case Opcodes.FILETEST_R:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
