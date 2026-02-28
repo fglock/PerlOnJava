@@ -19,9 +19,9 @@ public class RegexState {
     public final int lastSuccessfulMatchEnd;
     public final String lastSuccessfulMatchString;
     public final RuntimeRegex lastSuccessfulPattern;
+    public final String[] lastCaptureGroups;
 
     public RegexState() {
-        // Save all the static fields from RuntimeRegex
         this.globalMatcher = RuntimeRegex.globalMatcher;
         this.globalMatchString = RuntimeRegex.globalMatchString;
         this.lastMatchedString = RuntimeRegex.lastMatchedString;
@@ -32,10 +32,10 @@ public class RegexState {
         this.lastSuccessfulMatchEnd = RuntimeRegex.lastSuccessfulMatchEnd;
         this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
+        this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
     }
 
     public void restore() {
-        // Restore all the static fields to RuntimeRegex
         RuntimeRegex.globalMatcher = this.globalMatcher;
         RuntimeRegex.globalMatchString = this.globalMatchString;
         RuntimeRegex.lastMatchedString = this.lastMatchedString;
@@ -46,5 +46,6 @@ public class RegexState {
         RuntimeRegex.lastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
         RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
         RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
+        RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
     }
 }
