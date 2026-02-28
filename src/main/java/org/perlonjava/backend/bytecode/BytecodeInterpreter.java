@@ -423,7 +423,15 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase rdVal = registers[rd];
-                        RuntimeScalar rdScalar = (rdVal instanceof RuntimeScalar) ? (RuntimeScalar) rdVal : rdVal.scalar();
+                        RuntimeScalar rdScalar;
+                        if (rdVal instanceof RuntimeScalarReadOnly) {
+                            rdScalar = new RuntimeScalar();
+                            registers[rd] = rdScalar;
+                        } else if (rdVal instanceof RuntimeScalar) {
+                            rdScalar = (RuntimeScalar) rdVal;
+                        } else {
+                            rdScalar = rdVal.scalar();
+                        }
                         registers[rs].addToScalar(rdScalar);
                         break;
                     }
