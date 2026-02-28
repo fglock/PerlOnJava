@@ -942,7 +942,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (this instanceof RuntimeScalarReadOnly) {
                     yield new RuntimeArray();
                 }
-                yield AutovivificationArray.createAutovivifiedArray(this);
+                RuntimeArray arr = AutovivificationArray.createAutovivifiedArray(this);
+                arr.strictAutovivify = true;
+                yield arr;
             }
             case VSTRING -> // 5
                     throw new PerlCompilerException("Not an ARRAY reference");
