@@ -413,6 +413,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // We create: globalArrays["BEGIN_PKG_x::@arr"] = (the runtime @arr object)
         // Then when "say @arr" is parsed in the BEGIN, it resolves to BEGIN_PKG_x::@arr
         // which is aliased to the runtime array with values (a, b).
+        List<String> evalAliasKeys = new ArrayList<>();
         Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -442,6 +443,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             } else if (runtimeValue instanceof RuntimeScalar) {
                                 GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
                             }
+                            evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
                         }
                     }
                 }
@@ -564,6 +566,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             capturedHintHash.elements.putAll(savedHintHash);
 
             setCurrentScope(capturedSymbolTable);
+
+            // Clean up BEGIN aliases for captured variables after compilation.
+            // These aliases were only needed during parsing (for BEGIN blocks to access
+            // outer lexicals). Leaving them in GlobalVariable would cause corruption
+            // if a recursive call re-enters the same function and its `my` declaration
+            // calls retrieveBeginScalar, finding the stale alias instead of creating
+            // a fresh variable.
+            for (String key : evalAliasKeys) {
+                String fullName = key.substring(1);
+                switch (key.charAt(0)) {
+                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
+                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
+                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                }
+            }
 
             // Store source lines in symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention
