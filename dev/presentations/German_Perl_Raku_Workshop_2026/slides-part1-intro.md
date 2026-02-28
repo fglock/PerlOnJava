@@ -10,83 +10,91 @@ Flavio Glock
 
 ---
 
-## What is Perl?
+## The Problem
 
-- High-level language created by Larry Wall in 1987
-- Text processing, sysadmin, web, databases
-- Comprehensive module ecosystem (CPAN)
-- "Makes easy things easy and hard things possible"
-- Still widely used in enterprise, bioinformatics, finance, DevOps
+Imagine **50,000 lines of Perl** — and a mandate to move to Java or Kubernetes.
+
+**Your options today:**
+- Rewrite everything in Java
+- Maintain a separate Perl runtime forever
+
+**What if there were a third option?**
+
+Note:
+This is a common scenario in enterprise environments. Many companies have large Perl codebases that work well but don't fit into modern Java-based infrastructure.
 
 ---
 
-## What is PerlOnJava?
+## PerlOnJava: The Third Option
 
 <span class="metric">A Perl compiler and runtime for the JVM</span>
 
-- Compiles Perl to **native JVM bytecode** — same format as Java, Kotlin, Scala
+- Compiles Perl to **native JVM bytecode**
+- Same format as Java, Kotlin, Scala
 - Not an interpreter wrapping a Perl binary
 - Targets Perl 5.42+ semantics
-- Gains JVM benefits: cross-platform, Java library access, JVM tooling
 
-**Targets:** Java 21+ (any JDK)
+**Requires:** Java 21+ (any JDK)
 
----
-
-## Historical Context
-
-**25+ years of Perl-on-JVM research:**
-
-- **1997**: JPL (Java-Perl Library) — Brian Jepson
-- **2001**: Bradley Kuhn's MS thesis on porting Perl to JVM
-- **2002**: perljvm prototype using Perl's B compiler
-- **2013–2023**: Perlito5 — Perl to Java/JavaScript compiler (same author)
-- **2024**: PerlOnJava — production-oriented compiler (active development)
-
-Each prior attempt informed this implementation. PerlOnJava is the culmination of lessons learned.
+Note:
+PerlOnJava generates real JVM bytecode — the same kind of instructions that javac produces. This means Perl code gets all the JVM benefits: cross-platform, Java library access, JVM tooling.
 
 ---
 
-## Why Does This Matter?
+## What You Get
 
-You have **50,000 lines of Perl**. Your company is moving to Java/Kubernetes.
+- Run existing Perl scripts **unchanged** on the JVM
+- Access any **JDBC database** — no C drivers needed
+- Embed Perl in Java apps via **JSR-223** scripting API
+- Deploy to Docker, Kubernetes — **anywhere Java runs**
 
-**Without PerlOnJava:** Rewrite everything, or maintain a separate Perl runtime.
-
-**With PerlOnJava:**
-- Run existing Perl scripts unchanged on the JVM
-- Access any JDBC database — no C drivers needed
-- Embed Perl in Java apps via the standard JSR-223 scripting API
-- Deploy to Docker, Kubernetes — anywhere Java runs
+Note:
+JSR-223 is the standard Java scripting API, available since Java 6. It allows bidirectional Java ↔ Perl communication.
 
 ---
 
-## Key Achievements
+## 25 Years in the Making
+
+**1997** — JPL (Java-Perl Library)
+
+**2001** — Bradley Kuhn's MS thesis on Perl-to-JVM
+
+**2002** — perljvm prototype
+
+**2013–2023** — Perlito5: Perl to Java/JS compiler
+
+**2024** — PerlOnJava: lessons learned, production focus
+
+Note:
+Each prior attempt informed this implementation. JPL showed embedding was possible. Kuhn mapped the type system challenges. Perlito5 proved compilation works but revealed startup and eval limitations. PerlOnJava addresses all of these.
+
+---
+
+## By the Numbers
 
 - <span class="metric">~260,000 tests</span> in the suite
 - <span class="metric">392 Java source files</span>
-- <span class="metric">341 bundled Perl modules</span>
 - <span class="metric">5,741 commits</span> since June 2024
 - <span class="metric">2.2× faster</span> than Perl 5 on loop benchmarks
 
-**Bundled:** DBI, HTTP::Tiny, JSON, YAML, Text::CSV, Digest::MD5, MIME::Base64…
-
-No formal Perl spec exists — the test suite is the de facto specification.
+No formal Perl spec exists — the test suite **is** the specification.
 
 ---
 
-## Recent Milestones
+## Bundled Ecosystem
 
-- Latest Perl `class` features (modern OOP)
-- Dual execution backend (JVM compiler + Internal VM)
-- System V IPC and socket operations
-- 260,000+ tests in the suite
+<span class="metric">341 Perl modules</span> ship inside the JAR
+
+DBI, HTTP::Tiny, JSON, YAML, Text::CSV, Digest::MD5, MIME::Base64…
+
+- **Pure-Perl CPAN modules** work as-is
+- **XS modules** use Java equivalents (many bundled)
+- Modern Perl `class` features (OOP)
+- Dual execution backend (JVM + Internal VM)
 
 ---
 
 ## Getting Started
-
-**Requirements:** Java 21+ (any JDK)
 
 ```bash
 git clone https://github.com/fglock/PerlOnJava
@@ -95,21 +103,14 @@ make           # Build and run tests (~5 minutes)
 ./jperl -E 'say "Hello from PerlOnJava!"'
 ```
 
-**Add Maven dependencies (e.g. a JDBC driver):**
-```bash
-./Configure.pl --search mysql-connector-java
-```
-
-**Pure-Perl CPAN modules** work as-is. **XS modules** need Java equivalents (many bundled).
+Note:
+Add Maven dependencies with: `./Configure.pl --search mysql-connector-java`. Pure-Perl CPAN modules work as-is. XS modules need Java equivalents — many are already bundled.
 
 ---
 
 ## Live Demo
 
 ```bash
-# Simple hello world
-./jperl -E 'say "Hello from PerlOnJava!"'
-
 # Conway's Game of Life
 ./jperl examples/life.pl
 
@@ -124,7 +125,7 @@ make           # Build and run tests (~5 minutes)
 
 ## Live Demo: Database Integration
 
-**DBI with JDBC — no C-based DBD::* adapters needed:**
+**DBI with JDBC — no C-based DBD adapters needed:**
 
 ```perl
 use DBI;
@@ -139,34 +140,56 @@ while (my $row = $sth->fetchrow_hashref) {
 }
 ```
 
-**Supports:** PostgreSQL, MySQL, Oracle, SQLite, H2, any JDBC driver
+Note:
+Supports PostgreSQL, MySQL, Oracle, SQLite, H2 — any JDBC driver.
 
 ---
 
-## How It Works: Key Concepts
+## How It Works: AST
 
-**AST (Abstract Syntax Tree):** Tree representation of source code. `my $x = 1 + 2` becomes assignment → addition → operands. The compiler walks this tree to generate code.
+**Abstract Syntax Tree** — tree representation of source code
 
-**JVM Bytecode:** Low-level instructions for the Java Virtual Machine — same format as Java, Kotlin, Scala. The JVM's JIT compiler turns hot bytecode into native machine code at runtime.
+`my $x = 1 + 2` becomes:
 
-**ASM library:** A Java library for generating JVM bytecode programmatically. PerlOnJava emits bytecode directly, without going through Java source.
+```
+assignment → addition → operands
+```
+
+The compiler walks this tree to generate bytecode.
 
 ---
 
-## How It Works: The Pipeline
+## How It Works: JVM Bytecode
+
+Low-level instructions for the Java Virtual Machine
+
+- Same format as Java, Kotlin, Scala
+- The JVM's **JIT compiler** turns hot bytecode into native machine code
+
+PerlOnJava emits bytecode directly via the **ASM library** — no Java source intermediate step.
+
+---
+
+## The Compilation Pipeline
 
 ```
 Perl Source → Compiler → JVM Bytecode → JVM Execution
                        ↘ Custom Bytecode → Internal VM
 ```
 
-**Five stages:** Lexer → Parser → StringParser (DSLs) → EmitterVisitor (bytecode) → ClassLoader
+**Five stages:** Lexer → Parser → StringParser → EmitterVisitor → ClassLoader
 
-**Two execution backends sharing 100% of the runtime:**
+---
+
+## Two Backends, One Runtime
+
 - **JVM backend** — maximum performance via JIT optimization
 - **Internal VM** — compact, no size limits, fast `eval STRING`
 
-User code doesn't know which backend is running.
+Both share **100% of the runtime**. User code doesn't know which backend is running.
+
+Note:
+The dual backend is a common VM design pattern. HotSpot, V8, SpiderMonkey, and CRuby all use tiered execution for similar reasons.
 
 ---
 
@@ -191,6 +214,7 @@ INVOKEVIRTUAL RuntimeBase.addToScalar(RuntimeScalar)
 INVOKESTATIC IOOperator.say(RuntimeList;RuntimeScalar)
 ```
 
+Note:
 Standard JVM bytecode — optimized by the JVM's JIT compiler at runtime.
 
 ---
@@ -214,7 +238,7 @@ Bytecode length: 26 shorts
   24: RETURN r8
 ```
 
-Register-based, ~200 opcodes. Much more compact than JVM bytecode.
+Register-based, ~200 opcodes — much more compact.
 
 ---
 
