@@ -1719,7 +1719,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (constantValue != null) {
             return new RuntimeList(constantValue);
         }
-        RegexState savedRegexState = new RegexState();
         try {
             if (this.compilerSupplier != null) {
                 this.compilerSupplier.get();
@@ -1731,7 +1730,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
-            materializeSpecialVarsInResult(result);
             return result;
         } catch (NullPointerException e) {
 
@@ -1750,8 +1748,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
-        } finally {
-            savedRegexState.restore();
         }
     }
 
@@ -1759,7 +1755,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (constantValue != null) {
             return new RuntimeList(constantValue);
         }
-        RegexState savedRegexState = new RegexState();
         try {
             if (this.compilerSupplier != null) {
                 this.compilerSupplier.get();
@@ -1771,7 +1766,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
-            materializeSpecialVarsInResult(result);
             return result;
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
@@ -1783,8 +1777,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
-        } finally {
-            savedRegexState.restore();
         }
     }
 

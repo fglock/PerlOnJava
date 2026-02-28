@@ -650,6 +650,13 @@ public class EmitterMethodCreator implements Opcodes {
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
+            int regexStateSlot = ctx.symbolTable.allocateLocalVariable();
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+            mv.visitVarInsn(Opcodes.ASTORE, regexStateSlot);
+
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
             // inconsistent stack map frames when multiple control-flow paths merge.
@@ -1041,6 +1048,17 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
             }
             
+            // Materialize special vars ($1 etc.) in the return list before restoring regex state
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "materializeSpecialVarsInResult",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
+
+            mv.visitVarInsn(Opcodes.ALOAD, regexStateSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+
             // Teardown local variables and environment after the return value is materialized
             Local.localTeardown(localRecord, mv);
 

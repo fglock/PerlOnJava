@@ -77,6 +77,7 @@ public class BytecodeInterpreter {
 
         java.util.ArrayList<RegexState> regexStateStack = null;
 
+        RegexState savedRegexState = new RegexState();
         try {
         outer:
         while (true) {
@@ -106,7 +107,9 @@ public class BytecodeInterpreter {
                         if (retVal == null) {
                             return new RuntimeList();
                         }
-                        return retVal.getList();
+                        RuntimeList retList = retVal.getList();
+                        RuntimeCode.materializeSpecialVarsInResult(retList);
+                        return retList;
                     }
 
                     case Opcodes.GOTO: {
@@ -2341,7 +2344,7 @@ public class BytecodeInterpreter {
         }
         } // end outer while
         } finally {
-            // Always pop the interpreter state
+            savedRegexState.restore();
             InterpreterState.pop();
         }
     }
