@@ -597,7 +597,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // This is important for returning local arrays from functions
         RuntimeList result = new RuntimeList();
         for (RuntimeScalar element : this.elements) {
-            result.elements.add(new RuntimeScalar(element));
+            result.elements.add(element == null ? new RuntimeScalar() : new RuntimeScalar(element));
         }
         return result;
     }
