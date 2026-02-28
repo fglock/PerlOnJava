@@ -114,4 +114,5 @@ public class InterpreterState {
     public static List<Integer> getPcStack() {
         return new ArrayList<>(pcStack.get());
     }
+
 }

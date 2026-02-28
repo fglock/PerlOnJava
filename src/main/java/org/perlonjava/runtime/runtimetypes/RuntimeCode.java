@@ -741,8 +741,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Node ast = null;
         List<LexerToken> tokens = null;
 
-        // Save dynamic variable level to restore after eval
+        // Save dynamic variable level to restore after eval.
+        // Push currentPackage (used by caller()) so SET_PACKAGE inside eval doesn't leak.
         int dynamicVarLevel = DynamicVariableManager.getLocalLevel();
+        DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
 
         try {
             String evalString = code.toString();
