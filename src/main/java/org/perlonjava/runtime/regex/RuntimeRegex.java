@@ -56,6 +56,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static String lastSuccessfulMatchString = null;
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
+    // Capture groups from the last successful match that had captures.
+    // In Perl 5, $1/$2/etc persist across non-capturing matches.
+    public static String[] lastCaptureGroups = null;
     // Indicates if \G assertion is used
     private final boolean useGAssertion = false;
     // Compiled regex pattern
@@ -462,12 +465,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
             globalMatcher = matcher;
             globalMatchString = inputStr;
-            // Store match information to avoid IllegalStateException later
+            if (captureCount > 0) {
+                lastCaptureGroups = new String[captureCount];
+                for (int i = 0; i < captureCount; i++) {
+                    lastCaptureGroups[i] = matcher.group(i + 1);
+                }
+            } else {
+                lastCaptureGroups = null;
+            }
             lastMatchedString = matcher.group(0);
             lastMatchStart = matcher.start();
             lastMatchEnd = matcher.end();
-            // System.err.println("DEBUG: Set globalMatcher for match at position " + matcher.start() + "-" + matcher.end());
-            // System.err.println("DEBUG: Stored match info - matched: '" + lastMatchedString + "', start: " + lastMatchStart + ", end: " + lastMatchEnd);
 
             if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                 // Global match and no captures, in list context return the matched string
@@ -546,6 +554,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastMatchedString = null;
             lastMatchStart = -1;
             lastMatchEnd = -1;
+            if (matcher.groupCount() > 0) {
+                lastCaptureGroups = null;
+            }
         }
 
         if (found) {
@@ -715,7 +726,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Initialize $1, $2, @+, @- only when we have a match
             globalMatcher = matcher;
             globalMatchString = inputStr;
-            // Store match information
+            if (matcher.groupCount() > 0) {
+                lastCaptureGroups = new String[matcher.groupCount()];
+                for (int i = 0; i < matcher.groupCount(); i++) {
+                    lastCaptureGroups[i] = matcher.group(i + 1);
+                }
+            } else {
+                lastCaptureGroups = null;
+            }
             lastMatchedString = matcher.group(0);
             lastMatchStart = matcher.start();
             lastMatchEnd = matcher.end();
@@ -812,6 +830,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastSuccessfulMatchStart = -1;
         lastSuccessfulMatchEnd = -1;
         lastSuccessfulMatchString = null;
+        lastCaptureGroups = null;
 
         // Reset regex cache matched flags
         reset();
@@ -844,18 +863,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static String captureString(int group) {
-        if (globalMatcher == null || group < 0 || group > globalMatcher.groupCount()) {
+        if (group <= 0) {
+            if (globalMatcher == null) return null;
+            return globalMatcher.group(0);
+        }
+        if (lastCaptureGroups == null || group > lastCaptureGroups.length) {
             return null;
         }
-        return globalMatcher.group(group);
+        return lastCaptureGroups[group - 1];
     }
 
     public static String lastCaptureString() {
-        if (globalMatcher == null) {
+        if (lastCaptureGroups == null || lastCaptureGroups.length == 0) {
             return null;
         }
-        int lastGroup = globalMatcher.groupCount();
-        return globalMatcher.group(lastGroup);
+        return lastCaptureGroups[lastCaptureGroups.length - 1];
     }
 
     public static RuntimeScalar matcherStart(int group) {
