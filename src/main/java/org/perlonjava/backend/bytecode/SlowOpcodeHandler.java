@@ -1020,7 +1020,12 @@ public class SlowOpcodeHandler {
         RuntimeScalar search = (RuntimeScalar) registers[searchReg];
         RuntimeScalar replace = (RuntimeScalar) registers[replaceReg];
         RuntimeScalar modifiers = (RuntimeScalar) registers[modifiersReg];
-        RuntimeScalar target = (RuntimeScalar) registers[targetReg];
+        RuntimeBase targetBase = registers[targetReg];
+        if (BytecodeInterpreter.isImmutableProxy(targetBase)) {
+            targetBase = BytecodeInterpreter.ensureMutableScalar(targetBase);
+            registers[targetReg] = targetBase;
+        }
+        RuntimeScalar target = (RuntimeScalar) targetBase;
 
         // Compile and apply transliteration
         RuntimeTransliterate tr = RuntimeTransliterate.compile(search, replace, modifiers);
