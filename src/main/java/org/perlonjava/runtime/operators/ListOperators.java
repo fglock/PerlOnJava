@@ -78,6 +78,18 @@ public class ListOperators {
         // Create a new list from the elements of this RuntimeArray
         RuntimeArray array = runtimeList.getArrayOfAlias();
 
+        // If comparator is a string (subroutine name), resolve it to a code reference
+        RuntimeScalar comparator = perlComparatorClosure;
+        if (comparator.type == RuntimeScalarType.STRING ||
+            comparator.type == RuntimeScalarType.BYTE_STRING) {
+            String subName = comparator.toString();
+            if (!subName.contains("::")) {
+                subName = packageName + "::" + subName;
+            }
+            comparator = GlobalVariable.getGlobalCodeRef(subName);
+        }
+        final RuntimeScalar finalComparator = comparator;
+
         RuntimeArray comparatorArgs = new RuntimeArray();
 
         // Create the sort variables
@@ -92,7 +104,7 @@ public class ListOperators {
                 varB.set(b);
 
                 // Apply the Perl comparator subroutine with the arguments
-                RuntimeList result = RuntimeCode.apply(perlComparatorClosure, comparatorArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
 
                 // Retrieve the comparison result and return it as an integer
                 return result.getFirst().getInt();

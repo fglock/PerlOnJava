@@ -2,6 +2,7 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
+import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.List;
@@ -20,29 +21,40 @@ public class ParseMapGrepSort {
     static BinaryOperatorNode parseSort(Parser parser, LexerToken token) {
         ListNode operand;
         int currentIndex = parser.tokenIndex;
-        try {
-            // Handle 'sort' keyword as a Binary operator with a Code and List operands
-            operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
-        } catch (PerlCompilerException e) {
-            // sort $sub 1,2,3
-            parser.tokenIndex = currentIndex;
 
-            boolean paren = false;
-            if (peek(parser).text.equals("(")) {
-                TokenUtils.consume(parser);
-                paren = true;
-            }
-
-            parser.parsingForLoopVariable = true;
-            Node var = ParsePrimary.parsePrimary(parser);
-            parser.parsingForLoopVariable = false;
-            operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+        LexerToken nextToken = peek(parser);
+        if (nextToken.type == LexerTokenType.IDENTIFIER && !nextToken.text.equals("{")
+                && !ParserTables.CORE_PROTOTYPES.containsKey(nextToken.text)
+                && !ParsePrimary.isIsQuoteLikeOperator(nextToken.text)) {
+            String subName = IdentifierParser.parseSubroutineIdentifier(parser);
+            Node var = new OperatorNode("&",
+                    new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex);
+            operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
             operand.handle = var;
+            parser.ctx.logDebug("parseSort identifier: " + operand.handle + " : " + operand);
+        } else {
+            try {
+                operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
+            } catch (PerlCompilerException e) {
+                parser.tokenIndex = currentIndex;
 
-            if (paren) {
-                TokenUtils.consume(parser, OPERATOR, ")");
+                boolean paren = false;
+                if (peek(parser).text.equals("(")) {
+                    TokenUtils.consume(parser);
+                    paren = true;
+                }
+
+                parser.parsingForLoopVariable = true;
+                Node var = ParsePrimary.parsePrimary(parser);
+                parser.parsingForLoopVariable = false;
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+                operand.handle = var;
+
+                if (paren) {
+                    TokenUtils.consume(parser, OPERATOR, ")");
+                }
+                parser.ctx.logDebug("parseSort: " + operand.handle + " : " + operand);
             }
-            parser.ctx.logDebug("parseSort: " + operand.handle + " : " + operand);
         }
 
         // transform:   { 123 }

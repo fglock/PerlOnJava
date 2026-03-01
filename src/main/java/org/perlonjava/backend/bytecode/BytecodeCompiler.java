@@ -3863,6 +3863,8 @@ public class BytecodeCompiler implements Visitor {
             this.errorUtil,
             packedRegistry
         );
+        subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
+            symbolTable.currentPackageIsClass());
 
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
         subCompiler.currentSubroutineBeginId = beginId;
@@ -3969,6 +3971,8 @@ public class BytecodeCompiler implements Visitor {
             this.errorUtil,
             parentRegistry  // Pass parent variable registry for nested closure support
         );
+        subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
+            symbolTable.currentPackageIsClass());
 
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
