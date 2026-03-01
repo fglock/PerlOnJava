@@ -1,19 +1,20 @@
 use strict;
 use warnings;
-use Test::More tests => 12;
+use Test::More tests => 16;
 
 # Test basic substring assignment
 my $str = "Hello, world!";
 substr($str, 0, 5) = "Greetings";
 is($str, "Greetings, world!", "Basic substring assignment");
 
-# Test assignment beyond string length
+# Test assignment beyond string length (warns, doesn't modify string)
 $str = "Short";
-my $error = eval {
+{
+    my $warned = 0;
+    local $SIG{__WARN__} = sub { $warned++ if $_[0] =~ /substr outside of string/ };
     substr($str, 10, 5) = "long";
-    1;
-} ? "" : $@;
-like($error, qr/substr outside of string/, "Assignment beyond string length throws correct error");
+    ok($warned, "Assignment beyond string length warns");
+}
 
 # Test assignment with negative offset
 $str = "Hello, world!";
@@ -65,3 +66,17 @@ is($str, "Reve", "Empty string assignment");
 $str = "";
 substr($str, 0, 0) = "New";
 is($str, "New", "Assignment to empty string");
+
+# Test read with offset beyond string returns undef
+$str = "hello";
+my $val = substr($str, 6, 1);
+is($val, undef, "Read with offset beyond string returns undef");
+
+# Test read with too-negative offset returns undef
+$val = substr($str, -10, 1);
+is($val, undef, "Read with too-negative offset returns undef");
+
+# Test read at exact end returns empty string (not undef)
+$val = substr($str, 5, 1);
+ok(defined($val), "Read at exact string end returns defined value");
+is($val, "", "Read at exact string end returns empty string");

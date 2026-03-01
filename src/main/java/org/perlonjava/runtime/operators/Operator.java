@@ -272,6 +272,18 @@ public class Operator {
             offset = strLength + offset;
         }
 
+        if (offset < 0 || offset > strLength) {
+            WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                    RuntimeScalarCache.scalarEmptyString);
+            if (replacement != null) {
+                return new RuntimeScalar();
+            }
+            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", originalOffset, originalLength);
+            lvalue.type = RuntimeScalarType.UNDEF;
+            lvalue.value = null;
+            return lvalue;
+        }
+
         // Ensure offset is within bounds
         offset = Math.max(0, Math.min(offset, strLength));
 

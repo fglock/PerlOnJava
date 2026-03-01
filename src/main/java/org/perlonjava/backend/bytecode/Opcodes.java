@@ -50,8 +50,8 @@ public class Opcodes {
     // REGISTER OPERATIONS (5-9)
     // =================================================================
 
-    /** Register copy: rd = rs */
-    public static final short MOVE = 5;
+    /** Register alias: rd = rs (shares reference, does NOT copy value) */
+    public static final short ALIAS = 5;
 
     /** Load from constant pool: rd = constants[index] */
     public static final short LOAD_CONST = 6;
@@ -314,19 +314,19 @@ public class Opcodes {
 
     // =================================================================
     // SUPERINSTRUCTIONS (75-90) - Combine common opcode sequences
-    // These eliminate MOVE overhead by doing operation + store in one step
+    // These eliminate ALIAS overhead by doing operation + store in one step
     // =================================================================
 
-    /** Increment register in-place: rd = rd + 1 (combines ADD_SCALAR_INT + MOVE) */
+    /** Increment register in-place: rd = rd + 1 (combines ADD_SCALAR_INT + ALIAS) */
     public static final short INC_REG = 75;
 
-    /** Decrement register in-place: rd = rd - 1 (combines SUB_SCALAR_INT + MOVE) */
+    /** Decrement register in-place: rd = rd - 1 (combines SUB_SCALAR_INT + ALIAS) */
     public static final short DEC_REG = 76;
 
-    /** Add and assign: rd = rd + rs (combines ADD_SCALAR + MOVE when dest == src1) */
+    /** Add and assign: rd = rd + rs (combines ADD_SCALAR + ALIAS when dest == src1) */
     public static final short ADD_ASSIGN = 77;
 
-    /** Add immediate and assign: rd = rd + imm (combines ADD_SCALAR_INT + MOVE when dest == src) */
+    /** Add immediate and assign: rd = rd + imm (combines ADD_SCALAR_INT + ALIAS when dest == src) */
     public static final short ADD_ASSIGN_INT = 78;
 
     /** Pre-increment: ++rd (calls RuntimeScalar.preAutoIncrement) */
