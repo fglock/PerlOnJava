@@ -397,8 +397,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseAnd(
-            (RuntimeScalar) registers[rs1],
-            (RuntimeScalar) registers[rs2]
+            registers[rs1].scalar(),
+            registers[rs2].scalar()
         );
         return pc;
     }
@@ -412,8 +412,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseOr(
-            (RuntimeScalar) registers[rs1],
-            (RuntimeScalar) registers[rs2]
+            registers[rs1].scalar(),
+            registers[rs2].scalar()
         );
         return pc;
     }
@@ -427,8 +427,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseXor(
-            (RuntimeScalar) registers[rs1],
-            (RuntimeScalar) registers[rs2]
+            registers[rs1].scalar(),
+            registers[rs2].scalar()
         );
         return pc;
     }
@@ -442,8 +442,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseAndDot(
-            (RuntimeScalar) registers[rs1],
-            (RuntimeScalar) registers[rs2]
+            registers[rs1].scalar(),
+            registers[rs2].scalar()
         );
         return pc;
     }
@@ -457,8 +457,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseOrDot(
-            (RuntimeScalar) registers[rs1],
-            (RuntimeScalar) registers[rs2]
+            registers[rs1].scalar(),
+            registers[rs2].scalar()
         );
         return pc;
     }
@@ -472,8 +472,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseXorDot(
-            (RuntimeScalar) registers[rs1],
-            (RuntimeScalar) registers[rs2]
+            registers[rs1].scalar(),
+            registers[rs2].scalar()
         );
         return pc;
     }
@@ -485,7 +485,7 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseNotBinary(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseNotBinary((RuntimeScalar) registers[rs]);
+        registers[rd] = BitwiseOperators.bitwiseNotBinary(registers[rs].scalar());
         return pc;
     }
 
@@ -496,7 +496,7 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseNotString(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = BitwiseOperators.bitwiseNotDot((RuntimeScalar) registers[rs]);
+        registers[rd] = BitwiseOperators.bitwiseNotDot(registers[rs].scalar());
         return pc;
     }
 
