@@ -116,9 +116,15 @@ public class EmitBlock {
 
         int lastNonNullIndex = -1;
         for (int i = list.size() - 1; i >= 0; i--) {
-            if (list.get(i) != null) {
-                lastNonNullIndex = i;
-                break;
+            Node elem = list.get(i);
+            if (elem == null) continue;
+            if (elem instanceof ListNode ln && ln.elements.isEmpty()) continue;
+            lastNonNullIndex = i;
+            break;
+        }
+        if (lastNonNullIndex == -1) {
+            for (int i = list.size() - 1; i >= 0; i--) {
+                if (list.get(i) != null) { lastNonNullIndex = i; break; }
             }
         }
 

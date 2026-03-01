@@ -63,23 +63,32 @@ public class Readline {
         }
 
         // Handle different modes of $/
-        if (rs != null && rs.isSlurpMode()) {
-            // Handle slurp mode when $/ = undef
+        boolean isSlurp = (rs != null && rs.isSlurpMode()) ||
+                          (rs == null && rsScalar.type == RuntimeScalarType.UNDEF);
+        if (isSlurp) {
             StringBuilder content = new StringBuilder();
-            String readChar;
-            while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
-                content.append(readChar.charAt(0));
+            boolean isByteData = true;
+            RuntimeScalar chunk;
+            while (true) {
+                chunk = runtimeIO.ioHandle.read(8192);
+                String chunkStr = chunk.toString();
+                if (chunkStr.isEmpty()) break;
+                if (chunk.type != RuntimeScalarType.BYTE_STRING) isByteData = false;
+                content.append(chunkStr);
             }
 
             if (content.length() > 0) {
-                // Count newlines for line number tracking
                 String contentStr = content.toString();
                 for (int i = 0; i < contentStr.length(); i++) {
                     if (contentStr.charAt(i) == '\n') {
                         runtimeIO.currentLineNumber++;
                     }
                 }
-                return new RuntimeScalar(contentStr);
+                RuntimeScalar result = new RuntimeScalar(contentStr);
+                if (isByteData) {
+                    result.type = RuntimeScalarType.BYTE_STRING;
+                }
+                return result;
             } else if (runtimeIO.eof().getBoolean()) {
                 return scalarUndef;
             }

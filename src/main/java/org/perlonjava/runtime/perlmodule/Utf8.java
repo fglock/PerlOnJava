@@ -322,14 +322,18 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for is_utf8() method");
         }
         RuntimeScalar scalar = args.get(0);
-        return RuntimeScalarCache.getScalarBoolean(scalar.type == STRING).getList();
-
-//        String string = scalar.toString();
-//        CharsetDetector detector = new CharsetDetector();
-//        detector.setText(string.getBytes());
-//        CharsetMatch match = detector.detect();
-//        boolean isUtf8 = match != null && "UTF-8".equalsIgnoreCase(match.getName());
-//        return new RuntimeScalar(isUtf8).getList();
+        if (scalar.type == BYTE_STRING) {
+            return RuntimeScalarCache.scalarFalse.getList();
+        }
+        if (scalar.type == STRING) {
+            String s = scalar.toString();
+            for (int i = 0; i < s.length(); i++) {
+                if (s.charAt(i) > 255) {
+                    return RuntimeScalarCache.scalarTrue.getList();
+                }
+            }
+        }
+        return RuntimeScalarCache.scalarFalse.getList();
     }
 
     /**
