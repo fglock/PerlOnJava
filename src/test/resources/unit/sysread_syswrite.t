@@ -54,25 +54,22 @@ subtest 'UTF-8 layer error handling' => sub {
     close($utf8);
 };
 
-subtest 'In-memory file handles (expected to fail)' => sub {
+subtest 'In-memory file handles' => sub {
     plan tests => 2;
     
-    # Note: sysread/syswrite don't work with in-memory file handles in standard Perl
-    # This is a known limitation
     my $mem_content = '';
     open(my $mem_out, '>', \$mem_content) or die "Cannot open in-memory handle: $!";
     
     my $data = "In-memory test\n";
     my $bytes = syswrite($mem_out, $data);
-    ok(!defined($bytes), 'syswrite to in-memory handle returns undef (expected limitation)');
+    ok(!defined($bytes), 'syswrite to in-memory handle returns undef (known limitation)');
     close($mem_out);
     
-    # Test sysread from in-memory variable
     $mem_content = "Test content";
     open(my $mem_in, '<', \$mem_content) or die "Cannot open in-memory handle: $!";
     my $buffer;
     my $read = sysread($mem_in, $buffer, 1024);
-    ok(!defined($read), 'sysread from in-memory handle returns undef (expected limitation)');
+    is($read, length($mem_content), 'sysread from in-memory handle works');
     close($mem_in);
 };
 
