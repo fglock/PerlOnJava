@@ -192,13 +192,13 @@ public class TieOperators {
             }
             case ARRAYREFERENCE -> {
                 RuntimeArray array = variable.arrayDeref();
-                if (array.type == TIED_ARRAY) {
+                if (array.type == TIED_ARRAY && array.elements instanceof TieArray) {
                     return ((TieArray) array.elements).getSelf();
                 }
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
-                if (hash.type == TIED_HASH) {
+                if (hash.type == TIED_HASH && hash.elements instanceof TieHash) {
                     return ((TieHash) hash.elements).getSelf();
                 }
             }

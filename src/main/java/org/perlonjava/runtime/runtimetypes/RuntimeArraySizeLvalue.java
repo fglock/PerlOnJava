@@ -33,6 +33,48 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     public RuntimeScalar set(RuntimeScalar value) {
         RuntimeArray parent = lvalue.arrayDeref();
         parent.setLastElementIndex(value);
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = parent.lastElementIndex();
         return this;
+    }
+
+    @Override
+    public RuntimeScalar preAutoIncrement() {
+        RuntimeArray parent = lvalue.arrayDeref();
+        int newIndex = parent.lastElementIndex() + 1;
+        parent.setLastElementIndex(new RuntimeScalar(newIndex));
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = newIndex;
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar postAutoIncrement() {
+        RuntimeArray parent = lvalue.arrayDeref();
+        int oldIndex = parent.lastElementIndex();
+        parent.setLastElementIndex(new RuntimeScalar(oldIndex + 1));
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = oldIndex + 1;
+        return new RuntimeScalar(oldIndex);
+    }
+
+    @Override
+    public RuntimeScalar preAutoDecrement() {
+        RuntimeArray parent = lvalue.arrayDeref();
+        int newIndex = parent.lastElementIndex() - 1;
+        parent.setLastElementIndex(new RuntimeScalar(newIndex));
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = newIndex;
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar postAutoDecrement() {
+        RuntimeArray parent = lvalue.arrayDeref();
+        int oldIndex = parent.lastElementIndex();
+        parent.setLastElementIndex(new RuntimeScalar(oldIndex - 1));
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = oldIndex - 1;
+        return new RuntimeScalar(oldIndex);
     }
 }

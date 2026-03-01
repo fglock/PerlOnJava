@@ -124,11 +124,13 @@ public class InheritanceResolver {
      * Invalidate cache for a specific class and its dependents.
      */
     private static void invalidateCacheForClass(String className) {
-        // Remove from linearization cache
+        // Remove exact class and subclasses from linearization cache
+        linearizedClassesCache.remove(className);
         linearizedClassesCache.entrySet().removeIf(entry -> entry.getKey().startsWith(className + "::"));
 
-        // Remove from method cache (entries that reference this class)
-        methodCache.entrySet().removeIf(entry -> entry.getKey().contains(className + "::"));
+        // Remove from method cache (entries for this class and subclasses)
+        methodCache.entrySet().removeIf(entry ->
+                entry.getKey().startsWith(className + "::") || entry.getKey().contains("::" + className + "::"));
 
         // Could also notify dependents here if we had that information
     }
