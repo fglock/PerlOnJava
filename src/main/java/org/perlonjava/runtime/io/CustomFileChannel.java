@@ -156,12 +156,9 @@ public class CustomFileChannel implements IOHandle {
                 // ignore
             }
 
-            // Convert bytes to string where each char represents a byte
-            StringBuilder result = new StringBuilder(bytesRead);
-            for (int i = 0; i < bytesRead; i++) {
-                result.append((char) (buffer[i] & 0xFF));
-            }
-            return new RuntimeScalar(result.toString());
+            byte[] result = new byte[bytesRead];
+            System.arraycopy(buffer, 0, result, 0, bytesRead);
+            return new RuntimeScalar(result);
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }
@@ -357,14 +354,11 @@ public class CustomFileChannel implements IOHandle {
                 return new RuntimeScalar("");
             }
 
-            // Convert bytes to string representation
             buffer.flip();
-            StringBuilder result = new StringBuilder(bytesRead);
-            while (buffer.hasRemaining()) {
-                result.append((char) (buffer.get() & 0xFF));
-            }
+            byte[] result = new byte[bytesRead];
+            buffer.get(result);
 
-            return new RuntimeScalar(result.toString());
+            return new RuntimeScalar(result);
         } catch (IOException e) {
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
