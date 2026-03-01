@@ -642,7 +642,6 @@ public class SubroutineParser {
                     // Execute the BEGIN block immediately during parsing
                     SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
                     
-                    // Return empty list since the assignment already executed
                     return new ListNode(parser.tokenIndex);
                 }
             }
@@ -863,8 +862,6 @@ public class SubroutineParser {
         RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
         placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
 
-
-        // return an empty AST list
         return new ListNode(parser.tokenIndex);
     }
 

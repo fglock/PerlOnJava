@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.operators.WarnDie;
+
 /**
  * Represents a substring of a RuntimeScalar that can be used as an lvalue (left-hand value).
  * This class allows for modification of a specific portion of a string within a RuntimeScalar.
@@ -64,7 +66,9 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
             actualOffset = 0;
         }
         if (actualOffset > strLength) {
-            throw new PerlCompilerException("substr outside of string");
+            WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                    RuntimeScalarCache.scalarEmptyString);
+            return this;
         }
 
         // Calculate the actual length, handling negative lengths

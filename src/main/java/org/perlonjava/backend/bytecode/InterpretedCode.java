@@ -288,10 +288,10 @@ public class InterpretedCode extends RuntimeCode {
                     pc += 1;
                     sb.append("GOTO_IF_TRUE r").append(condReg).append(" -> ").append(target).append("\n");
                     break;
-                case Opcodes.MOVE:
+                case Opcodes.ALIAS:
                     int dest = bytecode[pc++];
                     int src = bytecode[pc++];
-                    sb.append("MOVE r").append(dest).append(" = r").append(src).append("\n");
+                    sb.append("ALIAS r").append(dest).append(" = r").append(src).append("\n");
                     break;
                 case Opcodes.LOAD_CONST:
                     int rd = bytecode[pc++];
@@ -364,6 +364,11 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.LOAD_UNDEF:
                     rd = bytecode[pc++];
                     sb.append("LOAD_UNDEF r").append(rd).append("\n");
+                    break;
+                case Opcodes.MY_SCALAR:
+                    rd = bytecode[pc++];
+                    src = bytecode[pc++];
+                    sb.append("MY_SCALAR r").append(rd).append(" = r").append(src).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_SCALAR:
                     rd = bytecode[pc++];

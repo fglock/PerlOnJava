@@ -1568,12 +1568,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             // Does AUTOLOAD exist?
-            String fullSubName = subroutineName;
-            if (fullSubName.isEmpty() && code.packageName != null && code.subName != null) {
-                fullSubName = code.packageName + "::" + code.subName;
-            }
+            String fullSubName = (code.packageName != null && code.subName != null)
+                    ? code.packageName + "::" + code.subName
+                    : subroutineName;
 
-            if (!fullSubName.isEmpty()) {
+            if (!fullSubName.isEmpty() && fullSubName.contains("::")) {
                 // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                 if (code.sourcePackage != null && !code.sourcePackage.isEmpty()) {
                     String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
@@ -1594,6 +1593,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
             }
+            throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
         }
 
         RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
@@ -1729,6 +1729,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get();
             }
 
+            if (this.methodHandle == null) {
+                String fullSubName = "";
+                if (this.packageName != null && this.subName != null) {
+                    fullSubName = this.packageName + "::" + this.subName;
+                }
+                if (!fullSubName.isEmpty()) {
+                    if (this.sourcePackage != null && !this.sourcePackage.isEmpty()) {
+                        String sourceAutoloadString = this.sourcePackage + "::AUTOLOAD";
+                        RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+                        if (sourceAutoload.getDefinedBoolean()) {
+                            String sourceSubroutineName = this.sourcePackage + "::" + this.subName;
+                            getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
+                            return apply(sourceAutoload, a, callContext);
+                        }
+                    }
+                    String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
+                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                    if (autoload.getDefinedBoolean()) {
+                        getGlobalVariable(autoloadString).set(fullSubName);
+                        return apply(autoload, a, callContext);
+                    }
+                    throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+                }
+                throw new PerlCompilerException("Undefined subroutine called at ");
+            }
+
             RuntimeList result;
             if (isStatic) {
                 result = (RuntimeList) this.methodHandle.invoke(a, callContext);
@@ -1736,15 +1762,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
             return result;
-        } catch (NullPointerException e) {
-
-            if (this.methodHandle == null) {
-                throw new PerlCompilerException("Subroutine exists but has null method handle (possible compilation or registration error) at ");
-            } else if (this.codeObject == null && !isStatic) {
-                throw new PerlCompilerException("Subroutine exists but has null code object at ");
-            } else {
-                throw new PerlCompilerException("Null pointer exception in subroutine call: " + e.getMessage() + " at ");
-            }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {
@@ -1765,6 +1782,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get();
             }
 
+            if (this.methodHandle == null) {
+                String fullSubName = (this.packageName != null && this.subName != null)
+                        ? this.packageName + "::" + this.subName
+                        : subroutineName;
+                if (fullSubName != null && !fullSubName.isEmpty() && fullSubName.contains("::")) {
+                    if (this.sourcePackage != null && !this.sourcePackage.isEmpty()) {
+                        String sourceAutoloadString = this.sourcePackage + "::AUTOLOAD";
+                        RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+                        if (sourceAutoload.getDefinedBoolean()) {
+                            String sourceSubroutineName = this.sourcePackage + "::" + this.subName;
+                            getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
+                            return apply(sourceAutoload, a, callContext);
+                        }
+                    }
+                    String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
+                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                    if (autoload.getDefinedBoolean()) {
+                        getGlobalVariable(autoloadString).set(fullSubName);
+                        return apply(autoload, a, callContext);
+                    }
+                    throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+                }
+                throw new PerlCompilerException("Undefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called at ");
+            }
+
             RuntimeList result;
             if (isStatic) {
                 result = (RuntimeList) this.methodHandle.invoke(a, callContext);
@@ -1772,8 +1814,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
             return result;
-        } catch (NullPointerException e) {
-            throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {

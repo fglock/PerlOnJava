@@ -2,6 +2,8 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -302,40 +304,31 @@ public class Readline {
             return new RuntimeScalar(0);
         }
 
-        // Read data using the new API - read characters, not bytes
-        String readData = fh.ioHandle.read(lengthValue).toString();
+        RuntimeScalar readResult = fh.ioHandle.read(lengthValue);
+        boolean isByteData = readResult.type == RuntimeScalarType.BYTE_STRING;
+        String readData = readResult.toString();
         int charsRead = readData.length();
 
         if (charsRead == 0) {
-            // EOF or error - handle based on offset
             if (offsetValue != 0) {
-                // Handle offset (both positive and negative) when reading 0 bytes
                 StringBuilder scalarValue = new StringBuilder(scalar.toString());
-
-                // Convert negative offset to positive
                 if (offsetValue < 0) {
                     offsetValue = scalarValue.length() + offsetValue;
                     if (offsetValue < 0) {
                         offsetValue = 0;
                     }
                 }
-
-                // Ensure buffer is large enough for offset
                 while (scalarValue.length() < offsetValue) {
                     scalarValue.append('\0');
                 }
-
-                // Truncate to offset
                 scalarValue.setLength(offsetValue);
                 scalar.set(scalarValue.toString());
             } else {
-                // No offset - just clear the scalar
                 scalar.set("");
             }
             return new RuntimeScalar(0);
         }
 
-        // Handle offset
         StringBuilder scalarValue = new StringBuilder(scalar.toString());
 
         if (offsetValue < 0) {
@@ -346,20 +339,26 @@ public class Readline {
         }
 
         int newLength = offsetValue + charsRead;
-
-        // Ensure the buffer is large enough for the offset
         while (scalarValue.length() < offsetValue) {
             scalarValue.append('\0');
         }
-
-        // Replace the data from offsetValue onwards with the new data
         scalarValue.replace(offsetValue, scalarValue.length(), readData);
-
-        // Truncate to the correct final length
         scalarValue.setLength(newLength);
 
-        // Update the scalar with the new value
-        scalar.set(scalarValue.toString());
+        if (isByteData && scalar.type != RuntimeScalarType.STRING) {
+            String s = scalarValue.toString();
+            boolean safe = true;
+            for (int i = 0; safe && i < s.length(); i++) {
+                if (s.charAt(i) > 255) safe = false;
+            }
+            if (safe) {
+                scalar.set(new RuntimeScalar(s.getBytes(StandardCharsets.ISO_8859_1)));
+            } else {
+                scalar.set(s);
+            }
+        } else {
+            scalar.set(scalarValue.toString());
+        }
 
         // Return the number of characters read
         return new RuntimeScalar(charsRead);

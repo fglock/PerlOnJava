@@ -197,8 +197,8 @@ public class BytecodeInterpreter {
                     // REGISTER OPERATIONS
                     // =================================================================
 
-                    case Opcodes.MOVE: {
-                        // Register copy: rd = rs
+                    case Opcodes.ALIAS: {
+                        // Register alias: rd = rs (shares reference, does NOT copy value)
                         // Must unwrap RuntimeScalarReadOnly to prevent read-only values in variable registers
                         int dest = bytecode[pc++];
                         int src = bytecode[pc++];
@@ -270,6 +270,16 @@ public class BytecodeInterpreter {
                             registers[rd] = ensureMutableScalar(registers[rd]);
                         }
                         registers[rd].undefine();
+                        break;
+                    }
+
+                    case Opcodes.MY_SCALAR: {
+                        // Lexical scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar newScalar = new RuntimeScalar();
+                        registers[rs].addToScalar(newScalar);
+                        registers[rd] = newScalar;
                         break;
                     }
 
@@ -1215,7 +1225,7 @@ public class BytecodeInterpreter {
                         break;
 
                     // =================================================================
-                    // SUPERINSTRUCTIONS - Eliminate MOVE overhead
+                    // SUPERINSTRUCTIONS - Eliminate ALIAS overhead
                     // =================================================================
 
                     case Opcodes.INC_REG: {

@@ -175,7 +175,7 @@ public class Encode extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for is_utf8");
         }
 
-        return RuntimeScalarCache.getScalarBoolean(args.get(0).type == BYTE_STRING).getList();
+        return RuntimeScalarCache.getScalarBoolean(args.get(0).type != BYTE_STRING).getList();
 
 //        // In PerlOnJava, strings are always internally Unicode (Java strings)
 //        // So we'll check if the string contains any non-ASCII characters

@@ -651,9 +651,30 @@ public class IOOperator {
         // Check for in-memory handles (ScalarBackedIO)
         IOHandle baseHandle = getBaseHandle(fh.ioHandle);
 
-        if (baseHandle instanceof ScalarBackedIO) {
-            getGlobalVariable("main::!").set("Invalid argument");
-            return new RuntimeScalar(); // undef
+        if (baseHandle instanceof ScalarBackedIO scalarIO) {
+            RuntimeScalar result;
+            try {
+                result = scalarIO.sysread(length);
+            } catch (Exception e) {
+                getGlobalVariable("main::!").set("Bad file descriptor");
+                return new RuntimeScalar();
+            }
+            if (!result.getDefinedBoolean()) {
+                return new RuntimeScalar(0);
+            }
+            String readData = result.toString();
+            String existing = target.toString();
+            if (offset > 0) {
+                while (existing.length() < offset) existing += "\0";
+                target.set(existing.substring(0, offset) + readData);
+            } else if (offset < 0) {
+                int effectiveOffset = existing.length() + offset;
+                if (effectiveOffset < 0) effectiveOffset = 0;
+                target.set(existing.substring(0, effectiveOffset) + readData);
+            } else {
+                target.set(readData);
+            }
+            return new RuntimeScalar(readData.length());
         }
 
         // Try to perform the system read
