@@ -578,11 +578,11 @@ public class SubroutineParser {
         return prototype;
     }
 
-    public static Node handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, String declaration) {
+    public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, String declaration) {
         return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false, declaration);
     }
     
-    public static Node handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
+    public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
         // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
         String lexicalKey = "&" + subName;
         SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
@@ -642,7 +642,7 @@ public class SubroutineParser {
                     // Execute the BEGIN block immediately during parsing
                     SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
                     
-                    return new NumberNode("1", parser.tokenIndex);
+                    return new ListNode(parser.tokenIndex);
                 }
             }
         }
@@ -862,7 +862,7 @@ public class SubroutineParser {
         RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
         placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
 
-        return new NumberNode("1", parser.tokenIndex);
+        return new ListNode(parser.tokenIndex);
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {

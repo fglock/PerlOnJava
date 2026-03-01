@@ -345,8 +345,17 @@ public class Readline {
         scalarValue.replace(offsetValue, scalarValue.length(), readData);
         scalarValue.setLength(newLength);
 
-        if (isByteData) {
-            scalar.set(new RuntimeScalar(scalarValue.toString().getBytes(StandardCharsets.ISO_8859_1)));
+        if (isByteData && scalar.type != RuntimeScalarType.STRING) {
+            String s = scalarValue.toString();
+            boolean safe = true;
+            for (int i = 0; safe && i < s.length(); i++) {
+                if (s.charAt(i) > 255) safe = false;
+            }
+            if (safe) {
+                scalar.set(new RuntimeScalar(s.getBytes(StandardCharsets.ISO_8859_1)));
+            } else {
+                scalar.set(s);
+            }
         } else {
             scalar.set(scalarValue.toString());
         }
