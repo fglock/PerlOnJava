@@ -378,6 +378,8 @@ public class EmitForeach {
             mv.visitLabel(afterIterLabel);
         }
 
+        int loopVarIndex = -1;
+
         mv.visitLabel(loopStart);
 
         // Check for pending signals (alarm, etc.) at loop entry
@@ -490,9 +492,9 @@ public class EmitForeach {
                 if (varName == null) {
                     // Unsupported variable shape; skip assignment rather than failing compilation.
                 } else {
-                    int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
-                    emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + varIndex);
-                    mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    loopVarIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                    emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + loopVarIndex);
+                    mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
                 }
             }
         }
@@ -586,6 +588,17 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+
+        if (loopVarIndex >= 0) {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "<init>",
+                    "()V",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
+        }
 
         // Restore the original value for reference aliasing: for \$x (...), for \@x (...), for \%x (...)
         if (isReferenceAliasing && savedValueIndex != -1) {
