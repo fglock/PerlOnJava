@@ -8,6 +8,7 @@ import org.perlonjava.runtime.operators.WaitpidOperator;
 import org.perlonjava.runtime.operators.Unpack;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -91,6 +92,9 @@ public class MiscOpcodeHandler {
             default -> throw new IllegalStateException("Unknown opcode in MiscOpcodeHandler: " + opcode);
         };
 
+        if (ctx == RuntimeContextType.SCALAR && result instanceof RuntimeList) {
+            result = ((RuntimeList) result).scalar();
+        }
         registers[rd] = result;
         return pc;
     }
