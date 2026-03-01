@@ -361,7 +361,8 @@ public class Operator {
 
                 // Remove elements
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
-                    removedElements.elements.add(runtimeArray.elements.remove(offset));
+                    RuntimeBase removed = runtimeArray.elements.remove(offset);
+                    removedElements.elements.add(removed != null ? removed : new RuntimeScalar());
                 }
 
                 // Add new elements
