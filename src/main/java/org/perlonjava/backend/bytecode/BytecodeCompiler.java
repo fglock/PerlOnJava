@@ -740,7 +740,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Save the last statement's result to the outer register BEFORE exiting scope
         if (outerResultReg >= 0 && lastResultReg >= 0) {
-            emit(Opcodes.MOVE);
+            emit(Opcodes.ALIAS);
             emitReg(outerResultReg);
             emitReg(lastResultReg);
         }
@@ -782,7 +782,7 @@ public class BytecodeCompiler implements Visitor {
 
             if (isInteger) {
                 // Regular integer - use LOAD_INT to create mutable scalar
-                // Note: We don't use RuntimeScalarCache here because MOVE just copies references,
+                // Note: We don't use RuntimeScalarCache here because ALIAS just copies references,
                 // and we need mutable scalars for variables (++, --, etc.)
                 int intValue = Integer.parseInt(value);
                 emit(Opcodes.LOAD_INT);
@@ -3949,7 +3949,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Store result from block
         if (lastResultReg >= 0) {
-            emit(Opcodes.MOVE);
+            emit(Opcodes.ALIAS);
             emitReg(resultReg);
             emitReg(lastResultReg);
         }
@@ -4188,7 +4188,7 @@ public class BytecodeCompiler implements Visitor {
                 }
                 // Save last statement result into outer register before exiting scope
                 if (outerResultReg >= 0 && lastResultReg >= 0) {
-                    emit(Opcodes.MOVE);
+                    emit(Opcodes.ALIAS);
                     emitReg(outerResultReg);
                     emitReg(lastResultReg);
                 }
@@ -4374,7 +4374,7 @@ public class BytecodeCompiler implements Visitor {
             // Both branches should produce results in the same register
             // If they differ, move else result to then result register
             if (thenResultReg >= 0 && elseResultReg >= 0 && thenResultReg != elseResultReg) {
-                emit(Opcodes.MOVE);
+                emit(Opcodes.ALIAS);
                 emitReg(thenResultReg);
                 emitReg(elseResultReg);
             }
@@ -4426,7 +4426,7 @@ public class BytecodeCompiler implements Visitor {
         int trueReg = lastResultReg;
 
         // Move true result to rd
-        emit(Opcodes.MOVE);
+        emit(Opcodes.ALIAS);
         emitReg(rd);
         emitReg(trueReg);
 
@@ -4444,7 +4444,7 @@ public class BytecodeCompiler implements Visitor {
         int falseReg = lastResultReg;
 
         // Move false result to rd
-        emit(Opcodes.MOVE);
+        emit(Opcodes.ALIAS);
         emitReg(rd);
         emitReg(falseReg);
 

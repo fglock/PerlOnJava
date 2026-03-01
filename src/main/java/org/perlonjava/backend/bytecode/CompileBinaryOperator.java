@@ -442,7 +442,7 @@ public class CompileBinaryOperator {
 
             // Allocate result register and move left value to it
             int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.MOVE);
+            bytecodeCompiler.emit(Opcodes.ALIAS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs1);
 
@@ -459,7 +459,7 @@ public class CompileBinaryOperator {
             int rs2 = bytecodeCompiler.lastResultReg;
 
             // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.MOVE);
+            bytecodeCompiler.emit(Opcodes.ALIAS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs2);
 
@@ -484,7 +484,7 @@ public class CompileBinaryOperator {
 
             // Allocate result register and move left value to it
             int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.MOVE);
+            bytecodeCompiler.emit(Opcodes.ALIAS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs1);
 
@@ -501,7 +501,7 @@ public class CompileBinaryOperator {
             int rs2 = bytecodeCompiler.lastResultReg;
 
             // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.MOVE);
+            bytecodeCompiler.emit(Opcodes.ALIAS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs2);
 
@@ -526,7 +526,7 @@ public class CompileBinaryOperator {
 
             // Allocate result register and move left value to it
             int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.MOVE);
+            bytecodeCompiler.emit(Opcodes.ALIAS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs1);
 
@@ -549,7 +549,7 @@ public class CompileBinaryOperator {
             int rs2 = bytecodeCompiler.lastResultReg;
 
             // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.MOVE);
+            bytecodeCompiler.emit(Opcodes.ALIAS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs2);
 
