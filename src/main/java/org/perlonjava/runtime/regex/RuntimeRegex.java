@@ -413,7 +413,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         Pattern pattern = regex.pattern;
         String inputStr = string.toString();
-        Matcher matcher = pattern.matcher(inputStr);
+        CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
+        Matcher matcher = pattern.matcher(matchInput);
 
         // hexPrinter(inputStr);
 
@@ -453,6 +454,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Clearing these variables would incorrectly erase the previous successful capture
         // state and break tests that rely on @-/@+.
 
+        try {
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
             if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
@@ -534,6 +536,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (!regex.regexFlags.isGlobalMatch()) {
                 break;
             }
+        }
+        } catch (RegexTimeoutException e) {
+            WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
+            found = false;
         }
 
         // Reset pos() on failed match with /g, unless /c is set
@@ -707,7 +713,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         Pattern pattern = regex.pattern;
-        Matcher matcher = pattern.matcher(inputStr);
+        CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
+        Matcher matcher = pattern.matcher(matchInput);
 
         // The result string after substitutions
         StringBuilder resultBuffer = new StringBuilder();
@@ -720,6 +727,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // This preserves capture variables from previous matches when substitution doesn't match
 
         // Perform the substitution
+        try {
         while (matcher.find()) {
             found++;
 
@@ -768,6 +776,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (!regex.regexFlags.isGlobalMatch()) {
                 break;
             }
+        }
+        } catch (RegexTimeoutException e) {
+            WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
+            found = 0;
         }
         // Append the remaining text after the last match to the result buffer
         matcher.appendTail(resultBuffer);
