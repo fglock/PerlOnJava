@@ -81,6 +81,12 @@ public class ControlFlowDetectorVisitor implements Visitor {
                 if (state == 0) {
                     String oper = op.operator;
 
+                    if ("return".equals(oper)) {
+                        if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE return at tokenIndex=" + op.tokenIndex);
+                        hasUnsafeControlFlow = true;
+                        continue;
+                    }
+
                     if ("goto".equals(oper)) {
                         if (allowedGotoLabels != null && op.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
                             Node arg = labelNode.elements.getFirst();

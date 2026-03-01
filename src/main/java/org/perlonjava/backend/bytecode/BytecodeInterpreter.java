@@ -350,8 +350,9 @@ public class BytecodeInterpreter {
                             registers[rd] = element;
                             GlobalVariable.aliasGlobalVariable(name, element);
                             pc = bodyTarget;  // ABSOLUTE jump back to body start
+                        } else {
+                            registers[rd] = new RuntimeScalar();
                         }
-                        // else: fall through to exit
                         break;
                     }
 
@@ -707,8 +708,9 @@ public class BytecodeInterpreter {
                             RuntimeScalar elem = iterator.next();
                             registers[rd] = (isImmutableProxy(elem)) ? ensureMutableScalar(elem) : elem;
                             pc = bodyTarget;  // ABSOLUTE jump back to body start
+                        } else {
+                            registers[rd] = new RuntimeScalar();
                         }
-                        // else: fall through to exit
                         break;
                     }
 
