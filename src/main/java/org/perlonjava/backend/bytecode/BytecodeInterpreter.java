@@ -21,6 +21,16 @@ public class BytecodeInterpreter {
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
 
+    static RuntimeScalar ensureMutableScalar(RuntimeBase val) {
+        if (val instanceof RuntimeScalarReadOnly ro) {
+            RuntimeScalar copy = new RuntimeScalar();
+            copy.type = ro.type;
+            copy.value = ro.value;
+            return copy;
+        }
+        return (RuntimeScalar) val;
+    }
+
     /**
      * Execute interpreted bytecode.
      *
@@ -115,10 +125,6 @@ public class BytecodeInterpreter {
                             return new RuntimeList();
                         }
                         RuntimeList retList = retVal.getList();
-                        // Materialize $1, $&, etc. into concrete scalars BEFORE returning.
-                        // The finally block will call savedRegexState.restore(), which overwrites
-                        // global regex state.  Any lazy ScalarSpecialVariable references in the
-                        // return list must be resolved while this sub's regex state is still active.
                         RuntimeCode.materializeSpecialVarsInResult(retList);
                         return retList;
                     }
@@ -182,9 +188,11 @@ public class BytecodeInterpreter {
 
                     case Opcodes.MOVE: {
                         // Register copy: rd = rs
+                        // Must unwrap RuntimeScalarReadOnly to prevent read-only values in variable registers
                         int dest = bytecode[pc++];
                         int src = bytecode[pc++];
-                        registers[dest] = registers[src];
+                        RuntimeBase srcVal = registers[src];
+                        registers[dest] = (srcVal instanceof RuntimeScalarReadOnly) ? ensureMutableScalar(srcVal) : srcVal;
                         break;
                     }
 
@@ -241,6 +249,13 @@ public class BytecodeInterpreter {
                         // Load undef: rd = new RuntimeScalar()
                         int rd = bytecode[pc++];
                         registers[rd] = new RuntimeScalar();
+                        break;
+                    }
+
+                    case Opcodes.UNDEFINE_SCALAR: {
+                        // Undefine variable in-place: rd.undefine()
+                        int rd = bytecode[pc++];
+                        registers[rd].undefine();
                         break;
                     }
 
@@ -928,7 +943,7 @@ public class BytecodeInterpreter {
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         RuntimeBase valBase = registers[valueReg];
                         RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
-                        hash.put(key.toString(), val);  // Convert key to String
+                        hash.put(key.toString(), ensureMutableScalar(val));
                         break;
                     }
 
@@ -1184,14 +1199,16 @@ public class BytecodeInterpreter {
                     case Opcodes.INC_REG: {
                         // Increment register in-place: r++
                         int rd = bytecode[pc++];
-                        registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], 1);
+                        RuntimeBase incResult = MathOperators.add((RuntimeScalar) registers[rd], 1);
+                        registers[rd] = (incResult instanceof RuntimeScalarReadOnly) ? ensureMutableScalar(incResult) : incResult;
                         break;
                     }
 
                     case Opcodes.DEC_REG: {
                         // Decrement register in-place: r--
                         int rd = bytecode[pc++];
-                        registers[rd] = MathOperators.subtract((RuntimeScalar) registers[rd], 1);
+                        RuntimeBase decResult = MathOperators.subtract((RuntimeScalar) registers[rd], 1);
+                        registers[rd] = (decResult instanceof RuntimeScalarReadOnly) ? ensureMutableScalar(decResult) : decResult;
                         break;
                     }
 
@@ -1199,6 +1216,9 @@ public class BytecodeInterpreter {
                         // Add and assign: rd += rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
+                        if (registers[rd] instanceof RuntimeScalarReadOnly) {
+                            registers[rd] = ensureMutableScalar(registers[rd]);
+                        }
                         MathOperators.addAssign(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
@@ -1211,6 +1231,9 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
                         pc += 1;
+                        if (registers[rd] instanceof RuntimeScalarReadOnly) {
+                            registers[rd] = ensureMutableScalar(registers[rd]);
+                        }
                         RuntimeScalar result = MathOperators.add((RuntimeScalar) registers[rd], immediate);
                         ((RuntimeScalar) registers[rd]).set(result);
                         break;
@@ -2491,6 +2514,9 @@ public class BytecodeInterpreter {
             case Opcodes.SUBTRACT_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (registers[rd] instanceof RuntimeScalarReadOnly) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -2502,6 +2528,9 @@ public class BytecodeInterpreter {
             case Opcodes.MULTIPLY_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (registers[rd] instanceof RuntimeScalarReadOnly) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -2513,6 +2542,9 @@ public class BytecodeInterpreter {
             case Opcodes.DIVIDE_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (registers[rd] instanceof RuntimeScalarReadOnly) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -2524,6 +2556,9 @@ public class BytecodeInterpreter {
             case Opcodes.MODULUS_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (registers[rd] instanceof RuntimeScalarReadOnly) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
