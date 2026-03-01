@@ -325,15 +325,7 @@ public class Utf8 extends PerlModuleBase {
         if (scalar.type == BYTE_STRING) {
             return RuntimeScalarCache.scalarFalse.getList();
         }
-        if (scalar.type == STRING) {
-            String s = scalar.toString();
-            for (int i = 0; i < s.length(); i++) {
-                if (s.charAt(i) > 255) {
-                    return RuntimeScalarCache.scalarTrue.getList();
-                }
-            }
-        }
-        return RuntimeScalarCache.scalarFalse.getList();
+        return RuntimeScalarCache.scalarTrue.getList();
     }
 
     /**
