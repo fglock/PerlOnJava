@@ -49,7 +49,7 @@ public class ScalarBackedIO implements IOHandle {
             isEOF = true;
         }
 
-        return new RuntimeScalar(decoded);
+        return new RuntimeScalar(buffer);
     }
 
     @Override
@@ -83,8 +83,8 @@ public class ScalarBackedIO implements IOHandle {
                     currentBytes.length - position - newBytes.length);
         }
 
-        // Update backing scalar
-        backingScalar.set(new String(resultBytes, StandardCharsets.ISO_8859_1));
+        // Update backing scalar (preserve BYTE_STRING type for binary data)
+        backingScalar.set(new RuntimeScalar(resultBytes));
         position += newBytes.length;
 
         return RuntimeScalarCache.scalarTrue;
@@ -207,20 +207,15 @@ public class ScalarBackedIO implements IOHandle {
 
         int available = bytes.length - position;
         if (available <= 0) {
-            // EOF
             return new RuntimeScalar("");
         }
 
         int toRead = Math.min(length, available);
-
-        // Convert bytes to string representation
-        StringBuilder result = new StringBuilder(toRead);
-        for (int i = 0; i < toRead; i++) {
-            result.append((char) (bytes[position + i] & 0xFF));
-        }
+        byte[] result = new byte[toRead];
+        System.arraycopy(bytes, position, result, 0, toRead);
 
         position += toRead;
-        return new RuntimeScalar(result.toString());
+        return new RuntimeScalar(result);
     }
 
     @Override
