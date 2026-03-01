@@ -279,7 +279,7 @@ public class StringOperators {
         String bStr = b.toString();
 
         if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(aStr + bStr);
+            return new RuntimeScalar(runtimeScalar.toString() + bStr);
         }
 
         if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
@@ -308,7 +308,7 @@ public class StringOperators {
             }
         }
 
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(runtimeScalar.toString() + bStr);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -320,7 +320,7 @@ public class StringOperators {
         String bStr = b.toString();
 
         if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(aStr + bStr);
+            return new RuntimeScalar(runtimeScalar.toString() + bStr);
         }
 
         if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
@@ -349,7 +349,7 @@ public class StringOperators {
             }
         }
 
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(runtimeScalar.toString() + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
