@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.BitSet;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -28,6 +29,7 @@ public class InterpretedCode extends RuntimeCode {
     public final int maxRegisters;         // Number of registers needed
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
+    public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
 
     // Lexical pragma state (for eval STRING to inherit)
     public final int strictOptions;        // Strict flags at compile time
@@ -67,7 +69,7 @@ public class InterpretedCode extends RuntimeCode {
                           int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, "main");
+             strictOptions, featureFlags, warningFlags, "main", null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -78,7 +80,21 @@ public class InterpretedCode extends RuntimeCode {
                           ErrorMessageUtil errorUtil,
                           int strictOptions, int featureFlags, BitSet warningFlags,
                           String compilePackage) {
-        super(null, new java.util.ArrayList<>()); // Call RuntimeCode constructor with null prototype, empty attributes
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+             sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+             strictOptions, featureFlags, warningFlags, compilePackage, null);
+    }
+
+    public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
+                          int maxRegisters, RuntimeBase[] capturedVars,
+                          String sourceName, int sourceLine,
+                          TreeMap<Integer, Integer> pcToTokenIndex,
+                          Map<String, Integer> variableRegistry,
+                          ErrorMessageUtil errorUtil,
+                          int strictOptions, int featureFlags, BitSet warningFlags,
+                          String compilePackage,
+                          List<Map<String, Integer>> evalSiteRegistries) {
+        super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
         this.stringPool = stringPool;
@@ -88,6 +104,7 @@ public class InterpretedCode extends RuntimeCode {
         this.sourceLine = sourceLine;
         this.pcToTokenIndex = pcToTokenIndex;
         this.variableRegistry = variableRegistry;
+        this.evalSiteRegistries = evalSiteRegistries;
         this.errorUtil = errorUtil;
         this.strictOptions = strictOptions;
         this.featureFlags = featureFlags;
@@ -163,15 +180,17 @@ public class InterpretedCode extends RuntimeCode {
             this.constants,
             this.stringPool,
             this.maxRegisters,
-            capturedVars,  // New captured vars
+            capturedVars,
             this.sourceName,
             this.sourceLine,
-            this.pcToTokenIndex,  // Preserve token index map
-            this.variableRegistry,  // Preserve variable registry
-            this.errorUtil,  // Preserve error util
-            this.strictOptions,  // Preserve strict flags
-            this.featureFlags,  // Preserve feature flags
-            this.warningFlags  // Preserve warning flags
+            this.pcToTokenIndex,
+            this.variableRegistry,
+            this.errorUtil,
+            this.strictOptions,
+            this.featureFlags,
+            this.warningFlags,
+            this.compilePackage,
+            this.evalSiteRegistries
         );
     }
 
@@ -1315,7 +1334,10 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.EVAL_STRING:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
-                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(")\n");
+                    int evalCtx = bytecode[pc++];
+                    int evalSite = bytecode[pc++];
+                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs)
+                      .append(", ctx=").append(evalCtx).append(", site=").append(evalSite).append(")\n");
                     break;
                 case Opcodes.SELECT_OP:
                     rd = bytecode[pc++];

@@ -74,9 +74,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
 
-                                // Track this variable - map the name to the register we already allocated
-                                bytecodeCompiler.variableScopes.peek().put(varName, reg);
-                                bytecodeCompiler.allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                bytecodeCompiler.registerVariable(varName, reg);
                                 bytecodeCompiler.lastResultReg = reg;
                                 return;
                             }
@@ -122,9 +120,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(arrayReg);
                                 bytecodeCompiler.emitReg(listReg);
 
-                                // Track this variable - map the name to the register we already allocated
-                                bytecodeCompiler.variableScopes.peek().put(varName, arrayReg);
-                                bytecodeCompiler.allDeclaredVariables.put(varName, arrayReg);  // Track for variableRegistry
+                                bytecodeCompiler.registerVariable(varName, arrayReg);
 
                                 // In scalar context, return the count of elements assigned
                                 // In list/void context, return the array
@@ -194,9 +190,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(hashReg);
                                 bytecodeCompiler.emitReg(listReg);
 
-                                // Track this variable - map the name to the register we already allocated
-                                bytecodeCompiler.variableScopes.peek().put(varName, hashReg);
-                                bytecodeCompiler.allDeclaredVariables.put(varName, hashReg);  // Track for variableRegistry
+                                bytecodeCompiler.registerVariable(varName, hashReg);
                                 bytecodeCompiler.lastResultReg = hashReg;
                                 return;
                             }
@@ -297,9 +291,7 @@ public class CompileAssignment {
                                             }
                                         }
 
-                                        // Track this variable
-                                        bytecodeCompiler.variableScopes.peek().put(varName, varReg);
-                                        bytecodeCompiler.allDeclaredVariables.put(varName, varReg);  // Track for variableRegistry
+                                        bytecodeCompiler.registerVariable(varName, varReg);
                                     } else {
                                         // Regular lexical variable (not captured)
                                         // Declare the variable

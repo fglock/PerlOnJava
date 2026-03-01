@@ -32,13 +32,14 @@ public class BytecodeCompiler implements Visitor {
     private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
     private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
 
-    // Simple variable-to-register mapping for the interpreter
-    // Each scope is a Map<String, Integer> mapping variable names to register indices
-    final Stack<Map<String, Integer>> variableScopes = new Stack<>();
-
-    // Symbol table for package/class tracking
-    // Tracks current package, class flag, and package versions like the compiler does
+    // Scoped symbol table for variable tracking, package/class tracking, and eval STRING support.
+    // Replaces the old variableScopes Stack + allDeclaredVariables flat map.
+    // Using ScopedSymbolTable gives us proper scope-aware variable lookups and
+    // getAllVisibleVariables()/getVisibleVariableRegistry() for per-eval-site snapshots.
     final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+    // Scope index stack for proper ScopedSymbolTable.exitScope() calls
+    private final Stack<Integer> scopeIndices = new Stack<>();
 
     // Stack to save/restore register state when entering/exiting scopes
     private final Stack<Integer> savedNextRegister = new Stack<>();
@@ -95,9 +96,9 @@ public class BytecodeCompiler implements Visitor {
     private String[] capturedVarNames;            // Parallel array of names
     Map<String, Integer> capturedVarIndices;  // Name → register index
 
-    // Track ALL variables ever declared (for variableRegistry)
-    // This is needed because inner scopes get popped before variableRegistry is built
-    final Map<String, Integer> allDeclaredVariables = new HashMap<>();
+    // Per-eval-site variable registries: each eval STRING emission snapshots the
+    // currently visible variables so at runtime the correct registers are captured.
+    final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
 
     // BEGIN support for named subroutine closures
     private int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
@@ -112,12 +113,10 @@ public class BytecodeCompiler implements Visitor {
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
 
-        // Initialize with global scope containing the 3 reserved registers
-        Map<String, Integer> globalScope = new HashMap<>();
-        globalScope.put("this", 0);
-        globalScope.put("@_", 1);
-        globalScope.put("wantarray", 2);
-        variableScopes.push(globalScope);
+        // Initialize symbolTable with the 3 reserved registers
+        symbolTable.addVariableWithIndex("this", 0, "reserved");
+        symbolTable.addVariableWithIndex("@_", 1, "reserved");
+        symbolTable.addVariableWithIndex("wantarray", 2, "reserved");
     }
 
     // Legacy constructor for backward compatibility
@@ -127,7 +126,7 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Constructor for eval STRING with parent scope variable registry.
-     * Initializes variableScopes with variables from parent scope.
+     * Initializes symbolTable with variables from parent scope.
      *
      * @param sourceName Source name for error messages
      * @param sourceLine Source line for error messages
@@ -140,99 +139,68 @@ public class BytecodeCompiler implements Visitor {
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
 
-        // Initialize with global scope containing the 3 reserved registers
-        // plus any variables from parent scope (for eval STRING)
-        Map<String, Integer> globalScope = new HashMap<>();
-        globalScope.put("this", 0);
-        globalScope.put("@_", 1);
-        globalScope.put("wantarray", 2);
+        // Initialize symbolTable with the 3 reserved registers
+        symbolTable.addVariableWithIndex("this", 0, "reserved");
+        symbolTable.addVariableWithIndex("@_", 1, "reserved");
+        symbolTable.addVariableWithIndex("wantarray", 2, "reserved");
 
         if (parentRegistry != null) {
-            // Add parent scope variables (for eval STRING variable capture)
-            globalScope.putAll(parentRegistry);
-
-            // Preserve parent scope variables in the compiled code's variableRegistry so that
-            // nested eval STRING can capture lexicals from this eval scope.
-            allDeclaredVariables.putAll(parentRegistry);
+            // Add parent scope variables to symbolTable (for eval STRING variable capture)
+            for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
+                String varName = entry.getKey();
+                int regIndex = entry.getValue();
+                if (regIndex >= 3) {
+                    symbolTable.addVariableWithIndex(varName, regIndex, "my");
+                }
+            }
 
             // Mark parent scope variables as captured so assignments use SET_SCALAR
             capturedVarIndices = new HashMap<>();
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
                 String varName = entry.getKey();
                 int regIndex = entry.getValue();
-                // Skip reserved registers
                 if (regIndex >= 3) {
                     capturedVarIndices.put(varName, regIndex);
                 }
             }
 
             // Adjust nextRegister to account for captured variables
-            // Find the maximum register index used by parent scope
-            int maxRegister = 2;  // Start with reserved registers (0-2)
+            int maxRegister = 2;
             for (Integer regIndex : parentRegistry.values()) {
                 if (regIndex > maxRegister) {
                     maxRegister = regIndex;
                 }
             }
-            // Next available register is one past the maximum used
             this.nextRegister = maxRegister + 1;
             this.maxRegisterEverUsed = maxRegister;
             this.baseRegisterForStatement = this.nextRegister;
         }
-
-        variableScopes.push(globalScope);
     }
 
-    /**
-     * Helper: Check if a variable exists in any scope.
-     */
     boolean hasVariable(String name) {
-        for (int i = variableScopes.size() - 1; i >= 0; i--) {
-            if (variableScopes.get(i).containsKey(name)) {
-                return true;
-            }
-        }
-        return false;
+        return symbolTable.getVariableIndex(name) != -1;
     }
 
-    /**
-     * Helper: Get the register index for a variable.
-     * Returns -1 if not found.
-     */
     int getVariableRegister(String name) {
-        for (int i = variableScopes.size() - 1; i >= 0; i--) {
-            Integer reg = variableScopes.get(i).get(name);
-            if (reg != null) {
-                return reg;
-            }
-        }
-        return -1;
+        return symbolTable.getVariableIndex(name);
     }
 
-    /**
-     * Helper: Add a variable to the current scope and return its register index.
-     * Allocates a new register.
-     */
     int addVariable(String name, String declType) {
         int reg = allocateRegister();
-        variableScopes.peek().put(name, reg);
-        allDeclaredVariables.put(name, reg);  // Track for variableRegistry
+        symbolTable.addVariableWithIndex(name, reg, declType);
         return reg;
     }
 
-    /**
-     * Helper: Enter a new lexical scope.
-     * Saves current register allocation state so inner scopes don't
-     * interfere with outer scope register usage.
-     */
+    void registerVariable(String name, int reg) {
+        symbolTable.addVariableWithIndex(name, reg, "my");
+    }
+
     private void enterScope() {
-        variableScopes.push(new HashMap<>());
-        // Save current register state
+        int scopeIdx = symbolTable.enterScope();
+        scopeIndices.push(scopeIdx);
         savedNextRegister.push(nextRegister);
         savedBaseRegister.push(baseRegisterForStatement);
-        // Update base to protect all registers allocated before this scope
         baseRegisterForStatement = nextRegister;
-        // Save current pragma state so use strict/no strict inside blocks is properly scoped
         if (emitterContext != null && emitterContext.symbolTable != null) {
             ScopedSymbolTable st = emitterContext.symbolTable;
             st.strictOptionsStack.push(st.strictOptionsStack.peek());
@@ -241,21 +209,15 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
-    /**
-     * Helper: Exit the current lexical scope.
-     * Restores register allocation state to what it was before entering the scope.
-     */
     private void exitScope() {
-        if (variableScopes.size() > 1) {
-            variableScopes.pop();
-            // Restore register state
+        if (!scopeIndices.isEmpty()) {
+            symbolTable.exitScope(scopeIndices.pop());
             if (!savedNextRegister.isEmpty()) {
                 nextRegister = savedNextRegister.pop();
             }
             if (!savedBaseRegister.isEmpty()) {
                 baseRegisterForStatement = savedBaseRegister.pop();
             }
-            // Restore pragma state
             if (emitterContext != null && emitterContext.symbolTable != null) {
                 ScopedSymbolTable st = emitterContext.symbolTable;
                 st.strictOptionsStack.pop();
@@ -282,15 +244,8 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.setCurrentPackage(packageName, false);
     }
 
-    /**
-     * Helper: Get all variable names in all scopes (for closure detection).
-     */
     private String[] getVariableNames() {
-        Set<String> allVars = new HashSet<>();
-        for (Map<String, Integer> scope : variableScopes) {
-            allVars.addAll(scope.keySet());
-        }
-        return allVars.toArray(new String[0]);
+        return symbolTable.getVariableNames();
     }
 
     /**
@@ -536,16 +491,11 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.RETURN);
         emitReg(returnReg);
 
-        // Build variable registry for eval STRING support
-        // Use allDeclaredVariables which tracks ALL variables ever declared,
-        // not variableScopes which loses variables when scopes are popped
-        Map<String, Integer> variableRegistry = new HashMap<>();
-        variableRegistry.putAll(allDeclaredVariables);
-
-        // Also include variables from current scopes (in case of nested contexts)
-        for (Map<String, Integer> scope : variableScopes) {
-            variableRegistry.putAll(scope);
-        }
+        // Build variable registry for eval STRING support.
+        // At this point all inner scopes have exited, so getVisibleVariableRegistry()
+        // returns only the outermost scope variables. Per-eval-site registries
+        // (stored in evalSiteRegistries) provide the correct scope-aware mappings.
+        Map<String, Integer> variableRegistry = symbolTable.getVisibleVariableRegistry();
 
         // Extract strict/feature/warning flags for eval STRING inheritance
         int strictOptions = 0;
@@ -562,17 +512,18 @@ public class BytecodeCompiler implements Visitor {
             toShortArray(),
             constants.toArray(),
             stringPool.toArray(new String[0]),
-            maxRegisterEverUsed + 1,  // maxRegisters = highest register used + 1
-            capturedVars,  // NOW POPULATED!
+            maxRegisterEverUsed + 1,
+            capturedVars,
             sourceName,
             sourceLine,
-            pcToTokenIndex,  // Pass token index map for error reporting
-            variableRegistry,  // Variable registry for eval STRING
-            errorUtil,  // Pass error util for line number lookup
-            strictOptions,  // Strict flags for eval STRING inheritance
-            featureFlags,  // Feature flags for eval STRING inheritance
-            warningFlags,  // Warning flags for eval STRING inheritance
-            symbolTable.getCurrentPackage()  // Compile-time package for eval STRING name resolution
+            pcToTokenIndex,
+            variableRegistry,
+            errorUtil,
+            strictOptions,
+            featureFlags,
+            warningFlags,
+            symbolTable.getCurrentPackage(),
+            evalSiteRegistries.isEmpty() ? null : evalSiteRegistries
         );
     }
 
@@ -1790,25 +1741,21 @@ public class BytecodeCompiler implements Visitor {
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
-                                // Track this as a captured/state variable - map to the register we allocated
-                                variableScopes.peek().put(varName, reg);
-                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                registerVariable(varName, reg);
                             }
                             case "@" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
-                                variableScopes.peek().put(varName, reg);
-                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                registerVariable(varName, reg);
                             }
                             case "%" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
-                                variableScopes.peek().put(varName, reg);
-                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                registerVariable(varName, reg);
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
@@ -2160,24 +2107,21 @@ public class BytecodeCompiler implements Visitor {
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(sigilOp.id);
-                                        variableScopes.peek().put(varName, reg);
-                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                        registerVariable(varName, reg);
                                     }
                                     case "@" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(sigilOp.id);
-                                        variableScopes.peek().put(varName, reg);
-                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                        registerVariable(varName, reg);
                                     }
                                     case "%" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(sigilOp.id);
-                                        variableScopes.peek().put(varName, reg);
-                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
+                                        registerVariable(varName, reg);
                                     }
                                     default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
@@ -3482,19 +3426,31 @@ public class BytecodeCompiler implements Visitor {
         return reg;
     }
 
+    TreeMap<Integer, String> collectVisiblePerlVariables() {
+        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
+        Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> visible = symbolTable.getAllVisibleVariables();
+        for (Map.Entry<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> e : visible.entrySet()) {
+            int reg = e.getKey();
+            String varName = e.getValue().name();
+            if (reg < 3 || varName == null || varName.isEmpty()) continue;
+            char sigil = varName.charAt(0);
+            if (sigil == '$' || sigil == '@' || sigil == '%') {
+                closureVarsByReg.put(reg, varName);
+            }
+        }
+        return closureVarsByReg;
+    }
+
     /**
      * Get the highest register index currently used by variables (not temporaries).
      * This is used to determine the reset point for register recycling.
      */
     private int getHighestVariableRegister() {
-        int maxReg = 2;  // Start with reserved registers (0=this, 1=@_, 2=wantarray)
-
-        // Check all variable scopes
-        for (Map<String, Integer> scope : variableScopes) {
-            for (Integer reg : scope.values()) {
-                if (reg > maxReg) {
-                    maxReg = reg;
-                }
+        int maxReg = 2;
+        Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> visible = symbolTable.getAllVisibleVariables();
+        for (Integer reg : visible.keySet()) {
+            if (reg > maxReg) {
+                maxReg = reg;
             }
         }
 
@@ -3785,33 +3741,13 @@ public class BytecodeCompiler implements Visitor {
         //
         // Therefore capture all visible Perl variables (scalars/arrays/hashes) from the
         // current scope, not just variables referenced directly in the sub AST.
-        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
-        for (Map<String, Integer> scope : variableScopes) {
-            for (Map.Entry<String, Integer> e : scope.entrySet()) {
-                String varName = e.getKey();
-                Integer reg = e.getValue();
-                if (reg == null || reg < 3) {
-                    continue;
-                }
-                if (varName == null || varName.isEmpty()) {
-                    continue;
-                }
-                char sigil = varName.charAt(0);
-                if (sigil != '$' && sigil != '@' && sigil != '%') {
-                    continue;
-                }
-                closureVarsByReg.put(reg, varName);
-            }
-        }
+        TreeMap<Integer, String> closureVarsByReg = collectVisiblePerlVariables();
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
 
-        // If there are closure variables, we need to store them in PersistentVariable globals
-        // so the named sub can retrieve them using RETRIEVE_BEGIN opcodes
         int beginId = 0;
         if (!closureVarIndices.isEmpty()) {
-            // Assign a unique BEGIN ID for this subroutine
             beginId = EmitterMethodCreator.classCounter++;
 
             // Store each closure variable in PersistentVariable globals
@@ -3930,24 +3866,7 @@ public class BytecodeCompiler implements Visitor {
         // lexicals only inside strings (so they won't appear as IdentifierNodes in the AST).
         // Perl still expects those lexicals to be visible to eval STRING at runtime.
         // Capture all visible Perl variables (scalars/arrays/hashes) from the current scope.
-        TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
-        for (Map<String, Integer> scope : variableScopes) {
-            for (Map.Entry<String, Integer> e : scope.entrySet()) {
-                String varName = e.getKey();
-                Integer reg = e.getValue();
-                if (reg == null || reg < 3) {
-                    continue;
-                }
-                if (varName == null || varName.isEmpty()) {
-                    continue;
-                }
-                char sigil = varName.charAt(0);
-                if (sigil != '$' && sigil != '@' && sigil != '%') {
-                    continue;
-                }
-                closureVarsByReg.put(reg, varName);
-            }
-        }
+        TreeMap<Integer, String> closureVarsByReg = collectVisiblePerlVariables();
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
@@ -4153,8 +4072,7 @@ public class BytecodeCompiler implements Visitor {
                 OperatorNode sigilOp = (OperatorNode) varOp2.operand;
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-                    variableScopes.peek().put(varName, varReg);
-                    allDeclaredVariables.put(varName, varReg);
+                    registerVariable(varName, varReg);
                 }
             }
         }
@@ -4697,26 +4615,6 @@ public class BytecodeCompiler implements Visitor {
         return bytecode;
     }
 
-    /**
-     * Get the variable scopes stack.
-     * Used by refactored compiler classes for variable declaration.
-     */
-    Stack<Map<String, Integer>> getVariableScopes() {
-        return variableScopes;
-    }
-
-    /**
-     * Get the all declared variables map.
-     * Used by refactored compiler classes for variable registry tracking.
-     */
-    Map<String, Integer> getAllDeclaredVariables() {
-        return allDeclaredVariables;
-    }
-
-    /**
-     * Get the captured variable indices map.
-     * Used by refactored compiler classes for closure support.
-     */
     Map<String, Integer> getCapturedVarIndices() {
         return capturedVarIndices;
     }

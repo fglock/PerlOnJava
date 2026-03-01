@@ -7,6 +7,8 @@ import org.perlonjava.runtime.operators.Operator;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.Map;
+
 /**
  * Handler for rarely-used operations called directly by BytecodeInterpreter.
  *
@@ -271,61 +273,62 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int evalCallContext = RuntimeContextType.SCALAR;
-        // Newer bytecode encodes the eval operator's own call context (VOID/SCALAR/LIST)
-        // so eval semantics are correct even when the surrounding statement is compiled
-        // in VOID context.
         if (pc < bytecode.length) {
             evalCallContext = bytecode[pc++];
         }
+        int evalSiteIndex = -1;
+        if (pc < bytecode.length) {
+            evalSiteIndex = bytecode[pc++];
+        }
 
-        // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
+        // Look up per-eval-site variable registry (scope-correct mapping)
+        Map<String, Integer> siteRegistry = null;
+        if (evalSiteIndex >= 0 && code.evalSiteRegistries != null
+                && evalSiteIndex < code.evalSiteRegistries.size()) {
+            siteRegistry = code.evalSiteRegistries.get(evalSiteIndex);
+        }
+
         RuntimeBase codeValue = registers[stringReg];
         RuntimeScalar codeScalar;
         if (codeValue instanceof RuntimeScalar) {
             codeScalar = (RuntimeScalar) codeValue;
         } else {
-            // Convert list to scalar (e.g., from string interpolation)
             codeScalar = codeValue.scalar();
         }
         String perlCode = codeScalar.toString();
         evalTrace("EVAL_STRING opcode enter rd=r" + rd + " strReg=r" + stringReg +
-                " ctx=" + evalCallContext + " outerWantarray=" + ((RuntimeScalar) registers[2]).getInt() +
+                " ctx=" + evalCallContext + " evalSite=" + evalSiteIndex +
                 " src=" + (code != null ? code.sourceName : "null"));
 
-        // Read outer wantarray from register 2 (set by BytecodeInterpreter from the call site context).
-        // This is the true calling context (VOID/SCALAR/LIST) that wantarray() inside the
-        // eval body must reflect — exactly as evalStringWithInterpreter receives callContext.
         int callContext = evalCallContext;
         if (registers[2] instanceof RuntimeScalar rs) {
-            // For backward compatibility with older bytecode, or if evalCallContext
-            // is not set correctly, fall back to the outer wantarray register.
             if (callContext == 0 && rs.value != null) {
                 callContext = rs.getInt();
             }
         }
 
         if (callContext == RuntimeContextType.LIST) {
-            // Return list context result
             RuntimeList result = EvalStringHandler.evalStringList(
                     perlCode,
-                    code,           // Current InterpretedCode for context
-                    registers,      // Current registers for variable access
+                    code,
+                    registers,
                     code.sourceName,
                     code.sourceLine,
-                    callContext
+                    callContext,
+                    siteRegistry
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " scalar=" + result.scalar().toString());
         } else {
-            // Scalar/void context: return scalar result
             RuntimeScalar result = EvalStringHandler.evalString(
                     perlCode,
-                    code,           // Current InterpretedCode for context
-                    registers,      // Current registers for variable access
+                    code,
+                    registers,
                     code.sourceName,
                     code.sourceLine,
-                    callContext
+                    callContext,
+                    siteRegistry
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +

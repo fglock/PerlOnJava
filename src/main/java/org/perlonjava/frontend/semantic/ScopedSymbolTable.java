@@ -218,6 +218,20 @@ public class ScopedSymbolTable {
         return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage(), ast);
     }
 
+    public void addVariableWithIndex(String name, int index, String variableDeclType) {
+        clearVisibleVariablesCache();
+        symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, getCurrentPackage());
+    }
+
+    public Map<String, Integer> getVisibleVariableRegistry() {
+        Map<String, Integer> registry = new HashMap<>();
+        Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();
+        for (SymbolTable.SymbolEntry entry : visible.values()) {
+            registry.put(entry.name(), entry.index());
+        }
+        return registry;
+    }
+
     /**
      * Retrieves the index of a variable, searching from the innermost to the outermost scope.
      *
