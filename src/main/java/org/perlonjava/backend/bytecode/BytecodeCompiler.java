@@ -707,6 +707,17 @@ public class BytecodeCompiler implements Visitor {
 
         // Visit each statement in the block
         int numStatements = node.elements.size();
+
+        int lastMeaningfulIndex = -1;
+        for (int i = numStatements - 1; i >= 0; i--) {
+            Node elem = node.elements.get(i);
+            if (elem == null) continue;
+            if (elem instanceof ListNode ln && ln.elements.isEmpty()) continue;
+            lastMeaningfulIndex = i;
+            break;
+        }
+        if (lastMeaningfulIndex == -1) lastMeaningfulIndex = numStatements - 1;
+
         for (int i = 0; i < numStatements; i++) {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
@@ -724,7 +735,7 @@ public class BytecodeCompiler implements Visitor {
 
             // If this is not an assignment or other value-using construct, use VOID context
             // EXCEPT for the last statement in a block, which should use the block's context
-            boolean isLastStatement = (i == numStatements - 1);
+            boolean isLastStatement = (i == lastMeaningfulIndex);
             if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
                 currentCallContext = RuntimeContextType.VOID;
             }
