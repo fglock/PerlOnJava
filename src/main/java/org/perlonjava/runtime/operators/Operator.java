@@ -7,6 +7,8 @@ import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinNT;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
+import org.perlonjava.runtime.regex.RegexTimeoutException;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -144,10 +146,12 @@ public class Operator {
                     }
                 }
             } else {
-                Matcher matcher = pattern.matcher(inputStr);
+                CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
+                Matcher matcher = pattern.matcher(matchInput);
                 int lastEnd = 0;
                 int splitCount = 0;
 
+                try {
                 while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
                     // Add the part before the match
 
@@ -188,6 +192,9 @@ public class Operator {
 
                     lastEnd = matcher.end();
                     splitCount++;
+                }
+                } catch (RegexTimeoutException e) {
+                    WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
                 }
 
                 // Add the remaining part of the string
@@ -354,7 +361,8 @@ public class Operator {
 
                 // Remove elements
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
-                    removedElements.elements.add(runtimeArray.elements.remove(offset));
+                    RuntimeBase removed = runtimeArray.elements.remove(offset);
+                    removedElements.elements.add(removed != null ? removed : new RuntimeScalar());
                 }
 
                 // Add new elements

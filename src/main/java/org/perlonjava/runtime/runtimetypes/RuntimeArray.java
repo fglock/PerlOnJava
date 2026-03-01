@@ -24,6 +24,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     private static final Stack<RuntimeArray> dynamicStateStack = new Stack<>();
     // Internal type of array - PLAIN_ARRAY, AUTOVIVIFY_ARRAY, TIED_ARRAY, or READONLY_ARRAY
     public int type;
+    public boolean strictAutovivify;
     // List to hold the elements of the array.
     public List<RuntimeScalar> elements;
     // For hash assignment in scalar context: %h = (1,2,3,4) should return 4, not 2
@@ -206,7 +207,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public void addToArray(RuntimeArray array) {
         if (this.type == AUTOVIVIFY_ARRAY) {
-            throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            if (this.strictAutovivify) {
+                throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            }
+            return;
         }
 
         List<RuntimeScalar> targetElements = array.elements;
@@ -593,7 +597,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // This is important for returning local arrays from functions
         RuntimeList result = new RuntimeList();
         for (RuntimeScalar element : this.elements) {
-            result.elements.add(new RuntimeScalar(element));
+            result.elements.add(element == null ? new RuntimeScalar() : new RuntimeScalar(element));
         }
         return result;
     }
@@ -612,8 +616,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 yield getScalarInt(elements.size());
             }
-            case AUTOVIVIFY_ARRAY ->
+            case AUTOVIVIFY_ARRAY -> {
+                if (this.strictAutovivify) {
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+                }
+                yield getScalarInt(0);
+            }
             case TIED_ARRAY -> TieArray.tiedFetchSize(this);
             case READONLY_ARRAY -> {
                 if (scalarContextSize != null) {
@@ -629,8 +637,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public int lastElementIndex() {
         return switch (type) {
             case PLAIN_ARRAY -> elements.size() - 1;
-            case AUTOVIVIFY_ARRAY ->
+            case AUTOVIVIFY_ARRAY -> {
+                if (this.strictAutovivify) {
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+                }
+                yield -1;
+            }
             case TIED_ARRAY -> TieArray.tiedFetchSize(this).getInt() - 1;
             case READONLY_ARRAY -> elements.size() - 1;
             default -> throw new IllegalStateException("Unknown array type: " + type);

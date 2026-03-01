@@ -109,6 +109,9 @@ public class OpcodeHandlerExtended {
     public static int executeRepeatAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeBase result = Operator.repeat(
             registers[rd],
             (RuntimeScalar) registers[rs],
@@ -130,6 +133,9 @@ public class OpcodeHandlerExtended {
     public static int executePowAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeBase val1 = registers[rd];
         RuntimeBase val2 = registers[rs];
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -151,6 +157,9 @@ public class OpcodeHandlerExtended {
     public static int executeLeftShiftAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar s1 = (RuntimeScalar) registers[rd];
         RuntimeScalar s2 = (RuntimeScalar) registers[rs];
         RuntimeScalar result = BitwiseOperators.shiftLeft(s1, s2);
@@ -170,6 +179,9 @@ public class OpcodeHandlerExtended {
     public static int executeRightShiftAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar s1 = (RuntimeScalar) registers[rd];
         RuntimeScalar s2 = (RuntimeScalar) registers[rs];
         RuntimeScalar result = BitwiseOperators.shiftRight(s1, s2);
@@ -189,12 +201,13 @@ public class OpcodeHandlerExtended {
     public static int executeLogicalAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
         if (!s1.getBoolean()) {
-            // Left side is false, result is left side (no assignment needed)
             return pc;
         }
-        // Left side is true, assign right side
         RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
         ((RuntimeScalar) registers[rd]).set(s2);
         return pc;
@@ -212,12 +225,13 @@ public class OpcodeHandlerExtended {
     public static int executeLogicalOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
         if (s1.getBoolean()) {
-            // Left side is true, result is left side (no assignment needed)
             return pc;
         }
-        // Left side is false, assign right side
         RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
         ((RuntimeScalar) registers[rd]).set(s2);
         return pc;
@@ -226,6 +240,9 @@ public class OpcodeHandlerExtended {
     public static int executeDefinedOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
         if (s1.getDefinedBoolean()) {
             return pc;
@@ -247,6 +264,9 @@ public class OpcodeHandlerExtended {
     public static int executeStringConcatAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = StringOperators.stringConcat(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -267,6 +287,9 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = BitwiseOperators.bitwiseAnd(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -287,6 +310,9 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -307,6 +333,9 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -315,18 +344,12 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
-    /**
-     * Execute string bitwise AND assign operation.
-     * Format: STRING_BITWISE_AND_ASSIGN rd rs
-     *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
-     * @param registers Register file
-     * @return Updated program counter
-     */
     public static int executeStringBitwiseAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = BitwiseOperators.bitwiseAndDot(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -335,18 +358,12 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
-    /**
-     * Execute string bitwise OR assign operation.
-     * Format: STRING_BITWISE_OR_ASSIGN rd rs
-     *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
-     * @param registers Register file
-     * @return Updated program counter
-     */
     public static int executeStringBitwiseOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = BitwiseOperators.bitwiseOrDot(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -355,18 +372,12 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
-    /**
-     * Execute string bitwise XOR assign operation.
-     * Format: STRING_BITWISE_XOR_ASSIGN rd rs
-     *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
-     * @param registers Register file
-     * @return Updated program counter
-     */
     public static int executeStringBitwiseXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeScalar result = BitwiseOperators.bitwiseXorDot(
             (RuntimeScalar) registers[rd],
             (RuntimeScalar) registers[rs]
@@ -688,6 +699,9 @@ public class OpcodeHandlerExtended {
      */
     public static int executePreAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         ((RuntimeScalar) registers[rd]).preAutoIncrement();
         return pc;
     }
@@ -699,6 +713,9 @@ public class OpcodeHandlerExtended {
     public static int executePostAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
+            registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
+        }
         registers[rd] = ((RuntimeScalar) registers[rs]).postAutoIncrement();
         return pc;
     }
@@ -709,6 +726,9 @@ public class OpcodeHandlerExtended {
      */
     public static int executePreAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         ((RuntimeScalar) registers[rd]).preAutoDecrement();
         return pc;
     }
@@ -720,6 +740,9 @@ public class OpcodeHandlerExtended {
     public static int executePostAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
+            registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
+        }
         registers[rd] = ((RuntimeScalar) registers[rs]).postAutoDecrement();
         return pc;
     }
@@ -879,7 +902,7 @@ public class OpcodeHandlerExtended {
             (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
         RuntimeScalar next = iterator.next();
-        registers[rd] = next;
+        registers[rd] = BytecodeInterpreter.isImmutableProxy(next) ? BytecodeInterpreter.ensureMutableScalar(next) : next;
         return pc;
     }
 
@@ -892,6 +915,10 @@ public class OpcodeHandlerExtended {
         int rs = bytecode[pc++];
 
         RuntimeBase val1 = registers[rd];
+        if (BytecodeInterpreter.isImmutableProxy(val1)) {
+            val1 = BytecodeInterpreter.ensureMutableScalar(val1);
+            registers[rd] = val1;
+        }
         RuntimeBase val2 = registers[rs];
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
@@ -909,6 +936,10 @@ public class OpcodeHandlerExtended {
         int rs = bytecode[pc++];
 
         RuntimeBase val1 = registers[rd];
+        if (BytecodeInterpreter.isImmutableProxy(val1)) {
+            val1 = BytecodeInterpreter.ensureMutableScalar(val1);
+            registers[rd] = val1;
+        }
         RuntimeBase val2 = registers[rs];
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
@@ -925,6 +956,9 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeBase val1 = registers[rd];
         RuntimeBase val2 = registers[rs];
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -934,14 +968,13 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
-    /**
-     * Execute modulus assign operation.
-     * Format: MODULUS_ASSIGN rd rs
-     */
     public static int executeModulusAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
         RuntimeBase val1 = registers[rd];
         RuntimeBase val2 = registers[rs];
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();

@@ -108,7 +108,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      *
      * @return The RuntimeScalar value of the special variable, or null if not available.
      */
-    RuntimeScalar getValueAsScalar() {
+    public RuntimeScalar getValueAsScalar() {
         try {
             RuntimeScalar result = switch (variableId) {
                 case CAPTURE -> {
@@ -268,6 +268,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     @Override
     public void addToList(RuntimeList list) {
         list.add(this.getValueAsScalar());
+    }
+
+    @Override
+    public RuntimeList getList() {
+        return new RuntimeList(this.getValueAsScalar());
     }
 
     /**

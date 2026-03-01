@@ -21,6 +21,27 @@ public class BytecodeInterpreter {
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
 
+    static RuntimeScalar ensureMutableScalar(RuntimeBase val) {
+        if (val instanceof RuntimeScalarReadOnly ro) {
+            RuntimeScalar copy = new RuntimeScalar();
+            copy.type = ro.type;
+            copy.value = ro.value;
+            return copy;
+        }
+        if (val instanceof ScalarSpecialVariable sv) {
+            RuntimeScalar src = sv.getValueAsScalar();
+            RuntimeScalar copy = new RuntimeScalar();
+            copy.type = src.type;
+            copy.value = src.value;
+            return copy;
+        }
+        return (RuntimeScalar) val;
+    }
+
+    static boolean isImmutableProxy(RuntimeBase val) {
+        return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
+    }
+
     /**
      * Execute interpreted bytecode.
      *
@@ -115,10 +136,6 @@ public class BytecodeInterpreter {
                             return new RuntimeList();
                         }
                         RuntimeList retList = retVal.getList();
-                        // Materialize $1, $&, etc. into concrete scalars BEFORE returning.
-                        // The finally block will call savedRegexState.restore(), which overwrites
-                        // global regex state.  Any lazy ScalarSpecialVariable references in the
-                        // return list must be resolved while this sub's regex state is still active.
                         RuntimeCode.materializeSpecialVarsInResult(retList);
                         return retList;
                     }
@@ -182,9 +199,11 @@ public class BytecodeInterpreter {
 
                     case Opcodes.MOVE: {
                         // Register copy: rd = rs
+                        // Must unwrap RuntimeScalarReadOnly to prevent read-only values in variable registers
                         int dest = bytecode[pc++];
                         int src = bytecode[pc++];
-                        registers[dest] = registers[src];
+                        RuntimeBase srcVal = registers[src];
+                        registers[dest] = isImmutableProxy(srcVal) ? ensureMutableScalar(srcVal) : srcVal;
                         break;
                     }
 
@@ -241,6 +260,16 @@ public class BytecodeInterpreter {
                         // Load undef: rd = new RuntimeScalar()
                         int rd = bytecode[pc++];
                         registers[rd] = new RuntimeScalar();
+                        break;
+                    }
+
+                    case Opcodes.UNDEFINE_SCALAR: {
+                        // Undefine variable in-place: rd.undefine()
+                        int rd = bytecode[pc++];
+                        if (isImmutableProxy(registers[rd])) {
+                            registers[rd] = ensureMutableScalar(registers[rd]);
+                        }
+                        registers[rd].undefine();
                         break;
                     }
 
@@ -315,6 +344,9 @@ public class BytecodeInterpreter {
 
                         if (iterator.hasNext()) {
                             RuntimeScalar element = iterator.next();
+                            if (isImmutableProxy(element)) {
+                                element = ensureMutableScalar(element);
+                            }
                             registers[rd] = element;
                             GlobalVariable.aliasGlobalVariable(name, element);
                             pc = bodyTarget;  // ABSOLUTE jump back to body start
@@ -422,7 +454,17 @@ public class BytecodeInterpreter {
                         // addToScalar calls getValueAsScalar() for ScalarSpecialVariable
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rs].addToScalar((RuntimeScalar) registers[rd]);
+                        RuntimeBase rdVal = registers[rd];
+                        RuntimeScalar rdScalar;
+                        if (isImmutableProxy(rdVal)) {
+                            rdScalar = new RuntimeScalar();
+                            registers[rd] = rdScalar;
+                        } else if (rdVal instanceof RuntimeScalar) {
+                            rdScalar = (RuntimeScalar) rdVal;
+                        } else {
+                            rdScalar = rdVal.scalar();
+                        }
+                        registers[rs].addToScalar(rdScalar);
                         break;
                     }
 
@@ -662,7 +704,8 @@ public class BytecodeInterpreter {
 
                         if (iterator.hasNext()) {
                             // Get next element and jump back to body
-                            registers[rd] = iterator.next();
+                            RuntimeScalar elem = iterator.next();
+                            registers[rd] = (isImmutableProxy(elem)) ? ensureMutableScalar(elem) : elem;
                             pc = bodyTarget;  // ABSOLUTE jump back to body start
                         }
                         // else: fall through to exit
@@ -916,8 +959,9 @@ public class BytecodeInterpreter {
                         int valueReg = bytecode[pc++];
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
-                        hash.put(key.toString(), val);  // Convert key to String
+                        RuntimeBase valBase = registers[valueReg];
+                        RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
+                        hash.put(key.toString(), ensureMutableScalar(val));
                         break;
                     }
 
@@ -999,7 +1043,8 @@ public class BytecodeInterpreter {
 
                         // Convert to scalar if called in scalar context
                         if (context == RuntimeContextType.SCALAR) {
-                            registers[rd] = result.scalar();
+                            RuntimeBase scalarResult = result.scalar();
+                            registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
                         } else {
                             registers[rd] = result;
                         }
@@ -1061,7 +1106,8 @@ public class BytecodeInterpreter {
 
                         // Convert to scalar if called in scalar context
                         if (context == RuntimeContextType.SCALAR) {
-                            registers[rd] = result.scalar();
+                            RuntimeBase scalarResult = result.scalar();
+                            registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
                         } else {
                             registers[rd] = result;
                         }
@@ -1173,14 +1219,16 @@ public class BytecodeInterpreter {
                     case Opcodes.INC_REG: {
                         // Increment register in-place: r++
                         int rd = bytecode[pc++];
-                        registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], 1);
+                        RuntimeBase incResult = MathOperators.add((RuntimeScalar) registers[rd], 1);
+                        registers[rd] = (isImmutableProxy(incResult)) ? ensureMutableScalar(incResult) : incResult;
                         break;
                     }
 
                     case Opcodes.DEC_REG: {
                         // Decrement register in-place: r--
                         int rd = bytecode[pc++];
-                        registers[rd] = MathOperators.subtract((RuntimeScalar) registers[rd], 1);
+                        RuntimeBase decResult = MathOperators.subtract((RuntimeScalar) registers[rd], 1);
+                        registers[rd] = (isImmutableProxy(decResult)) ? ensureMutableScalar(decResult) : decResult;
                         break;
                     }
 
@@ -1188,6 +1236,9 @@ public class BytecodeInterpreter {
                         // Add and assign: rd += rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
+                        if (isImmutableProxy(registers[rd])) {
+                            registers[rd] = ensureMutableScalar(registers[rd]);
+                        }
                         MathOperators.addAssign(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
@@ -1200,6 +1251,9 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
                         pc += 1;
+                        if (isImmutableProxy(registers[rd])) {
+                            registers[rd] = ensureMutableScalar(registers[rd]);
+                        }
                         RuntimeScalar result = MathOperators.add((RuntimeScalar) registers[rd], immediate);
                         ((RuntimeScalar) registers[rd]).set(result);
                         break;
@@ -2311,7 +2365,7 @@ public class BytecodeInterpreter {
             }
 
             // Not in eval - show detailed error with bytecode context
-            int errorPc = Math.max(0, pc - 1); // Go back one instruction
+            int errorPc = Math.max(0, pc - 1);
 
             // Show bytecode context (10 bytes before errorPc)
             StringBuilder bcContext = new StringBuilder();
@@ -2327,7 +2381,9 @@ public class BytecodeInterpreter {
             }
             bcContext.append(" ]");
 
-            String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage();
+            StackTraceElement[] st = e.getStackTrace();
+            String javaLine = (st.length > 0) ? " [java:" + st[0].getFileName() + ":" + st[0].getLineNumber() + "]" : "";
+            String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage() + javaLine;
             throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
         } catch (Throwable e) {
             // Check if we're inside an eval block
@@ -2358,7 +2414,15 @@ public class BytecodeInterpreter {
             }
 
             // Wrap other exceptions with interpreter context including bytecode context
-            String errorMessage = formatInterpreterError(code, pc, e);
+            int debugPc = Math.max(0, pc - 3);
+            String opcodeInfo = " [opcodes at pc-3..pc: ";
+            for (int di = debugPc; di <= Math.min(pc + 2, bytecode.length - 1); di++) {
+                if (di == pc) opcodeInfo += ">>>";
+                opcodeInfo += bytecode[di] + " ";
+                if (di == pc) opcodeInfo += "<<< ";
+            }
+            opcodeInfo += "]";
+            String errorMessage = formatInterpreterError(code, pc, e) + opcodeInfo;
             throw new RuntimeException(errorMessage, e);
         }
         } // end outer while
@@ -2478,6 +2542,9 @@ public class BytecodeInterpreter {
             case Opcodes.SUBTRACT_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (isImmutableProxy(registers[rd])) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -2489,6 +2556,9 @@ public class BytecodeInterpreter {
             case Opcodes.MULTIPLY_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (isImmutableProxy(registers[rd])) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -2500,6 +2570,9 @@ public class BytecodeInterpreter {
             case Opcodes.DIVIDE_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (isImmutableProxy(registers[rd])) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
@@ -2511,6 +2584,9 @@ public class BytecodeInterpreter {
             case Opcodes.MODULUS_ASSIGN: {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
+                if (isImmutableProxy(registers[rd])) {
+                    registers[rd] = ensureMutableScalar(registers[rd]);
+                }
                 RuntimeBase val1 = registers[rd];
                 RuntimeBase val2 = registers[rs];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();

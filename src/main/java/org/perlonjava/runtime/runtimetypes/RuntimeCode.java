@@ -490,6 +490,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCtx.capturedEnv = ctx.capturedEnv;
             }
             
+            ast.setAnnotation("blockIsSubroutine", true);
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,

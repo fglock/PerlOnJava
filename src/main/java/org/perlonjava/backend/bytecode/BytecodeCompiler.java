@@ -3002,25 +3002,34 @@ public class BytecodeCompiler implements Visitor {
                             continue;
                         }
 
-                        // Regular scalar variable in list
-                        if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode idNode) {
-                            String varName = "$" + idNode.name;
-
-                            // Check if it's a lexical variable
-                            if (hasVariable(varName)) {
-                                throwCompilerException("Can't localize lexical variable " + varName);
+                        if (sigilOp.operand instanceof IdentifierNode idNode) {
+                            if (sigil.equals("*")) {
+                                String globalName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                                int nameIdx = addToStringPool(globalName);
+                                int rd = allocateRegister();
+                                emit(Opcodes.LOCAL_GLOB);
+                                emitReg(rd);
+                                emit(nameIdx);
+                                varRegs.add(rd);
+                            } else {
+                                String varName = sigil + idNode.name;
+                                if (hasVariable(varName)) {
+                                    throwCompilerException("Can't localize lexical variable " + varName);
+                                }
+                                String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                                int nameIdx = addToStringPool(globalVarName);
+                                int rd = allocateRegister();
+                                if (sigil.equals("$")) {
+                                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                } else if (sigil.equals("@")) {
+                                    emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                } else if (sigil.equals("%")) {
+                                    emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                }
+                                emitReg(rd);
+                                emit(nameIdx);
+                                varRegs.add(rd);
                             }
-
-                            // Localize global variable
-                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
-                            int nameIdx = addToStringPool(globalVarName);
-
-                            int rd = allocateRegister();
-                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                            emitReg(rd);
-                            emit(nameIdx);
-
-                            varRegs.add(rd);
                         }
                     }
                 }
@@ -3854,6 +3863,8 @@ public class BytecodeCompiler implements Visitor {
             this.errorUtil,
             packedRegistry
         );
+        subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
+            symbolTable.currentPackageIsClass());
 
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
         subCompiler.currentSubroutineBeginId = beginId;
@@ -3960,6 +3971,8 @@ public class BytecodeCompiler implements Visitor {
             this.errorUtil,
             parentRegistry  // Pass parent variable registry for nested closure support
         );
+        subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
+            symbolTable.currentPackageIsClass());
 
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
