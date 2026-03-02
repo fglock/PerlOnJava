@@ -577,6 +577,7 @@ public class ModuleOperators {
         parsedArgs.fileName = actualFileName;
         parsedArgs.incHook = incHookRef;
         parsedArgs.applySourceFilters = shouldApplyFilters;  // Enable source filter preprocessing if needed
+        parsedArgs.disassembleEnabled = RuntimeCode.DISASSEMBLE;
         if (code == null) {
             try {
                 code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName), parsedArgs);
