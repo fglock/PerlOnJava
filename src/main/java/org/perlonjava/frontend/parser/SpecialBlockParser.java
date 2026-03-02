@@ -123,6 +123,13 @@ public class SpecialBlockParser {
                             tokenIndex));
         }
 
+        // Track newly created evalBeginIds entries so we can clean them up after block execution
+        // when inside a subroutine body. Entries created just for this special block's variable
+        // capture must not pollute the global map, or they will cause JVM-compiled 'my' variables
+        // to incorrectly use retrieveBeginScalar.
+        boolean inSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
+        List<OperatorNode> newEvalBeginEntries = inSubroutineBody ? new ArrayList<>() : null;
+
         // Declare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
@@ -148,6 +155,9 @@ public class SpecialBlockParser {
                     int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
                             ast,
                             k -> EmitterMethodCreator.classCounter++);
+                    if (!isFromOuterScope && newEvalBeginEntries != null) {
+                        newEvalBeginEntries.add(ast);
+                    }
                     packageName = PersistentVariable.beginPackage(beginId);
                     // Emit: package BEGIN_PKG
                     nodes.add(
@@ -261,6 +271,18 @@ public class SpecialBlockParser {
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
         }
         GlobalVariable.getGlobalVariable("main::@").set(""); // Reset error variable
+
+        // Clean up evalBeginIds entries that were created just for this special block,
+        // but ONLY when inside a subroutine body. Top-level variables need their entries
+        // to persist across multiple BEGIN blocks (e.g. my $x; BEGIN { $x = 1 }).
+        // Inside subroutines, these entries must not persist or they cause 'my' variables
+        // to incorrectly use retrieveBeginScalar (shared persistent storage) instead of
+        // creating fresh RuntimeScalars per invocation.
+        if (newEvalBeginEntries != null) {
+            for (OperatorNode ast : newEvalBeginEntries) {
+                RuntimeCode.evalBeginIds.remove(ast);
+            }
+        }
 
         if (!blockPhase.equals("BEGIN")) {
             RuntimeScalar codeRef = result.getFirst();
