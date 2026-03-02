@@ -142,13 +142,11 @@ public class SpecialBlockParser {
                             new OperatorNode("package",
                                     new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 } else {
-                    // "my" or "state" variable live in a special BEGIN package
-                    // Retrieve the variable id from the AST; create a new id if needed
                     OperatorNode ast = entry.ast();
-                    if (ast.id == 0) {
-                        ast.id = EmitterMethodCreator.classCounter++;
-                    }
-                    packageName = PersistentVariable.beginPackage(ast.id);
+                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                            ast,
+                            k -> EmitterMethodCreator.classCounter++);
+                    packageName = PersistentVariable.beginPackage(beginId);
                     // Emit: package BEGIN_PKG
                     nodes.add(
                             new OperatorNode("package",
