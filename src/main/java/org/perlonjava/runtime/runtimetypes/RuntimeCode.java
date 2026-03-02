@@ -1716,10 +1716,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Invokes the JVM-compiled method associated with this code object.
      *
-     * <p>Regex state scoping ($1, $&amp;, etc.) is NOT handled here.  For JVM-compiled code
-     * it is emitted directly into the generated method by {@code EmitterMethodCreator}
-     * ({@code regexStateSlot} save/restore).  For interpreted code, {@code InterpretedCode}
-     * overrides this method and delegates to {@code BytecodeInterpreter.execute()}.
+     * <p>Regex state scoping ($1, $&amp;, etc.) is handled on-demand via
+     * {@link RegexState#saveBeforeMatch()} and {@link DynamicVariableManager}.
      *
      * @param a           the RuntimeArray containing the arguments for the subroutine
      * @param callContext the context in which the subroutine is called

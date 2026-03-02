@@ -106,7 +106,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
-        if (scalar.type == TIED_SCALAR) {
+        if (scalar instanceof ScalarSpecialVariable ssv) {
+            scalar = ssv.getValueAsScalar();
+        } else if (scalar.type == TIED_SCALAR) {
             scalar = scalar.tiedFetch();
         }
         this.type = scalar.type;
