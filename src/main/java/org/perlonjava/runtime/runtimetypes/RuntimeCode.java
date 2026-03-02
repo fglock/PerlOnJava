@@ -42,6 +42,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
+    private static final Map<Integer, Integer> evalBeginIds = new HashMap<>();
+
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
      * Enabled by default. eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
@@ -421,15 +423,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // "my" or "state" variables get special BEGIN package globals
                     Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
                     if (runtimeValue != null) {
-                        // Get or create the special package ID
-                        // IMPORTANT: We need to set the ID NOW (before parsing) so that when
-                        // runSpecialBlock is called during parsing, it uses the SAME ID
+                        // Get or create the special package ID.
+                        // IMPORTANT: Do NOT mutate the AST node (ast.id) — the AST is
+                        // shared with the JVM compiler and mutation would corrupt `my`
+                        // variable reinitialization in loops.
                         OperatorNode ast = entry.ast();
                         if (ast != null) {
-                            if (ast.id == 0) {
-                                ast.id = EmitterMethodCreator.classCounter++;
-                            }
-                            String packageName = PersistentVariable.beginPackage(ast.id);
+                            int beginId = evalBeginIds.computeIfAbsent(
+                                    System.identityHashCode(ast),
+                                    k -> EmitterMethodCreator.classCounter++);
+                            String packageName = PersistentVariable.beginPackage(beginId);
                             // IMPORTANT: Global variable keys do NOT include the sigil
                             // entry.name() is "@arr" but the key should be "packageName::arr"
                             String varNameWithoutSigil = entry.name().substring(1);  // Remove the sigil
@@ -802,7 +805,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            // Setup for BEGIN block support - create aliases for captured variables
+            // Setup for BEGIN block support - create aliases for captured variables.
+            // IMPORTANT: Do NOT mutate AST nodes (e.g. operatorAst.id) here.
+            // The AST is shared with the JVM compiler; mutating it would change how
+            // `my` declarations are compiled (NEW vs RETRIEVE_BEGIN), causing variables
+            // inside loops to stop being reinitialized between iterations.
             ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
             Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
             for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
@@ -812,10 +819,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         if (runtimeValue != null) {
                             OperatorNode operatorAst = entry.ast();
                             if (operatorAst != null) {
-                                if (operatorAst.id == 0) {
-                                    operatorAst.id = EmitterMethodCreator.classCounter++;
-                                }
-                                String packageName = PersistentVariable.beginPackage(operatorAst.id);
+                                int beginId = evalBeginIds.computeIfAbsent(
+                                        System.identityHashCode(operatorAst),
+                                        k -> EmitterMethodCreator.classCounter++);
+                                String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
 

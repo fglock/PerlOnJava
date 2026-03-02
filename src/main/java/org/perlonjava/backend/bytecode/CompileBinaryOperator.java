@@ -715,11 +715,14 @@ public class CompileBinaryOperator {
 
         int listReg;
         if (node.right instanceof ListNode listNode) {
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
             java.util.List<Integer> argRegs = new java.util.ArrayList<>();
             for (Node arg : listNode.elements) {
                 arg.accept(bytecodeCompiler);
                 argRegs.add(bytecodeCompiler.lastResultReg);
             }
+            bytecodeCompiler.currentCallContext = savedContext;
             listReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CREATE_LIST);
             bytecodeCompiler.emitReg(listReg);
