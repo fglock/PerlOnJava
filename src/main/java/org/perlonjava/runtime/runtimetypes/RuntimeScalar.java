@@ -587,7 +587,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case JAVAOBJECT -> value != null;
             case TIED_SCALAR -> this.tiedFetch().getBoolean();
             case DUALVAR -> ((DualVar) this.value).stringValue().getBoolean();
-            case CODE -> ((RuntimeCode) value).defined();
+            case CODE -> true;
             default -> Overload.boolify(this).getBoolean();
         };
     }
