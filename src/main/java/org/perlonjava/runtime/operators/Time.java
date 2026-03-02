@@ -212,13 +212,7 @@ public class Time {
      * This method should be called at safe execution points in the interpreter.
      */
     public static void checkPendingSignals() {
-        // Process any queued signals
         PerlSignalQueue.processSignals();
-
-        // Clear interrupt flag if it was set by alarm
-        if (Thread.interrupted()) {
-            // The interrupt was handled via signal processing
-        }
     }
 
     /**
