@@ -357,20 +357,20 @@ Java uses 2 UTF-16 code units for emoji; Perl counts code points.
 ## Control Flow: Non-Local Jumps
 
 ```perl
-OUTER: for my $i (1..10) {
-    INNER: for my $j (1..10) {
-        last OUTER if $i * $j > 50;
-        next INNER if $j == 5;
-    }
+sub skip { last SKIP }   # Jumps out of caller's block!
+
+SKIP: {
+    skip() unless $have_feature;
+    ok(1, "feature works");
 }
 ```
 
+`skip()` executes `last SKIP` — but `SKIP` is in the **caller's** scope.
+
 **Implementation:** Tagged return values (`RuntimeControlFlowList`).
 
-- Returns carry a control-flow tag (last/next/redo/goto/tail-call) + target label
-- Caller checks tag and dispatches accordingly
-- Untagged lists → normal execution continues
-- Implements `goto &sub` (tail calls) and non-local jumps safely
+- Return carries a control-flow tag (`last`/`next`/`redo`/`goto`) + target label
+- Caller checks tag and dispatches — unwinding across subroutine boundaries
 
 ---
 
