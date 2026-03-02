@@ -97,9 +97,9 @@ public class BytecodeInterpreter {
         // Each entry is [labelStringPoolIdx, exitPc]
 
         // Record DVM level so the finally block can clean up everything pushed
-        // by this subroutine (local variables AND on-demand regex state snapshots).
+        // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = DynamicVariableManager.getLocalLevel();
-        RegexState.enterScope();
+        RegexState.save();
         try {
         outer:
         while (true) {
@@ -2408,7 +2408,6 @@ public class BytecodeInterpreter {
         } // end outer while
         } finally {
             DynamicVariableManager.popToLocalLevel(savedLocalLevel);
-            RegexState.leaveScope();
             InterpreterState.pop();
         }
     }

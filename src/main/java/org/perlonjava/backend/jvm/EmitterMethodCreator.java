@@ -650,10 +650,10 @@ public class EmitterMethodCreator implements Opcodes {
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
-            // Subroutine-level regex state scoping: increment depth so that the first
-            // regex match in this sub will push a snapshot onto DynamicVariableManager.
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "enterScope", "()V", false);
+            if (localRecord.needsDVM()) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            }
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
@@ -1056,12 +1056,8 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
 
             // Teardown local variables — popToLocalLevel() also restores regex state
-            // (if any regex ran in this sub, a RegexState was pushed onto the DVM stack).
+            // (RegexState was pushed onto the DVM stack at sub entry).
             Local.localTeardown(localRecord, mv);
-
-            // Decrement regex scope depth (counterpart to enterScope at method entry)
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "leaveScope", "()V", false);
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
