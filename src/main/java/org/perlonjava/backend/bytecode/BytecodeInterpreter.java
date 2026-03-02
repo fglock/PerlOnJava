@@ -1937,6 +1937,8 @@ public class BytecodeInterpreter {
                     // Group 1-2: Dereferencing and Slicing (114-121)
                     case Opcodes.DEREF_ARRAY:
                     case Opcodes.DEREF_HASH:
+                    case Opcodes.DEREF_HASH_NONSTRICT:
+                    case Opcodes.DEREF_ARRAY_NONSTRICT:
                     case Opcodes.ARRAY_SLICE:
                     case Opcodes.ARRAY_SLICE_SET:
                     case Opcodes.HASH_SLICE:
@@ -2958,6 +2960,10 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeDerefArray(bytecode, pc, registers);
             case Opcodes.DEREF_HASH:
                 return SlowOpcodeHandler.executeDerefHash(bytecode, pc, registers);
+            case Opcodes.DEREF_HASH_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefHashNonStrict(bytecode, pc, registers, code);
+            case Opcodes.DEREF_ARRAY_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefArrayNonStrict(bytecode, pc, registers, code);
             case Opcodes.ARRAY_SLICE:
                 return SlowOpcodeHandler.executeArraySlice(bytecode, pc, registers);
             case Opcodes.ARRAY_SLICE_SET:

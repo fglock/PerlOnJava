@@ -830,6 +830,36 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeDerefHashNonStrict(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int scalarReg = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+        String pkg = code.stringPool[pkgIdx];
+        RuntimeBase scalarBase = registers[scalarReg];
+        if (scalarBase instanceof RuntimeHash) {
+            registers[rd] = scalarBase;
+            return pc;
+        }
+        RuntimeScalar scalar = scalarBase.scalar();
+        registers[rd] = scalar.hashDerefNonStrict(pkg);
+        return pc;
+    }
+
+    public static int executeDerefArrayNonStrict(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int scalarReg = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+        String pkg = code.stringPool[pkgIdx];
+        RuntimeBase scalarBase = registers[scalarReg];
+        if (scalarBase instanceof RuntimeArray) {
+            registers[rd] = scalarBase;
+            return pc;
+        }
+        RuntimeScalar scalar = scalarBase.scalar();
+        registers[rd] = scalar.arrayDerefNonStrict(pkg);
+        return pc;
+    }
+
     /**
      * SLOW_HASH_SLICE: rd = hash.getSlice(keys_list)
      * Format: [SLOW_HASH_SLICE] [rd] [hashReg] [keysListReg]

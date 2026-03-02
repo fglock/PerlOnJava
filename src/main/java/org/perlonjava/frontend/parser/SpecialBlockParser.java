@@ -134,6 +134,7 @@ public class SpecialBlockParser {
                 }
 
                 String packageName;
+                boolean isFromOuterScope = false;
                 if (entry.decl().equals("our")) {
                     // "our" variable lives in a Perl package
                     packageName = entry.perlPackage();
@@ -143,6 +144,7 @@ public class SpecialBlockParser {
                                     new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 } else {
                     OperatorNode ast = entry.ast();
+                    isFromOuterScope = RuntimeCode.evalBeginIds.containsKey(ast);
                     int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
                             ast,
                             k -> EmitterMethodCreator.classCounter++);
@@ -159,7 +161,10 @@ public class SpecialBlockParser {
                 // The special global BEGIN_PKG::@arr is an ALIAS to the closed @arr variable.
                 //
                 // Implementation: Set the global variable to reference the same runtime object.
-                if (!entry.decl().equals("our")) {
+                // Only alias if the variable is from the outer (eval) scope, NOT if it's a newly
+                // declared variable in the current compilation unit that just happens to share
+                // the same name.
+                if (!entry.decl().equals("our") && isFromOuterScope) {
                     RuntimeCode.EvalRuntimeContext evalCtx = RuntimeCode.getEvalRuntimeContext();
                     if (evalCtx != null) {
                         Object runtimeValue = evalCtx.getRuntimeValue(entry.name());

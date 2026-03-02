@@ -831,9 +831,17 @@ public class BytecodeCompiler implements Visitor {
             leftOp.operand.accept(this);
             int scalarRefReg = lastResultReg;
             arrayReg = allocateRegister();
-            emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-            emitReg(arrayReg);
-            emitReg(scalarRefReg);
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(arrayReg);
+                emitReg(scalarRefReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                emitReg(arrayReg);
+                emitReg(scalarRefReg);
+                emit(pkgIdx);
+            }
         }
 
         if (!(node.right instanceof ArrayLiteralNode indicesNode)) {
@@ -1071,9 +1079,17 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 arrayReg = allocateRegister();
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                emitReg(arrayReg);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(arrayReg);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(arrayReg);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
             } else {
                 throwCompilerException("Array slice requires array or array reference");
                 return;
@@ -1235,9 +1251,17 @@ public class BytecodeCompiler implements Visitor {
 
             // Dereference to get the hash
             hashReg = allocateRegister();
-            emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-            emitReg(hashReg);
-            emitReg(scalarRefReg);
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarRefReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarRefReg);
+                emit(pkgIdx);
+            }
         } else {
             throwCompilerException("Hash slice requires hash variable or reference");
             return;
@@ -1317,9 +1341,17 @@ public class BytecodeCompiler implements Visitor {
             leftOp.operand.accept(this);
             int scalarRefReg = lastResultReg;
             hashReg = allocateRegister();
-            emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-            emitReg(hashReg);
-            emitReg(scalarRefReg);
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarRefReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                emitReg(hashReg);
+                emitReg(scalarRefReg);
+                emit(pkgIdx);
+            }
         }
 
         if (!(node.right instanceof HashLiteralNode)) {
@@ -1520,9 +1552,17 @@ public class BytecodeCompiler implements Visitor {
 
             // For now, let's assume it's a scalar with arrayref and dereference it first
             int arrayReg = allocateRegister();
-            emit(Opcodes.DEREF_ARRAY);
-            emitReg(arrayReg);
-            emitReg(baseReg);
+            if (isStrictRefsEnabled()) {
+                emit(Opcodes.DEREF_ARRAY);
+                emitReg(arrayReg);
+                emitReg(baseReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emit(Opcodes.DEREF_ARRAY_NONSTRICT);
+                emitReg(arrayReg);
+                emitReg(baseReg);
+                emit(pkgIdx);
+            }
 
             // Now get the element
             int rd = allocateRegister();
@@ -1600,9 +1640,17 @@ public class BytecodeCompiler implements Visitor {
                 // We need to handle both cases. Dereference if needed.
 
                 int hashReg = allocateRegister();
-                emit(Opcodes.DEREF_HASH);
-                emitReg(hashReg);
-                emitReg(baseReg);
+                if (isStrictRefsEnabled()) {
+                    emit(Opcodes.DEREF_HASH);
+                    emitReg(hashReg);
+                    emitReg(baseReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emit(Opcodes.DEREF_HASH_NONSTRICT);
+                    emitReg(hashReg);
+                    emitReg(baseReg);
+                    emit(pkgIdx);
+                }
 
                 // Now get the element
                 int rd = allocateRegister();
@@ -1661,9 +1709,17 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 arrayReg = allocateRegister();
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                emitReg(arrayReg);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(arrayReg);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(arrayReg);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
             } else {
                 throwCompilerException("push/unshift requires array or array reference");
                 return;
@@ -3182,9 +3238,17 @@ public class BytecodeCompiler implements Visitor {
                 // The reference should contain a RuntimeArray
                 // For @$scalar, we need to dereference it
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
 
                 lastResultReg = rd;
                 // Note: We don't check scalar context here because dereferencing
@@ -3199,9 +3263,17 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                emitReg(rd);
-                emitReg(refReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
 
                 lastResultReg = rd;
             } else if (node.operand instanceof StringNode strNode) {
@@ -3252,9 +3324,17 @@ public class BytecodeCompiler implements Visitor {
                 refOp.accept(this);
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
-                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                emitReg(hashReg);
-                emitReg(scalarReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                    emit(pkgIdx);
+                }
                 if (currentCallContext == RuntimeContextType.SCALAR) {
                     int rd = allocateRegister();
                     emit(Opcodes.ARRAY_SIZE);
@@ -3269,9 +3349,17 @@ public class BytecodeCompiler implements Visitor {
                 blockNode.accept(this);
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
-                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                emitReg(hashReg);
-                emitReg(scalarReg);
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                    emit(pkgIdx);
+                }
                 lastResultReg = hashReg;
             } else if (node.operand instanceof StringNode strNode) {
                 // Symbolic ref: %{'name'} or 'name'->%* — load global hash by string name

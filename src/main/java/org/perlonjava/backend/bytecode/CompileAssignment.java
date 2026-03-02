@@ -994,9 +994,17 @@ public class CompileAssignment {
 
                         // Dereference to get the actual array
                         int arrayReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(scalarRefReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(scalarRefReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(scalarRefReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
 
                         // Assign the value to the dereferenced array
                         bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
@@ -1169,9 +1177,17 @@ public class CompileAssignment {
 
                         // Dereference the array reference to get the actual array
                         arrayReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(scalarReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
                     } else {
                         bytecodeCompiler.throwCompilerException("Array assignment requires variable or expression on left side");
                         return;
@@ -1317,9 +1333,17 @@ public class CompileAssignment {
                                 hashOp.operand.accept(bytecodeCompiler);
                                 int scalarReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
-                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                                bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emitReg(scalarReg);
+                                if (bytecodeCompiler.isStrictRefsEnabled()) {
+                                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emitReg(scalarReg);
+                                } else {
+                                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emitReg(scalarReg);
+                                    bytecodeCompiler.emit(pkgIdx);
+                                }
                             }
                         } else {
                             bytecodeCompiler.throwCompilerException("Hash assignment requires scalar dereference: $var{key}");
@@ -1333,9 +1357,17 @@ public class CompileAssignment {
 
                         // Dereference to get the hash (with autovivification)
                         hashReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
                     } else {
                         bytecodeCompiler.throwCompilerException("Hash assignment requires variable or expression on left side");
                         return;
@@ -1396,9 +1428,17 @@ public class CompileAssignment {
 
                         // Dereference to get the hash
                         int hashReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(refReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(refReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(refReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
 
                         // Compile key
                         int keyReg;
@@ -1437,9 +1477,17 @@ public class CompileAssignment {
 
                         // Dereference to get the array
                         int arrayReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(refReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(refReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitReg(refReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
 
                         // Compile index
                         if (arrayIdx.elements.isEmpty()) {
@@ -1686,9 +1734,17 @@ public class CompileAssignment {
             operandOp.accept(bytecodeCompiler);
             int refReg = bytecodeCompiler.lastResultReg;
             int arrayReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, dollarHashOp.getIndex());
-            bytecodeCompiler.emitReg(arrayReg);
-            bytecodeCompiler.emitReg(refReg);
+            if (bytecodeCompiler.isStrictRefsEnabled()) {
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(refReg);
+            } else {
+                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(refReg);
+                bytecodeCompiler.emit(pkgIdx);
+            }
             return arrayReg;
         }
         bytecodeCompiler.throwCompilerException("$# assignment requires array variable");

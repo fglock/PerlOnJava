@@ -993,9 +993,17 @@ public class CompileOperator {
 
                 // Dereference to get the array
                 arrayReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(refReg);
+                if (bytecodeCompiler.isStrictRefsEnabled()) {
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(refReg);
+                } else {
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(refReg);
+                    bytecodeCompiler.emit(pkgIdx);
+                }
             } else {
                 bytecodeCompiler.throwCompilerException("pop requires array variable or dereferenced array: pop @array or pop @$ref");
             }
@@ -1057,9 +1065,17 @@ public class CompileOperator {
 
                 // Dereference to get the array
                 arrayReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(refReg);
+                if (bytecodeCompiler.isStrictRefsEnabled()) {
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(refReg);
+                } else {
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(refReg);
+                    bytecodeCompiler.emit(pkgIdx);
+                }
             } else {
                 bytecodeCompiler.throwCompilerException("shift requires array variable or dereferenced array: shift @array or shift @$ref");
             }
@@ -1120,9 +1136,17 @@ public class CompileOperator {
 
                 // Dereference to get the array
                 arrayReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(refReg);
+                if (bytecodeCompiler.isStrictRefsEnabled()) {
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(refReg);
+                } else {
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(refReg);
+                    bytecodeCompiler.emit(pkgIdx);
+                }
             } else {
                 bytecodeCompiler.throwCompilerException("splice requires array variable or dereferenced array: splice @array or splice @$ref");
             }
@@ -1238,9 +1262,17 @@ public class CompileOperator {
                         int scalarReg = bytecodeCompiler.lastResultReg;
 
                         hashReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
                     }
                 } else if (hashAccess.left instanceof BinaryOperatorNode) {
                     // Nested: exists $hash{outer}{inner}
@@ -1248,9 +1280,17 @@ public class CompileOperator {
                     int scalarReg = bytecodeCompiler.lastResultReg;
 
                     hashReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                    bytecodeCompiler.emitReg(hashReg);
-                    bytecodeCompiler.emitReg(scalarReg);
+                    if (bytecodeCompiler.isStrictRefsEnabled()) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(scalarReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(scalarReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
                 } else {
                     bytecodeCompiler.throwCompilerException("Hash access requires variable or expression on left side");
                     return;
@@ -1428,9 +1468,17 @@ public class CompileOperator {
                         int scalarReg = bytecodeCompiler.lastResultReg;
 
                         hashReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
                     }
                 } else if (hashAccess.left instanceof BinaryOperatorNode) {
                     // Nested: delete $hash{outer}{inner}
@@ -1438,9 +1486,17 @@ public class CompileOperator {
                     int scalarReg = bytecodeCompiler.lastResultReg;
 
                     hashReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                    bytecodeCompiler.emitReg(hashReg);
-                    bytecodeCompiler.emitReg(scalarReg);
+                    if (bytecodeCompiler.isStrictRefsEnabled()) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(scalarReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(scalarReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
                 } else {
                     bytecodeCompiler.throwCompilerException("Hash access requires variable or expression on left side");
                     return;
@@ -1490,9 +1546,17 @@ public class CompileOperator {
                 int scalarReg = bytecodeCompiler.lastResultReg;
 
                 int hashReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                bytecodeCompiler.emitReg(hashReg);
-                bytecodeCompiler.emitReg(scalarReg);
+                if (bytecodeCompiler.isStrictRefsEnabled()) {
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    bytecodeCompiler.emitReg(hashReg);
+                    bytecodeCompiler.emitReg(scalarReg);
+                } else {
+                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    bytecodeCompiler.emitReg(hashReg);
+                    bytecodeCompiler.emitReg(scalarReg);
+                    bytecodeCompiler.emit(pkgIdx);
+                }
 
                 // Compile key
                 int keyReg;
@@ -1667,9 +1731,17 @@ public class CompileOperator {
                     int refReg = bytecodeCompiler.lastResultReg;
 
                     arrayReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
+                    if (bytecodeCompiler.isStrictRefsEnabled()) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(refReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(refReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
                 } else {
                     bytecodeCompiler.throwCompilerException("$# requires array variable or dereferenced array");
                 }

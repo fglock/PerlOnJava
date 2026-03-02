@@ -1380,6 +1380,29 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("DEREF_HASH r").append(rd).append(" = %{r").append(rs).append("}\n");
                     break;
+                case Opcodes.DEREF_HASH_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("DEREF_HASH_NONSTRICT r").append(rd).append(" = %{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.DEREF_ARRAY_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("DEREF_ARRAY_NONSTRICT r").append(rd).append(" = @{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.DEREF_SCALAR_STRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DEREF_SCALAR_STRICT r").append(rd).append(" = ${r").append(rs).append("}\n");
+                    break;
+                case Opcodes.DEREF_SCALAR_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("DEREF_SCALAR_NONSTRICT r").append(rd).append(" = ${r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
+                    break;
                 case Opcodes.RETRIEVE_BEGIN_SCALAR:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
