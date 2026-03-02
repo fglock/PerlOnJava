@@ -5,6 +5,7 @@ import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.WinBase;
 import com.sun.jna.platform.win32.WinNT;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
@@ -89,8 +90,8 @@ public class UtimeOperator {
             }
 
             // Regular filename case
-            String filename = fileArg.toString();
-            if (filename.isEmpty()) {
+            String filename = RuntimeIO.sanitizePathname("utime", fileArg.toString());
+            if (filename == null || filename.isEmpty()) {
                 return false;
             }
 

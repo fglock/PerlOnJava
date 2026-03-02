@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
@@ -51,10 +52,9 @@ public class CompileAssignment {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if this variable is captured by named subs (Parser marks with id)
-                            if (sigilOp.id != 0) {
-                                // RETRIEVE the persistent variable (creates if doesn't exist)
-                                int beginId = sigilOp.id;
+                            Integer beginIdObj = RuntimeCode.evalBeginIds.get(sigilOp);
+                            if (beginIdObj != null) {
+                                int beginId = beginIdObj;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
                                 int reg = bytecodeCompiler.allocateRegister();
 
@@ -98,10 +98,9 @@ public class CompileAssignment {
                             // Handle my @array = ...
                             String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if this variable is captured by named subs
-                            if (sigilOp.id != 0) {
-                                // RETRIEVE the persistent array
-                                int beginId = sigilOp.id;
+                            Integer beginIdArr = RuntimeCode.evalBeginIds.get(sigilOp);
+                            if (beginIdArr != null) {
+                                int beginId = beginIdArr;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
                                 int arrayReg = bytecodeCompiler.allocateRegister();
 
@@ -168,10 +167,9 @@ public class CompileAssignment {
                             // Handle my %hash = ...
                             String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if this variable is captured by named subs
-                            if (sigilOp.id != 0) {
-                                // RETRIEVE the persistent hash
-                                int beginId = sigilOp.id;
+                            Integer beginIdHash = RuntimeCode.evalBeginIds.get(sigilOp);
+                            if (beginIdHash != null) {
+                                int beginId = beginIdHash;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
                                 int hashReg = bytecodeCompiler.allocateRegister();
 
@@ -261,10 +259,9 @@ public class CompileAssignment {
 
                                     int varReg;
 
-                                    // Check if this variable is captured by named subs (Parser marks with id)
-                                    if (sigilOp.id != 0) {
-                                        // This variable is captured - use RETRIEVE_BEGIN to get persistent storage
-                                        int beginId = sigilOp.id;
+                                    Integer beginIdList = RuntimeCode.evalBeginIds.get(sigilOp);
+                                    if (beginIdList != null) {
+                                        int beginId = beginIdList;
                                         int nameIdx = bytecodeCompiler.addToStringPool(varName);
                                         varReg = bytecodeCompiler.allocateRegister();
 
@@ -326,7 +323,7 @@ public class CompileAssignment {
 
                                     // Assign to variable
                                     if (sigil.equals("$")) {
-                                        if (sigilOp.id != 0) {
+                                        if (beginIdList != null) {
                                             bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                             bytecodeCompiler.emitReg(varReg);
                                             bytecodeCompiler.emitReg(elemReg);

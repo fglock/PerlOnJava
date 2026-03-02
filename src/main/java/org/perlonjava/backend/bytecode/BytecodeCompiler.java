@@ -70,6 +70,11 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    // Goto label support: maps label names to their PC addresses for intra-function goto.
+    // pendingGotos tracks forward references (goto before label) needing patch-up.
+    final Map<String, Integer> gotoLabelPcs = new HashMap<>();
+    final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), labelName(String)]
+
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
@@ -1734,15 +1739,9 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
-                    // Check if this variable is captured by closures (sigilOp.id != 0) or is a state variable
-                    // State variables always use persistent storage
-                    if (sigilOp.id != 0 || op.equals("state")) {
-                        // Variable is captured by compiled named subs or is a state variable
-                        // Store as persistent variable so both interpreted and compiled code can access it
-                        // Don't use a local register; instead load/store through persistent globals
-
-                        // For state variables, retrieve or initialize the persistent variable
-                        // For captured variables, retrieve the BEGIN-initialized variable
+                    Integer beginId = RuntimeCode.evalBeginIds.get(sigilOp);
+                    if (beginId != null || op.equals("state")) {
+                        int persistId = beginId != null ? beginId : sigilOp.id;
                         int reg = allocateRegister();
                         int nameIdx = addToStringPool(varName);
 
@@ -1751,21 +1750,21 @@ public class BytecodeCompiler implements Visitor {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
-                                emit(sigilOp.id);
+                                emit(persistId);
                                 registerVariable(varName, reg);
                             }
                             case "@" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
-                                emit(sigilOp.id);
+                                emit(persistId);
                                 registerVariable(varName, reg);
                             }
                             case "%" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
-                                emit(sigilOp.id);
+                                emit(persistId);
                                 registerVariable(varName, reg);
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
@@ -2106,9 +2105,9 @@ public class BytecodeCompiler implements Visitor {
                                 continue;
                             }
 
-                            // Check if this variable is captured by closures or is a state variable
-                            if (sigilOp.id != 0 || op.equals("state")) {
-                                // Variable is captured or is a state variable - use persistent storage
+                            Integer beginId2 = RuntimeCode.evalBeginIds.get(sigilOp);
+                            if (beginId2 != null || op.equals("state")) {
+                                int persistId = beginId2 != null ? beginId2 : sigilOp.id;
                                 int reg = allocateRegister();
                                 int nameIdx = addToStringPool(varName);
 
@@ -2117,21 +2116,21 @@ public class BytecodeCompiler implements Visitor {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
-                                        emit(sigilOp.id);
+                                        emit(persistId);
                                         registerVariable(varName, reg);
                                     }
                                     case "@" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
-                                        emit(sigilOp.id);
+                                        emit(persistId);
                                         registerVariable(varName, reg);
                                     }
                                     case "%" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
-                                        emit(sigilOp.id);
+                                        emit(persistId);
                                         registerVariable(varName, reg);
                                     }
                                     default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
@@ -4473,7 +4472,14 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        // Labels are tracked in loops, standalone labels are no-ops
+        int pc = bytecode.size();
+        gotoLabelPcs.put(node.label, pc);
+        for (Object[] pending : pendingGotos) {
+            if (node.label.equals(pending[1])) {
+                patchIntOffset((Integer) pending[0], pc);
+            }
+        }
+        pendingGotos.removeIf(p -> node.label.equals(p[1]));
         lastResultReg = -1;
     }
 
