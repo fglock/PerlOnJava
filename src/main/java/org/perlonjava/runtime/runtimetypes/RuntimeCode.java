@@ -759,6 +759,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Declare these outside try block so they're accessible in finally block for debugger support
         Node ast = null;
         List<LexerToken> tokens = null;
+        List<String> evalAliasKeys = new ArrayList<>();
 
         // Save dynamic variable level to restore after eval.
         // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
@@ -831,6 +832,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 } else if (runtimeValue instanceof RuntimeScalar) {
                                     GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
                                 }
+                                evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
                             }
                         }
                     }
@@ -1049,6 +1051,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
+
+            // Clean up BEGIN aliases for captured variables after compilation.
+            // These aliases were only needed during parsing (for BEGIN blocks to access
+            // outer lexicals). Leaving them in GlobalVariable would cause corruption
+            // if a recursive call re-enters the same function and its `my` declaration
+            // calls retrieveBeginScalar, finding the stale alias instead of creating
+            // a fresh variable.
+            for (String key : evalAliasKeys) {
+                String fullName = key.substring(1);
+                switch (key.charAt(0)) {
+                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
+                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
+                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                }
+            }
 
             // Store source lines in debugger symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention
