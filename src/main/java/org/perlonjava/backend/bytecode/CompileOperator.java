@@ -449,6 +449,24 @@ public class CompileOperator {
             }
 
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("alarm")) {
+            int rd = bytecodeCompiler.allocateRegister();
+            if (node.operand != null) {
+                node.operand.accept(bytecodeCompiler);
+                int argReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.emit(Opcodes.ALARM_OP);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(argReg);
+            } else {
+                int zeroReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                bytecodeCompiler.emitReg(zeroReg);
+                bytecodeCompiler.emitInt(0);
+                bytecodeCompiler.emit(Opcodes.ALARM_OP);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(zeroReg);
+            }
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("study")) {
             // study $var
             // In modern Perl, study is a no-op that always returns true

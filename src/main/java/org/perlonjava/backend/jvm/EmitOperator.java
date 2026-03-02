@@ -1196,7 +1196,22 @@ public class EmitOperator {
             if (node.operand instanceof OperatorNode operatorNode &&
                     operatorNode.operator.equals("&")) {
                 emitterVisitor.ctx.logDebug("Handle \\& " + operatorNode.operand);
-                if (operatorNode.operand instanceof OperatorNode ||
+                if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                    emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                    emitterVisitor.ctx.mv.visitLdcInsn(identifierNode.name);
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "<init>",
+                            "(Ljava/lang/String;)V",
+                            false);
+                    emitterVisitor.pushCurrentPackage();
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "createCodeReference",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else if (operatorNode.operand instanceof OperatorNode ||
                         operatorNode.operand instanceof BlockNode) {
                     operatorNode.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.pushCurrentPackage();

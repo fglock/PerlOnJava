@@ -53,6 +53,10 @@ public class ReferenceOperators {
                 str = ref(runtimeScalar.tiedFetch()).toString();
                 break;
             case CODE:
+                if (!((RuntimeCode) runtimeScalar.value).defined()) {
+                    str = "";
+                    break;
+                }
                 blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "CODE" : NameNormalizer.getBlessStr(blessId);
                 break;

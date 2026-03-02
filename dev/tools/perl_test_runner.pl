@@ -291,7 +291,8 @@ sub run_single_test {
     }
     # For tests in t/ directory (t/op/, t/base/, etc.), change to t/
     # so they can find ./test.pl via require
-    elsif ($test_file =~ m{^t/}) {
+    # But not for ExifTool tests which need to run from their root dir
+    elsif ($test_file =~ m{^t/} && !-f 't/TestLib.pm') {
         $local_test_dir = 't';
     }
 
