@@ -533,7 +533,7 @@ public class EmitEval {
 
     /**
      * Emit bytecode for the interpreter path: compile to InterpretedCode and execute directly.
-     * This path is used when JPERL_EVAL_USE_INTERPRETER is set.
+     * This path is used by default (disable with JPERL_EVAL_NO_INTERPRETER=1).
      *
      * @param emitterVisitor The visitor that traverses the AST
      * @param evalTag The unique identifier for this eval site

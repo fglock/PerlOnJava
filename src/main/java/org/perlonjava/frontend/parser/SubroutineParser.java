@@ -700,16 +700,13 @@ public class SubroutineParser {
                             entry.name().substring(1),
                             entry.perlPackage());
                 } else {
-                    // Handle "my" or "state" variables which live in a special BEGIN package
-                    // Retrieve the variable id from the AST; create a new id if needed
                     OperatorNode ast = entry.ast();
-                    if (ast.id == 0) {
-                        ast.id = EmitterMethodCreator.classCounter++;
-                    }
-                    // Normalize variable name for 'my' or 'state' declarations
+                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                            ast,
+                            k -> EmitterMethodCreator.classCounter++);
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),
-                            PersistentVariable.beginPackage(ast.id));
+                            PersistentVariable.beginPackage(beginId));
                 }
                 // Determine the class type based on the sigil
                 classList.add(

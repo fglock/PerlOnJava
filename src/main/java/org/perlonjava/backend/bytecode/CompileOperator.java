@@ -2941,13 +2941,16 @@ public class CompileOperator {
             if (labelStr == null) {
                 bytecodeCompiler.throwCompilerException("goto must be given label");
             }
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.CREATE_GOTO);
-            bytecodeCompiler.emitReg(rd);
-            int labelIdx = bytecodeCompiler.addToStringPool(labelStr);
-            bytecodeCompiler.emitReg(labelIdx);
-            bytecodeCompiler.emit(Opcodes.RETURN);
-            bytecodeCompiler.emitReg(rd);
+            Integer targetPc = bytecodeCompiler.gotoLabelPcs.get(labelStr);
+            if (targetPc != null) {
+                bytecodeCompiler.emit(Opcodes.GOTO);
+                bytecodeCompiler.emitInt(targetPc);
+            } else {
+                bytecodeCompiler.emit(Opcodes.GOTO);
+                int patchPc = bytecodeCompiler.bytecode.size();
+                bytecodeCompiler.emitInt(0);
+                bytecodeCompiler.pendingGotos.add(new Object[]{patchPc, labelStr});
+            }
             bytecodeCompiler.lastResultReg = -1;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
