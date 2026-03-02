@@ -1359,6 +1359,11 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("SLEEP_OP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
                     break;
+                case Opcodes.ALARM_OP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("ALARM_OP r").append(rd).append(" = alarm(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.DEREF_GLOB:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

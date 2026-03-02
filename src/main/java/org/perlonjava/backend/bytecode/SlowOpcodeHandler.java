@@ -492,6 +492,17 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeAlarm(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int secondsReg = bytecode[pc++];
+        RuntimeScalar seconds = registers[secondsReg].scalar();
+        registers[rd] = Time.alarm(RuntimeContextType.SCALAR, seconds);
+        return pc;
+    }
+
     /**
      * Dereference array reference for multidimensional array access.
      * Handles: $array[0][1] which is really $array[0]->[1]
