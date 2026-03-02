@@ -1189,5 +1189,8 @@ public class Opcodes {
      *  Format: RESTORE_REGEX_STATE rs */
     public static final short RESTORE_REGEX_STATE = 357;
 
+    public static final short DEREF_HASH_NONSTRICT = 358;
+    public static final short DEREF_ARRAY_NONSTRICT = 359;
+
     private Opcodes() {} // Utility class - no instantiation
 }

@@ -666,12 +666,15 @@ public class IOOperator {
             if (offset > 0) {
                 while (existing.length() < offset) existing += "\0";
                 target.set(existing.substring(0, offset) + readData);
+                target.type = RuntimeScalarType.BYTE_STRING;
             } else if (offset < 0) {
                 int effectiveOffset = existing.length() + offset;
                 if (effectiveOffset < 0) effectiveOffset = 0;
                 target.set(existing.substring(0, effectiveOffset) + readData);
+                target.type = RuntimeScalarType.BYTE_STRING;
             } else {
                 target.set(readData);
+                target.type = RuntimeScalarType.BYTE_STRING;
             }
             return new RuntimeScalar(readData.length());
         }
@@ -717,6 +720,7 @@ public class IOOperator {
             if (offset == 0) {
                 // Clear the buffer when no offset is specified
                 target.set("");
+                target.type = RuntimeScalarType.BYTE_STRING;
             }
             // Otherwise preserve the buffer when using offset
             return new RuntimeScalar(0);
@@ -751,6 +755,7 @@ public class IOOperator {
         newValue.append(data);
 
         target.set(newValue.toString());
+        target.type = RuntimeScalarType.BYTE_STRING;
         return new RuntimeScalar(bytesRead);
     }
 
