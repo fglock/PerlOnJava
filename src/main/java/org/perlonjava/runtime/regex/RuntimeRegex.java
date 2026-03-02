@@ -460,8 +460,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Clearing these variables would incorrectly erase the previous successful capture
         // state and break tests that rely on @-/@+.
 
-        RegexState.saveBeforeMatch();
-
         try {
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
@@ -735,8 +733,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
-
-        RegexState.saveBeforeMatch();
 
         // Perform the substitution
         try {
