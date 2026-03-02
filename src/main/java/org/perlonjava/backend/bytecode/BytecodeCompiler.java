@@ -70,6 +70,11 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    // Goto label support: maps label names to their PC addresses for intra-function goto.
+    // pendingGotos tracks forward references (goto before label) needing patch-up.
+    final Map<String, Integer> gotoLabelPcs = new HashMap<>();
+    final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), labelName(String)]
+
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
@@ -4473,7 +4478,14 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        // Labels are tracked in loops, standalone labels are no-ops
+        int pc = bytecode.size();
+        gotoLabelPcs.put(node.label, pc);
+        for (Object[] pending : pendingGotos) {
+            if (node.label.equals(pending[1])) {
+                patchIntOffset((Integer) pending[0], pc);
+            }
+        }
+        pendingGotos.removeIf(p -> node.label.equals(p[1]));
         lastResultReg = -1;
     }
 
