@@ -44,13 +44,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
-     * When set, eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
+     * Enabled by default. eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
      * This provides 46x faster compilation for workloads with many unique eval strings.
      *
-     * Set environment variable JPERL_EVAL_USE_INTERPRETER=1 to enable.
+     * Set environment variable JPERL_EVAL_NO_INTERPRETER=1 to disable.
      */
     public static final boolean EVAL_USE_INTERPRETER =
-            System.getenv("JPERL_EVAL_USE_INTERPRETER") != null;
+            System.getenv("JPERL_EVAL_NO_INTERPRETER") == null;
 
     /**
      * Flag to control whether eval compilation errors should be printed to stderr.
