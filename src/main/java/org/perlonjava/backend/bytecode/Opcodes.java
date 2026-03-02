@@ -603,6 +603,8 @@ public class Opcodes {
     public static final short LOAD_GLOB = 153;
     /** rd = Time.sleep(seconds) - sleep for specified seconds */
     public static final short SLEEP_OP = 154;
+    /** rd = Time.alarm(seconds) - set alarm timer */
+    public static final short ALARM_OP = 155;
 
     // =================================================================
     // PHASE 3: OPERATORHANDLER PROMOTIONS (400-499) - Math Operators

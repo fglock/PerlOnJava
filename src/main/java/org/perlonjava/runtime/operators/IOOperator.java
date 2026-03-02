@@ -46,15 +46,14 @@ public class IOOperator {
             if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
                 double sleepTime = timeout.getDouble();
                 if (sleepTime > 0) {
+                    Thread.interrupted();
                     try {
-                        // Convert seconds to milliseconds
                         long millis = (long) (sleepTime * 1000);
                         int nanos = (int) ((sleepTime * 1000 - millis) * 1_000_000);
                         Thread.sleep(millis, nanos);
                     } catch (InterruptedException e) {
-                        // Restore interrupted status
-                        Thread.currentThread().interrupt();
-                        // Return remaining time (we don't track it precisely, so return 0)
+                        PerlSignalQueue.checkPendingSignals();
+                        Thread.interrupted();
                         return new RuntimeScalar(0);
                     }
                 }

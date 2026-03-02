@@ -2030,6 +2030,7 @@ public class BytecodeInterpreter {
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:
                     case Opcodes.SLEEP_OP:
+                    case Opcodes.ALARM_OP:
                     case Opcodes.DEREF_GLOB:
                     case Opcodes.LOAD_GLOB_DYNAMIC:
                     case Opcodes.DEREF_SCALAR_STRICT:
@@ -3143,6 +3144,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
             case Opcodes.SLEEP_OP:
                 return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
+            case Opcodes.ALARM_OP:
+                return SlowOpcodeHandler.executeAlarm(bytecode, pc, registers);
             case Opcodes.DEREF_GLOB:
                 return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers, code);
             case Opcodes.LOAD_GLOB_DYNAMIC:

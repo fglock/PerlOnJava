@@ -52,16 +52,15 @@ public class PerlSignalQueue {
      * Internal implementation of signal processing.
      */
     private static void processSignalsImpl() {
+        Thread.interrupted();
         SignalEvent event;
         while ((event = signalQueue.poll()) != null) {
-            // Execute the handler - this may throw PerlCompilerException (from die)
+            hasPendingSignal = !signalQueue.isEmpty();
             RuntimeArray args = new RuntimeArray();
             args.push(new RuntimeScalar(event.signal));
             RuntimeCode.apply(event.handler, args, RuntimeContextType.VOID);
-            // Note: If the handler throws an exception, it will propagate immediately
-            // and we won't process remaining signals in the queue
         }
-        hasPendingSignal = false;  // Clear flag after processing all signals
+        hasPendingSignal = false;
     }
 
     /**
