@@ -42,7 +42,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
-    private static final Map<Integer, Integer> evalBeginIds = new HashMap<>();
+    public static final IdentityHashMap<OperatorNode, Integer> evalBeginIds = new IdentityHashMap<>();
 
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
@@ -429,16 +429,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // variable reinitialization in loops.
                         OperatorNode ast = entry.ast();
                         if (ast != null) {
+                            boolean isNew = !evalBeginIds.containsKey(ast);
                             int beginId = evalBeginIds.computeIfAbsent(
-                                    System.identityHashCode(ast),
+                                    ast,
                                     k -> EmitterMethodCreator.classCounter++);
                             String packageName = PersistentVariable.beginPackage(beginId);
-                            // IMPORTANT: Global variable keys do NOT include the sigil
-                            // entry.name() is "@arr" but the key should be "packageName::arr"
-                            String varNameWithoutSigil = entry.name().substring(1);  // Remove the sigil
+                            String varNameWithoutSigil = entry.name().substring(1);
                             String fullName = packageName + "::" + varNameWithoutSigil;
 
-                            // Alias the global to the runtime value
                             if (runtimeValue instanceof RuntimeArray) {
                                 GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
                             } else if (runtimeValue instanceof RuntimeHash) {
@@ -820,7 +818,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             OperatorNode operatorAst = entry.ast();
                             if (operatorAst != null) {
                                 int beginId = evalBeginIds.computeIfAbsent(
-                                        System.identityHashCode(operatorAst),
+                                        operatorAst,
                                         k -> EmitterMethodCreator.classCounter++);
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);

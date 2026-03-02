@@ -1739,15 +1739,9 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
-                    // Check if this variable is captured by closures (sigilOp.id != 0) or is a state variable
-                    // State variables always use persistent storage
-                    if (sigilOp.id != 0 || op.equals("state")) {
-                        // Variable is captured by compiled named subs or is a state variable
-                        // Store as persistent variable so both interpreted and compiled code can access it
-                        // Don't use a local register; instead load/store through persistent globals
-
-                        // For state variables, retrieve or initialize the persistent variable
-                        // For captured variables, retrieve the BEGIN-initialized variable
+                    Integer beginId = RuntimeCode.evalBeginIds.get(sigilOp);
+                    if (beginId != null || op.equals("state")) {
+                        int persistId = beginId != null ? beginId : sigilOp.id;
                         int reg = allocateRegister();
                         int nameIdx = addToStringPool(varName);
 
@@ -1756,21 +1750,21 @@ public class BytecodeCompiler implements Visitor {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
-                                emit(sigilOp.id);
+                                emit(persistId);
                                 registerVariable(varName, reg);
                             }
                             case "@" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
-                                emit(sigilOp.id);
+                                emit(persistId);
                                 registerVariable(varName, reg);
                             }
                             case "%" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
-                                emit(sigilOp.id);
+                                emit(persistId);
                                 registerVariable(varName, reg);
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
@@ -2111,9 +2105,9 @@ public class BytecodeCompiler implements Visitor {
                                 continue;
                             }
 
-                            // Check if this variable is captured by closures or is a state variable
-                            if (sigilOp.id != 0 || op.equals("state")) {
-                                // Variable is captured or is a state variable - use persistent storage
+                            Integer beginId2 = RuntimeCode.evalBeginIds.get(sigilOp);
+                            if (beginId2 != null || op.equals("state")) {
+                                int persistId = beginId2 != null ? beginId2 : sigilOp.id;
                                 int reg = allocateRegister();
                                 int nameIdx = addToStringPool(varName);
 
@@ -2122,21 +2116,21 @@ public class BytecodeCompiler implements Visitor {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
-                                        emit(sigilOp.id);
+                                        emit(persistId);
                                         registerVariable(varName, reg);
                                     }
                                     case "@" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
-                                        emit(sigilOp.id);
+                                        emit(persistId);
                                         registerVariable(varName, reg);
                                     }
                                     case "%" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
-                                        emit(sigilOp.id);
+                                        emit(persistId);
                                         registerVariable(varName, reg);
                                     }
                                     default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);

@@ -1110,9 +1110,8 @@ public class EmitVariable {
                     String className = EmitterMethodCreator.getVariableClassName(sigil);
 
                     if (operator.equals("my")) {
-                        // "my":
-                        if (sigilNode.id == 0) {
-                            // Create a new instance of the determined class
+                        Integer beginId = RuntimeCode.evalBeginIds.get(sigilNode);
+                        if (beginId == null) {
                             ctx.mv.visitTypeInsn(Opcodes.NEW, className);
                             ctx.mv.visitInsn(Opcodes.DUP);
                             ctx.mv.visitMethodInsn(
@@ -1122,9 +1121,6 @@ public class EmitVariable {
                                     "()V",
                                     false);
                         } else {
-                            // The variable was initialized by a BEGIN block
-
-                            // Determine the method to call and its descriptor based on the sigil
                             String methodName;
                             String methodDescriptor;
                             switch (var.charAt(0)) {
@@ -1145,7 +1141,7 @@ public class EmitVariable {
                             }
 
                             ctx.mv.visitLdcInsn(var);
-                            ctx.mv.visitLdcInsn(sigilNode.id);
+                            ctx.mv.visitLdcInsn(beginId);
                             ctx.mv.visitMethodInsn(
                                     Opcodes.INVOKESTATIC,
                                     "org/perlonjava/runtime/runtimetypes/PersistentVariable",
