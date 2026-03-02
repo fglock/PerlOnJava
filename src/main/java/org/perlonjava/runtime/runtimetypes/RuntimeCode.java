@@ -429,7 +429,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // variable reinitialization in loops.
                         OperatorNode ast = entry.ast();
                         if (ast != null) {
-                            boolean isNew = !evalBeginIds.containsKey(ast);
                             int beginId = evalBeginIds.computeIfAbsent(
                                     ast,
                                     k -> EmitterMethodCreator.classCounter++);
@@ -1733,8 +1732,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Invokes the JVM-compiled method associated with this code object.
      *
-     * <p>Regex state scoping ($1, $&amp;, etc.) is handled on-demand via
-     * {@link RegexState#saveBeforeMatch()} and {@link DynamicVariableManager}.
+     * <p>Regex state scoping ($1, $&amp;, etc.) is handled by {@link RegexState#save()}
+     * at subroutine entry, restored by {@link DynamicVariableManager#popToLocalLevel} at exit.
      *
      * @param a           the RuntimeArray containing the arguments for the subroutine
      * @param callContext the context in which the subroutine is called
