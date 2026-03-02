@@ -184,8 +184,8 @@ public class SystemOperator {
             setGlobalVariable("main::!", e.getMessage());
             exitCode = -1;
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new PerlCompilerException("Command execution interrupted: " + e.getMessage());
+            PerlSignalQueue.checkPendingSignals();
+            Thread.interrupted();
         } finally {
             // Readers are closed automatically by try-with-resources in threads
             if (process != null) {
@@ -236,8 +236,8 @@ public class SystemOperator {
             setGlobalVariable("main::!", e.getMessage());
             exitCode = -1;
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new PerlCompilerException("Command execution interrupted: " + e.getMessage());
+            PerlSignalQueue.checkPendingSignals();
+            Thread.interrupted();
         } finally {
             closeQuietly(reader);
             closeQuietly(errorReader);
