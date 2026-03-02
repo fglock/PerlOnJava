@@ -650,15 +650,10 @@ public class EmitterMethodCreator implements Opcodes {
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
-            // Subroutine-level regex state scoping (Perl 5 semantics): unconditionally save
-            // the caller's $1, $&, etc. on entry.  Restored at returnLabel before ARETURN.
-            // This is separate from block-level scoping (EmitBlock/EmitForeach + RegexUsageDetector).
-            int regexStateSlot = ctx.symbolTable.allocateLocalVariable();
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
-            mv.visitVarInsn(Opcodes.ASTORE, regexStateSlot);
+            // Subroutine-level regex state scoping: increment depth so that the first
+            // regex match in this sub will push a snapshot onto DynamicVariableManager.
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "enterScope", "()V", false);
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
@@ -1060,13 +1055,13 @@ public class EmitterMethodCreator implements Opcodes {
                     "materializeSpecialVarsInResult",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
 
-            // Restore caller's regex state (counterpart to the save at method entry)
-            mv.visitVarInsn(Opcodes.ALOAD, regexStateSlot);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
-
-            // Teardown local variables and environment after the return value is materialized
+            // Teardown local variables — popToLocalLevel() also restores regex state
+            // (if any regex ran in this sub, a RegexState was pushed onto the DVM stack).
             Local.localTeardown(localRecord, mv);
+
+            // Decrement regex scope depth (counterpart to enterScope at method entry)
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "leaveScope", "()V", false);
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed

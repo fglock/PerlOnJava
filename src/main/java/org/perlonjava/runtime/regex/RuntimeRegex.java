@@ -59,8 +59,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
-    // Indicates if \G assertion is used
-    private final boolean useGAssertion = false;
+    // Indicates if \G assertion is used (set from regexFlags during compilation)
+    private boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -112,6 +112,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             validateModifiers(modifiers);
 
             regex.regexFlags = fromModifiers(modifiers, patternString);
+            regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
             String javaPattern = null;
@@ -191,7 +192,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.pattern = recompiled.pattern;
         regex.patternFlags = recompiled.patternFlags;
         regex.regexFlags = recompiled.regexFlags;
-        // Keep patternString, replacement, etc.
+        regex.useGAssertion = recompiled.useGAssertion;
         regex.deferredUserDefinedUnicodeProperties = recompiled.deferredUserDefinedUnicodeProperties;
         return regex;
     }
@@ -262,6 +263,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.pattern = originalRegex.pattern;
             regex.patternString = originalRegex.patternString;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
+            regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
             return new RuntimeScalar(regex);
@@ -287,6 +289,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.pattern = originalRegex.pattern;
                     regex.patternString = originalRegex.patternString;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
+                    regex.useGAssertion = regex.regexFlags.useGAssertion();
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
 
                     return new RuntimeScalar(regex);
@@ -325,6 +328,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.pattern = resolvedRegex.pattern;
         regex.patternString = resolvedRegex.patternString;
         regex.regexFlags = resolvedRegex.regexFlags;
+        regex.useGAssertion = resolvedRegex.useGAssertion;
         regex.patternFlags = resolvedRegex.patternFlags;
 
         // Only recompile if we have new modifiers that actually change the flags
@@ -345,10 +349,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.pattern = recompiledRegex.pattern;
                 regex.patternString = recompiledRegex.patternString;
                 regex.regexFlags = recompiledRegex.regexFlags;
+                regex.useGAssertion = recompiledRegex.useGAssertion;
                 regex.patternFlags = recompiledRegex.patternFlags;
             } else {
                 // Just update the flags without recompiling
                 regex.regexFlags = newFlags;
+                regex.useGAssertion = newFlags.useGAssertion();
                 regex.patternFlags = newFlags.toPatternFlags();
             }
         }
@@ -453,6 +459,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // frequently run internal regexes (some of which fail) between user assertions.
         // Clearing these variables would incorrectly erase the previous successful capture
         // state and break tests that rely on @-/@+.
+
+        RegexState.saveBeforeMatch();
 
         try {
         while (matcher.find()) {
@@ -697,6 +705,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.pattern = pattern;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
                 tempRegex.regexFlags = originalFlags;
+                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
                 tempRegex.replacement = replacement;
                 regex = tempRegex;
             } else {
@@ -707,6 +716,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.pattern = Pattern.compile("", flags);
                 tempRegex.patternString = "";
                 tempRegex.regexFlags = originalFlags;
+                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
                 tempRegex.replacement = replacement;
                 regex = tempRegex;
             }
@@ -725,6 +735,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
+
+        RegexState.saveBeforeMatch();
 
         // Perform the substitution
         try {

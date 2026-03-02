@@ -5,46 +5,35 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 import java.util.regex.Matcher;
 
 /**
- * Immutable snapshot of all regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
+ * On-demand snapshot of regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
  *
- * <p>In Perl 5, regex match variables are dynamically scoped: each subroutine and
- * each block that contains regex operations saves the current state on entry and
- * restores it on exit.  This ensures that a caller's match variables are not
- * clobbered by callees or inner blocks.
+ * <p>Implements {@link DynamicState} so it integrates with {@link DynamicVariableManager}.
+ * Instead of eagerly saving at every block boundary, a snapshot is pushed onto the
+ * DynamicVariableManager stack <b>on first regex match</b> within a dynamic scope
+ * (subroutine / eval).  {@code popToLocalLevel()} restores it automatically on scope exit.
  *
- * <p>Two levels of scoping use this class:
- * <ul>
- *   <li><b>Subroutine-level</b> (unconditional): saved at method entry, restored at exit.
- *       In JVM-compiled code: {@code EmitterMethodCreator} ({@code regexStateSlot}).
- *       In interpreted code: {@code BytecodeInterpreter} ({@code savedRegexState} + finally block).</li>
- *   <li><b>Block-level</b> (conditional, gated by {@link org.perlonjava.frontend.analysis.RegexUsageDetector}):
- *       saved/restored around blocks that contain regex ops.
- *       In JVM-compiled code: {@code EmitBlock} / {@code EmitForeach}.
- *       In interpreted code: {@code SAVE_REGEX_STATE} / {@code RESTORE_REGEX_STATE} opcodes.</li>
- * </ul>
- *
- * <p><b>Important ordering constraint:</b> When a subroutine returns a value containing
- * lazy {@link org.perlonjava.runtime.specialvariables.ScalarSpecialVariable} references (e.g., $1),
- * those must be materialized via {@link RuntimeCode#materializeSpecialVarsInResult}
- * BEFORE calling {@link #restore()}, otherwise the restored (caller's) state would be
- * read instead of the subroutine's state.
- *
- * @see org.perlonjava.runtime.regex.RuntimeRegex for the global static fields being snapshotted
+ * <p>Callers must bracket each dynamic scope with {@link #enterScope()} / {@link #leaveScope()}.
+ * The regex runtime calls {@link #saveBeforeMatch()} before modifying globals.
  */
-public class RegexState {
-    public final Matcher globalMatcher;
-    public final String globalMatchString;
-    public final String lastMatchedString;
-    public final int lastMatchStart;
-    public final int lastMatchEnd;
-    public final String lastSuccessfulMatchedString;
-    public final int lastSuccessfulMatchStart;
-    public final int lastSuccessfulMatchEnd;
-    public final String lastSuccessfulMatchString;
-    public final RuntimeRegex lastSuccessfulPattern;
-    public final String[] lastCaptureGroups;
+public class RegexState implements DynamicState {
+    private static int scopeNestingDepth = 0;
+    private static int lastSavedAtDepth = -1;
 
-    public RegexState() {
+    private final Matcher globalMatcher;
+    private final String globalMatchString;
+    private final String lastMatchedString;
+    private final int lastMatchStart;
+    private final int lastMatchEnd;
+    private final String lastSuccessfulMatchedString;
+    private final int lastSuccessfulMatchStart;
+    private final int lastSuccessfulMatchEnd;
+    private final String lastSuccessfulMatchString;
+    private final RuntimeRegex lastSuccessfulPattern;
+    private final String[] lastCaptureGroups;
+    private final int savedDepth;
+
+    private RegexState() {
+        this.savedDepth = scopeNestingDepth;
         this.globalMatcher = RuntimeRegex.globalMatcher;
         this.globalMatchString = RuntimeRegex.globalMatchString;
         this.lastMatchedString = RuntimeRegex.lastMatchedString;
@@ -58,7 +47,27 @@ public class RegexState {
         this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
     }
 
-    public void restore() {
+    public static void enterScope() {
+        scopeNestingDepth++;
+    }
+
+    public static void leaveScope() {
+        scopeNestingDepth--;
+    }
+
+    public static void saveBeforeMatch() {
+        if (lastSavedAtDepth < scopeNestingDepth) {
+            lastSavedAtDepth = scopeNestingDepth;
+            DynamicVariableManager.pushLocalVariable(new RegexState());
+        }
+    }
+
+    @Override
+    public void dynamicSaveState() {
+    }
+
+    @Override
+    public void dynamicRestoreState() {
         RuntimeRegex.globalMatcher = this.globalMatcher;
         RuntimeRegex.globalMatchString = this.globalMatchString;
         RuntimeRegex.lastMatchedString = this.lastMatchedString;
@@ -70,5 +79,8 @@ public class RegexState {
         RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
         RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
         RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
+        if (lastSavedAtDepth >= savedDepth) {
+            lastSavedAtDepth = savedDepth - 1;
+        }
     }
 }
