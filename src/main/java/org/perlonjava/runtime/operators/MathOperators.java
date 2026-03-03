@@ -434,14 +434,16 @@ public class MathOperators {
      */
     public static RuntimeScalar integerDivide(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert to integers and perform integer division
-        long dividend = arg1.getLong();
-        long divisor = arg2.getLong();
+        int dividend = arg1.getInt();
+        int divisor = arg2.getInt();
 
+        // Handle division by zero
         if (divisor == 0) {
             throw new PerlCompilerException("Illegal division by zero");
         }
 
-        long result = dividend / divisor;
+        // Perform integer division
+        int result = dividend / divisor;
         return new RuntimeScalar(result);
     }
 
@@ -455,14 +457,17 @@ public class MathOperators {
      */
     public static RuntimeScalar integerModulus(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert to integers and perform integer modulus
-        long dividend = arg1.getLong();
-        long divisor = arg2.getLong();
+        int dividend = arg1.getInt();
+        int divisor = arg2.getInt();
 
+        // Handle division by zero
         if (divisor == 0) {
             throw new PerlCompilerException("Illegal modulus zero");
         }
 
-        long result = dividend % divisor;
+        // In Perl with "use integer", modulus follows C99 truncated division rules
+        // The result has the sign of the dividend, not the divisor
+        int result = dividend % divisor;
         return new RuntimeScalar(result);
     }
 

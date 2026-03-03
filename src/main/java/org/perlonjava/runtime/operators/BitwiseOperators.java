@@ -205,8 +205,9 @@ public class BitwiseOperators {
             return bitwiseNotDot(val);
         }
 
-        long value = val.getLong();
-        long result = ~value;
+        // Use signed 32-bit integer semantics
+        int value = val.getInt();
+        int result = ~value;
         return new RuntimeScalar(result);
     }
 
@@ -504,24 +505,28 @@ public class BitwiseOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        long value = runtimeScalar.getLong();
+        int value = runtimeScalar.getInt();
         long shift = arg2.getLong();
         
         // Handle negative shift (reverse direction: left becomes right)
         if (shift < 0) {
             shift = -shift;
-            if (shift >= 64) {
-                return new RuntimeScalar(value < 0 ? -1L : 0L);
+            // For shifts >= 32, stick to -1 or 0 depending on sign
+            if (shift >= 32) {
+                return new RuntimeScalar(value < 0 ? -1 : 0);
             }
-            long result = value >> (int)shift;
+            // Perform signed (arithmetic) right shift
+            int result = value >> (int)shift;
             return new RuntimeScalar(result);
         }
 
-        if (shift >= 64) {
+        // Shifts >= 32 return 0
+        if (shift >= 32) {
             return RuntimeScalarCache.scalarZero;
         }
         
-        long result = value << (int)shift;
+        // Perform signed left shift
+        int result = value << (int)shift;
         return new RuntimeScalar(result);
     }
     
@@ -549,24 +554,28 @@ public class BitwiseOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        long value = runtimeScalar.getLong();
+        int value = runtimeScalar.getInt();
         long shift = arg2.getLong();
         
         // Handle negative shift (reverse direction: right becomes left)
         if (shift < 0) {
             shift = -shift;
-            if (shift >= 64) {
+            // Shifts >= 32 return 0
+            if (shift >= 32) {
                 return RuntimeScalarCache.scalarZero;
             }
-            long result = value << (int)shift;
+            // Perform signed left shift
+            int result = value << (int)shift;
             return new RuntimeScalar(result);
         }
 
-        if (shift >= 64) {
-            return new RuntimeScalar(value < 0 ? -1L : 0L);
+        // For shifts >= 32, stick to -1 or 0 depending on sign
+        if (shift >= 32) {
+            return new RuntimeScalar(value < 0 ? -1 : 0);
         }
         
-        long result = value >> (int)shift;
+        // Perform signed (arithmetic) right shift
+        int result = value >> (int)shift;
         return new RuntimeScalar(result);
     }
 }
