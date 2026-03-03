@@ -41,6 +41,18 @@ PerlOnJava generates real JVM bytecode — the same kind of instructions that ja
 
 ---
 
+## Why the JVM?
+
+- **30 years of optimization** — JIT compilation turns hot code into native machine code
+- **500K+ libraries** on Maven Central — accessible without C bindings
+- **Container-aware** — built-in cgroup support for Docker/Kubernetes
+- Perl joins Java, Kotlin, Scala, Clojure, JRuby on the platform
+
+Note:
+The JVM runs on 3+ billion devices. Built-in tooling (JFR flight recorder, JMX monitoring, VisualVM) works automatically on PerlOnJava code. Multiple GC strategies available (ZGC, G1, Shenandoah).
+
+---
+
 ## What You Get
 
 - Run existing Perl scripts **unchanged** on the JVM
@@ -50,6 +62,27 @@ PerlOnJava generates real JVM bytecode — the same kind of instructions that ja
 
 Note:
 JSR-223 is the standard Java scripting API, available since Java 6. It allows bidirectional Java ↔ Perl communication.
+
+---
+
+## One JAR, Everything Included
+
+**`perlonjava-3.0.0.jar`** — 25 MB, zero external dependencies
+
+```
+perlonjava.jar
+├── org/perlonjava/   ← 392 Java compiled classes
+├── lib/              ← 341 Perl modules (DBI, JSON, HTTP::Tiny…)
+├── ASM, ICU4J, JNA   ← Java libraries bundled
+└── META-INF/services ← JSR-223 auto-discovery
+```
+
+`java -jar perlonjava.jar script.pl` — that's it.
+
+Or use `./jperl script.pl` — a wrapper that also supports `$CLASSPATH` for JDBC drivers.
+
+Note:
+Built with Gradle Shadow plugin (fat JAR). Perl modules live in src/main/perl/lib and are packaged as resources inside the JAR. The require mechanism reads them directly from the JAR via classloader. No installation, no CPAN, no paths to configure. The jperl wrapper uses -cp instead of -jar so users can add extra JARs to CLASSPATH.
 
 ---
 
