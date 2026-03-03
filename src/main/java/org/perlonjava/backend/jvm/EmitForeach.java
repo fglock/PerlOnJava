@@ -5,6 +5,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
+
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -291,7 +292,7 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         }
         
-        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
+        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv, true);
 
         int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
 
@@ -518,10 +519,8 @@ public class EmitForeach {
         EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID);
         if (node.body instanceof BlockNode blockNode) {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
-            Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv);
+            Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv, true);
 
-            // Perl 5 regex state scoping for foreach body.  Each iteration saves/restores
-            // independently.  No blockIsSubroutine check needed: foreach body is never a sub.
             int regexStateLocal = -1;
             if (RegexUsageDetector.containsRegexOperation(blockNode)) {
                 regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
@@ -559,7 +558,6 @@ public class EmitForeach {
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 
-            // Restore block-level regex state at end of each iteration
             if (regexStateLocal >= 0) {
                 mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,

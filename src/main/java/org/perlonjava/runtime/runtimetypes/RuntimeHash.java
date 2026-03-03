@@ -42,7 +42,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         type = PLAIN_HASH;
         elements = new StableHashMap<>();
     }
-
+    
     /**
      * Creates a hash with the elements of a list.
      *

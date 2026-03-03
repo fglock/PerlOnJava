@@ -648,17 +648,10 @@ public class EmitterMethodCreator implements Opcodes {
             EmitterVisitor visitor = new EmitterVisitor(ctx);
 
             // Setup local variables and environment for the method
-            Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
+            int dynamicIndex = Local.localSetup(ctx, ast, mv);
 
-            // Subroutine-level regex state scoping (Perl 5 semantics): unconditionally save
-            // the caller's $1, $&, etc. on entry.  Restored at returnLabel before ARETURN.
-            // This is separate from block-level scoping (EmitBlock/EmitForeach + RegexUsageDetector).
-            int regexStateSlot = ctx.symbolTable.allocateLocalVariable();
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
-            mv.visitVarInsn(Opcodes.ASTORE, regexStateSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
@@ -672,6 +665,9 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitInsn(Opcodes.ACONST_NULL);
             mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
 
+            // Slot to save eval error across DVM teardown (used only when useTryCatch=true)
+            int evalErrorSlot = -1;
+
             // Labels for eval-block try/catch wrapping (used only when useTryCatch=true)
             Label tryStart = null;
             Label tryEnd = null;
@@ -684,6 +680,10 @@ public class EmitterMethodCreator implements Opcodes {
                 // --------------------------------
                 // Start of try-catch block
                 // --------------------------------
+
+                evalErrorSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, evalErrorSlot);
 
                 tryStart = new Label();
                 tryEnd = new Label();
@@ -1010,9 +1010,22 @@ public class EmitterMethodCreator implements Opcodes {
                         "org/perlonjava/runtime/operators/WarnDie",
                         "catchEval",
                         "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-
-                // Discard catchEval() return value; it only sets $@
                 mv.visitInsn(Opcodes.POP);
+
+                // Save a snapshot of $@ so we can re-set it after DVM teardown
+                // (DVM pop may restore `local $@` from a callee, clobbering $@)
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn("main::@");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "getGlobalVariable",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "<init>",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                mv.visitVarInsn(Opcodes.ASTORE, evalErrorSlot);
 
                 // Return undef/empty list from eval on error.
                 Label evalCatchList = new Label();
@@ -1060,13 +1073,30 @@ public class EmitterMethodCreator implements Opcodes {
                     "materializeSpecialVarsInResult",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
 
-            // Restore caller's regex state (counterpart to the save at method entry)
-            mv.visitVarInsn(Opcodes.ALOAD, regexStateSlot);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+            // Teardown local variables — popToLocalLevel() also restores regex state
+            // (RegexState was pushed onto the DVM stack at sub entry).
+            Local.localTeardown(dynamicIndex, mv);
 
-            // Teardown local variables and environment after the return value is materialized
-            Local.localTeardown(localRecord, mv);
+            // After DVM teardown, re-set $@ if we caught an eval error.
+            // DVM pop may have restored `local $@` from a callee, clobbering
+            // the error that catchEval set.
+            if (useTryCatch) {
+                Label skipErrorRestore = new Label();
+                mv.visitVarInsn(Opcodes.ALOAD, evalErrorSlot);
+                mv.visitJumpInsn(Opcodes.IFNULL, skipErrorRestore);
+                mv.visitLdcInsn("main::@");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "getGlobalVariable",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitVarInsn(Opcodes.ALOAD, evalErrorSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "set",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitInsn(Opcodes.POP);
+                mv.visitLabel(skipErrorRestore);
+            }
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed

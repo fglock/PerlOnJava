@@ -429,7 +429,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // variable reinitialization in loops.
                         OperatorNode ast = entry.ast();
                         if (ast != null) {
-                            boolean isNew = !evalBeginIds.containsKey(ast);
                             int beginId = evalBeginIds.computeIfAbsent(
                                     ast,
                                     k -> EmitterMethodCreator.classCounter++);
@@ -759,6 +758,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Declare these outside try block so they're accessible in finally block for debugger support
         Node ast = null;
         List<LexerToken> tokens = null;
+        List<String> evalAliasKeys = new ArrayList<>();
 
         // Save dynamic variable level to restore after eval.
         // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
@@ -831,6 +831,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 } else if (runtimeValue instanceof RuntimeScalar) {
                                     GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
                                 }
+                                evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
                             }
                         }
                     }
@@ -984,6 +985,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return new RuntimeList(new RuntimeScalar());
                 }
             }
+
+            // Clean up BEGIN aliases BEFORE execution. These aliases were only needed during
+            // parsing/compilation (for BEGIN blocks to access outer lexicals). If left in
+            // GlobalVariable during execution, a recursive call that re-enters the same
+            // function would find the alias via retrieveBeginScalar, sharing the same
+            // RuntimeScalar object instead of creating a fresh one.
+            for (String key : evalAliasKeys) {
+                String fullName = key.substring(1);
+                switch (key.charAt(0)) {
+                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
+                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
+                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                }
+            }
+            evalAliasKeys.clear();
 
             // Execute the interpreted code
             try {
@@ -1716,10 +1732,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Invokes the JVM-compiled method associated with this code object.
      *
-     * <p>Regex state scoping ($1, $&amp;, etc.) is NOT handled here.  For JVM-compiled code
-     * it is emitted directly into the generated method by {@code EmitterMethodCreator}
-     * ({@code regexStateSlot} save/restore).  For interpreted code, {@code InterpretedCode}
-     * overrides this method and delegates to {@code BytecodeInterpreter.execute()}.
+     * <p>Regex state scoping ($1, $&amp;, etc.) is handled by {@link RegexState#save()}
+     * at subroutine entry, restored by {@link DynamicVariableManager#popToLocalLevel} at exit.
      *
      * @param a           the RuntimeArray containing the arguments for the subroutine
      * @param callContext the context in which the subroutine is called
