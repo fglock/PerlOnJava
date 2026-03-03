@@ -29,6 +29,18 @@ public class InputRecordSeparator extends RuntimeScalar {
             return set(value.tiedFetch());
         }
 
+        if (value instanceof RuntimeBaseProxy) {
+            RuntimeScalar resolved = ((RuntimeBaseProxy) value).lvalue;
+            if (resolved == null) {
+                if (value instanceof ScalarSpecialVariable) {
+                    resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
+                } else {
+                    resolved = new RuntimeScalar();
+                }
+            }
+            return set(resolved);
+        }
+
         // Store current value in case validation fails
         int oldType = this.type;
         Object oldValue = this.value;

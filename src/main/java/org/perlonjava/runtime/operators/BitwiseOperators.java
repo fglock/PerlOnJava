@@ -205,9 +205,8 @@ public class BitwiseOperators {
             return bitwiseNotDot(val);
         }
 
-        // Use signed 32-bit integer semantics
-        int value = val.getInt();
-        int result = ~value;
+        long value = val.getLong();
+        long result = ~value;
         return new RuntimeScalar(result);
     }
 
@@ -491,7 +490,6 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the integer left shift operation.
      */
     public static RuntimeScalar integerShiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Check for uninitialized values and generate warnings
         if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
                     RuntimeScalarCache.scalarEmptyString);
@@ -501,29 +499,27 @@ public class BitwiseOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int value = runtimeScalar.getInt();
+        long value = runtimeScalar.getLong();
         long shift = arg2.getLong();
         
-        // Handle negative shift (reverse direction: left becomes right)
         if (shift < 0) {
             shift = -shift;
-            if (shift < 0 || shift >= 32) {
-                return new RuntimeScalar(value < 0 ? -1 : 0);
+            if (shift < 0 || shift >= 64) {
+                return new RuntimeScalar(value < 0 ? -1L : 0L);
             }
-            int result = value >> (int)shift;
+            long result = value >> (int)shift;
             return new RuntimeScalar(result);
         }
 
-        if (shift >= 32) {
+        if (shift >= 64) {
             return RuntimeScalarCache.scalarZero;
         }
         
-        int result = value << (int)shift;
+        long result = value << (int)shift;
         return new RuntimeScalar(result);
     }
     
@@ -536,7 +532,6 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the integer right shift operation.
      */
     public static RuntimeScalar integerShiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Check for uninitialized values and generate warnings
         if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
                     RuntimeScalarCache.scalarEmptyString);
@@ -546,29 +541,27 @@ public class BitwiseOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int value = runtimeScalar.getInt();
+        long value = runtimeScalar.getLong();
         long shift = arg2.getLong();
         
-        // Handle negative shift (reverse direction: right becomes left)
         if (shift < 0) {
             shift = -shift;
-            if (shift < 0 || shift >= 32) {
+            if (shift < 0 || shift >= 64) {
                 return RuntimeScalarCache.scalarZero;
             }
-            int result = value << (int)shift;
+            long result = value << (int)shift;
             return new RuntimeScalar(result);
         }
 
-        if (shift >= 32) {
-            return new RuntimeScalar(value < 0 ? -1 : 0);
+        if (shift >= 64) {
+            return new RuntimeScalar(value < 0 ? -1L : 0L);
         }
         
-        int result = value >> (int)shift;
+        long result = value >> (int)shift;
         return new RuntimeScalar(result);
     }
 }

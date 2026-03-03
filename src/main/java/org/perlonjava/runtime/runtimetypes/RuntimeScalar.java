@@ -642,6 +642,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(value);
         }
+        if (value instanceof ScalarSpecialVariable) {
+            RuntimeScalar resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
+            this.type = resolved.type;
+            this.value = resolved.value;
+            return this;
+        }
         this.type = value.type;
         this.value = value.value;
         return this;
