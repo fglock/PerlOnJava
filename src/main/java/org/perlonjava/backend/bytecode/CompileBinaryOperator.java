@@ -48,28 +48,33 @@ public class CompileBinaryOperator {
             int formatReg = bytecodeCompiler.lastResultReg;
 
             // Compile the arguments (right operand) into a list
+            // Use LIST context only for array/hash args so they expand;
+            // scalar expressions keep current context to avoid wrapping in RuntimeList
             int argsListReg = bytecodeCompiler.allocateRegister();
             if (node.right instanceof ListNode) {
                 ListNode argsList = (ListNode) node.right;
                 int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (Node arg : argsList.elements) {
+                    if (isArrayLikeNode(arg)) {
+                        bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+                    }
                     arg.accept(bytecodeCompiler);
+                    bytecodeCompiler.currentCallContext = savedContext;
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
-                bytecodeCompiler.currentCallContext = savedContext;
-                // Create list with arguments: CREATE_LIST rd count [regs...]
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(argsListReg);
-                bytecodeCompiler.emit(argRegs.size());  // emit count
+                bytecodeCompiler.emit(argRegs.size());
                 for (int argReg : argRegs) {
                     bytecodeCompiler.emitReg(argReg);
                 }
             } else {
                 // Single argument - wrap in list
                 int savedContext2 = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+                if (isArrayLikeNode(node.right)) {
+                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+                }
                 node.right.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
                 bytecodeCompiler.currentCallContext = savedContext2;
@@ -750,5 +755,19 @@ public class CompileBinaryOperator {
         bytecodeCompiler.emitReg(listReg);
 
         bytecodeCompiler.lastResultReg = rd;
+    }
+
+    static boolean isArrayLikeNode(Node node) {
+        if (node instanceof OperatorNode op) {
+            String o = op.operator;
+            if (o.equals("@") || o.equals("%")) return true;
+            if (o.equals("unpack") || o.equals("split") || o.equals("sort") ||
+                o.equals("reverse") || o.equals("grep") || o.equals("map") ||
+                o.equals("keys") || o.equals("values") || o.equals("each")) return true;
+        }
+        if (node instanceof BinaryOperatorNode bin) {
+            if (bin.operator.equals("(") || bin.operator.equals("()")) return true;
+        }
+        return false;
     }
 }
