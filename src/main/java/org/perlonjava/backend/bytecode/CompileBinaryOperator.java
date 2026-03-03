@@ -56,9 +56,7 @@ public class CompileBinaryOperator {
                 int savedContext = bytecodeCompiler.currentCallContext;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (Node arg : argsList.elements) {
-                    if (isArrayLikeNode(arg)) {
-                        bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                    }
+                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                     arg.accept(bytecodeCompiler);
                     bytecodeCompiler.currentCallContext = savedContext;
                     argRegs.add(bytecodeCompiler.lastResultReg);

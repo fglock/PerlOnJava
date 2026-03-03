@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -724,6 +725,14 @@ public class BytecodeCompiler implements Visitor {
 
         enterScope();
 
+        int regexSaveReg = -1;
+        if (!node.getBooleanAnnotation("blockIsSubroutine")
+                && RegexUsageDetector.containsRegexOperation(node)) {
+            regexSaveReg = allocateRegister();
+            emit(Opcodes.SAVE_REGEX_STATE);
+            emitReg(regexSaveReg);
+        }
+
         // Visit each statement in the block
         int numStatements = node.elements.size();
 
@@ -775,6 +784,11 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.ALIAS);
             emitReg(outerResultReg);
             emitReg(lastResultReg);
+        }
+
+        if (regexSaveReg >= 0) {
+            emit(Opcodes.RESTORE_REGEX_STATE);
+            emitReg(regexSaveReg);
         }
 
         // Exit scope restores register state
@@ -4173,6 +4187,13 @@ public class BytecodeCompiler implements Visitor {
         node.list.accept(this);
         int listReg = lastResultReg;
 
+        int foreachRegexSaveReg = -1;
+        if (RegexUsageDetector.containsRegexOperation(node)) {
+            foreachRegexSaveReg = allocateRegister();
+            emit(Opcodes.SAVE_REGEX_STATE);
+            emitReg(foreachRegexSaveReg);
+        }
+
         // Step 2: Create iterator from the list
         int iterReg = allocateRegister();
         emit(Opcodes.ITERATOR_CREATE);
@@ -4293,6 +4314,11 @@ public class BytecodeCompiler implements Visitor {
         loopStack.pop();
         exitScope();
 
+        if (foreachRegexSaveReg >= 0) {
+            emit(Opcodes.RESTORE_REGEX_STATE);
+            emitReg(foreachRegexSaveReg);
+        }
+
         lastResultReg = -1;  // For loop returns empty
     }
 
@@ -4349,6 +4375,13 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = outerResultReg;
             return;
+        }
+
+        int loopRegexSaveReg = -1;
+        if (RegexUsageDetector.containsRegexOperation(node)) {
+            loopRegexSaveReg = allocateRegister();
+            emit(Opcodes.SAVE_REGEX_STATE);
+            emitReg(loopRegexSaveReg);
         }
 
         // Step 1: Execute initialization (for C-style loops only)
@@ -4471,6 +4504,11 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 12: Pop loop info
         loopStack.pop();
+
+        if (loopRegexSaveReg >= 0) {
+            emit(Opcodes.RESTORE_REGEX_STATE);
+            emitReg(loopRegexSaveReg);
+        }
 
         lastResultReg = -1;  // For loop returns empty
     }

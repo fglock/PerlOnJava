@@ -2163,9 +2163,7 @@ public class CompileOperator {
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (int i = 1; i < list.elements.size(); i++) {
                     Node arg = list.elements.get(i);
-                    if (CompileBinaryOperator.isArrayLikeNode(arg)) {
-                        bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                    }
+                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                     arg.accept(bytecodeCompiler);
                     bytecodeCompiler.currentCallContext = savedContext;
                     argRegs.add(bytecodeCompiler.lastResultReg);

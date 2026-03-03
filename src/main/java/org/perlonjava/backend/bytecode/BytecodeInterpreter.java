@@ -96,6 +96,8 @@ public class BytecodeInterpreter {
         java.util.Stack<int[]> labeledBlockStack = new java.util.Stack<>();
         // Each entry is [labelStringPoolIdx, exitPc]
 
+        java.util.Stack<RegexState> regexStateStack = new java.util.Stack<>();
+
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = DynamicVariableManager.getLocalLevel();
@@ -327,6 +329,20 @@ public class BytecodeInterpreter {
                         int rs = bytecode[pc++];
                         int savedLevel = ((RuntimeScalar) registers[rs]).getInt();
                         DynamicVariableManager.popToLocalLevel(savedLevel);
+                        break;
+                    }
+
+                    case Opcodes.SAVE_REGEX_STATE: {
+                        pc++;
+                        regexStateStack.push(new RegexState());
+                        break;
+                    }
+
+                    case Opcodes.RESTORE_REGEX_STATE: {
+                        pc++;
+                        if (!regexStateStack.isEmpty()) {
+                            regexStateStack.pop().restore();
+                        }
                         break;
                     }
 
