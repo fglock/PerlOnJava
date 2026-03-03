@@ -10,6 +10,7 @@ import com.sun.jna.ptr.IntByReference;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Map;
@@ -93,33 +94,51 @@ public class WaitpidOperator {
         }
     }
 
-    /**
-     * POSIX implementation using native waitpid()
-     */
     private static RuntimeScalar waitpidPosix(int pid, int flags) {
+        if (pid > 0) {
+            Process javaProcess = RuntimeIO.getChildProcess(pid);
+            if (javaProcess != null) {
+                return waitpidJavaProcess(pid, javaProcess, flags);
+            }
+        }
         try {
             IntByReference status = new IntByReference();
             int result = PosixLibrary.INSTANCE.waitpid(pid, status, flags);
 
             if (result > 0) {
-                // Child process state changed
                 setExitStatus(status.getValue());
                 return new RuntimeScalar(result);
             } else if (result == 0) {
-                // WNOHANG was specified and no child was ready
                 return new RuntimeScalar(0);
             } else {
-                // Error occurred
                 int errno = Native.getLastError();
-                if (errno == 10) { // ECHILD - No child processes
+                if (errno == 10) { // ECHILD
                     return new RuntimeScalar(-1);
                 }
-                // Other error
                 setExitStatus(-1);
                 return new RuntimeScalar(-1);
             }
         } catch (LastErrorException e) {
-            // No child processes or other error
+            return new RuntimeScalar(-1);
+        }
+    }
+
+    private static RuntimeScalar waitpidJavaProcess(int pid, Process process, int flags) {
+        boolean nonBlocking = (flags & WNOHANG) != 0;
+        if (nonBlocking) {
+            if (process.isAlive()) return new RuntimeScalar(0);
+            int exitCode = process.exitValue();
+            RuntimeIO.removeChildProcess(pid);
+            setExitStatus(exitCode << 8);
+            return new RuntimeScalar(pid);
+        }
+        try {
+            int exitCode = process.waitFor();
+            RuntimeIO.removeChildProcess(pid);
+            setExitStatus(exitCode << 8);
+            return new RuntimeScalar(pid);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             return new RuntimeScalar(-1);
         }
     }
