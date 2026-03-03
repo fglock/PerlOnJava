@@ -44,6 +44,7 @@ public class RegexPreprocessor {
 
     static int captureGroupCount;
     static boolean deferredUnicodePropertyEncountered;
+    static boolean inlinePFlagEncountered;
     private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_FOLDS = Map.of(
             0x00B5, 0x03BC,
             0x212A, 0x006B,
@@ -63,6 +64,10 @@ public class RegexPreprocessor {
         return deferredUnicodePropertyEncountered;
     }
 
+    static boolean hadInlinePFlag() {
+        return inlinePFlagEncountered;
+    }
+
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -76,6 +81,7 @@ public class RegexPreprocessor {
     static String preProcessRegex(String s, RegexFlags regexFlags) {
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
+        inlinePFlagEncountered = false;
 
         // First, escape invalid quantifier braces (Perl compatibility)
         // DISABLED: Causes test regressions - needs more work

@@ -127,6 +127,21 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String postmatch = RuntimeRegex.postMatchString();
                     yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
                 }
+                case P_PREMATCH -> {
+                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    String prematch = RuntimeRegex.preMatchString();
+                    yield prematch != null ? new RuntimeScalar(prematch) : scalarUndef;
+                }
+                case P_MATCH -> {
+                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    String match = RuntimeRegex.matchString();
+                    yield match != null ? new RuntimeScalar(match) : scalarUndef;
+                }
+                case P_POSTMATCH -> {
+                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    String postmatch = RuntimeRegex.postMatchString();
+                    yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
+                }
                 case LAST_FH -> {
                     if (RuntimeIO.lastAccesseddHandle == null) {
                         yield scalarUndef;
@@ -331,6 +346,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         PREMATCH,  // Represents the part of the string before the matched substring.
         MATCH,     // Represents the matched substring.
         POSTMATCH, // Represents the part of the string after the matched substring.
+        P_PREMATCH,  // ${^PREMATCH} - only defined when last match used /p
+        P_MATCH,     // ${^MATCH} - only defined when last match used /p
+        P_POSTMATCH, // ${^POSTMATCH} - only defined when last match used /p
         LAST_FH,    // Represents the last filehandle used in an input operation.
         INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
         LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.

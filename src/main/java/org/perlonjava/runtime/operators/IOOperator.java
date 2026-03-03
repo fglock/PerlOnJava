@@ -596,6 +596,12 @@ public class IOOperator {
      * @param args Contains FILEHANDLE, TARGET, LENGTH and optional OFFSET
      * @return Number of bytes read, 0 at EOF, or undef on error
      */
+    private static void setByteString(RuntimeScalar target, String value) {
+        RuntimeScalar tmp = new RuntimeScalar(value);
+        tmp.type = RuntimeScalarType.BYTE_STRING;
+        target.set(tmp);
+    }
+
     public static RuntimeScalar sysread(int ctx, RuntimeBase... args) {
         if (args.length < 3) {
             throw new PerlCompilerException("Not enough arguments for sysread");
@@ -665,16 +671,13 @@ public class IOOperator {
             String existing = target.toString();
             if (offset > 0) {
                 while (existing.length() < offset) existing += "\0";
-                target.set(existing.substring(0, offset) + readData);
-                target.type = RuntimeScalarType.BYTE_STRING;
+                setByteString(target, existing.substring(0, offset) + readData);
             } else if (offset < 0) {
                 int effectiveOffset = existing.length() + offset;
                 if (effectiveOffset < 0) effectiveOffset = 0;
-                target.set(existing.substring(0, effectiveOffset) + readData);
-                target.type = RuntimeScalarType.BYTE_STRING;
+                setByteString(target, existing.substring(0, effectiveOffset) + readData);
             } else {
-                target.set(readData);
-                target.type = RuntimeScalarType.BYTE_STRING;
+                setByteString(target, readData);
             }
             return new RuntimeScalar(readData.length());
         }
@@ -719,8 +722,7 @@ public class IOOperator {
             // EOF or zero-byte read
             if (offset == 0) {
                 // Clear the buffer when no offset is specified
-                target.set("");
-                target.type = RuntimeScalarType.BYTE_STRING;
+                setByteString(target, "");
             }
             // Otherwise preserve the buffer when using offset
             return new RuntimeScalar(0);
@@ -754,8 +756,7 @@ public class IOOperator {
         }
         newValue.append(data);
 
-        target.set(newValue.toString());
-        target.type = RuntimeScalarType.BYTE_STRING;
+        setByteString(target, newValue.toString());
         return new RuntimeScalar(bytesRead);
     }
 

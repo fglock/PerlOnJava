@@ -776,6 +776,10 @@ public class RegexPreprocessorHelper {
 
         RegexFlags newFlags = regexFlags.with(positiveFlags, negativeFlags);
 
+        if (positiveFlags.indexOf('p') >= 0) {
+            RegexPreprocessor.inlinePFlagEncountered = true;
+        }
+
         // Handle `n` flags
         if (positiveFlags.indexOf('n') >= 0) {
             positiveFlags = positiveFlags.replace("n", "");
