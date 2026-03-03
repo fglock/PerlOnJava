@@ -102,10 +102,9 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UNICODE")).set(0);    // initialize $^UNICODE to 0 - `-C` unicode flags
 
-        // Aliases
-        GlobalVariable.aliasGlobalVariable(encodeSpecialVar("PREMATCH"), "main::`");
-        GlobalVariable.aliasGlobalVariable(encodeSpecialVar("MATCH"), "main::&");
-        GlobalVariable.aliasGlobalVariable(encodeSpecialVar("POSTMATCH"), "main::'");
+        GlobalVariable.globalVariables.put(encodeSpecialVar("PREMATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_PREMATCH));
+        GlobalVariable.globalVariables.put(encodeSpecialVar("MATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_MATCH));
+        GlobalVariable.globalVariables.put(encodeSpecialVar("POSTMATCH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.P_POSTMATCH));
 
         GlobalVariable.getGlobalVariable(encodeSpecialVar("SAFE_LOCALES"));  // TODO
 

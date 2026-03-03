@@ -5,44 +5,26 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 import java.util.regex.Matcher;
 
 /**
- * Immutable snapshot of all regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
+ * Snapshot of regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
  *
- * <p>In Perl 5, regex match variables are dynamically scoped: each subroutine and
- * each block that contains regex operations saves the current state on entry and
- * restores it on exit.  This ensures that a caller's match variables are not
- * clobbered by callees or inner blocks.
- *
- * <p>Two levels of scoping use this class:
- * <ul>
- *   <li><b>Subroutine-level</b> (unconditional): saved at method entry, restored at exit.
- *       In JVM-compiled code: {@code EmitterMethodCreator} ({@code regexStateSlot}).
- *       In interpreted code: {@code BytecodeInterpreter} ({@code savedRegexState} + finally block).</li>
- *   <li><b>Block-level</b> (conditional, gated by {@link org.perlonjava.frontend.analysis.RegexUsageDetector}):
- *       saved/restored around blocks that contain regex ops.
- *       In JVM-compiled code: {@code EmitBlock} / {@code EmitForeach}.
- *       In interpreted code: {@code SAVE_REGEX_STATE} / {@code RESTORE_REGEX_STATE} opcodes.</li>
- * </ul>
- *
- * <p><b>Important ordering constraint:</b> When a subroutine returns a value containing
- * lazy {@link org.perlonjava.runtime.specialvariables.ScalarSpecialVariable} references (e.g., $1),
- * those must be materialized via {@link RuntimeCode#materializeSpecialVarsInResult}
- * BEFORE calling {@link #restore()}, otherwise the restored (caller's) state would be
- * read instead of the subroutine's state.
- *
- * @see org.perlonjava.runtime.regex.RuntimeRegex for the global static fields being snapshotted
+ * <p>Implements {@link DynamicState} so it integrates with {@link DynamicVariableManager}.
+ * A snapshot is pushed onto the DynamicVariableManager stack at subroutine entry via
+ * {@link #save()}.  {@code popToLocalLevel()} restores it automatically on scope exit.
  */
-public class RegexState {
-    public final Matcher globalMatcher;
-    public final String globalMatchString;
-    public final String lastMatchedString;
-    public final int lastMatchStart;
-    public final int lastMatchEnd;
-    public final String lastSuccessfulMatchedString;
-    public final int lastSuccessfulMatchStart;
-    public final int lastSuccessfulMatchEnd;
-    public final String lastSuccessfulMatchString;
-    public final RuntimeRegex lastSuccessfulPattern;
-    public final String[] lastCaptureGroups;
+public class RegexState implements DynamicState {
+
+    private final Matcher globalMatcher;
+    private final String globalMatchString;
+    private final String lastMatchedString;
+    private final int lastMatchStart;
+    private final int lastMatchEnd;
+    private final String lastSuccessfulMatchedString;
+    private final int lastSuccessfulMatchStart;
+    private final int lastSuccessfulMatchEnd;
+    private final String lastSuccessfulMatchString;
+    private final RuntimeRegex lastSuccessfulPattern;
+    private final boolean lastMatchUsedPFlag;
+    private final String[] lastCaptureGroups;
 
     public RegexState() {
         this.globalMatcher = RuntimeRegex.globalMatcher;
@@ -55,10 +37,24 @@ public class RegexState {
         this.lastSuccessfulMatchEnd = RuntimeRegex.lastSuccessfulMatchEnd;
         this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
+        this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
         this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
     }
 
+    public static void save() {
+        DynamicVariableManager.pushLocalVariable(new RegexState());
+    }
+
+    @Override
+    public void dynamicSaveState() {
+    }
+
     public void restore() {
+        dynamicRestoreState();
+    }
+
+    @Override
+    public void dynamicRestoreState() {
         RuntimeRegex.globalMatcher = this.globalMatcher;
         RuntimeRegex.globalMatchString = this.globalMatchString;
         RuntimeRegex.lastMatchedString = this.lastMatchedString;
@@ -69,6 +65,7 @@ public class RegexState {
         RuntimeRegex.lastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
         RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
         RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
+        RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
         RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
     }
 }
