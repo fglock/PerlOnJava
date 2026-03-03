@@ -663,7 +663,14 @@ public class SprintfOperator {
                 yield String.format("%." + prec + "f", 0.0);
             }
             case 'g', 'G' -> "0";
-            case 'd', 'i', 'u', 'o', 'x', 'X' -> "0";
+            case 'd', 'i', 'u', 'o', 'x', 'X' -> {
+                int digits = args.precision > 0 ? args.precision : 1;
+                String zeros = "0".repeat(digits);
+                if (args.width > zeros.length()) {
+                    zeros = " ".repeat(args.width - zeros.length()) + zeros;
+                }
+                yield zeros;
+            }
             case 's' -> "";
             case 'c' -> "\0";
             default -> "";
