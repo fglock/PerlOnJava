@@ -556,7 +556,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // If we run out of values, use undef
                 value = new RuntimeScalar();
             }
-            this.put(key, value);
+            RuntimeScalar copy = new RuntimeScalar();
+            copy.set(value);
+            this.put(key, copy);
         }
     }
 
