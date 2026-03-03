@@ -8,6 +8,7 @@ import org.perlonjava.frontend.astnode.IfNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TryNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 /**
@@ -110,6 +111,16 @@ public class EmitStatement {
             Label endLabel = new Label();
             Label continueLabel = new Label();
 
+            int regexStateLocal = -1;
+            if (!node.isSimpleBlock && RegexUsageDetector.containsRegexOperation(node)) {
+                regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+                mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+            }
+
             // Visit the initialization node (executed once at the start)
             if (node.initialization != null) {
                 node.initialization.accept(voidVisitor);
@@ -189,6 +200,12 @@ public class EmitStatement {
             // Visit the end label (this is where the loop ends)
             mv.visitLabel(endLabel);
 
+            if (regexStateLocal >= 0) {
+                mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+            }
+
             // Exit the scope in the symbol table
             if (node.useNewScope) {
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
@@ -221,6 +238,16 @@ public class EmitStatement {
         Label continueLabel = new Label();
         Label endLabel = new Label();
         Label redoLabel = new Label();
+
+        int regexStateLocal = -1;
+        if (RegexUsageDetector.containsRegexOperation(node)) {
+            regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+            mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+        }
 
         // Register loop labels as pseudo-loop (isTrueLoop = false)
         // This allows us to throw proper compile errors for last/next/redo in do-while
@@ -267,6 +294,12 @@ public class EmitStatement {
 
         // End of loop
         mv.visitLabel(endLabel);
+
+        if (regexStateLocal >= 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        }
 
         // Pop loop labels
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
