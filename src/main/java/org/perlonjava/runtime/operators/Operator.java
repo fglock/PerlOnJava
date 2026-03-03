@@ -111,11 +111,14 @@ public class Operator {
             return result;
         }
 
-        // Special case: if the pattern is a single space character, treat it as /\s+/
-        if (quotedRegex.type != RuntimeScalarType.REGEX && quotedRegex.toString().equals(" ")) {
-            quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(""));
-            // Remove leading whitespace from the input string
-            inputStr = inputStr.replaceAll("^\\s+", "");
+        if (quotedRegex.type != RuntimeScalarType.REGEX) {
+            String patternStr = quotedRegex.toString();
+            if (patternStr.equals(" ")) {
+                quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(""));
+                inputStr = inputStr.replaceAll("^\\s+", "");
+            } else {
+                quotedRegex = RuntimeRegex.getQuotedRegex(quotedRegex, new RuntimeScalar(""));
+            }
         }
 
         if (quotedRegex.type == RuntimeScalarType.REGEX) {

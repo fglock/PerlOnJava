@@ -62,6 +62,17 @@ for my ($num, $square) (@squares) {
     $idx2++;
 }
 
-1;
+my $x = "original";
+my @a = ("a", "b", "c");
+foreach $x (@a) { }
+is($x, "original", 'foreach restores lexical loop variable');
+
+$x = "before";
+foreach $x (1..3) { }
+is($x, "before", 'foreach with range restores lexical loop variable');
+
+our $gv = "saved";
+foreach $gv ("x", "y") { }
+is($gv, "saved", 'foreach restores global loop variable');
 
 done_testing();
