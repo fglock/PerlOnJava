@@ -705,6 +705,7 @@ public class BytecodeCompiler implements Visitor {
             Node elem = node.elements.get(i);
             if (elem == null) continue;
             if (elem instanceof ListNode ln && ln.elements.isEmpty()) continue;
+            if (elem instanceof AbstractNode an && an.getBooleanAnnotation("compileTimeOnly")) continue;
             lastMeaningfulIndex = i;
             break;
         }
@@ -714,6 +715,7 @@ public class BytecodeCompiler implements Visitor {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
             Node stmt = node.elements.get(i);
+            if (stmt instanceof AbstractNode an && an.getBooleanAnnotation("compileTimeOnly")) continue;
 
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
             if (stmt != null) {

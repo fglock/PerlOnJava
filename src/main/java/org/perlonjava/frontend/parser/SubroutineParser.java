@@ -499,8 +499,9 @@ public class SubroutineParser {
             RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
             codeRef.prototype = prototype;
             codeRef.attributes = attributes;
-            // return an empty AST list
-            return new ListNode(parser.tokenIndex);
+            ListNode result = new ListNode(parser.tokenIndex);
+            result.setAnnotation("compileTimeOnly", true);
+            return result;
         }
 
         if (!wantName && !peek(parser).text.equals("{")) {
@@ -642,7 +643,9 @@ public class SubroutineParser {
                     // Execute the BEGIN block immediately during parsing
                     SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
                     
-                    return new ListNode(parser.tokenIndex);
+                    ListNode result = new ListNode(parser.tokenIndex);
+                    result.setAnnotation("compileTimeOnly", true);
+                    return result;
                 }
             }
         }
@@ -859,7 +862,9 @@ public class SubroutineParser {
         RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
         placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
 
-        return new ListNode(parser.tokenIndex);
+        ListNode result = new ListNode(parser.tokenIndex);
+        result.setAnnotation("compileTimeOnly", true);
+        return result;
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
