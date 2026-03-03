@@ -89,7 +89,7 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
-            long arg = args.getFirst().getInt();
+            long arg = args.getFirst().getLong();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
         }
         return getTimeComponents(ctx, date);
@@ -107,7 +107,7 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            long arg = args.getFirst().getInt();
+            long arg = args.getFirst().getLong();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
         }
         return getTimeComponents(ctx, date);
