@@ -3184,7 +3184,10 @@ public class BytecodeCompiler implements Visitor {
                 BlockNode block = (BlockNode) node.operand;
 
                 // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
+                int savedCtx = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 block.accept(this);
+                currentCallContext = savedCtx;
                 int blockResultReg = lastResultReg;
                 int rd = allocateRegister();
                 if (isStrictRefsEnabled()) {
@@ -3314,7 +3317,10 @@ public class BytecodeCompiler implements Visitor {
                 // @{ block } - evaluate block and dereference the result
                 // The block should return an arrayref
                 BlockNode blockNode = (BlockNode) node.operand;
+                int savedCtx = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 blockNode.accept(this);
+                currentCallContext = savedCtx;
                 int refReg = lastResultReg;
 
                 // Dereference to get the array
@@ -3407,7 +3413,10 @@ public class BytecodeCompiler implements Visitor {
                 }
             } else if (node.operand instanceof BlockNode blockNode) {
                 // %{ block } — evaluate block and dereference to hash
+                int savedCtx = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 blockNode.accept(this);
+                currentCallContext = savedCtx;
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
                 if (isStrictRefsEnabled()) {
