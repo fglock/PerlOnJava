@@ -2020,6 +2020,11 @@ public class BytecodeInterpreter {
                         break;
 
                     // Group 9: Special I/O (151-154), glob ops, strict deref
+                    case Opcodes.TIME_OP: {
+                        int rd = bytecode[pc++];
+                        registers[rd] = org.perlonjava.runtime.operators.Time.time();
+                        break;
+                    }
                     case Opcodes.EVAL_STRING:
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:

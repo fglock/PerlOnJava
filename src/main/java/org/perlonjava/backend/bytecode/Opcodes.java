@@ -1192,5 +1192,9 @@ public class Opcodes {
     public static final short DEREF_HASH_NONSTRICT = 358;
     public static final short DEREF_ARRAY_NONSTRICT = 359;
 
+    /** Perl time() builtin: rd = current epoch seconds.
+     *  Format: TIME_OP rd */
+    public static final short TIME_OP = 360;
+
     private Opcodes() {} // Utility class - no instantiation
 }

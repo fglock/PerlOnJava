@@ -1583,6 +1583,12 @@ public class EmitterMethodCreator implements Opcodes {
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
             throw new RuntimeException(e);
+        } catch (PerlCompilerException e) {
+            if (USE_INTERPRETER_FALLBACK && e.getMessage() != null && e.getMessage().contains("ASM frame computation failed")) {
+                System.err.println("Note: ASM frame crash, using interpreter backend.");
+                return compileToInterpreter(ast, ctx, useTryCatch);
+            }
+            throw e;
         }
     }
 

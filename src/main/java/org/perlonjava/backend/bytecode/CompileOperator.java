@@ -3032,6 +3032,11 @@ public class CompileOperator {
                 bytecodeCompiler.pendingGotos.add(new Object[]{patchPc, labelStr});
             }
             bytecodeCompiler.lastResultReg = -1;
+        } else if (op.equals("time")) {
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.TIME_OP);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.lastResultReg = rd;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
