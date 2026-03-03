@@ -80,4 +80,15 @@ public interface PosixLibrary extends Library {
     int errno();
 
     String strerror(int errnum);
+
+    // Password database
+    Pointer getpwnam(String name);
+
+    Pointer getpwuid(int uid);
+
+    void setpwent();
+
+    void endpwent();
+
+    Pointer getpwent();
 }
