@@ -986,6 +986,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
+            // Clean up BEGIN aliases BEFORE execution. These aliases were only needed during
+            // parsing/compilation (for BEGIN blocks to access outer lexicals). If left in
+            // GlobalVariable during execution, a recursive call that re-enters the same
+            // function would find the alias via retrieveBeginScalar, sharing the same
+            // RuntimeScalar object instead of creating a fresh one.
+            for (String key : evalAliasKeys) {
+                String fullName = key.substring(1);
+                switch (key.charAt(0)) {
+                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
+                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
+                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                }
+            }
+            evalAliasKeys.clear();
+
             // Execute the interpreted code
             try {
                 result = interpretedCode.apply(args, callContext);
@@ -1050,21 +1065,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
-
-            // Clean up BEGIN aliases for captured variables after compilation.
-            // These aliases were only needed during parsing (for BEGIN blocks to access
-            // outer lexicals). Leaving them in GlobalVariable would cause corruption
-            // if a recursive call re-enters the same function and its `my` declaration
-            // calls retrieveBeginScalar, finding the stale alias instead of creating
-            // a fresh variable.
-            for (String key : evalAliasKeys) {
-                String fullName = key.substring(1);
-                switch (key.charAt(0)) {
-                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
-                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
-                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
-                }
-            }
 
             // Store source lines in debugger symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention

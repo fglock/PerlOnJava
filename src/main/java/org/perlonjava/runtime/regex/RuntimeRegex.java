@@ -56,6 +56,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static String lastSuccessfulMatchString = null;
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
+    public static boolean lastMatchUsedPFlag = false;
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
@@ -72,6 +73,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
+    boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     private boolean deferredUserDefinedUnicodeProperties = false;
 
     public RuntimeRegex() {
@@ -127,6 +129,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Track if preprocessing deferred user-defined Unicode properties.
                 // These need to be resolved later, once the corresponding Perl subs are defined.
                 regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
+                regex.hasPreservesMatch = regex.regexFlags.preservesMatch() || RegexPreprocessor.hadInlinePFlag();
 
                 regex.patternString = patternString;
 
@@ -262,7 +265,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             RuntimeRegex regex = new RuntimeRegex();
             regex.pattern = originalRegex.pattern;
             regex.patternString = originalRegex.patternString;
+            regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
+            regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
             regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
@@ -288,7 +293,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     RuntimeRegex regex = new RuntimeRegex();
                     regex.pattern = originalRegex.pattern;
                     regex.patternString = originalRegex.patternString;
+                    regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
+                    regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
                     regex.useGAssertion = regex.regexFlags.useGAssertion();
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
 
@@ -328,6 +335,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.pattern = resolvedRegex.pattern;
         regex.patternString = resolvedRegex.patternString;
         regex.regexFlags = resolvedRegex.regexFlags;
+        regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
         regex.useGAssertion = resolvedRegex.useGAssertion;
         regex.patternFlags = resolvedRegex.patternFlags;
 
@@ -349,11 +357,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.pattern = recompiledRegex.pattern;
                 regex.patternString = recompiledRegex.patternString;
                 regex.regexFlags = recompiledRegex.regexFlags;
+                regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
                 regex.useGAssertion = recompiledRegex.useGAssertion;
                 regex.patternFlags = recompiledRegex.patternFlags;
             } else {
                 // Just update the flags without recompiling
                 regex.regexFlags = newFlags;
+                regex.hasPreservesMatch = regex.hasPreservesMatch || newFlags.preservesMatch();
                 regex.useGAssertion = newFlags.useGAssertion();
                 regex.patternFlags = newFlags.toPatternFlags();
             }
@@ -573,6 +583,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (found) {
             regex.matched = true; // Counter for m?PAT?
+            lastMatchUsedPFlag = regex.hasPreservesMatch;
             lastSuccessfulPattern = regex;
             // Store last successful match information (persists across failed matches)
             lastSuccessfulMatchedString = lastMatchedString;
@@ -702,6 +713,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
                 tempRegex.replacement = replacement;
@@ -796,6 +808,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String finalResult = resultBuffer.toString();
 
             // Store as last successful pattern for empty pattern reuse
+            lastMatchUsedPFlag = regex.hasPreservesMatch;
             lastSuccessfulPattern = regex;
 
             if (regex.regexFlags.isNonDestructive()) {
@@ -850,6 +863,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastSuccessfulMatchStart = -1;
         lastSuccessfulMatchEnd = -1;
         lastSuccessfulMatchString = null;
+        lastMatchUsedPFlag = false;
         lastCaptureGroups = null;
 
         // Reset regex cache matched flags

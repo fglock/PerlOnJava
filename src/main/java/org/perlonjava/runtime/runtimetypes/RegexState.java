@@ -23,9 +23,10 @@ public class RegexState implements DynamicState {
     private final int lastSuccessfulMatchEnd;
     private final String lastSuccessfulMatchString;
     private final RuntimeRegex lastSuccessfulPattern;
+    private final boolean lastMatchUsedPFlag;
     private final String[] lastCaptureGroups;
 
-    private RegexState() {
+    public RegexState() {
         this.globalMatcher = RuntimeRegex.globalMatcher;
         this.globalMatchString = RuntimeRegex.globalMatchString;
         this.lastMatchedString = RuntimeRegex.lastMatchedString;
@@ -36,6 +37,7 @@ public class RegexState implements DynamicState {
         this.lastSuccessfulMatchEnd = RuntimeRegex.lastSuccessfulMatchEnd;
         this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
+        this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
         this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
     }
 
@@ -45,6 +47,10 @@ public class RegexState implements DynamicState {
 
     @Override
     public void dynamicSaveState() {
+    }
+
+    public void restore() {
+        dynamicRestoreState();
     }
 
     @Override
@@ -59,6 +65,7 @@ public class RegexState implements DynamicState {
         RuntimeRegex.lastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
         RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
         RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
+        RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
         RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
     }
 }
