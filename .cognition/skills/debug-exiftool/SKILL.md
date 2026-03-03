@@ -240,12 +240,14 @@ Key files for the interpreter:
 
 **The runtime flow for captured variables in the interpreter path:**
 1. `compileToInterpreter()` creates `BytecodeCompiler`, calls `compiler.compile(ast, ctx)` which runs `detectClosureVariables()` — this sets up `capturedVarIndices` (name→register mapping) used during bytecode generation
-2. `compileToInterpreter()` creates placeholder `capturedVars` (all `RuntimeScalar`)
-3. `SubroutineParser.withCapturedVars()` **replaces** the placeholder with actual values from `paramList` (built from `getAllVisibleVariables()` with same filtering)
+2. `compileToInterpreter()` creates placeholder `capturedVars` from `ctx.capturedEnv` (all `RuntimeScalar`, wrong types for hashes/arrays, possibly wrong count). **This step is harmless** — the placeholders are replaced in step 3.
+3. `SubroutineParser.withCapturedVars()` **replaces** the placeholder with actual values from `paramList` (built from `getAllVisibleVariables()` with same filtering). The `paramList` uses `GlobalVariable.getGlobalHash/Array/Variable` to get correctly-typed `RuntimeHash`/`RuntimeArray`/`RuntimeScalar` values.
 4. At runtime, `BytecodeInterpreter.execute()` copies `capturedVars[i]` to `registers[3+i]` via `System.arraycopy`
 5. The compiled bytecode accesses these registers for captured variable reads/writes
 
-**Key invariant**: The ordering of variables in `detectClosureVariables()` MUST match `SubroutineParser`'s `paramList` ordering, because `capturedVars[i]` is copied to register `3+i` and the bytecode was compiled expecting specific variables at specific registers.
+**Key invariant**: The ordering of variables in `detectClosureVariables()` MUST match `SubroutineParser`'s `paramList` ordering, because `capturedVars[i]` is copied to register `3+i` and the bytecode was compiled expecting specific variables at specific registers. If the ordering diverges, captured variables silently get the wrong values — no error is thrown, and the bug manifests as incorrect output (e.g., empty hashes where populated ones were expected).
+
+**Known filter gap**: `SubroutineParser` has a `filterLexicalMethods` flag that skips variables containing `__lexmethod_` or `__lexsub_` for generated methods. `detectClosureVariables()` does not replicate this filter. This is currently harmless because the interpreter fallback path is only triggered for very large user-written subs (like WriteExif), not generated methods. If this changes, the filter must be added.
 
 ## Common Failure Patterns
 
@@ -401,3 +403,26 @@ To trace which subs hit interpreter fallback:
 ```bash
 JPERL_SHOW_FALLBACK=1 java -jar target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1 | grep FALLBACK
 ```
+
+### Verifying captured variable delivery at runtime
+Add this in `BytecodeInterpreter.execute()` right after the `System.arraycopy` for capturedVars:
+```java
+if (code.subName != null && code.subName.contains("WriteExif")) {
+    System.err.println("DEBUG capturedVars count=" + code.capturedVars.length);
+    for (int i = 0; i < code.capturedVars.length; i++) {
+        RuntimeBase v = code.capturedVars[i];
+        System.err.println("  [" + i + "] reg=" + (3+i)
+            + " type=" + v.getClass().getSimpleName() + " value=" + v);
+    }
+}
+```
+This confirms: (a) the right number of vars are captured, (b) they have the right types (RuntimeHash for `%` vars, not RuntimeScalar), (c) they have non-empty values.
+
+### Diagnosing variable resolution path
+To check whether a hash variable is resolving via the symbol table (correct) or falling through to global load (bug), add a print in `handleHashElementAccess`:
+```java
+// After the hasVariable(hashVarName) check:
+System.err.println("DEBUG hash " + hashVarName + " resolved via "
+    + (hasVariable(hashVarName) ? "symbolTable reg=" + getVariableRegister(hashVarName) : "GLOBAL"));
+```
+If it says `GLOBAL` for a captured variable like `%crossDelete`, the variable wasn't registered in the symbol table.
