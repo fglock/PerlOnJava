@@ -4383,7 +4383,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         int loopRegexSaveReg = -1;
-        if (RegexUsageDetector.containsRegexOperation(node)) {
+        if (node.useNewScope && RegexUsageDetector.containsRegexOperation(node)) {
             loopRegexSaveReg = allocateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(loopRegexSaveReg);

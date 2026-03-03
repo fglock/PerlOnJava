@@ -112,7 +112,7 @@ public class EmitStatement {
             Label continueLabel = new Label();
 
             int regexStateLocal = -1;
-            if (!node.isSimpleBlock && RegexUsageDetector.containsRegexOperation(node)) {
+            if (!node.isSimpleBlock && node.useNewScope && RegexUsageDetector.containsRegexOperation(node)) {
                 regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
                 mv.visitInsn(Opcodes.DUP);
