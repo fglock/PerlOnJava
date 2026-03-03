@@ -770,11 +770,17 @@ public class CompileAssignment {
                     String varName = "@" + ((IdentifierNode) leftOp.operand).name;
 
                     int arrayReg;
-                    if (bytecodeCompiler.hasVariable(varName)) {
-                        // Lexical array
+                    if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                            && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                        arrayReg = bytecodeCompiler.allocateRegister();
+                        int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                        bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emit(nameIdx);
+                        bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                    } else if (bytecodeCompiler.hasVariable(varName)) {
                         arrayReg = bytecodeCompiler.getVariableRegister(varName);
                     } else {
-                        // Global array - load it
                         arrayReg = bytecodeCompiler.allocateRegister();
                         String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, bytecodeCompiler.getCurrentPackage());
                         int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
@@ -804,11 +810,17 @@ public class CompileAssignment {
                     String varName = "%" + ((IdentifierNode) leftOp.operand).name;
 
                     int hashReg;
-                    if (bytecodeCompiler.hasVariable(varName)) {
-                        // Lexical hash
+                    if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                            && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                        hashReg = bytecodeCompiler.allocateRegister();
+                        int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                        bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emit(nameIdx);
+                        bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                    } else if (bytecodeCompiler.hasVariable(varName)) {
                         hashReg = bytecodeCompiler.getVariableRegister(varName);
                     } else {
-                        // Global hash - load it
                         hashReg = bytecodeCompiler.allocateRegister();
                         String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, bytecodeCompiler.getCurrentPackage());
                         int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
@@ -1079,13 +1091,18 @@ public class CompileAssignment {
                     if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
                         String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
 
-                        // Get the array register
                         int arrayReg;
-                        if (bytecodeCompiler.hasVariable(varName)) {
-                            // Lexical array
+                        if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                            arrayReg = bytecodeCompiler.allocateRegister();
+                            int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                            bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emit(nameIdx);
+                            bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                        } else if (bytecodeCompiler.hasVariable(varName)) {
                             arrayReg = bytecodeCompiler.getVariableRegister(varName);
                         } else {
-                            // Global array - load it
                             arrayReg = bytecodeCompiler.allocateRegister();
                             String globalArrayName = NameNormalizer.normalizeVariableName(
                                     ((IdentifierNode) arrayOp.operand).name,
@@ -1149,12 +1166,17 @@ public class CompileAssignment {
                             String varName = ((IdentifierNode) arrayOp.operand).name;
                             String arrayVarName = "@" + varName;
 
-                            // Get the array register
-                            if (bytecodeCompiler.hasVariable(arrayVarName)) {
-                                // Lexical array
+                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(arrayVarName)) {
+                                arrayReg = bytecodeCompiler.allocateRegister();
+                                int nameIdx = bytecodeCompiler.addToStringPool(arrayVarName);
+                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                            } else if (bytecodeCompiler.hasVariable(arrayVarName)) {
                                 arrayReg = bytecodeCompiler.getVariableRegister(arrayVarName);
                             } else {
-                                // Global array - load it
                                 arrayReg = bytecodeCompiler.allocateRegister();
                                 String globalArrayName = NameNormalizer.normalizeVariableName(
                                         varName,
@@ -1238,12 +1260,17 @@ public class CompileAssignment {
                             String varName = ((IdentifierNode) hashOp.operand).name;
                             String hashVarName = "%" + varName;
 
-                            // Get the hash - check lexical first, then global
-                            if (bytecodeCompiler.hasVariable(hashVarName)) {
-                                // Lexical hash
+                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)) {
+                                hashReg = bytecodeCompiler.allocateRegister();
+                                int nameIdx = bytecodeCompiler.addToStringPool(hashVarName);
+                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                                bytecodeCompiler.emitReg(hashReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                            } else if (bytecodeCompiler.hasVariable(hashVarName)) {
                                 hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
                             } else {
-                                // Global hash - load it
                                 hashReg = bytecodeCompiler.allocateRegister();
                                 String globalHashName = NameNormalizer.normalizeVariableName(
                                         varName,
@@ -1313,11 +1340,17 @@ public class CompileAssignment {
                                 String varName = ((IdentifierNode) hashOp.operand).name;
                                 String hashVarName = "%" + varName;
 
-                                if (bytecodeCompiler.hasVariable(hashVarName)) {
-                                    // Lexical hash
+                                if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)) {
+                                    hashReg = bytecodeCompiler.allocateRegister();
+                                    int nameIdx = bytecodeCompiler.addToStringPool(hashVarName);
+                                    bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                                } else if (bytecodeCompiler.hasVariable(hashVarName)) {
                                     hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
                                 } else {
-                                    // Global hash - load it
                                     hashReg = bytecodeCompiler.allocateRegister();
                                     String globalHashName = NameNormalizer.normalizeVariableName(
                                             varName,
@@ -1533,6 +1566,18 @@ public class CompileAssignment {
                 }
 
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+            } else if (node.left instanceof TernaryOperatorNode) {
+                LValueVisitor.getContext(node.left);
+                node.left.accept(bytecodeCompiler);
+                int lvalueReg = bytecodeCompiler.lastResultReg;
+                node.right.accept(bytecodeCompiler);
+                int rhsReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                bytecodeCompiler.emitReg(lvalueReg);
+                bytecodeCompiler.emitReg(rhsReg);
+                bytecodeCompiler.lastResultReg = rhsReg;
+                bytecodeCompiler.currentCallContext = savedContext;
+                return;
             } else if (node.left instanceof ListNode) {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS
@@ -1612,7 +1657,15 @@ public class CompileAssignment {
                                 String varName = "@" + ((IdentifierNode) lhsOp.operand).name;
 
                                 int arrayReg;
-                                if (bytecodeCompiler.hasVariable(varName)) {
+                                if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                                    arrayReg = bytecodeCompiler.allocateRegister();
+                                    int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                                    bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                                    bytecodeCompiler.emitReg(arrayReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                                } else if (bytecodeCompiler.hasVariable(varName)) {
                                     arrayReg = bytecodeCompiler.getVariableRegister(varName);
                                 } else {
                                     arrayReg = bytecodeCompiler.allocateRegister();
@@ -1646,7 +1699,15 @@ public class CompileAssignment {
                                 String varName = "%" + ((IdentifierNode) lhsOp.operand).name;
 
                                 int hashReg;
-                                if (bytecodeCompiler.hasVariable(varName)) {
+                                if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                                    hashReg = bytecodeCompiler.allocateRegister();
+                                    int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                                    bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                                } else if (bytecodeCompiler.hasVariable(varName)) {
                                     hashReg = bytecodeCompiler.getVariableRegister(varName);
                                 } else {
                                     hashReg = bytecodeCompiler.allocateRegister();
@@ -1708,6 +1769,16 @@ public class CompileAssignment {
         if (dollarHashOp.operand instanceof OperatorNode operandOp
                 && operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode idNode) {
             String varName = "@" + idNode.name;
+            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                    && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                int arrayReg = bytecodeCompiler.allocateRegister();
+                int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emit(nameIdx);
+                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                return arrayReg;
+            }
             if (bytecodeCompiler.hasVariable(varName)) {
                 return bytecodeCompiler.getVariableRegister(varName);
             }
@@ -1720,6 +1791,16 @@ public class CompileAssignment {
             return arrayReg;
         } else if (dollarHashOp.operand instanceof IdentifierNode idNode) {
             String varName = "@" + idNode.name;
+            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                    && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                int arrayReg = bytecodeCompiler.allocateRegister();
+                int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emit(nameIdx);
+                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                return arrayReg;
+            }
             if (bytecodeCompiler.hasVariable(varName)) {
                 return bytecodeCompiler.getVariableRegister(varName);
             }
