@@ -1196,5 +1196,14 @@ public class Opcodes {
      *  Format: TIME_OP rd */
     public static final short TIME_OP = 360;
 
+    public static final short INTEGER_LEFT_SHIFT = 361;
+    public static final short INTEGER_RIGHT_SHIFT = 362;
+    public static final short INTEGER_DIV = 363;
+    public static final short INTEGER_MOD = 364;
+    public static final short INTEGER_LEFT_SHIFT_ASSIGN = 365;
+    public static final short INTEGER_RIGHT_SHIFT_ASSIGN = 366;
+    public static final short INTEGER_DIV_ASSIGN = 367;
+    public static final short INTEGER_MOD_ASSIGN = 368;
+
     private Opcodes() {} // Utility class - no instantiation
 }

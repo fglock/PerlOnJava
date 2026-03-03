@@ -352,6 +352,11 @@ public class BytecodeCompiler implements Visitor {
                 && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
     }
 
+    boolean isIntegerEnabled() {
+        return emitterContext != null && emitterContext.symbolTable != null
+                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+    }
+
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
         // Only check if strict vars is enabled
         if (emitterContext == null || emitterContext.symbolTable == null) {
@@ -1547,8 +1552,8 @@ public class BytecodeCompiler implements Visitor {
             case "+=" -> emit(Opcodes.ADD_ASSIGN);
             case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
             case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
-            case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
-            case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
+            case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
+            case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
             case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
             case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
@@ -1558,8 +1563,8 @@ public class BytecodeCompiler implements Visitor {
             case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
             case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
             case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
-            case "<<=" -> emit(Opcodes.LEFT_SHIFT_ASSIGN);              // Left shift
-            case ">>=" -> emit(Opcodes.RIGHT_SHIFT_ASSIGN);             // Right shift
+            case "<<=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
+            case ">>=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
             case "&&=" -> emit(Opcodes.LOGICAL_AND_ASSIGN);             // Logical AND
             case "||=" -> emit(Opcodes.LOGICAL_OR_ASSIGN);              // Logical OR
             case "//=" -> emit(Opcodes.DEFINED_OR_ASSIGN);              // Defined-or
