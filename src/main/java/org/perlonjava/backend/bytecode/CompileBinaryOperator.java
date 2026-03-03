@@ -636,22 +636,29 @@ public class CompileBinaryOperator {
         }
 
         // Compile left and right operands (for non-short-circuit operators).
+        // For arithmetic/bitwise operators, force SCALAR context to prevent
+        // parenthesized expressions from producing RuntimeList in LIST context.
+        boolean forceScalar = switch (node.operator) {
+            case "+", "-", "*", "/", "%", "**",
+                 "&", "|", "^", "<<", ">>",
+                 "binary&", "binary|", "binary^",
+                 "&.", "|.", "^." -> true;
+            default -> false;
+        };
+        int savedCtx = bytecodeCompiler.currentCallContext;
+        if (forceScalar) {
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+        }
         node.left.accept(bytecodeCompiler);
         int rs1 = bytecodeCompiler.lastResultReg;
 
         // For =~ and !~, force SCALAR context on the right side (the regex/pattern)
-        // so that sub calls like 'use constant quire => qr/...'; $s =~ quire
-        // emit ctx=SCALAR in CALL_SUB and get a scalar back, not a RuntimeList.
-        // The left side keeps its own context (it may be a list in a grep, etc.).
-        if (node.operator.equals("=~") || node.operator.equals("!~")) {
-            int savedCtx = bytecodeCompiler.currentCallContext;
+        if (!forceScalar && (node.operator.equals("=~") || node.operator.equals("!~"))) {
             bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.right.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedCtx;
-        } else {
-            node.right.accept(bytecodeCompiler);
         }
+        node.right.accept(bytecodeCompiler);
         int rs2 = bytecodeCompiler.lastResultReg;
+        bytecodeCompiler.currentCallContext = savedCtx;
 
         // Emit opcode based on operator (delegated to helper method)
         int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
