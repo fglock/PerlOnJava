@@ -656,8 +656,21 @@ public class StatementResolver {
                     }
 
                     // Statement modifier for loop: EXPR for LIST
-                    // The emitter will handle localization of $_ if needed
-                    yield new For1Node(null, false, scalarUnderscore(parser), modifierExpression, expression, null, parser.tokenIndex);
+                    // $_ is global, so needs array-of-alias and local wrapping
+                    Node varNode = scalarUnderscore(parser);
+                    if (varNode instanceof OperatorNode operatorNode && operatorNode.operator.equals("$")
+                            && operatorNode.operand instanceof IdentifierNode identifierNode) {
+                        String fullName = NameNormalizer.normalizeVariableName(identifierNode.name, parser.ctx.symbolTable.getCurrentPackage());
+                        identifierNode.name = fullName;
+                        For1Node forNode = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
+                        forNode.needsArrayOfAlias = true;
+                        yield new BlockNode(
+                                List.of(
+                                        new OperatorNode("local", varNode, parser.tokenIndex),
+                                        forNode
+                                ), parser.tokenIndex);
+                    }
+                    yield new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
                 }
 
                 case "while", "until" -> {
