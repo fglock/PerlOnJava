@@ -628,7 +628,7 @@ Workarounds: JNA for native access, Java threading APIs, file auto-close at exit
 
 ## Perl Was Never Designed to Run on the JVM
 
-We made it work anyway — and made it **2.2× faster**.
+We made it work anyway — and made it run fast**.
 
 <span class="metric">260,000+ tests</span> · <span class="metric">392 files</span> · <span class="metric">5,741 commits</span>
 
