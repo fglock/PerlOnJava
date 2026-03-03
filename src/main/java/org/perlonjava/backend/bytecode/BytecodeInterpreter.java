@@ -852,8 +852,10 @@ public class BytecodeInterpreter {
                         int valueReg = bytecode[pc++];
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
-                        arr.get(idx.getInt()).set(val);  // Get element then set its value
+                        RuntimeBase valueBase = registers[valueReg];
+                        RuntimeScalar val = (valueBase instanceof RuntimeScalar)
+                                ? (RuntimeScalar) valueBase : valueBase.scalar();
+                        arr.get(idx.getInt()).set(val);
                         break;
                     }
 
