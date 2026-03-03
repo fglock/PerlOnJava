@@ -1034,19 +1034,16 @@ public class BytecodeInterpreter {
                                 : codeRefBase.scalar();
                         RuntimeBase argsBase = registers[argsReg];
 
-                        // Convert args to RuntimeArray if needed
                         RuntimeArray callArgs;
                         if (argsBase instanceof RuntimeArray) {
                             callArgs = (RuntimeArray) argsBase;
                         } else if (argsBase instanceof RuntimeList) {
-                            // Convert RuntimeList to RuntimeArray (from ListNode)
-                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                            callArgs = new RuntimeArray();
+                            ((RuntimeList) argsBase).setArrayOfAlias(callArgs);
                         } else {
-                            // Single scalar argument
                             callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                         }
 
-                        // RuntimeCode.apply works for both compiled AND interpreted code
                         RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
 
                         // Convert to scalar if called in scalar context
@@ -1097,19 +1094,16 @@ public class BytecodeInterpreter {
                         RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
                         RuntimeBase argsBase = registers[argsReg];
 
-                        // Convert args to RuntimeArray if needed
                         RuntimeArray callArgs;
                         if (argsBase instanceof RuntimeArray) {
                             callArgs = (RuntimeArray) argsBase;
                         } else if (argsBase instanceof RuntimeList) {
-                            // Convert RuntimeList to RuntimeArray (from ListNode)
-                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                            callArgs = new RuntimeArray();
+                            ((RuntimeList) argsBase).setArrayOfAlias(callArgs);
                         } else {
-                            // Single scalar argument
                             callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                         }
 
-                        // RuntimeCode.call handles method resolution and dispatch
                         RuntimeList result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
 
                         // Convert to scalar if called in scalar context
