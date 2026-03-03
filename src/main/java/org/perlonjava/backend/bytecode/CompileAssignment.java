@@ -1533,6 +1533,18 @@ public class CompileAssignment {
                 }
 
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+            } else if (node.left instanceof TernaryOperatorNode) {
+                LValueVisitor.getContext(node.left);
+                node.left.accept(bytecodeCompiler);
+                int lvalueReg = bytecodeCompiler.lastResultReg;
+                node.right.accept(bytecodeCompiler);
+                int rhsReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                bytecodeCompiler.emitReg(lvalueReg);
+                bytecodeCompiler.emitReg(rhsReg);
+                bytecodeCompiler.lastResultReg = rhsReg;
+                bytecodeCompiler.currentCallContext = savedContext;
+                return;
             } else if (node.left instanceof ListNode) {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS

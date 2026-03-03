@@ -60,7 +60,7 @@ my @tests = (
     },
     {
         code => 'my @b; my $c = 1; $c ? $a : @b = 123',
-        expected => qr/Assignment to both a list and a scalar|Assignment to non-identifier not yet supported/,
+        expected => qr/Assignment to both a list and a scalar/,
     },
 );
 
