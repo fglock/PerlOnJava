@@ -31,14 +31,12 @@ public class InputRecordSeparator extends RuntimeScalar {
 
         if (value instanceof RuntimeBaseProxy) {
             RuntimeScalar resolved = ((RuntimeBaseProxy) value).lvalue;
-            if (resolved == null) {
-                if (value instanceof ScalarSpecialVariable) {
-                    resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
-                } else {
-                    resolved = new RuntimeScalar();
-                }
+            if (resolved != null) {
+                return set(resolved);
             }
-            return set(resolved);
+            if (value instanceof ScalarSpecialVariable) {
+                return set(((ScalarSpecialVariable) value).getValueAsScalar());
+            }
         }
 
         // Store current value in case validation fails
