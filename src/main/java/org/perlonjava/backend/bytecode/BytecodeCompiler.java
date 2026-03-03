@@ -544,47 +544,74 @@ public class BytecodeCompiler implements Visitor {
      * @param ctx EmitterContext containing symbol table and eval context
      */
     private void detectClosureVariables(Node ast, EmitterContext ctx) {
-        // If capturedVarIndices was already set by the constructor (for eval STRING
-        // with parentRegistry), don't overwrite it. The constructor has already set up
-        // the correct captured variable mappings from the parent scope.
         if (capturedVarIndices != null) {
-            return;  // Already set up by constructor with parentRegistry
+            return;
         }
 
-        // Step 1: Collect all variable references in AST
+        if (ctx == null || ctx.symbolTable == null) {
+            return;
+        }
+
+        // Use getAllVisibleVariables() (TreeMap sorted by register index) with the same
+        // filtering as SubroutineParser to ensure capturedVars ordering matches exactly.
+        Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> outerVars =
+            ctx.symbolTable.getAllVisibleVariables();
+        int skipVariables = org.perlonjava.backend.jvm.EmitterMethodCreator.skipVariables;
+
+        List<String> outerVarNames = new ArrayList<>();
+        List<RuntimeBase> outerValues = new ArrayList<>();
+        capturedVarIndices = new HashMap<>();
+
+        int reg = 3;
+        for (Map.Entry<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> e :
+                outerVars.entrySet()) {
+            if (e.getKey() < skipVariables) continue;
+            org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry entry = e.getValue();
+            String name = entry.name();
+            // Match SubroutineParser filters: skip @_, empty decl, fields, code refs
+            if (name.equals("@_")) continue;
+            if (entry.decl().isEmpty()) continue;
+            if (entry.decl().equals("field")) continue;
+            if (name.startsWith("&")) continue;
+            capturedVarIndices.put(name, reg);
+            outerVarNames.add(name);
+            outerValues.add(getVariableValueFromContext(name, ctx));
+            reg++;
+        }
+
+        // Register captured variables in the compiler's symbol table so that
+        // all existing hasVariable()/getVariableRegister() lookups find them.
+        // This is critical for handleHashElementAccess, handleArrayElementAccess, etc.
+        for (int i = 0; i < outerVarNames.size(); i++) {
+            symbolTable.addVariableWithIndex(outerVarNames.get(i), 3 + i, "my");
+        }
+
+        // Reserve registers for captured variables so local my declarations don't collide
+        nextRegister = reg;
+        maxRegisterEverUsed = Math.max(maxRegisterEverUsed, nextRegister - 1);
+        baseRegisterForStatement = nextRegister;
+
+        // Also scan AST for referenced variables and add them to capturedVarIndices.
+        // This prevents aggressive register recycling (getHighestVariableRegister uses this).
         Set<String> referencedVars = collectReferencedVariables(ast);
-
-        // Step 2: Get local variable declarations from symbol table
         Set<String> localVars = getLocalVariableNames(ctx);
-
-        // Step 3: Closure vars = referenced - local
-        Set<String> closureVarNames = new HashSet<>(referencedVars);
-        closureVarNames.removeAll(localVars);
-
-        // Remove special variables that don't need capture (they're globals)
-        closureVarNames.removeIf(name ->
+        referencedVars.removeAll(localVars);
+        referencedVars.removeIf(name ->
             name.equals("$_") || name.equals("$@") || name.equals("$!")
         );
-
-        if (closureVarNames.isEmpty()) {
-            return;  // No closure vars
+        for (String varName : referencedVars) {
+            if (!capturedVarIndices.containsKey(varName)) {
+                capturedVarIndices.put(varName, reg++);
+            }
         }
 
-        // Step 4: Build arrays
-        capturedVarNames = closureVarNames.toArray(new String[0]);
-        capturedVarIndices = new HashMap<>();
-        List<RuntimeBase> values = new ArrayList<>();
-
-        for (int i = 0; i < capturedVarNames.length; i++) {
-            String varName = capturedVarNames[i];
-            capturedVarIndices.put(varName, 3 + i);  // Registers 3+
-
-            // Get variable value from eval runtime context
-            RuntimeBase value = getVariableValueFromContext(varName, ctx);
-            values.add(value);
+        if (outerVarNames.isEmpty() && capturedVarIndices.isEmpty()) {
+            capturedVarIndices = null;
+            return;
         }
 
-        capturedVars = values.toArray(new RuntimeBase[0]);
+        capturedVarNames = outerVarNames.toArray(new String[0]);
+        capturedVars = outerValues.toArray(new RuntimeBase[0]);
     }
 
     /**
