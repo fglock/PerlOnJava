@@ -40,13 +40,13 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "%" -> {
-                bytecodeCompiler.emit(Opcodes.MOD_SCALAR);
+                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_MOD : Opcodes.MOD_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "/" -> {
-                bytecodeCompiler.emit(Opcodes.DIV_SCALAR);
+                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -406,15 +406,13 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "<<" -> {
-                // Left shift: rs1 << rs2
-                bytecodeCompiler.emit(Opcodes.LEFT_SHIFT);
+                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT : Opcodes.LEFT_SHIFT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case ">>" -> {
-                // Right shift: rs1 >> rs2
-                bytecodeCompiler.emit(Opcodes.RIGHT_SHIFT);
+                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT : Opcodes.RIGHT_SHIFT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

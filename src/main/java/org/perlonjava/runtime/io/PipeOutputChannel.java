@@ -353,6 +353,10 @@ public class PipeOutputChannel implements IOHandle {
         return process != null && process.isAlive();
     }
 
+    public Process getProcess() {
+        return process;
+    }
+
     /**
      * Checks if the pipe has been closed.
      *

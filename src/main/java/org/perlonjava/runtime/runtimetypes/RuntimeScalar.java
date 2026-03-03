@@ -1373,7 +1373,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
             case REFERENCE -> {
                 // Dereference and check if it's a CODE reference
-                RuntimeScalar deref = this.undefine();
+                RuntimeScalar deref = (RuntimeScalar) this.value;
                 if (deref.type == RuntimeScalarType.CODE) {
                     yield deref;
                 }

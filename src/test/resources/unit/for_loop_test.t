@@ -62,6 +62,67 @@ for my ($num, $square) (@squares) {
     $idx2++;
 }
 
-1;
+my $x = "original";
+my @a = ("a", "b", "c");
+foreach $x (@a) { }
+is($x, "original", 'foreach restores lexical loop variable');
+
+$x = "before";
+foreach $x (1..3) { }
+is($x, "before", 'foreach with range restores lexical loop variable');
+
+our $gv = "saved";
+foreach $gv ("x", "y") { }
+is($gv, "saved", 'foreach restores global loop variable');
+
+# $1 scoping: persists across iterations, restores after loop exit
+{
+    "abc" =~ /(a)/;
+    is($1, 'a', '$1 set before for(;;) loop');
+    for (my $i = 0; $i < 2; $i++) {
+        "x${i}y" =~ /(\d)/;
+    }
+    is($1, 'a', '$1 restored after for(;;) loop');
+}
+
+{
+    my $s = "a1b2c3";
+    my @seen;
+    for (;;) {
+        last unless $s =~ /([a-z])/g;
+        push @seen, $1;
+        $s =~ /(\d)/g or last;
+    }
+    is_deeply(\@seen, ['a', 'b', 'c'], '$1 persists across for(;;) iterations');
+}
+
+{
+    "abc" =~ /(a)/;
+    foreach my $i (1..2) {
+        "x${i}y" =~ /(\d)/;
+    }
+    is($1, 'a', '$1 restored after foreach loop');
+}
+
+{
+    "xyz" =~ /(y)/;
+    {
+        "abc" =~ /(b)/;
+    }
+    is($1, 'y', '$1 restored after bare block');
+}
+
+# local is restored per-iteration (each iteration is a dynamic scope)
+$main::lv = "outer";
+for my $i (1..3) {
+    local $main::lv = "iter$i";
+}
+is($main::lv, 'outer', 'local restored after foreach loop');
+
+$main::lv2 = "outer";
+for (my $j = 0; $j < 3; $j++) {
+    local $main::lv2 = "iter$j";
+}
+is($main::lv2, 'outer', 'local restored after for(;;) loop');
 
 done_testing();

@@ -54,4 +54,19 @@ $string = 'a1b2c3';
 @result = split(/(\d+)/, $string, 3);
 is_deeply(\@result, ['a', '1', 'b', '2', 'c3'], 'split with capturing groups and positive limit');
 
+$string = 'one, two, three';
+my $pattern = ',+\s*';
+@result = split $pattern, $string;
+is_deeply(\@result, ['one', 'two', 'three'], 'split with variable regex pattern');
+
+$string = 'a.b.c';
+$pattern = '\.';
+@result = split $pattern, $string;
+is_deeply(\@result, ['a', 'b', 'c'], 'split with escaped dot in variable');
+
+$string = 'abc';
+$pattern = '.';
+@result = split $pattern, $string, -1;
+is_deeply(\@result, ['', '', '', ''], 'split with dot as regex (matches any char)');
+
 done_testing();

@@ -373,7 +373,9 @@ public class IOOperator {
             // Use set() to modify the lvalue in place
             fileHandle.set(newGlob);
         }
-        return scalarTrue; // success
+        long pid = fh.getPid();
+        if (pid > 0) return new RuntimeScalar(pid);
+        return scalarTrue;
     }
 
     /**

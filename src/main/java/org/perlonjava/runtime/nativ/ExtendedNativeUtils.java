@@ -3,6 +3,9 @@ package org.perlonjava.runtime.nativ;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import com.sun.jna.Platform;
+import com.sun.jna.Pointer;
+
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -48,130 +51,128 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
     }
 
-    /**
-     * Get password entry by username
-     */
-    public static RuntimeList getpwnam(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeList();
-        String username = args[0].toString();
+    private static String ptrString(Pointer p, long offset) {
+        Pointer s = p.getPointer(offset);
+        return s != null ? s.getString(0) : "";
+    }
 
-        // In scalar context, return just the username
-        if (ctx == RuntimeContextType.SCALAR) {
-            return new RuntimeScalar(username).getList();
-        }
-
-        // Check cache first for full info
-        String cacheKey = "user:" + username;
-        if (userInfoCache.containsKey(cacheKey)) {
-            return userInfoCache.get(cacheKey).getList();
-        }
-
+    private static RuntimeList passwdPointerToList(Pointer pw) {
+        if (pw == null) return new RuntimeList();
         RuntimeArray result = new RuntimeArray();
-        try {
-            if (IS_WINDOWS) {
-                // Windows implementation
-                if (username.equals(System.getProperty("user.name"))) {
-                    RuntimeArray.push(result, new RuntimeScalar(username)); // name
-                    RuntimeArray.push(result, new RuntimeScalar("x")); // passwd (placeholder)
-                    RuntimeArray.push(result, getuid(SCALAR)); // uid
-                    RuntimeArray.push(result, getgid(SCALAR)); // gid
-                    RuntimeArray.push(result, new RuntimeScalar("")); // quota
-                    RuntimeArray.push(result, new RuntimeScalar("")); // comment
-                    RuntimeArray.push(result, new RuntimeScalar("")); // gcos
-                    RuntimeArray.push(result, new RuntimeScalar(System.getProperty("user.home"))); // dir
-                    RuntimeArray.push(result, new RuntimeScalar("cmd.exe")); // shell
-                    RuntimeArray.push(result, new RuntimeScalar("")); // expire
-                } else {
-                    // For other users, provide minimal info
-                    RuntimeArray.push(result, new RuntimeScalar(username)); // name
-                    RuntimeArray.push(result, new RuntimeScalar("x")); // passwd
-                    RuntimeArray.push(result, new RuntimeScalar(username.equals("Administrator") ? 500 : 1001)); // uid
-                    RuntimeArray.push(result, new RuntimeScalar(513)); // gid (Users group)
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                    RuntimeArray.push(result, new RuntimeScalar("C:\\Users\\" + username)); // dir
-                    RuntimeArray.push(result, new RuntimeScalar("cmd.exe")); // shell
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                }
-            } else {
-                // POSIX: Try to read from /etc/passwd
-                boolean found = false;
-                try (Scanner scanner = new Scanner(new java.io.File("/etc/passwd"))) {
-                    while (scanner.hasNextLine()) {
-                        String line = scanner.nextLine();
-                        String[] parts = line.split(":");
-                        if (parts.length >= 7 && parts[0].equals(username)) {
-                            RuntimeArray.push(result, new RuntimeScalar(parts[0])); // name
-                            RuntimeArray.push(result, new RuntimeScalar(parts[1])); // passwd
-                            RuntimeArray.push(result, new RuntimeScalar(Integer.parseInt(parts[2]))); // uid
-                            RuntimeArray.push(result, new RuntimeScalar(Integer.parseInt(parts[3]))); // gid
-                            RuntimeArray.push(result, new RuntimeScalar("")); // quota (not in /etc/passwd)
-                            RuntimeArray.push(result, new RuntimeScalar("")); // comment (not in /etc/passwd)
-                            RuntimeArray.push(result, new RuntimeScalar(parts.length > 4 ? parts[4] : "")); // gcos
-                            RuntimeArray.push(result, new RuntimeScalar(parts.length > 5 ? parts[5] : "")); // dir
-                            RuntimeArray.push(result, new RuntimeScalar(parts.length > 6 ? parts[6] : "")); // shell
-                            RuntimeArray.push(result, new RuntimeScalar("")); // expire
-                            found = true;
-                            break;
-                        }
-                    }
-                } catch (Exception e) {
-                    // Fall through to manual entry
-                }
-
-                // If not found in /etc/passwd, create entry for known users
-                if (!found) {
-                    if (username.equals("root")) {
-                        RuntimeArray.push(result, new RuntimeScalar("root"));
-                        RuntimeArray.push(result, new RuntimeScalar("x"));
-                        RuntimeArray.push(result, new RuntimeScalar(0)); // uid
-                        RuntimeArray.push(result, new RuntimeScalar(0)); // gid
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                        RuntimeArray.push(result, new RuntimeScalar("root"));
-                        RuntimeArray.push(result, new RuntimeScalar("/root"));
-                        RuntimeArray.push(result, new RuntimeScalar("/bin/bash"));
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                    } else if (username.equals(System.getProperty("user.name"))) {
-                        RuntimeArray.push(result, new RuntimeScalar(username));
-                        RuntimeArray.push(result, new RuntimeScalar("x"));
-                        RuntimeArray.push(result, getuid(SCALAR));
-                        RuntimeArray.push(result, getgid(SCALAR));
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                        RuntimeArray.push(result, new RuntimeScalar(System.getProperty("user.home")));
-                        RuntimeArray.push(result, new RuntimeScalar("/bin/bash"));
-                        RuntimeArray.push(result, new RuntimeScalar(""));
-                    }
-                }
-            }
-
-            if (result.size() > 0) {
-                userInfoCache.put(cacheKey, result);
-            }
-        } catch (Exception e) {
-            // Return empty array on error
+        String name = ptrString(pw, 0);
+        String passwd = ptrString(pw, 8);
+        int uid = pw.getInt(16);
+        int gid = pw.getInt(20);
+        if (Platform.isMac()) {
+            // macOS struct passwd: name(0) passwd(8) uid(16) gid(20) change(24) class(32) gecos(40) dir(48) shell(56) expire(64)
+            long change = pw.getLong(24);
+            String gecos = ptrString(pw, 40);
+            String dir = ptrString(pw, 48);
+            String shell = ptrString(pw, 56);
+            long expire = pw.getLong(64);
+            RuntimeArray.push(result, new RuntimeScalar(name));
+            RuntimeArray.push(result, new RuntimeScalar(passwd));
+            RuntimeArray.push(result, new RuntimeScalar(uid));
+            RuntimeArray.push(result, new RuntimeScalar(gid));
+            RuntimeArray.push(result, new RuntimeScalar(change));
+            RuntimeArray.push(result, new RuntimeScalar(""));
+            RuntimeArray.push(result, new RuntimeScalar(gecos));
+            RuntimeArray.push(result, new RuntimeScalar(dir));
+            RuntimeArray.push(result, new RuntimeScalar(shell));
+            RuntimeArray.push(result, new RuntimeScalar(expire));
+        } else {
+            // Linux struct passwd: name(0) passwd(8) uid(16) gid(20) gecos(24) dir(32) shell(40)
+            String gecos = ptrString(pw, 24);
+            String dir = ptrString(pw, 32);
+            String shell = ptrString(pw, 40);
+            RuntimeArray.push(result, new RuntimeScalar(name));
+            RuntimeArray.push(result, new RuntimeScalar(passwd));
+            RuntimeArray.push(result, new RuntimeScalar(uid));
+            RuntimeArray.push(result, new RuntimeScalar(gid));
+            RuntimeArray.push(result, new RuntimeScalar(""));
+            RuntimeArray.push(result, new RuntimeScalar(""));
+            RuntimeArray.push(result, new RuntimeScalar(gecos));
+            RuntimeArray.push(result, new RuntimeScalar(dir));
+            RuntimeArray.push(result, new RuntimeScalar(shell));
+            RuntimeArray.push(result, new RuntimeScalar(""));
         }
-
         return result.getList();
     }
 
-    /**
-     * Get password entry by UID
-     */
+    private static RuntimeList nativeGetpwnam(String username) {
+        Pointer pw = PosixLibrary.INSTANCE.getpwnam(username);
+        return passwdPointerToList(pw);
+    }
+
+    private static RuntimeList nativeGetpwuid(int uid) {
+        Pointer pw = PosixLibrary.INSTANCE.getpwuid(uid);
+        return passwdPointerToList(pw);
+    }
+
+    public static RuntimeList getpwnam(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
+        String username = args[0].toString();
+        if (Platform.isWindows()) {
+            if (ctx == RuntimeContextType.SCALAR) return new RuntimeList();
+            return windowsGetpwnam(username);
+        }
+        try {
+            if (ctx == RuntimeContextType.SCALAR) {
+                Pointer pw = PosixLibrary.INSTANCE.getpwnam(username);
+                if (pw != null) return new RuntimeScalar(pw.getInt(16)).getList();
+                return new RuntimeList();
+            }
+            return nativeGetpwnam(username);
+        } catch (Exception e) {
+            return new RuntimeList();
+        }
+    }
+
     public static RuntimeList getpwuid(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeList();
-
         int uid = args[0].scalar().getInt();
-        int currentUid = getuid(SCALAR).getInt();
-
-        if (uid == currentUid) {
-            return getpwnam(ctx, new RuntimeScalar(System.getProperty("user.name")));
+        if (Platform.isWindows()) {
+            if (ctx == RuntimeContextType.SCALAR) return new RuntimeList();
+            return windowsGetpwuid(uid);
         }
+        try {
+            if (ctx == RuntimeContextType.SCALAR) {
+                Pointer pw = PosixLibrary.INSTANCE.getpwuid(uid);
+                if (pw != null) return new RuntimeScalar(ptrString(pw, 0)).getList();
+                return new RuntimeList();
+            }
+            return nativeGetpwuid(uid);
+        } catch (Exception e) {
+            return new RuntimeList();
+        }
+    }
 
-        return new RuntimeList(); // User not found
+    private static RuntimeList windowsGetpwnam(String username) {
+        RuntimeArray result = new RuntimeArray();
+        RuntimeArray.push(result, new RuntimeScalar(username));
+        RuntimeArray.push(result, new RuntimeScalar("x"));
+        if (username.equals(System.getProperty("user.name"))) {
+            RuntimeArray.push(result, getuid(SCALAR));
+            RuntimeArray.push(result, getgid(SCALAR));
+        } else {
+            RuntimeArray.push(result, new RuntimeScalar(username.equals("Administrator") ? 500 : 1001));
+            RuntimeArray.push(result, new RuntimeScalar(513));
+        }
+        RuntimeArray.push(result, new RuntimeScalar(""));
+        RuntimeArray.push(result, new RuntimeScalar(""));
+        RuntimeArray.push(result, new RuntimeScalar(""));
+        String home = username.equals(System.getProperty("user.name"))
+                ? System.getProperty("user.home") : "C:\\Users\\" + username;
+        RuntimeArray.push(result, new RuntimeScalar(home));
+        RuntimeArray.push(result, new RuntimeScalar("cmd.exe"));
+        RuntimeArray.push(result, new RuntimeScalar(""));
+        return result.getList();
+    }
+
+    private static RuntimeList windowsGetpwuid(int uid) {
+        int currentUid = getuid(SCALAR).getInt();
+        if (uid == currentUid) return windowsGetpwnam(System.getProperty("user.name"));
+        return new RuntimeList();
     }
 
     /**
@@ -237,20 +238,18 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeArray();
     }
 
-    // Iterator functions for user/group entries
     public static RuntimeList getpwent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = userIterator.get();
-        if (iterator == null) {
-            List<String> users = getSystemUsers();
-            iterator = users.iterator();
-            userIterator.set(iterator);
+        if (Platform.isWindows()) return new RuntimeList();
+        try {
+            Pointer pw = PosixLibrary.INSTANCE.getpwent();
+            if (pw == null) return new RuntimeList();
+            if (ctx == RuntimeContextType.SCALAR) {
+                return new RuntimeScalar(ptrString(pw, 0)).getList();
+            }
+            return passwdPointerToList(pw);
+        } catch (Exception e) {
+            return new RuntimeList();
         }
-
-        if (iterator.hasNext()) {
-            return getpwnam(ctx, new RuntimeScalar(iterator.next()));
-        }
-
-        return new RuntimeList(); // End of entries
     }
 
     public static RuntimeArray getgrent(int ctx, RuntimeBase... args) {
@@ -269,7 +268,10 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
-        userIterator.remove(); // Clear this thread's iterator
+        if (!Platform.isWindows()) {
+            try { PosixLibrary.INSTANCE.setpwent(); } catch (Exception e) { }
+        }
+        userIterator.remove();
         userInfoCache.clear();
         return new RuntimeScalar(1);
     }
@@ -281,7 +283,10 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar endpwent(int ctx, RuntimeBase... args) {
-        userIterator.remove(); // Clear this thread's iterator
+        if (!Platform.isWindows()) {
+            try { PosixLibrary.INSTANCE.endpwent(); } catch (Exception e) { }
+        }
+        userIterator.remove();
         return new RuntimeScalar(1);
     }
 
