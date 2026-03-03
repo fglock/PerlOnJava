@@ -106,8 +106,8 @@ public class BytecodeCompiler implements Visitor {
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
 
     // BEGIN support for named subroutine closures
-    private int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
-    private Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
+    int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
+    Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
 
     // Source information
     final String sourceName;
@@ -994,13 +994,19 @@ public class BytecodeCompiler implements Visitor {
         String varName = ((IdentifierNode) leftOp.operand).name;
         String arrayVarName = "@" + varName;
 
-        // Get the array register - check lexical first, then global
+        // Get the array register - check closure, lexical, then global
         int arrayReg;
-        if (hasVariable(arrayVarName)) {
-            // Lexical array
+        if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
+                && currentSubroutineClosureVars.contains(arrayVarName)) {
+            arrayReg = allocateRegister();
+            int nameIdx = addToStringPool(arrayVarName);
+            emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+            emitReg(arrayReg);
+            emit(nameIdx);
+            emit(currentSubroutineBeginId);
+        } else if (hasVariable(arrayVarName)) {
             arrayReg = getVariableRegister(arrayVarName);
         } else {
-            // Global array - load it
             arrayReg = allocateRegister();
             String globalArrayName = NameNormalizer.normalizeVariableName(
                 varName,
@@ -1055,12 +1061,17 @@ public class BytecodeCompiler implements Visitor {
             String varName = ((IdentifierNode) leftOp.operand).name;
             String arrayVarName = "@" + varName;
 
-            // Get the array register - check lexical first, then global
-            if (hasVariable(arrayVarName)) {
-                // Lexical array
+            if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
+                    && currentSubroutineClosureVars.contains(arrayVarName)) {
+                arrayReg = allocateRegister();
+                int nameIdx = addToStringPool(arrayVarName);
+                emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                emitReg(arrayReg);
+                emit(nameIdx);
+                emit(currentSubroutineBeginId);
+            } else if (hasVariable(arrayVarName)) {
                 arrayReg = getVariableRegister(arrayVarName);
             } else {
-                // Global array - load it
                 arrayReg = allocateRegister();
                 String globalArrayName = NameNormalizer.normalizeVariableName(
                     varName,
@@ -1149,13 +1160,19 @@ public class BytecodeCompiler implements Visitor {
         String varName = ((IdentifierNode) leftOp.operand).name;
         String hashVarName = "%" + varName;
 
-        // Get the hash register - check lexical first, then global
+        // Get the hash register - check closure, lexical, then global
         int hashReg;
-        if (hasVariable(hashVarName)) {
-            // Lexical hash
+        if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
+                && currentSubroutineClosureVars.contains(hashVarName)) {
+            hashReg = allocateRegister();
+            int nameIdx = addToStringPool(hashVarName);
+            emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+            emitReg(hashReg);
+            emit(nameIdx);
+            emit(currentSubroutineBeginId);
+        } else if (hasVariable(hashVarName)) {
             hashReg = getVariableRegister(hashVarName);
         } else {
-            // Global hash - load it
             hashReg = allocateRegister();
             String globalHashName = NameNormalizer.normalizeVariableName(
                 varName,
@@ -1229,12 +1246,17 @@ public class BytecodeCompiler implements Visitor {
             String varName = ((IdentifierNode) leftOp.operand).name;
             String hashVarName = "%" + varName;
 
-            // Get the hash - check lexical first, then global
-            if (hasVariable(hashVarName)) {
-                // Lexical hash
+            if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
+                    && currentSubroutineClosureVars.contains(hashVarName)) {
+                hashReg = allocateRegister();
+                int nameIdx = addToStringPool(hashVarName);
+                emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                emitReg(hashReg);
+                emit(nameIdx);
+                emit(currentSubroutineBeginId);
+            } else if (hasVariable(hashVarName)) {
                 hashReg = getVariableRegister(hashVarName);
             } else {
-                // Global hash - load it
                 hashReg = allocateRegister();
                 String globalHashName = NameNormalizer.normalizeVariableName(
                     varName,
@@ -1327,7 +1349,15 @@ public class BytecodeCompiler implements Visitor {
             String varName = ((IdentifierNode) leftOp.operand).name;
             String hashVarName = "%" + varName;
 
-            if (hasVariable(hashVarName)) {
+            if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
+                    && currentSubroutineClosureVars.contains(hashVarName)) {
+                hashReg = allocateRegister();
+                int nameIdx = addToStringPool(hashVarName);
+                emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                emitReg(hashReg);
+                emit(nameIdx);
+                emit(currentSubroutineBeginId);
+            } else if (hasVariable(hashVarName)) {
                 hashReg = getVariableRegister(hashVarName);
             } else {
                 hashReg = allocateRegister();
@@ -3295,13 +3325,18 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = "%" + ((IdentifierNode) node.operand).name;
 
-                // Get the hash register
                 int hashReg;
-                if (hasVariable(varName)) {
-                    // Lexical hash - use existing register
+                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
+                        && currentSubroutineClosureVars.contains(varName)) {
+                    hashReg = allocateRegister();
+                    int nameIdx = addToStringPool(varName);
+                    emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emit(nameIdx);
+                    emit(currentSubroutineBeginId);
+                } else if (hasVariable(varName)) {
                     hashReg = getVariableRegister(varName);
                 } else {
-                    // Global hash - load it
                     hashReg = allocateRegister();
                     String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
                     int nameIdx = addToStringPool(globalHashName);
