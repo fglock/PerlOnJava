@@ -1354,6 +1354,10 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     sb.append("LOAD_GLOB r").append(rd).append(" = *").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.TIME_OP:
+                    rd = bytecode[pc++];
+                    sb.append("TIME_OP r").append(rd).append(" = time()\n");
+                    break;
                 case Opcodes.SLEEP_OP:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

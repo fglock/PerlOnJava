@@ -68,7 +68,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray(RuntimeList a) {
         this.elements = new ArrayList<>();
         for (RuntimeScalar runtimeScalar : a) {
-            this.elements.add(runtimeScalar);
+            this.elements.add(new RuntimeScalar(runtimeScalar));
         }
     }
 

@@ -725,6 +725,10 @@ public class MathOperators {
 
 
     public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
+        int blessId = blessedId(runtimeScalar);
+        if (blessId < 0) {
+            return Overload.bool_not(runtimeScalar);
+        }
         return switch (runtimeScalar.type) {
             case INTEGER -> getScalarBoolean((int) runtimeScalar.value == 0);
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
@@ -732,14 +736,13 @@ public class MathOperators {
                 String s = (String) runtimeScalar.value;
                 yield getScalarBoolean(s.isEmpty() || s.equals("0"));
             }
-            case UNDEF -> scalarTrue;
-            case VSTRING -> scalarFalse;
             case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
             case GLOB -> scalarFalse;
             case REGEX -> scalarFalse;
             case JAVAOBJECT -> scalarFalse;
+            case VSTRING -> scalarFalse;
             case TIED_SCALAR -> not(runtimeScalar.tiedFetch());
-            default -> Overload.bool_not(runtimeScalar);
+            default -> getScalarBoolean(!runtimeScalar.getBoolean());
         };
     }
 }
