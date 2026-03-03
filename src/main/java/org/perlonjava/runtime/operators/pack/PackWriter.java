@@ -17,40 +17,27 @@ public class PackWriter {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         int length = bytes.length;
 
-        // Process in chunks of 45 bytes (standard uuencode line length)
         for (int lineStart = 0; lineStart < length; lineStart += 45) {
             int lineLength = Math.min(45, length - lineStart);
-
-            // Write line length character
             output.write((lineLength & 0x3F) + 32);
 
-            // Process groups of 3 bytes
             for (int i = lineStart; i < lineStart + lineLength; i += 3) {
                 int b1 = (i < length) ? (bytes[i] & 0xFF) : 0;
                 int b2 = (i + 1 < length) ? (bytes[i + 1] & 0xFF) : 0;
                 int b3 = (i + 2 < length) ? (bytes[i + 2] & 0xFF) : 0;
 
-                // Convert 3 bytes to 4 uuencoded characters
                 int c1 = (b1 >> 2) & 0x3F;
                 int c2 = ((b1 << 4) | (b2 >> 4)) & 0x3F;
                 int c3 = ((b2 << 2) | (b3 >> 6)) & 0x3F;
                 int c4 = b3 & 0x3F;
 
-                // Convert to printable characters (space becomes backtick)
-                output.write(c1 == 0 ? 96 : c1 + 32);  // 96 is backtick
-                output.write(c2 == 0 ? 96 : c2 + 32);
-                if (i + 1 < length || i + 1 < lineStart + lineLength) {
-                    output.write(c3 == 0 ? 96 : c3 + 32);
-                }
-                if (i + 2 < length || i + 2 < lineStart + lineLength) {
-                    output.write(c4 == 0 ? 96 : c4 + 32);
-                }
+                output.write(c1 + 32);
+                output.write(c2 + 32);
+                output.write(c3 + 32);
+                output.write(c4 + 32);
             }
 
-            // Add newline after each line (except possibly the last)
-            if (lineStart + 45 < length) {
-                output.write('\n');
-            }
+            output.write('\n');
         }
     }
 
