@@ -1262,12 +1262,20 @@ public class CompileAssignment {
 
                         // Check for hash slice assignment: @hash{keys} = values
                         if (hashOp.operator.equals("@")) {
-                            // Hash slice assignment
-                            if (!(hashOp.operand instanceof IdentifierNode)) {
+                            // Hash slice assignment - extract identifier name
+                            // The parser may produce OperatorNode("@", IdentifierNode("name"))
+                            // or OperatorNode("@", OperatorNode("$", IdentifierNode("name")))
+                            String varName;
+                            if (hashOp.operand instanceof IdentifierNode idNode) {
+                                varName = idNode.name;
+                            } else if (hashOp.operand instanceof OperatorNode innerOp
+                                    && innerOp.operator.equals("$")
+                                    && innerOp.operand instanceof IdentifierNode idNode) {
+                                varName = idNode.name;
+                            } else {
                                 bytecodeCompiler.throwCompilerException("Hash slice assignment requires identifier");
                                 return;
                             }
-                            String varName = ((IdentifierNode) hashOp.operand).name;
                             String hashVarName = "%" + varName;
 
                             if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null

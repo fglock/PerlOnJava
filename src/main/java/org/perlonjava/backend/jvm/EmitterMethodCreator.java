@@ -1584,9 +1584,14 @@ public class EmitterMethodCreator implements Opcodes {
             }
             throw new RuntimeException(e);
         } catch (PerlCompilerException e) {
-            if (USE_INTERPRETER_FALLBACK && e.getMessage() != null && e.getMessage().contains("ASM frame computation failed")) {
-                System.err.println("Note: ASM frame crash, using interpreter backend.");
-                return compileToInterpreter(ast, ctx, useTryCatch);
+            if (USE_INTERPRETER_FALLBACK && e.getMessage() != null) {
+                String msg = e.getMessage();
+                if (msg.contains("ASM frame computation failed") || msg.contains("requires interpreter fallback")) {
+                    if (SHOW_FALLBACK) {
+                        System.err.println("Note: JVM compilation needs interpreter fallback (" + msg.split("\n")[0] + ").");
+                    }
+                    return compileToInterpreter(ast, ctx, useTryCatch);
+                }
             }
             throw e;
         }
@@ -1685,6 +1690,10 @@ public class EmitterMethodCreator implements Opcodes {
 
         // Compile AST to interpreter bytecode (pass ctx for package context and closure detection)
         InterpretedCode code = compiler.compile(ast, ctx);
+
+        if (ctx.compilerOptions.disassembleEnabled) {
+            System.out.println(code.disassemble());
+        }
 
         // Handle captured variables if needed (for closures)
         if (ctx.capturedEnv != null && ctx.capturedEnv.length > skipVariables) {

@@ -393,43 +393,8 @@ public class EmitControlFlow {
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            // Non-local goto: create RuntimeControlFlowList and return
-            ctx.logDebug("visit(goto): Non-local goto to " + labelName);
-            
-            // Create new RuntimeControlFlowList with GOTO type, label, fileName, lineNumber
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
-                    "org/perlonjava/runtime/runtimetypes/ControlFlowType",
-                    "GOTO", 
-                    "Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;");
-            ctx.mv.visitLdcInsn(labelName);
-            // Push fileName
-            ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-            // Push lineNumber
-            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
-            ctx.mv.visitLdcInsn(lineNumber);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "<init>",
-                    "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
-                    false);
-
-            int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledMarker = markerSlot >= 0;
-            if (!pooledMarker) {
-                markerSlot = ctx.symbolTable.allocateLocalVariable();
-            }
-            ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
-
-            // Jump to returnLabel with the marker on stack.
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
-            if (pooledMarker) {
-                ctx.javaClassInfo.releaseSpillSlot();
-            }
-            ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-            return;
+            throw new PerlCompilerException(node.tokenIndex,
+                    "goto label not in JVM scope, requires interpreter fallback", ctx.errorUtil);
         }
 
         // Local goto: use fast GOTO (existing code)

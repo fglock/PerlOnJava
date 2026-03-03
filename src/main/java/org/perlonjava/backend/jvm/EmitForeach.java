@@ -416,6 +416,16 @@ public class EmitForeach {
 
         int loopVarIndex = -1;
 
+        int foreachRegexStateLocal = -1;
+        if (node.body instanceof BlockNode bodyBlock && RegexUsageDetector.containsRegexOperation(bodyBlock)) {
+            foreachRegexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
+            mv.visitVarInsn(Opcodes.ASTORE, foreachRegexStateLocal);
+        }
+
         mv.visitLabel(loopStart);
 
         // Check for pending signals (alarm, etc.) at loop entry
@@ -556,16 +566,6 @@ public class EmitForeach {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv, true);
 
-            int regexStateLocal = -1;
-            if (RegexUsageDetector.containsRegexOperation(blockNode)) {
-                regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
-                mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
-            }
-
             pushGotoLabelsForBlock(emitterVisitor, blockNode);
 
             java.util.List<Node> list = blockNode.elements;
@@ -593,12 +593,6 @@ public class EmitForeach {
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 
-            if (regexStateLocal >= 0) {
-                mv.visitVarInsn(Opcodes.ALOAD, regexStateLocal);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
-            }
-
             Local.localTeardown(bodyLocalRecord, mv);
             emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);
         } else {
@@ -621,6 +615,12 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+
+        if (foreachRegexStateLocal >= 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, foreachRegexStateLocal);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
+        }
 
         if (savedLoopVarIndex >= 0 && loopVarIndex >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, savedLoopVarIndex);

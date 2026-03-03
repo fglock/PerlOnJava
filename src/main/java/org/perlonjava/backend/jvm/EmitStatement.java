@@ -119,6 +119,9 @@ public class EmitStatement {
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                         "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
                 mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+                if (node.body != null) {
+                    node.body.setAnnotation("skipRegexSaveRestore", true);
+                }
             }
 
             // Visit the initialization node (executed once at the start)
@@ -247,6 +250,9 @@ public class EmitStatement {
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/runtimetypes/RegexState", "<init>", "()V", false);
             mv.visitVarInsn(Opcodes.ASTORE, regexStateLocal);
+            if (node.body != null) {
+                node.body.setAnnotation("skipRegexSaveRestore", true);
+            }
         }
 
         // Register loop labels as pseudo-loop (isTrueLoop = false)
