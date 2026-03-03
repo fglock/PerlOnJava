@@ -95,6 +95,20 @@ public class RuntimeIO extends RuntimeScalar {
         }
     };
 
+    private static final Map<Long, Process> childProcesses = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static void registerChildProcess(Process p) {
+        if (p != null) childProcesses.put(p.pid(), p);
+    }
+
+    public static Process getChildProcess(long pid) {
+        return childProcesses.get(pid);
+    }
+
+    public static Process removeChildProcess(long pid) {
+        return childProcesses.remove(pid);
+    }
+
     /**
      * Standard output stream handle (STDOUT)
      */
@@ -147,6 +161,20 @@ public class RuntimeIO extends RuntimeScalar {
      * Can be a file, socket, pipe, or custom I/O implementation.
      */
     public IOHandle ioHandle = new ClosedIOHandle(); // Initialize with ClosedIOHandle
+
+    public long getPid() {
+        Process p = null;
+        if (ioHandle instanceof PipeInputChannel pic) {
+            p = pic.getProcess();
+        } else if (ioHandle instanceof PipeOutputChannel poc) {
+            p = poc.getProcess();
+        }
+        if (p != null) {
+            registerChildProcess(p);
+            return p.pid();
+        }
+        return -1;
+    }
 
     /**
      * Directory handle for directory operations (opendir, readdir, etc.).

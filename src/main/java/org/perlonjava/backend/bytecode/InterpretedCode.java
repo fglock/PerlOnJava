@@ -1299,6 +1299,26 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("RIGHT_SHIFT_ASSIGN r").append(rd).append(" >>= r").append(rs).append("\n");
                     break;
+                case Opcodes.INTEGER_LEFT_SHIFT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("INTEGER_LEFT_SHIFT_ASSIGN r").append(rd).append(" <<= r").append(rs).append("\n");
+                    break;
+                case Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("INTEGER_RIGHT_SHIFT_ASSIGN r").append(rd).append(" >>= r").append(rs).append("\n");
+                    break;
+                case Opcodes.INTEGER_DIV_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("INTEGER_DIV_ASSIGN r").append(rd).append(" /= r").append(rs).append("\n");
+                    break;
+                case Opcodes.INTEGER_MOD_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("INTEGER_MOD_ASSIGN r").append(rd).append(" %= r").append(rs).append("\n");
+                    break;
                 case Opcodes.LOGICAL_AND_ASSIGN:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
@@ -1320,6 +1340,30 @@ public class InterpretedCode extends RuntimeCode {
                     rs1 = bytecode[pc++];
                     rs2 = bytecode[pc++];
                     sb.append("RIGHT_SHIFT r").append(rd).append(" = r").append(rs1).append(" >> r").append(rs2).append("\n");
+                    break;
+                case Opcodes.INTEGER_LEFT_SHIFT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("INTEGER_LEFT_SHIFT r").append(rd).append(" = r").append(rs1).append(" << r").append(rs2).append("\n");
+                    break;
+                case Opcodes.INTEGER_RIGHT_SHIFT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("INTEGER_RIGHT_SHIFT r").append(rd).append(" = r").append(rs1).append(" >> r").append(rs2).append("\n");
+                    break;
+                case Opcodes.INTEGER_DIV:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("INTEGER_DIV r").append(rd).append(" = r").append(rs1).append(" / r").append(rs2).append("\n");
+                    break;
+                case Opcodes.INTEGER_MOD:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("INTEGER_MOD r").append(rd).append(" = r").append(rs1).append(" % r").append(rs2).append("\n");
                     break;
                 case Opcodes.LIST_TO_COUNT:
                     rd = bytecode[pc++];

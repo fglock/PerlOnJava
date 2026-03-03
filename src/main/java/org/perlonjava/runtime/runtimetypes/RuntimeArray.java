@@ -816,7 +816,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             AutovivificationArray.vivify(this);
         }
 
-        arr.elements.addAll(this.elements);
+        for (int i = 0; i < this.elements.size(); i++) {
+            RuntimeScalar element = this.elements.get(i);
+            if (element == null) {
+                arr.elements.add(new RuntimeArrayProxyEntry(this, i));
+            } else {
+                arr.elements.add(element);
+            }
+        }
         return arr;
     }
 
@@ -920,7 +927,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public String toString() {
         StringBuilder sb = new StringBuilder();
         for (RuntimeBase element : elements) {
-            sb.append(element.toString());
+            if (element != null) {
+                sb.append(element.toString());
+            }
         }
         return sb.toString();
     }

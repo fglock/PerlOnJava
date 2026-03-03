@@ -127,9 +127,12 @@ public class EmitForeach {
             }
         }
 
+        boolean isDeclaredInFor = false;
+
         // First declare the variables if it's a my/our operator
         if (variableNode instanceof OperatorNode opNode &&
                 (opNode.operator.equals("my") || opNode.operator.equals("our"))) {
+            isDeclaredInFor = true;
             boolean isWarningEnabled = Warnings.warningManager.isWarningEnabled("redefine");
             if (isWarningEnabled) {
                 // turn off "masks earlier declaration" warning
@@ -169,6 +172,7 @@ public class EmitForeach {
         if (variableNode instanceof OperatorNode opNode &&
                 opNode.operator.equals("state") && opNode.operand instanceof OperatorNode declVar
                 && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
+            isDeclaredInFor = true;
             variableNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
             variableNode = opNode.operand;
             String varName = declVar.operator + declId.name;
@@ -279,17 +283,48 @@ public class EmitForeach {
         boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null && 
                                          (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
         
-        // Allocate variable to track dynamic variable stack level for our localization
+        int savedLoopVarIndex = -1;
+        boolean needSaveRestoreLexicalLoopVar = !isDeclaredInFor && !isReferenceAliasing
+                && !loopVariableIsGlobal && variableNode instanceof OperatorNode;
+        if (needSaveRestoreLexicalLoopVar) {
+            String varName = extractSimpleVariableName((OperatorNode) variableNode);
+            if (varName != null) {
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                if (varIndex >= 0) {
+                    savedLoopVarIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                    mv.visitVarInsn(Opcodes.ASTORE, savedLoopVarIndex);
+                } else {
+                    needSaveRestoreLexicalLoopVar = false;
+                }
+            } else {
+                needSaveRestoreLexicalLoopVar = false;
+            }
+        }
+
+        boolean needLocalizeGlobalLoopVar = !isDeclaredInFor && !isReferenceAliasing
+                && loopVariableIsGlobal && globalVarName != null && !isGlobalUnderscore;
+
+        // Allocate variable to track dynamic variable stack level for localization
         int dynamicIndex = -1;
-        if (needLocalizeUnderscore) {
+        if (needLocalizeUnderscore || needLocalizeGlobalLoopVar) {
             dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            // Get the current level of the dynamic variable stack and store it
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
                     "getLocalLevel",
                     "()I",
                     false);
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+        }
+
+        if (needLocalizeGlobalLoopVar) {
+            mv.visitLdcInsn(globalVarName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
+                    "makeLocal",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
         }
         
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv, true);
@@ -587,7 +622,10 @@ public class EmitForeach {
 
         mv.visitLabel(loopEnd);
 
-        if (loopVarIndex >= 0) {
+        if (savedLoopVarIndex >= 0 && loopVarIndex >= 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, savedLoopVarIndex);
+            mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
+        } else if (loopVarIndex >= 0) {
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
             mv.visitInsn(Opcodes.DUP);
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
@@ -675,7 +713,7 @@ public class EmitForeach {
         }
         
         // Restore dynamic variable stack for our localization
-        if (needLocalizeUnderscore && dynamicIndex != -1) {
+        if ((needLocalizeUnderscore || needLocalizeGlobalLoopVar) && dynamicIndex != -1) {
             mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",

@@ -321,6 +321,10 @@ public class PipeInputChannel implements IOHandle {
         return process != null && process.isAlive();
     }
 
+    public Process getProcess() {
+        return process;
+    }
+
     @Override
     public RuntimeScalar sysread(int length) {
         try {

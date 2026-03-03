@@ -1405,6 +1405,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return code.apply(a, callContext);
         }
 
+        if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
+            String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
+            RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
+            return apply(resolved, a, callContext);
+        }
+
         RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
         if (overloadedCode != null) {
             return apply(overloadedCode, a, callContext);
@@ -1542,6 +1548,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
+        if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
+            String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
+            RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
+            return apply(resolved, subroutineName, args, callContext);
+        }
+
         RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
         if (overloadedCode != null) {
             return apply(overloadedCode, subroutineName, args, callContext);
@@ -1615,6 +1627,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
             }
             throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+        }
+
+        if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
+            String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
+            RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
+            return apply(resolved, subroutineName, list, callContext);
         }
 
         RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
