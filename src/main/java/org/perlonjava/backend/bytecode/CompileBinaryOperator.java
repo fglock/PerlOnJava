@@ -51,12 +51,14 @@ public class CompileBinaryOperator {
             int argsListReg = bytecodeCompiler.allocateRegister();
             if (node.right instanceof ListNode) {
                 ListNode argsList = (ListNode) node.right;
-                // Compile each argument
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (Node arg : argsList.elements) {
                     arg.accept(bytecodeCompiler);
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
+                bytecodeCompiler.currentCallContext = savedContext;
                 // Create list with arguments: CREATE_LIST rd count [regs...]
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(argsListReg);
@@ -66,8 +68,11 @@ public class CompileBinaryOperator {
                 }
             } else {
                 // Single argument - wrap in list
+                int savedContext2 = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 node.right.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.currentCallContext = savedContext2;
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(argsListReg);
                 bytecodeCompiler.emit(1);  // emit count = 1
