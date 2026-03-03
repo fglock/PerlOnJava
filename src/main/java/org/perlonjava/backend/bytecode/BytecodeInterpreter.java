@@ -1693,13 +1693,38 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SCALAR_TO_LIST: {
-                        // Convert scalar to RuntimeList
+                        // Convert scalar to RuntimeList (flattened)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
                         if (val instanceof RuntimeList) {
-                            // Already a list
-                            registers[rd] = val;
+                            RuntimeList srcList = (RuntimeList) val;
+                            boolean needsFlatten = false;
+                            for (RuntimeBase elem : srcList.elements) {
+                                if (!(elem instanceof RuntimeScalar)) {
+                                    needsFlatten = true;
+                                    break;
+                                }
+                            }
+                            if (needsFlatten) {
+                                RuntimeList flat = new RuntimeList();
+                                for (RuntimeBase elem : srcList.elements) {
+                                    if (elem instanceof RuntimeScalar) {
+                                        flat.elements.add(elem);
+                                    } else if (elem instanceof RuntimeArray) {
+                                        for (RuntimeScalar s : (RuntimeArray) elem) {
+                                            flat.elements.add(s);
+                                        }
+                                    } else if (elem instanceof RuntimeList) {
+                                        flat.elements.addAll(((RuntimeList) elem).elements);
+                                    } else {
+                                        flat.elements.add(elem.scalar());
+                                    }
+                                }
+                                registers[rd] = flat;
+                            } else {
+                                registers[rd] = val;
+                            }
                         } else if (val instanceof RuntimeArray) {
                             // Convert array to list
                             RuntimeList list = new RuntimeList();
