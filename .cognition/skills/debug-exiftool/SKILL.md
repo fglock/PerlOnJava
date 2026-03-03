@@ -18,50 +18,148 @@ You are debugging failures in the Image::ExifTool test suite running under PerlO
 - **ExifTool tests**: `Image-ExifTool-13.44/t/*.t`
 - **ExifTool test lib**: `Image-ExifTool-13.44/t/TestLib.pm` (exports `check`, `writeCheck`, `writeInfo`, `testCompare`, `binaryCompare`, `testVerbose`, `notOK`, `done`)
 - **ExifTool test data**: `Image-ExifTool-13.44/t/images/` (reference images)
-- **PerlOnJava unit tests**: `src/test/resources/unit/*.t` (mvn test suite)
+- **ExifTool reference output**: `Image-ExifTool-13.44/t/<TestName>_N.out` (expected tag output per sub-test)
+- **PerlOnJava unit tests**: `src/test/resources/unit/*.t` (mvn test suite, 154 tests)
+- **Perl5 core tests**: `perl5_t/t/` (Perl 5 compatibility suite, run via `make test-gradle`)
 - **Fat JAR**: `target/perlonjava-3.0.0.jar`
+- **Launcher script**: `./jperl` (resolves JAR path, sets `$^X`)
 
-## Running Tests
+## Building PerlOnJava
 
-### Single ExifTool test
 ```bash
-cd Image-ExifTool-13.44
-java -jar ../target/perlonjava-3.0.0.jar -Ilib t/ExifTool.t
+# Build JAR (required after any Java source change)
+mvn package -q -DskipTests
+
+# Run PerlOnJava's own unit test suite (154 tests, must all pass)
+mvn test
+
+# Run Perl5 core compatibility tests (perl5_t/t/*.t)
+make test-gradle
+# Or manually:
+perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json perl5_t/t
 ```
 
-### Single ExifTool test with timeout (prevents infinite loops)
+## Running ExifTool Tests
+
+### Single test
 ```bash
 cd Image-ExifTool-13.44
-timeout 60 java -jar ../target/perlonjava-3.0.0.jar -Ilib t/XMP.t
+java -jar ../target/perlonjava-3.0.0.jar -Ilib t/Writer.t
+# Or using the launcher:
+cd Image-ExifTool-13.44
+../jperl -Ilib t/Writer.t
 ```
 
-### All ExifTool tests with timeout (batch)
+### Single test with timeout (prevents infinite loops)
 ```bash
 cd Image-ExifTool-13.44
+timeout 120 java -jar ../target/perlonjava-3.0.0.jar -Ilib t/XMP.t
+```
+
+### All ExifTool tests in parallel with summary
+```bash
+cd Image-ExifTool-13.44
+mkdir -p /tmp/exiftool_results
 for t in t/*.t; do
     name=$(basename "$t" .t)
-    printf "%-20s " "$name"
-    output=$(timeout 60 java -jar ../target/perlonjava-3.0.0.jar -Ilib "$t" 2>&1)
-    ec=$?
-    if [ $ec -eq 124 ]; then echo "TIMEOUT"
-    else
-        pass=$(echo "$output" | grep -cE '^ok ')
-        fail=$(echo "$output" | grep -cE '^not ok ')
-        plan=$(echo "$output" | grep -oE '^1\.\.[0-9]+' | head -1)
-        planned=${plan#1..}
-        [ $fail -gt 0 ] || [ $ec -ne 0 ] && echo "FAIL (pass=$pass fail=$fail planned=${planned:-?} exit=$ec)" || echo "PASS ($pass/${planned:-?})"
-    fi
+    ( output=$(timeout 120 java -jar ../target/perlonjava-3.0.0.jar -Ilib "$t" 2>&1)
+      ec=$?
+      if [ $ec -eq 124 ]; then echo "$name TIMEOUT"
+      else
+          pass=$(echo "$output" | grep -cE '^ok ')
+          fail=$(echo "$output" | grep -cE '^not ok ')
+          plan=$(echo "$output" | grep -oE '^1\.\.[0-9]+' | head -1)
+          planned=${plan#1..}
+          echo "$name pass=$pass fail=$fail planned=${planned:-?} exit=$ec"
+      fi
+    ) > "/tmp/exiftool_results/$name.txt" &
 done
+wait
+echo "=== RESULTS ==="
+cat /tmp/exiftool_results/*.txt | sort
+echo "=== TOTALS ==="
+cat /tmp/exiftool_results/*.txt | awk '{
+    for(i=1;i<=NF;i++) {
+        if($i~/^pass=/) p+=substr($i,6)
+        if($i~/^fail=/) f+=substr($i,6)
+        if($i~/^planned=/) { v=substr($i,9); if(v!="?") pl+=v }
+    }
+} END { printf "PASS=%d FAIL=%d PLANNED=%d RATE=%d%%\n", p, f, pl, (pl>0?p*100/pl:0) }'
 ```
 
-### Build the JAR (required after Java source changes)
+### Running Perl5 core tests (e.g. lexsub.t)
 ```bash
-mvn package -q -DskipTests
+cd perl5_t/t
+../../jperl op/lexsub.t
 ```
 
-### Run PerlOnJava's own test suite (154 tests)
+## Comparing with System Perl
+
+When debugging, compare PerlOnJava output with native Perl to isolate the difference:
+
 ```bash
-mvn test
+# Run with system Perl
+cd Image-ExifTool-13.44
+perl -Ilib t/Writer.t 2>&1 | grep -E '^(not )?ok ' > /tmp/perl_results.txt
+
+# Run with PerlOnJava
+java -jar ../target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1 | grep -E '^(not )?ok ' > /tmp/jperl_results.txt
+
+# Diff
+diff /tmp/perl_results.txt /tmp/jperl_results.txt
+```
+
+For individual Perl constructs:
+```bash
+# System Perl
+perl -e 'my @a = (1,2,3); $_ *= 2 foreach @a; print "@a\n"'
+
+# PerlOnJava
+java -jar target/perlonjava-3.0.0.jar -e 'my @a = (1,2,3); $_ *= 2 foreach @a; print "@a\n"'
+```
+
+For comparing `.failed` output files against `.out` reference files:
+```bash
+cd Image-ExifTool-13.44
+diff t/Writer_11.out t/Writer_11.failed
+```
+
+## Environment Variables
+
+### Compiler/Interpreter Control
+| Variable | Effect |
+|----------|--------|
+| `JPERL_DISABLE_INTERPRETER_FALLBACK=1` | Disable bytecode interpreter fallback for large subs (force JVM compilation only) |
+| `JPERL_SHOW_FALLBACK=1` | Print a message when a sub falls back to the bytecode interpreter |
+| `JPERL_EVAL_NO_INTERPRETER=1` | Disable interpreter for `eval STRING` (force JVM compilation) |
+| `JPERL_SPILL_SLOTS=N` | Set number of JVM spill slots (default 16) |
+
+### Debugging/Tracing
+| Variable | Effect |
+|----------|--------|
+| `JPERL_ASM_DEBUG=1` | Print JVM bytecode disassembly when ASM frame computation crashes |
+| `JPERL_ASM_DEBUG_CLASS=<name>` | Filter ASM debug output to a specific generated class name |
+| `JPERL_BYTECODE_SIZE_DEBUG=1` | Print bytecode size for each generated method |
+| `JPERL_EVAL_VERBOSE=1` | Verbose error reporting for eval STRING compilation issues |
+| `JPERL_EVAL_TRACE=1` | Trace eval STRING execution path (compile, interpret, fallback) |
+| `JPERL_IO_DEBUG=1` | Trace file handle open/dup/write operations |
+| `JPERL_STDIO_DEBUG=1` | Trace STDOUT/STDERR flush sequencing |
+| `JPERL_REQUIRE_DEBUG=1` | Trace `require`/`use` module loading |
+| `JPERL_TRACE_CONTROLFLOW=1` | Trace control flow detection (goto, return, last/next/redo safety) |
+| `JPERL_DISASSEMBLE=1` | Disassemble generated bytecode (also `--disassemble` CLI flag) |
+
+### Perl-level
+| Variable | Effect |
+|----------|--------|
+| `JPERL_UNIMPLEMENTED=warn` | Downgrade unimplemented regex features from fatal to warning |
+
+### Usage with jperl launcher
+```bash
+# Pass JVM options via JPERL_OPTS
+JPERL_OPTS="-Xmx512m" ./jperl script.pl
+
+# Combine env vars
+JPERL_SHOW_FALLBACK=1 JPERL_EVAL_TRACE=1 java -jar target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1
 ```
 
 ## Test File Anatomy
@@ -73,17 +171,20 @@ END { print "not ok 1\n" unless $loaded; }
 use Image::ExifTool;
 $loaded = 1;
 
-# Read test
+# Read test: extract tags and compare against t/<TestName>_N.out
 my $exifTool = Image::ExifTool->new;
 my $info = $exifTool->ImageInfo('t/images/SomeFile.ext', @tags);
 print 'not ' unless check($exifTool, $info, $testname, $testnum);
 print "ok $testnum\n";
 
-# Write test (uses writeInfo from TestLib)
+# Write test: modify tags and verify output
 writeInfo($exifTool, 'src.jpg', 'tmp/out.jpg', \@setNewValue_args);
+
+# Binary compare test: verify exact byte-for-byte match
+binaryCompare('output.jpg', 't/images/original.jpg');
 ```
 
-The `check()` function compares extracted tags against reference files in `t/ExifTool_N.out` (or `t/<TestName>_N.out`). The `writeInfo()` function calls SetNewValue + WriteInfo and compares the output file.
+The `check()` function compares extracted tags against reference files `t/<TestName>_N.out`. Failed tests leave `t/<TestName>_N.failed` files for comparison. The `writeInfo()` function calls SetNewValue + WriteInfo.
 
 ## Debugging Workflow
 
@@ -95,74 +196,208 @@ The `check()` function compares extracted tags against reference files in `t/Exi
 
 2. **Identify the failing sub-test number** and find it in the `.t` file. Map it to the ExifTool operation (read vs write, which image format, which tags).
 
-3. **Check the `.out` reference file** (e.g., `t/XMP_3.out`) to understand expected output. Compare with actual output by adding debug prints or using `testVerbose`.
-
-4. **Isolate the Perl construct** causing the failure. Write a minimal `.pl` reproducer:
+3. **Check the `.out` vs `.failed` files** to understand the difference:
    ```bash
-   java -jar target/perlonjava-3.0.0.jar -e 'print "test\n"'
+   diff t/Writer_11.out t/Writer_11.failed
    ```
 
-5. **Trace into PerlOnJava source** to find the bug. Key areas:
-   - **Bytecode interpreter**: `src/main/java/org/perlonjava/runtime/BytecodeInterpreter.java`
-   - **Compiler/emitter**: `src/main/java/org/perlonjava/codegen/`
-   - **Runtime operators**: `src/main/java/org/perlonjava/operators/`
-   - **Runtime scalars/arrays/hashes**: `src/main/java/org/perlonjava/runtime/RuntimeScalar.java`, `RuntimeArray.java`, `RuntimeHash.java`
-   - **IO operations**: `src/main/java/org/perlonjava/runtime/RuntimeIO.java`
-   - **String/regex ops**: `src/main/java/org/perlonjava/operators/StringOperators.java`
-   - **List operators**: `src/main/java/org/perlonjava/operators/ListOperators.java`
-   - **Large block refactoring** (wraps big subs in anonymous sub calls): `src/main/java/org/perlonjava/codegen/LargeBlockRefactorer.java`
+4. **Compare with system Perl** to confirm it's a PerlOnJava issue, not a test environment issue.
 
-6. **Fix in PerlOnJava**, rebuild (`mvn package -q -DskipTests`), re-run the ExifTool test.
+5. **Isolate the Perl construct** causing the failure. Write a minimal reproducer:
+   ```bash
+   java -jar target/perlonjava-3.0.0.jar -e 'print pos("abc" =~ /b/g), "\n"'
+   perl -e 'print pos("abc" =~ /b/g), "\n"'
+   ```
 
-7. **Run `mvn test`** to verify no regressions in the 154 unit tests.
+6. **Trace into PerlOnJava source** to find the bug. Use `JPERL_SHOW_FALLBACK=1` to check if large subs are hitting the interpreter path.
+
+7. **Fix in PerlOnJava**, rebuild (`mvn package -q -DskipTests`), re-run the ExifTool test.
+
+8. **Verify no regressions**: Run `mvn test` (154 unit tests) and check `perl5_t/t/op/lexsub.t` (sensitive to block/sub emission changes).
+
+## Interpreter Fallback Architecture
+
+PerlOnJava has two compilation backends:
+- **JVM backend** (default): Compiles Perl AST to JVM bytecode via ASM. Fast, but has a ~64KB method size limit.
+- **Bytecode interpreter** (fallback): When a subroutine is too large for JVM (>N lines, typically ~500), it's compiled to PerlOnJava's own bytecode and interpreted. This includes `eval STRING` by default.
+
+Key files for the interpreter:
+- `BytecodeCompiler.java` — compiles AST to interpreter bytecode
+- `BytecodeInterpreter.java` — executes interpreter bytecode
+- `CompileAssignment.java` — assignment compilation for interpreter
+- `Opcodes.java` — opcode definitions
+- `InterpretedCode.java` — runtime representation of interpreter-compiled code
+
+**Closure variables** are the main challenge for the interpreter fallback path. There are two distinct mechanisms:
+
+1. **Inner named subs within the large sub**: These are compiled by SubroutineParser using the JVM compiler (via `compilerSupplier`). They get full closure support through `RETRIEVE_BEGIN_*` opcodes and `VariableCollectorVisitor.java`.
+
+2. **The large sub itself accessing outer-scope `my` variables**: This is handled by `detectClosureVariables()` in `BytecodeCompiler.java`. It must:
+   - Use `getAllVisibleVariables()` (TreeMap, sorted by register index) with the **exact same filtering** as `SubroutineParser` (skip `@_`, empty decl, fields, `&` refs) to ensure the capturedVars ordering matches `withCapturedVars()`.
+   - Register captured variables in the compiler's **symbol table** via `addVariableWithIndex()` so that ALL variable resolution paths find them — not just `visit(IdentifierNode)`. This is critical because `handleHashElementAccess`, `handleArrayElementAccess`, hash slices, array slices, and assignment targets all have their own variable lookup logic that checks the symbol table.
+   - Reserve registers (bump `nextRegister`) so local `my` declarations don't collide with captured variable registers.
+   - Scan AST-referenced non-local variables and add them to `capturedVarIndices` for register recycling protection (prevents `getHighestVariableRegister()` from being too low).
+
+**The runtime flow for captured variables in the interpreter path:**
+1. `compileToInterpreter()` creates `BytecodeCompiler`, calls `compiler.compile(ast, ctx)` which runs `detectClosureVariables()` — this sets up `capturedVarIndices` (name→register mapping) used during bytecode generation
+2. `compileToInterpreter()` creates placeholder `capturedVars` (all `RuntimeScalar`)
+3. `SubroutineParser.withCapturedVars()` **replaces** the placeholder with actual values from `paramList` (built from `getAllVisibleVariables()` with same filtering)
+4. At runtime, `BytecodeInterpreter.execute()` copies `capturedVars[i]` to `registers[3+i]` via `System.arraycopy`
+5. The compiled bytecode accesses these registers for captured variable reads/writes
+
+**Key invariant**: The ordering of variables in `detectClosureVariables()` MUST match `SubroutineParser`'s `paramList` ordering, because `capturedVars[i]` is copied to register `3+i` and the bytecode was compiled expecting specific variables at specific registers.
 
 ## Common Failure Patterns
 
 ### Infinite loops / TIMEOUT
-- Often caused by `return` inside a block that was refactored by `LargeBlockRefactorer.tryWholeBlockRefactoring()` into `sub { ... }->(@_)`. The `return` exits the anonymous sub instead of the enclosing function. Check `ControlFlowDetectorVisitor.java` for unsafe control flow detection.
-- Can also be caused by regex catastrophic backtracking — PerlOnJava has timeout protection via `d0071f45`.
+- Often caused by `return` inside a block refactored by `LargeBlockRefactorer` into `sub { ... }->(@_)`. The `return` exits the anonymous sub instead of the enclosing function.
+- Can also be caused by regex catastrophic backtracking.
+- Use `timeout 120` to prevent hangs; `JPERL_SHOW_FALLBACK=1` to see if interpreter fallback is involved.
 
-### Foreach loop variable corruption
-- After a foreach loop exits, the loop variable register may still alias the last array element. Writes to that variable corrupt the source array. Fixed in `BytecodeInterpreter.java` (`FOREACH_NEXT_OR_EXIT`) and `EmitForeach.java`.
+### Missing mandatory EXIF tags on write
+- When creating EXIF, mandatory tags (YCbCrPositioning, ExifVersion, ComponentsConfiguration, ColorSpace) should be auto-created by `WriteExif.pl` using `%mandatory` hash.
+- If these are missing, check that `%mandatory` is accessible (closure variable issue in interpreter fallback).
 
-### Write test failures ("WriteInfo errors")
-- `SetNewValue` or `WriteInfo` returning errors. Often due to missing Perl features in string/binary operations (pack/unpack edge cases, encoding, tied handles).
+### Closure variable inaccessibility in interpreter
+- File-scope `my %hash` / `my @array` not accessible inside large subs compiled by interpreter.
+- Symptoms: tags silently missing from output, no error messages. Hash lookups return undef instead of the expected values.
+- **Root cause pattern**: The bytecode compiler has MULTIPLE variable resolution paths (`visit(IdentifierNode)`, `handleHashElementAccess`, `handleArrayElementAccess`, hash/array slices, assignment LHS). If captured variables are only in `capturedVarIndices` but NOT in the compiler's symbol table, most access paths won't find them and fall through to global variable load (which returns an empty hash/array).
+- **Fix**: `detectClosureVariables()` must call `symbolTable.addVariableWithIndex()` for each captured variable so all resolution paths find them.
+- **Debugging**: Add `System.err.println` in `BytecodeInterpreter.execute()` after the `System.arraycopy` for capturedVars to verify the correct values are being passed at runtime. Also check the `handleHashElementAccess` code path to see if it reaches `LOAD_GLOBAL_HASH` (bad) vs `getVariableRegister` (good).
+
+### XMP lang-alt writing failures
+- Non-default language entries (`en`, `de`, `fr`) fail to be created in lang-alt lists.
+- Related to `WriteXMP.pl` path tracking using `pos()` after `m//g` regex.
+
+### pos() behavior after m//g
+- `pos()` returning wrong value after global regex match can cause index tracking bugs in ExifTool's write logic.
+
+### Foreach loop variable aliasing
+- Postfix foreach (`EXPR foreach @list`) must alias `$_` to actual array elements for modification.
+- Block-form and statement-modifier foreach have different code paths in `StatementParser.java` vs `StatementResolver.java`.
 
 ### Encoding / binary data issues
-- ExifTool heavily uses `binmode`, `sysread`, `syswrite`, `pack`, `unpack`, `Encode::decode`/`encode`. Check that PerlOnJava handles these correctly for the specific format being tested.
-
-### Missing or incomplete Perl builtins
-- `local *glob` unwinding, tied handles, `pos()` after regex match, `$1`/`$2` capture variables in eval, `wantarray` in specific contexts.
+- ExifTool heavily uses `binmode`, `sysread`, `syswrite`, `pack`, `unpack`, `Encode::decode`/`encode`.
+- BYTE_STRING vs STRING type propagation in concat operations can corrupt binary data.
 
 ### Read-only variable violations
-- Operations that try to modify read-only scalars (e.g., `$_` aliased to a constant). Check `RuntimeScalarReadOnly` usage.
+- Operations that try to modify read-only scalars (e.g., `$_` aliased to a constant).
+
+## Current Test Status (as of 2026-03-03)
+
+### ExifTool Test Results: 524/600 planned (87%)
+
+| Test | Pass/Planned | Status |
+|------|-------------|--------|
+| ExifTool.t | 35/35 | PASS |
+| Writer.t | 59/61 | 2 fail (test 10: Pentax date fmt, test 46: XMP Audio data) |
+| XMP.t | 44/54 | 10 fail |
+| Geotag.t | 3/12 | 9 fail |
+| PDF.t | 18/26 | 8 fail |
+| QuickTime.t | 17/22 | 5 fail |
+| CanonVRD.t | 19/24 | 5 fail |
+| Nikon.t | 6/9 | 3 fail |
+| CanonRaw.t | 5/9 | 3 fail + crash |
+| Pentax.t | 1/4 | 3 fail |
+| Panasonic.t | 2/5 | 3 fail |
+| (72 other tests) | all pass | PASS |
+
+### Fix Priority (by impact)
+
+#### P1: Writer.t remaining failures (2 tests: Writer 10, 46)
+- **Test 10**: Pentax MakerNotes date `2008:03:02` becomes `2008:0:0`, time `12:01:23` becomes `12:0:0`. Binary date decoding issue — likely `pack`/`unpack` or BCD decode in Pentax.pm. Also has a float rounding diff (`13.2` vs `13.3`).
+- **Test 46**: Missing `[XMP, XMP-GAudio, Audio] Data - Audio Data: (Binary data 1 bytes)` in output. An XMP Audio binary data tag is not being written/preserved.
+
+#### RESOLVED: Writer.t closure variable fix (previously P1, 15 tests fixed)
+The `%mandatory` and `%crossDelete` hashes in `WriteExif.pl` are file-scope `my` variables accessed inside the large `WriteExif` sub (compiled by interpreter fallback). Fixed by registering captured variables in the compiler's symbol table via `addVariableWithIndex()` in `detectClosureVariables()`. This fixed Writer tests 6,7,11,13,19,25-28,35,38,42,48,53,55.
+
+#### P2: Geotag date/time computation (9 tests: Geotag 2,4,6-12)
+All geotag tests except module loading and 2 others fail. All use `Time::Local` for date arithmetic and GPS coordinate interpolation. Likely one root cause in date string parsing or timezone offset calculation. Compare `Geotag_2.out` vs `Geotag_2.failed` to see if GPS coordinates are wrong or dates are wrong.
+
+#### P3: XMP lang-alt writing (5 tests: XMP 13,17,26,51,52)
+Writing non-default language entries to XMP lang-alt lists fails silently. Only `x-default` works. The write path in `WriteXMP.pl` uses `pos()` after `m//g` for path tracking. Test with:
+```bash
+perl -e '"a/b/c" =~ m|/|g; print pos(), "\n"'  # should print 2
+java -jar target/perlonjava-3.0.0.jar -e '"a/b/c" =~ m|/|g; print pos(), "\n"'
+```
+
+#### P4: XMP lang-alt Bag index tracking (3 tests: XMP 36,38,50)
+Values assigned to wrong bag items; empty strings dropped from lists. Also likely `pos()` related. Test 36 specifically loses an empty string as first list element.
+
+#### P5: PDF write/revert cycle (8 tests: PDF 7-12,25,26)
+Tests 7-12 are sequential edit/revert operations on a PDF — one failure cascades. Tests 25-26 are AES encryption (require `Digest::SHA`). Investigate test 7 first as it's the cascade root.
+
+#### P6: QuickTime write failures (5 tests: QuickTime 11-13,18,20)
+HEIC write failures and VideoKeys/AudioKeys extraction. Lower priority — likely format-specific issues.
+
+#### P7: Other write failures (CanonVRD 5, Nikon 3, Pentax 3, Panasonic 3, etc.)
+Various format-specific write issues. Many may share root causes with P1 (mandatory EXIF tags).
+
+## Key Source Files Quick Reference
+
+| Area | File |
+|------|------|
+| Bytecode compiler | `backend/bytecode/BytecodeCompiler.java` |
+| Bytecode interpreter | `backend/bytecode/BytecodeInterpreter.java` |
+| Assignment compilation (interp) | `backend/bytecode/CompileAssignment.java` |
+| Variable collector (closures) | `backend/bytecode/VariableCollectorVisitor.java` |
+| Opcodes | `backend/bytecode/Opcodes.java` |
+| Block emission (JVM) | `backend/jvm/EmitBlock.java` |
+| Subroutine emission (JVM) | `backend/jvm/EmitSubroutine.java` |
+| Foreach emission (JVM) | `backend/jvm/EmitForeach.java` |
+| Eval handling (JVM) | `backend/jvm/EmitEval.java` |
+| Method creator / fallback | `backend/jvm/EmitterMethodCreator.java` |
+| Large block refactoring | `backend/jvm/LargeBlockRefactorer.java` |
+| Control flow safety | `frontend/analysis/ControlFlowDetectorVisitor.java` |
+| Statement parser (block foreach) | `frontend/parser/StatementParser.java` |
+| Statement resolver (postfix foreach) | `frontend/parser/StatementResolver.java` |
+| Subroutine parser | `frontend/parser/SubroutineParser.java` |
+| Runtime scalar | `runtime/runtimetypes/RuntimeScalar.java` |
+| Runtime array | `runtime/runtimetypes/RuntimeArray.java` |
+| Runtime hash | `runtime/runtimetypes/RuntimeHash.java` |
+| Dynamic variables | `runtime/runtimetypes/DynamicVariableManager.java` |
+| IO operations | `runtime/runtimetypes/RuntimeIO.java` |
+| IO operator (open/dup) | `runtime/operators/IOOperator.java` |
+| String operators | `runtime/operators/StringOperators.java` |
+| Pack/Unpack | `runtime/operators/PackOperator.java` |
+| Regex preprocessor | `runtime/regex/RegexPreprocessor.java` |
+| Regex runtime | `runtime/regex/RuntimeRegex.java` |
+| Module loading | `runtime/operators/ModuleOperators.java` |
+
+All paths relative to `src/main/java/org/perlonjava/`.
+
+## Lessons Learned (Debugging Pitfalls)
+
+### Register recycling inflation
+The HEAD code's AST-based `detectClosureVariables` populated `capturedVarIndices` with ~321 entries, which inflated `getHighestVariableRegister()` and prevented aggressive register recycling. A no-op version (removing all capturedVarIndices) dropped Writer.t from 44/61 to 26/61 — not because of closure access, but because register recycling became too aggressive. When modifying `detectClosureVariables`, always ensure `capturedVarIndices` has enough entries to keep `getHighestVariableRegister()` high enough to prevent register corruption.
+
+### Multiple variable resolution paths
+The bytecode compiler resolves variables in MANY separate code paths:
+- `visit(IdentifierNode)` — checks `capturedVarIndices` then symbol table
+- `handleHashElementAccess` — checks closure vars, symbol table, then global
+- `handleArrayElementAccess` — same pattern
+- `handleHashSlice`, `handleArraySlice`, `handleHashKeyValueSlice` — same
+- Assignment targets in `CompileAssignment.java` — same pattern
+- Various places in `CompileOperator.java`
+
+If a fix only patches ONE of these paths (e.g., `capturedVarIndices` check in `visit(IdentifierNode)`), hash/array access will still fall through to globals. The correct fix is to register captured variables in the **symbol table** so ALL paths find them.
+
+### Ordering matters for capturedVars
+`SubroutineParser` builds `paramList` by iterating `getAllVisibleVariables()` (TreeMap sorted by register index) with specific filters. `detectClosureVariables()` must use the **exact same iteration order and filters**. Any mismatch causes captured variable values to be assigned to wrong registers at runtime.
 
 ## Adding Debug Instrumentation
 
-When you need to trace execution inside ExifTool Perl code, add temporary prints:
+In ExifTool Perl code (temporary, never commit):
 ```perl
 print STDERR "DEBUG: variable=$variable\n";
 ```
 
-When tracing inside PerlOnJava Java code, use:
+In PerlOnJava Java code (temporary, never commit):
 ```java
 System.err.println("DEBUG: value=" + value);
 ```
 
-**Always remove debug instrumentation before committing.**
-
-## Key Files Quick Reference
-
-| Area | File |
-|------|------|
-| Bytecode interpreter | `src/main/java/org/perlonjava/runtime/BytecodeInterpreter.java` |
-| Foreach emission | `src/main/java/org/perlonjava/codegen/EmitForeach.java` |
-| Large block refactoring | `src/main/java/org/perlonjava/codegen/LargeBlockRefactorer.java` |
-| Control flow safety | `src/main/java/org/perlonjava/codegen/ControlFlowDetectorVisitor.java` |
-| Runtime scalar | `src/main/java/org/perlonjava/runtime/RuntimeScalar.java` |
-| IO operations | `src/main/java/org/perlonjava/runtime/RuntimeIO.java` |
-| String operators | `src/main/java/org/perlonjava/operators/StringOperators.java` |
-| List operators | `src/main/java/org/perlonjava/operators/ListOperators.java` |
-| Pack/Unpack | `src/main/java/org/perlonjava/operators/PackOperator.java` |
-| Eval handling | `src/main/java/org/perlonjava/codegen/EmitterMethodCreator.java` |
-| Dynamic variables | `src/main/java/org/perlonjava/runtime/DynamicVariableManager.java` |
+To trace which subs hit interpreter fallback:
+```bash
+JPERL_SHOW_FALLBACK=1 java -jar target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1 | grep FALLBACK
+```
