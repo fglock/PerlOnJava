@@ -2158,17 +2158,21 @@ public class CompileOperator {
                 list.elements.get(0).accept(bytecodeCompiler);
                 int formatReg = bytecodeCompiler.lastResultReg;
 
-                // Compile remaining arguments and collect their registers
+                // Compile remaining arguments in list context
+                int savedContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (int i = 1; i < list.elements.size(); i++) {
                     list.elements.get(i).accept(bytecodeCompiler);
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
+                bytecodeCompiler.currentCallContext = savedContext;
 
                 // Create a RuntimeList with the arguments
                 int listReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(listReg);
+                bytecodeCompiler.emit(argRegs.size());
                 for (int argReg : argRegs) {
                     bytecodeCompiler.emitReg(argReg);
                 }
@@ -2908,6 +2912,7 @@ public class CompileOperator {
                 argsReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(argsReg);
+                bytecodeCompiler.emit(0);
             }
 
             int rd = bytecodeCompiler.allocateRegister();
