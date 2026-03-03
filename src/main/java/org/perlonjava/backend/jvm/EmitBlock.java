@@ -123,6 +123,14 @@ public class EmitBlock {
                 break;
             }
         }
+        if (lastNonNullIndex == -1) {
+            for (int i = list.size() - 1; i >= 0; i--) {
+                if (list.get(i) != null) {
+                    lastNonNullIndex = i;
+                    break;
+                }
+            }
+        }
 
         // Create labels for the block as a loop, like `L1: {...}`
         Label redoLabel = new Label();
