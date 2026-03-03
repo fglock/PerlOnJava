@@ -852,8 +852,10 @@ public class BytecodeInterpreter {
                         int valueReg = bytecode[pc++];
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
-                        arr.get(idx.getInt()).set(val);  // Get element then set its value
+                        RuntimeBase valueBase = registers[valueReg];
+                        RuntimeScalar val = (valueBase instanceof RuntimeScalar)
+                                ? (RuntimeScalar) valueBase : valueBase.scalar();
+                        arr.get(idx.getInt()).set(val);
                         break;
                     }
 
@@ -1032,19 +1034,16 @@ public class BytecodeInterpreter {
                                 : codeRefBase.scalar();
                         RuntimeBase argsBase = registers[argsReg];
 
-                        // Convert args to RuntimeArray if needed
                         RuntimeArray callArgs;
                         if (argsBase instanceof RuntimeArray) {
                             callArgs = (RuntimeArray) argsBase;
                         } else if (argsBase instanceof RuntimeList) {
-                            // Convert RuntimeList to RuntimeArray (from ListNode)
-                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                            callArgs = new RuntimeArray();
+                            ((RuntimeList) argsBase).setArrayOfAlias(callArgs);
                         } else {
-                            // Single scalar argument
                             callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                         }
 
-                        // RuntimeCode.apply works for both compiled AND interpreted code
                         RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
 
                         // Convert to scalar if called in scalar context
@@ -1095,19 +1094,16 @@ public class BytecodeInterpreter {
                         RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
                         RuntimeBase argsBase = registers[argsReg];
 
-                        // Convert args to RuntimeArray if needed
                         RuntimeArray callArgs;
                         if (argsBase instanceof RuntimeArray) {
                             callArgs = (RuntimeArray) argsBase;
                         } else if (argsBase instanceof RuntimeList) {
-                            // Convert RuntimeList to RuntimeArray (from ListNode)
-                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                            callArgs = new RuntimeArray();
+                            ((RuntimeList) argsBase).setArrayOfAlias(callArgs);
                         } else {
-                            // Single scalar argument
                             callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                         }
 
-                        // RuntimeCode.call handles method resolution and dispatch
                         RuntimeList result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
 
                         // Convert to scalar if called in scalar context
@@ -1693,13 +1689,38 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SCALAR_TO_LIST: {
-                        // Convert scalar to RuntimeList
+                        // Convert scalar to RuntimeList (flattened)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
                         if (val instanceof RuntimeList) {
-                            // Already a list
-                            registers[rd] = val;
+                            RuntimeList srcList = (RuntimeList) val;
+                            boolean needsFlatten = false;
+                            for (RuntimeBase elem : srcList.elements) {
+                                if (!(elem instanceof RuntimeScalar)) {
+                                    needsFlatten = true;
+                                    break;
+                                }
+                            }
+                            if (needsFlatten) {
+                                RuntimeList flat = new RuntimeList();
+                                for (RuntimeBase elem : srcList.elements) {
+                                    if (elem instanceof RuntimeScalar) {
+                                        flat.elements.add(elem);
+                                    } else if (elem instanceof RuntimeArray) {
+                                        for (RuntimeScalar s : (RuntimeArray) elem) {
+                                            flat.elements.add(s);
+                                        }
+                                    } else if (elem instanceof RuntimeList) {
+                                        flat.elements.addAll(((RuntimeList) elem).elements);
+                                    } else {
+                                        flat.elements.add(elem.scalar());
+                                    }
+                                }
+                                registers[rd] = flat;
+                            } else {
+                                registers[rd] = val;
+                            }
                         } else if (val instanceof RuntimeArray) {
                             // Convert array to list
                             RuntimeList list = new RuntimeList();
@@ -1993,6 +2014,11 @@ public class BytecodeInterpreter {
                         break;
 
                     // Group 9: Special I/O (151-154), glob ops, strict deref
+                    case Opcodes.TIME_OP: {
+                        int rd = bytecode[pc++];
+                        registers[rd] = org.perlonjava.runtime.operators.Time.time();
+                        break;
+                    }
                     case Opcodes.EVAL_STRING:
                     case Opcodes.SELECT_OP:
                     case Opcodes.LOAD_GLOB:

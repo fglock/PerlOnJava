@@ -309,20 +309,18 @@ public class CompileAssignment {
                                         }
                                     }
 
-                                    // Get i-th element from RHS
-                                    int indexReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                                    bytecodeCompiler.emitReg(indexReg);
-                                    bytecodeCompiler.emitInt(i);
-
-                                    int elemReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emit(Opcodes.ARRAY_GET);
-                                    bytecodeCompiler.emitReg(elemReg);
-                                    bytecodeCompiler.emitReg(rhsListReg);
-                                    bytecodeCompiler.emitReg(indexReg);
-
-                                    // Assign to variable
                                     if (sigil.equals("$")) {
+                                        int indexReg = bytecodeCompiler.allocateRegister();
+                                        bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                                        bytecodeCompiler.emitReg(indexReg);
+                                        bytecodeCompiler.emitInt(i);
+
+                                        int elemReg = bytecodeCompiler.allocateRegister();
+                                        bytecodeCompiler.emit(Opcodes.ARRAY_GET);
+                                        bytecodeCompiler.emitReg(elemReg);
+                                        bytecodeCompiler.emitReg(rhsListReg);
+                                        bytecodeCompiler.emitReg(indexReg);
+
                                         if (beginIdList != null) {
                                             bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                             bytecodeCompiler.emitReg(varReg);
@@ -333,13 +331,25 @@ public class CompileAssignment {
                                             bytecodeCompiler.emitReg(elemReg);
                                         }
                                     } else if (sigil.equals("@")) {
+                                        int remainingListReg = bytecodeCompiler.allocateRegister();
+                                        bytecodeCompiler.emit(Opcodes.LIST_SLICE_FROM);
+                                        bytecodeCompiler.emitReg(remainingListReg);
+                                        bytecodeCompiler.emitReg(rhsListReg);
+                                        bytecodeCompiler.emitInt(i);
+
                                         bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                                         bytecodeCompiler.emitReg(varReg);
-                                        bytecodeCompiler.emitReg(elemReg);
+                                        bytecodeCompiler.emitReg(remainingListReg);
                                     } else if (sigil.equals("%")) {
+                                        int remainingListReg = bytecodeCompiler.allocateRegister();
+                                        bytecodeCompiler.emit(Opcodes.LIST_SLICE_FROM);
+                                        bytecodeCompiler.emitReg(remainingListReg);
+                                        bytecodeCompiler.emitReg(rhsListReg);
+                                        bytecodeCompiler.emitInt(i);
+
                                         bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
                                         bytecodeCompiler.emitReg(varReg);
-                                        bytecodeCompiler.emitReg(elemReg);
+                                        bytecodeCompiler.emitReg(remainingListReg);
                                     }
                                 }
                             }

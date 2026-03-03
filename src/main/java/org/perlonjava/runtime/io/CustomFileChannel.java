@@ -185,8 +185,8 @@ public class CustomFileChannel implements IOHandle {
                 data[i] = (byte) string.charAt(i);
             }
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
-            int bytesWritten = fileChannel.write(byteBuffer);
-            return new RuntimeScalar(bytesWritten);
+            fileChannel.write(byteBuffer);
+            return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "write failed");
         }

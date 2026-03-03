@@ -2158,15 +2158,18 @@ public class CompileOperator {
                 list.elements.get(0).accept(bytecodeCompiler);
                 int formatReg = bytecodeCompiler.lastResultReg;
 
-                // Compile remaining arguments in list context
+                // Compile remaining arguments; use LIST context only for array/hash args
                 int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (int i = 1; i < list.elements.size(); i++) {
-                    list.elements.get(i).accept(bytecodeCompiler);
+                    Node arg = list.elements.get(i);
+                    if (CompileBinaryOperator.isArrayLikeNode(arg)) {
+                        bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+                    }
+                    arg.accept(bytecodeCompiler);
+                    bytecodeCompiler.currentCallContext = savedContext;
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
-                bytecodeCompiler.currentCallContext = savedContext;
 
                 // Create a RuntimeList with the arguments
                 int listReg = bytecodeCompiler.allocateRegister();
@@ -3029,6 +3032,11 @@ public class CompileOperator {
                 bytecodeCompiler.pendingGotos.add(new Object[]{patchPc, labelStr});
             }
             bytecodeCompiler.lastResultReg = -1;
+        } else if (op.equals("time")) {
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.TIME_OP);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.lastResultReg = rd;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
