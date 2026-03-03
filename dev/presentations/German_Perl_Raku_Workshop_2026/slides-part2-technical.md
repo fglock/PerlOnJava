@@ -592,10 +592,11 @@ Also: globalIORefs → IO, globalFormatRefs → FORMAT. Slot access: *foo{CODE} 
 
 - Loads **Java extensions** instead of C shared libraries
 - **JNA** (Java Native Access) replaces XS for native calls
+- `nativ/` package: POSIX libc on Unix, Kernel32 on Windows — **same JAR, all platforms**
 - No C compiler needed
 
 Note:
-Java equivalents are easier to write and maintain than C/XS. The same API surface is exposed to Perl code.
+The nativ/ package provides cross-platform implementations of symlink, link, getppid, getuid/gid, chmod, chown, kill, and more. NativeUtils detects the OS at startup and routes each call to the appropriate native API. ExtendedNativeUtils adds user/group info, network ops, and System V IPC. Java equivalents are easier to write and maintain than C/XS.
 
 ---
 

@@ -69,20 +69,23 @@ JSR-223 is the standard Java scripting API, available since Java 6. It allows bi
 
 **`perlonjava-3.0.0.jar`** — 25 MB, zero external dependencies
 
+**Same JAR runs on Linux, macOS, and Windows** — no recompilation.
+
 ```
 perlonjava.jar
-├── org/perlonjava/   ← 392 Java compiled classes
-├── lib/              ← 341 Perl modules (DBI, JSON, HTTP::Tiny…)
-├── ASM, ICU4J, JNA   ← Java libraries bundled
-└── META-INF/services ← JSR-223 auto-discovery
+├── org/perlonjava/        ← 392 Java compiled classes
+├── lib/                   ← 341 Perl modules (DBI, JSON, HTTP::Tiny…)
+├── runtime/nativ/         ← Platform abstraction (POSIX ↔ Win32 via JNA)
+├── ASM, ICU4J, JNA        ← Java libraries bundled
+└── META-INF/services      ← JSR-223 auto-discovery
 ```
 
-`java -jar perlonjava.jar script.pl` — that's it.
+`java -jar perlonjava.jar script.pl` — or `./jperl` / `jperl.bat`
 
-Or use `./jperl script.pl` — a wrapper that also supports `$CLASSPATH` for JDBC drivers.
+Also ships as: **Debian package** (`make deb`) · **Docker image** (`docker build -t perlonjava .`)
 
 Note:
-Built with Gradle Shadow plugin (fat JAR). Perl modules live in src/main/perl/lib and are packaged as resources inside the JAR. The require mechanism reads them directly from the JAR via classloader. No installation, no CPAN, no paths to configure. The jperl wrapper uses -cp instead of -jar so users can add extra JARs to CLASSPATH.
+Built with Gradle Shadow plugin (fat JAR). Perl modules live in src/main/perl/lib and are packaged as resources inside the JAR. The require mechanism reads them directly from the JAR via classloader. The nativ/ package uses JNA to call POSIX libc on Unix and Kernel32 on Windows — same Perl code, platform-specific native calls handled transparently. The jperl wrapper uses -cp instead of -jar so users can add extra JARs to CLASSPATH. Docker: `docker build -t perlonjava .` then `docker run perlonjava script.pl`. Debian: `make deb` creates a .deb in build/distributions/, install with `sudo dpkg -i`.
 
 ---
 
