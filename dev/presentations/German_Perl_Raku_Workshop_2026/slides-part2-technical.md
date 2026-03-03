@@ -88,6 +88,29 @@ Other special blocks: END runs at program exit, INIT runs after compilation befo
 
 ---
 
+## BEGIN: The Hard Part
+
+```perl
+my @data;
+BEGIN { @data = qw(a b c) }  # Compile time
+say @data;                    # Runtime — must see "a b c"
+```
+
+`@data` is a **lexical** — but BEGIN runs at compile time, before runtime lexicals exist.
+
+**Solution:** Temporary package globals as a bridge:
+
+1. Parser **snapshots** all visible lexicals
+2. Each `my` variable gets a temporary global: `PerlOnJava::_BEGIN_42::data`
+3. BEGIN body is compiled with `our` aliases to these globals
+4. BEGIN **executes immediately** — sets the global
+5. At runtime, `my @data` **retrieves** the value from the global and removes it
+
+Note:
+This is implemented in SpecialBlockParser (capture + alias) and PersistentVariable (retrieve + cleanup). For eval STRING, the runtime values are passed via ThreadLocal storage so BEGIN blocks inside eval can access the caller's lexicals. The temporary globals are cleaned up after retrieval to avoid leaks.
+
+---
+
 ## EmitterVisitor: Bytecode Generation
 
 **What it does:**
@@ -453,6 +476,30 @@ say $x;    # prints "reading!" then 10
 ```
 
 `TIED_SCALAR` type in `RuntimeScalar` dispatches `FETCH`/`STORE` transparently. Supported for scalars, arrays, hashes, and filehandles.
+
+---
+
+## Signal Handling: `%SIG` and `alarm`
+
+```perl
+$SIG{ALRM} = sub { die "timeout\n" };
+alarm(5);
+eval { long_operation() };
+alarm(0);
+say "Caught: $@" if $@;
+```
+
+**Challenge:** JVM has no POSIX signals. Timer threads can't safely run Perl handlers.
+
+**Solution:** A signal queue with safe-point checking:
+
+1. `alarm()` schedules a timer on a daemon thread
+2. Timer **enqueues** signal + handler (thread-safe `ConcurrentLinkedQueue`)
+3. Compiler inserts `checkPendingSignals()` at every **loop entry**
+4. Check is a volatile boolean read (~2 CPU cycles) — zero cost when idle
+
+Note:
+The kill() operator also uses this mechanism for self-signals. On Unix, external signals use JNA to call POSIX kill(). On Windows, signals map to GenerateConsoleCtrlEvent and TerminateProcess. The signal queue pattern ensures handlers always execute in the original thread context, not the timer thread.
 
 ---
 
