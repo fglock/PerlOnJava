@@ -410,6 +410,25 @@ Registers maintain state explicitly. Label → bytecode offset mapping with shar
 
 ---
 
+## `caller()` and Stack Traces: Reusing the JVM Stack
+
+```perl
+sub foo { print "Called from: ", (caller)[1], " line ", (caller)[2], "\n" }
+```
+
+**Key trick:** `caller()` creates a `new Throwable()` to capture the **native JVM stack** — zero overhead when not called.
+
+**JVM backend:** Each Perl sub compiles to a JVM class. `ByteCodeSourceMapper` maps token indices back to Perl file/line/package at compile time.
+
+**Internal VM:** `InterpreterState` maintains a parallel frame stack (ThreadLocal). `ExceptionFormatter` walks the JVM stack, matching `BytecodeInterpreter.execute()` frames to Perl-level info.
+
+No shadow stack needed — the JVM does the bookkeeping for us.
+
+Note:
+ExceptionFormatter handles three frame types: JVM-compiled Perl subs (org.perlonjava.anon*), Internal VM frames (BytecodeInterpreter.execute), and compile-time frames (CallerStack for use/BEGIN). The same mechanism powers warn/die location messages.
+
+---
+
 ## Closures and Lexical Scoping
 
 ```perl
@@ -442,7 +461,23 @@ Context threaded through the entire call stack as `EmitterContext` during code g
 
 ---
 
-## `local` and Dynamic Scoping
+## Variable Scoping: Four Declarations, Three Strategies
+
+| Declaration | JVM Mapping |
+|---|---|
+| `my $x` | `new RuntimeScalar()` → **JVM local variable slot** (`ASTORE`) |
+| `our $x` | Lexical **alias** to package global → same JVM slot |
+| `state $x` | Persistent via `StateVariable` registry, keyed by `__SUB__` |
+| `local $x` | **Save stack** — snapshot + restore on scope exit |
+
+All four use JVM local variable slots for fast access. The difference is *lifetime* and *initialization*.
+
+Note:
+`my` creates a fresh RuntimeScalar per call. `our` fetches the existing global RuntimeScalar from GlobalVariable registry and stores it in a local slot — it's the same object, so mutations are visible globally. `state` uses a static registry keyed by the enclosing sub reference + variable name, so it persists across calls but is unique per closure clone. `local` uses DynamicVariableManager to push/pop state — the compiler inserts getLocalLevel() at block entry and popToLocalLevel() in a finally block.
+
+---
+
+## `local`: Dynamic Scoping via Save Stack
 
 ```perl
 our $x = "global";
@@ -457,7 +492,10 @@ outer();  # "dynamic"
 inner();  # "global" again
 ```
 
-Saves the current value onto a save stack; restores on scope exit — even through `die`/`eval`. Implemented for scalars, arrays, hashes, typeglobs, and filehandles.
+Compiler wraps the scope with `getLocalLevel()` / `popToLocalLevel()` — restores even through `die`/`eval`. Works for scalars, arrays, hashes, typeglobs, and filehandles.
+
+Note:
+DynamicVariableManager maintains a Stack of saved states. pushLocalVariable() calls dynamicSaveState() which snapshots {type, value, blessId} and resets to undef. popToLocalLevel() calls dynamicRestoreState() for each saved variable. The compiler detects `local` usage at compile time (FindDeclarationVisitor) and only emits save/restore code for blocks that need it.
 
 ---
 
