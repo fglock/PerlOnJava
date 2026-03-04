@@ -2115,28 +2115,10 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             }
         } else if (op.equals("+")) {
-            // Unary + operator: forces numeric context on its operand
-            // For arrays/hashes in scalar context, this returns the size
-            // For scalars, this ensures the value is numeric
+            // Unary + operator: a no-op used for disambiguation (e.g., map +(...), LIST)
+            // It passes through the operand transparently without changing context.
             if (node.operand != null) {
-                // Evaluate operand in scalar context
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
-
-                    // Emit ARRAY_SIZE to convert to scalar
-                    // This handles arrays/hashes (converts to size) and passes through scalars
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
-                }
+                node.operand.accept(bytecodeCompiler);
             } else {
                 bytecodeCompiler.throwCompilerException("unary + operator requires an operand");
             }
