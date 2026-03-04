@@ -108,10 +108,10 @@ Each prior attempt informed this implementation. JPL showed embedding was possib
 
 ## By the Numbers
 
-- <span class="metric">~260,000 tests</span> in the suite
+- <span class="metric">~200,000 tests</span> in the suite
 - <span class="metric">392 Java source files</span>
 - <span class="metric">5,741 commits</span> since June 2024
-- <span class="metric">2.2× faster</span> than Perl 5 on loop benchmarks
+- <span class="metric">2x faster</span> than Perl 5 on loop benchmarks
 
 No formal Perl spec exists — the test suite **is** the specification.
 

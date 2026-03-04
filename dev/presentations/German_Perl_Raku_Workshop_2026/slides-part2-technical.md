@@ -189,7 +189,7 @@ This is a common VM design pattern: HotSpot, V8, SpiderMonkey, CRuby all use tie
 
 **Loop increment, 1 billion iterations:**
 - Perl 5: **7.88s**
-- PerlOnJava: **3.57s** (2.2× faster)
+- PerlOnJava: **3.57s** (2x faster)
 
 After JIT warmup (~10K iterations), the JVM inlines and unrolls hot loops.
 
@@ -669,12 +669,12 @@ Workarounds: JNA for native access, Java threading APIs, file auto-close at exit
 
 We made it work anyway — and made it run fast**.
 
-<span class="metric">260,000+ tests</span> · <span class="metric">392 files</span> · <span class="metric">5,741 commits</span>
+<span class="metric">200,000+ tests</span> · <span class="metric">392 files</span> · <span class="metric">5,741 commits</span>
 
 No formal spec exists. The tests **are** the specification.
 
 Note:
-This is test-driven development at its most extreme — 260,000 tests define the language behavior.
+This is test-driven development at its most extreme — tests define the language behavior.
 
 ---
 
@@ -693,7 +693,7 @@ This is test-driven development at its most extreme — 260,000 tests define the
 **Special thanks to:**
 
 - **Larry Wall** — for creating Perl
-- **Perl test writers** — 260,000+ tests that define Perl's behavior
+- **Perl test writers** — tests that define Perl's behavior
 - **Perl community** — for decades of innovation
 - **Prior pioneers** — JPL, perljvm, Perlito5
 
