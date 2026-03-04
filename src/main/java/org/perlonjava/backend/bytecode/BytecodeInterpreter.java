@@ -1043,6 +1043,10 @@ public class BytecodeInterpreter {
 
                     case Opcodes.HASH_SET: {
                         // Hash element store: hash{key} = value
+                        // Must copy the value into a new scalar for the hash element,
+                        // because the source register may be modified in-place later
+                        // (e.g. $hash{k} = $fix; $fix = {} would clear $hash{k} otherwise)
+                        // Uses addToScalar to properly resolve special variables ($1, $2, etc.)
                         int hashReg = bytecode[pc++];
                         int keyReg = bytecode[pc++];
                         int valueReg = bytecode[pc++];
@@ -1050,7 +1054,9 @@ public class BytecodeInterpreter {
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         RuntimeBase valBase = registers[valueReg];
                         RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
-                        hash.put(key.toString(), ensureMutableScalar(val));
+                        RuntimeScalar copy = new RuntimeScalar();
+                        val.addToScalar(copy);
+                        hash.put(key.toString(), copy);
                         break;
                     }
 

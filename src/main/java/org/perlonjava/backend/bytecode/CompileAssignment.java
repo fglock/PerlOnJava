@@ -1262,34 +1262,49 @@ public class CompileAssignment {
 
                         // Check for hash slice assignment: @hash{keys} = values
                         if (hashOp.operator.equals("@")) {
-                            // Hash slice assignment
-                            if (!(hashOp.operand instanceof IdentifierNode)) {
-                                bytecodeCompiler.throwCompilerException("Hash slice assignment requires identifier");
-                                return;
-                            }
-                            String varName = ((IdentifierNode) hashOp.operand).name;
-                            String hashVarName = "%" + varName;
+                            if (hashOp.operand instanceof IdentifierNode idNode) {
+                                String varName = idNode.name;
+                                String hashVarName = "%" + varName;
 
-                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)) {
+                                if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)) {
+                                    hashReg = bytecodeCompiler.allocateRegister();
+                                    int nameIdx = bytecodeCompiler.addToStringPool(hashVarName);
+                                    bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                                } else if (bytecodeCompiler.hasVariable(hashVarName)) {
+                                    hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
+                                } else {
+                                    hashReg = bytecodeCompiler.allocateRegister();
+                                    String globalHashName = NameNormalizer.normalizeVariableName(
+                                            varName,
+                                            bytecodeCompiler.getCurrentPackage()
+                                    );
+                                    int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                }
+                            } else if (hashOp.operand instanceof OperatorNode) {
+                                hashOp.operand.accept(bytecodeCompiler);
+                                int scalarRefReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
-                                int nameIdx = bytecodeCompiler.addToStringPool(hashVarName);
-                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
-                                bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emit(nameIdx);
-                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                            } else if (bytecodeCompiler.hasVariable(hashVarName)) {
-                                hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
+                                if (bytecodeCompiler.isStrictRefsEnabled()) {
+                                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emitReg(scalarRefReg);
+                                } else {
+                                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                                    bytecodeCompiler.emitReg(hashReg);
+                                    bytecodeCompiler.emitReg(scalarRefReg);
+                                    bytecodeCompiler.emit(pkgIdx);
+                                }
                             } else {
-                                hashReg = bytecodeCompiler.allocateRegister();
-                                String globalHashName = NameNormalizer.normalizeVariableName(
-                                        varName,
-                                        bytecodeCompiler.getCurrentPackage()
-                                );
-                                int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
-                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                                bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.throwCompilerException("Hash slice assignment requires identifier or reference");
+                                return;
                             }
 
                             // Get the keys from HashLiteralNode

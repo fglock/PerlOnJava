@@ -589,7 +589,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case JAVAOBJECT -> value != null;
             case TIED_SCALAR -> this.tiedFetch().getBoolean();
             case DUALVAR -> ((DualVar) this.value).stringValue().getBoolean();
-            case CODE -> true;
+            case CODE -> {
+                if (value == null) yield false;
+                RuntimeCode code = (RuntimeCode) value;
+                yield code.packageName != null || code.subName != null || code.defined();
+            }
             default -> Overload.boolify(this).getBoolean();
         };
     }
@@ -641,6 +645,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(value);
+        }
+        if (value instanceof ScalarSpecialVariable) {
+            RuntimeScalar resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
+            this.type = resolved.type;
+            this.value = resolved.value;
+            return this;
         }
         this.type = value.type;
         this.value = value.value;
@@ -758,7 +768,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toString();
             case DUALVAR -> ((DualVar) this.value).stringValue().toString();
-            case CODE -> ((RuntimeCode) value).defined() ? Overload.stringify(this).toString() : "";
+            case CODE -> Overload.stringify(this).toString();
             default -> {
                 if (type == REGEX) yield value.toString();
                 yield  Overload.stringify(this).toString();

@@ -1184,6 +1184,11 @@ public class EmitOperator {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "flattenElements",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
                     "createListReference",
                     "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);

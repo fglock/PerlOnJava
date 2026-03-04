@@ -157,6 +157,7 @@ public class EmitBlock {
 
         int regexStateLocal = -1;
         if (!node.getBooleanAnnotation("blockIsSubroutine")
+                && !node.getBooleanAnnotation("skipRegexSaveRestore")
                 && RegexUsageDetector.containsRegexOperation(node)) {
             regexStateLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RegexState");

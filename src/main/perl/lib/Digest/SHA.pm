@@ -98,152 +98,27 @@ sub base64digest {
 }
 
 # Functional interface implementations
-sub sha1 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('1');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha1_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('1');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha1_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('1');
-    $sha->add($data);
-    return $sha->b64digest;
-}
-
-sub sha224 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('224');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha224_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('224');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha224_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('224');
-    $sha->add($data);
-    return $sha->b64digest;
-}
-
-sub sha256 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('256');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha256_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('256');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha256_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('256');
-    $sha->add($data);
-    return $sha->b64digest;
-}
-
-sub sha384 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('384');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha384_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('384');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha384_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('384');
-    $sha->add($data);
-    return $sha->b64digest;
-}
-
-sub sha512 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha512_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha512_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512');
-    $sha->add($data);
-    return $sha->b64digest;
-}
-
-sub sha512224 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512224');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha512224_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512224');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha512224_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512224');
-    $sha->add($data);
-    return $sha->b64digest;
-}
-
-sub sha512256 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512256');
-    $sha->add($data);
-    return $sha->digest;
-}
-
-sub sha512256_hex {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512256');
-    $sha->add($data);
-    return $sha->hexdigest;
-}
-
-sub sha512256_base64 {
-    my $data = shift;
-    my $sha = Digest::SHA->new('512256');
-    $sha->add($data);
-    return $sha->b64digest;
-}
+sub sha1 { my $sha = Digest::SHA->new('1'); $sha->add(@_); return $sha->digest }
+sub sha1_hex { my $sha = Digest::SHA->new('1'); $sha->add(@_); return $sha->hexdigest }
+sub sha1_base64 { my $sha = Digest::SHA->new('1'); $sha->add(@_); return $sha->b64digest }
+sub sha224 { my $sha = Digest::SHA->new('224'); $sha->add(@_); return $sha->digest }
+sub sha224_hex { my $sha = Digest::SHA->new('224'); $sha->add(@_); return $sha->hexdigest }
+sub sha224_base64 { my $sha = Digest::SHA->new('224'); $sha->add(@_); return $sha->b64digest }
+sub sha256 { my $sha = Digest::SHA->new('256'); $sha->add(@_); return $sha->digest }
+sub sha256_hex { my $sha = Digest::SHA->new('256'); $sha->add(@_); return $sha->hexdigest }
+sub sha256_base64 { my $sha = Digest::SHA->new('256'); $sha->add(@_); return $sha->b64digest }
+sub sha384 { my $sha = Digest::SHA->new('384'); $sha->add(@_); return $sha->digest }
+sub sha384_hex { my $sha = Digest::SHA->new('384'); $sha->add(@_); return $sha->hexdigest }
+sub sha384_base64 { my $sha = Digest::SHA->new('384'); $sha->add(@_); return $sha->b64digest }
+sub sha512 { my $sha = Digest::SHA->new('512'); $sha->add(@_); return $sha->digest }
+sub sha512_hex { my $sha = Digest::SHA->new('512'); $sha->add(@_); return $sha->hexdigest }
+sub sha512_base64 { my $sha = Digest::SHA->new('512'); $sha->add(@_); return $sha->b64digest }
+sub sha512224 { my $sha = Digest::SHA->new('512224'); $sha->add(@_); return $sha->digest }
+sub sha512224_hex { my $sha = Digest::SHA->new('512224'); $sha->add(@_); return $sha->hexdigest }
+sub sha512224_base64 { my $sha = Digest::SHA->new('512224'); $sha->add(@_); return $sha->b64digest }
+sub sha512256 { my $sha = Digest::SHA->new('512256'); $sha->add(@_); return $sha->digest }
+sub sha512256_hex { my $sha = Digest::SHA->new('512256'); $sha->add(@_); return $sha->hexdigest }
+sub sha512256_base64 { my $sha = Digest::SHA->new('512256'); $sha->add(@_); return $sha->b64digest }
 
 # File hashing utilities
 sub shasum {

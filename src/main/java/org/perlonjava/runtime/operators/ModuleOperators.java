@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
@@ -616,6 +617,7 @@ public class ModuleOperators {
 
         RuntimeList result;
         FeatureFlags outerFeature = featureManager;
+        String savedPackage = InterpreterState.currentPackage.get().toString();
         try {
             featureManager = new FeatureFlags();
 
@@ -635,6 +637,7 @@ public class ModuleOperators {
             return new RuntimeScalar(); // return undef
         } finally {
             featureManager = outerFeature;
+            InterpreterState.currentPackage.get().set(savedPackage);
         }
 
         // Return result based on context
