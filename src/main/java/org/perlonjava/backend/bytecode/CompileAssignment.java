@@ -734,8 +734,11 @@ public class CompileAssignment {
                         // Lexical variable - check if it's captured
                         int targetReg = bytecodeCompiler.getVariableRegister(varName);
 
-                        if (bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName)) {
-                            // Captured variable - use SET_SCALAR to preserve aliasing
+                        if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
+                                || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
+                            // Captured variable - use SET_SCALAR to preserve aliasing.
+                            // LOAD_UNDEF would replace the register with a new RuntimeScalar,
+                            // breaking the shared reference that closures depend on.
                             bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
@@ -1073,11 +1076,20 @@ public class CompileAssignment {
 
                 if (bytecodeCompiler.hasVariable(varName)) {
                     int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                    bytecodeCompiler.emitReg(targetReg);
-                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                    bytecodeCompiler.emitReg(targetReg);
-                    bytecodeCompiler.emitReg(valueReg);
+                    String varNameWithSigil = varName.startsWith("$") ? varName : "$" + varName;
+                    if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varNameWithSigil))
+                            || bytecodeCompiler.closureCapturedVarNames.contains(varNameWithSigil)
+                            || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
+                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    } else {
+                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    }
                     bytecodeCompiler.lastResultReg = targetReg;
                 } else {
                     // Global variable (varName has no sigil here)
@@ -1661,7 +1673,8 @@ public class CompileAssignment {
 
                                 if (bytecodeCompiler.hasVariable(varName)) {
                                     int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                                    if (bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName)) {
+                                    if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
+                                            || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
                                         bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                         bytecodeCompiler.emitReg(targetReg);
                                         bytecodeCompiler.emitReg(elementReg);

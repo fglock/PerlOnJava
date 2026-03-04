@@ -110,6 +110,12 @@ public class BytecodeCompiler implements Visitor {
     int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
     Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
 
+    // Variables captured by inner closures (named or anonymous subs compiled within this scope).
+    // Assignments to these variables must use SET_SCALAR alone (in-place modification)
+    // instead of LOAD_UNDEF + SET_SCALAR, to preserve the RuntimeScalar identity that
+    // closures share.
+    final Set<String> closureCapturedVarNames = new HashSet<>();
+
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -3899,6 +3905,8 @@ public class BytecodeCompiler implements Visitor {
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
 
+        closureCapturedVarNames.addAll(closureVarNames);
+
         int beginId = 0;
         if (!closureVarIndices.isEmpty()) {
             beginId = EmitterMethodCreator.classCounter++;
@@ -4027,6 +4035,8 @@ public class BytecodeCompiler implements Visitor {
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
+
+        closureCapturedVarNames.addAll(closureVarNames);
 
         // Step 3: Create a new BytecodeCompiler for the subroutine body
         // Build a variable registry from current scope to pass to sub-compiler
