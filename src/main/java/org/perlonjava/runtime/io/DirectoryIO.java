@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -113,31 +114,23 @@ public class DirectoryIO {
      * @param ctx the context type, either scalar or list
      * @return a {@code RuntimeScalar} representing the directory entry or entries
      */
-    public RuntimeScalar readdir(int ctx) {
-        // Make sure all entries are loaded
+    public RuntimeBase readdir(int ctx) {
         loadAllEntries();
 
         if (ctx == RuntimeContextType.SCALAR) {
-            // Check if we're at a valid position
             if (currentPosition < 0 || currentPosition >= allEntries.size()) {
                 return scalarUndef;
             }
-
-            // Get the entry at current position and advance
             String entry = allEntries.get(currentPosition);
             currentPosition++;
             return new RuntimeScalar(entry);
-
         } else {
-            // List context - return all remaining entries
             RuntimeList result = new RuntimeList();
-
             while (currentPosition >= 0 && currentPosition < allEntries.size()) {
                 result.elements.add(new RuntimeScalar(allEntries.get(currentPosition)));
                 currentPosition++;
             }
-
-            return result.scalar();
+            return result;
         }
     }
 }

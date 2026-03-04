@@ -6,6 +6,8 @@ use File::Temp qw(tempdir);
 use File::Spec;
 
 # Create a temporary directory for testing
+use Cwd qw(getcwd);
+my $orig_cwd = getcwd();
 my $tmpdir = tempdir(CLEANUP => 1);
 chdir $tmpdir or die "Cannot chdir to $tmpdir: $!";
 
@@ -241,4 +243,5 @@ subtest 'glob state per source location' => sub {
     is($count, 1, 'While loop with glob exhausts the iterator (found Readme.md)');
 };
 
+chdir $orig_cwd;
 done_testing();

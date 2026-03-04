@@ -63,7 +63,7 @@ public class Stat {
         MSVCRT = lib;
     }
 
-    private static NativeStatFields nativeStat(String path, boolean followLinks) {
+    static NativeStatFields nativeStat(String path, boolean followLinks) {
         try {
             if (Platform.isWindows()) return nativeStatWindows(path);
             return nativeStatUnix(path, followLinks);
