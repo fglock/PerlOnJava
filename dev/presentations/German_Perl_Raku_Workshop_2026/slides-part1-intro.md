@@ -271,7 +271,7 @@ Bytecode length: 26 shorts
   24: RETURN r8
 ```
 
-Register-based, ~200 opcodes — much more compact.
+Register-based, ~300 opcodes — much more compact.
 
 ---
 

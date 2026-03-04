@@ -253,7 +253,7 @@ This pattern is used throughout: getDouble(), toString(), getBoolean().
 - 65,536 virtual registers
 - Good fit for `eval`-heavy scripts
 
-Switch-based VM with ~200 opcodes.
+Switch-based VM with ~300 opcodes.
 
 Note:
 Peak throughput is lower than the JVM backend, but startup is faster and there are no size constraints.
