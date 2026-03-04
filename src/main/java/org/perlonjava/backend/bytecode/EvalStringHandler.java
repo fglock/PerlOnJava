@@ -118,11 +118,14 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Use the runtime package at the eval call site.
-            // InterpreterState.currentPackage tracks runtime package changes from SET_PACKAGE/
-            // PUSH_PACKAGE opcodes, so it correctly reflects the package active when eval is called.
-            // This matches Perl's behaviour: eval("__PACKAGE__") returns the package at call site.
-            String compilePackage = InterpreterState.currentPackage.get().toString();
+            // Determine the compile-time package for this eval STRING.
+            // Prefer currentCode.compilePackage (baked at compile time) over
+            // InterpreterState.currentPackage (runtime). This matters for INIT/END
+            // blocks where the runtime package has been restored to "main" but
+            // the block was compiled inside a different package.
+            String compilePackage = (currentCode != null && currentCode.compilePackage != null)
+                    ? currentCode.compilePackage
+                    : InterpreterState.currentPackage.get().toString();
             symbolTable.setCurrentPackage(compilePackage, false);
 
             evalTrace("EvalStringHandler compilePackage=" + compilePackage + " fileName=" + opts.fileName);
