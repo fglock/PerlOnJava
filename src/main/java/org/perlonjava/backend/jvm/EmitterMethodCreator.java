@@ -1574,14 +1574,19 @@ public class EmitterMethodCreator implements Opcodes {
             }
             throw new RuntimeException(e);
         } catch (PerlCompilerException e) {
-            if (USE_INTERPRETER_FALLBACK && e.getMessage() != null) {
-                String msg = e.getMessage();
-                if (msg.contains("ASM frame computation failed") || msg.contains("requires interpreter fallback")) {
-                    if (SHOW_FALLBACK) {
-                        System.err.println("Note: JVM compilation needs interpreter fallback (" + msg.split("\n")[0] + ").");
-                    }
-                    return compileToInterpreter(ast, ctx, useTryCatch);
+            if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
+                if (SHOW_FALLBACK) {
+                    System.err.println("Note: JVM compilation needs interpreter fallback (" + e.getMessage().split("\n")[0] + ").");
                 }
+                return compileToInterpreter(ast, ctx, useTryCatch);
+            }
+            throw e;
+        } catch (RuntimeException e) {
+            if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
+                if (SHOW_FALLBACK) {
+                    System.err.println("Note: JVM compilation needs interpreter fallback (" + getRootMessage(e) + ").");
+                }
+                return compileToInterpreter(ast, ctx, useTryCatch);
             }
             throw e;
         }
@@ -1667,6 +1672,27 @@ public class EmitterMethodCreator implements Opcodes {
      * @param useTryCatch Whether to use try-catch (for eval)
      * @return InterpretedCode ready to execute
      */
+    private static boolean needsInterpreterFallback(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String msg = t.getMessage();
+            if (msg != null && (
+                    msg.contains("ASM frame computation failed") ||
+                    msg.contains("requires interpreter fallback") ||
+                    msg.contains("Unexpected runtime error during bytecode generation") ||
+                    msg.contains("dstFrame"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String getRootMessage(Throwable e) {
+        Throwable root = e;
+        while (root.getCause() != null) root = root.getCause();
+        String msg = root.getMessage();
+        return msg != null ? msg.split("\n")[0] : e.getClass().getSimpleName();
+    }
+
     private static InterpretedCode compileToInterpreter(
             Node ast, EmitterContext ctx, boolean useTryCatch) {
 

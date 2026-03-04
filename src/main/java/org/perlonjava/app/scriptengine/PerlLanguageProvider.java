@@ -363,8 +363,8 @@ public class PerlLanguageProvider {
                 return compiled;
 
             } catch (RuntimeException e) {
-                // Check if this is a "Method too large" error from ASM
-                if (e.getMessage() != null && e.getMessage().contains("Method too large")) {
+                // Check if this is a recoverable compilation error that can use interpreter fallback
+                if (needsInterpreterFallback(e)) {
                     // Interpreter fallback is enabled by default and can be disabled with JPERL_DISABLE_INTERPRETER_FALLBACK
                     // automatically fall back to the interpreter backend
                     boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
@@ -395,6 +395,21 @@ public class PerlLanguageProvider {
                 }
             }
         }
+    }
+
+    private static boolean needsInterpreterFallback(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String msg = t.getMessage();
+            if (msg != null && (
+                    msg.contains("Method too large") ||
+                    msg.contains("ASM frame computation failed") ||
+                    msg.contains("Unexpected runtime error during bytecode generation") ||
+                    msg.contains("dstFrame") ||
+                    msg.contains("requires interpreter fallback"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

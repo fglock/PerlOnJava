@@ -73,6 +73,8 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("is_utf8", null);
             encode.registerMethod("find_encoding", null);
             encode.registerMethod("from_to", null);
+            encode.registerMethod("_utf8_on", null);
+            encode.registerMethod("_utf8_off", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
@@ -246,6 +248,27 @@ public class Encode extends PerlModuleBase {
         } catch (Exception e) {
             throw new RuntimeException("Cannot convert from " + fromEnc + " to " + toEnc + ": " + e.getMessage());
         }
+    }
+
+    public static RuntimeList _utf8_on(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            throw new IllegalStateException("Bad number of arguments for _utf8_on");
+        }
+        return scalarUndef.getList();
+    }
+
+    public static RuntimeList _utf8_off(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            throw new IllegalStateException("Bad number of arguments for _utf8_off");
+        }
+        RuntimeScalar arg = args.get(0);
+        if (arg.type != BYTE_STRING) {
+            String s = arg.toString();
+            byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+            arg.set(new String(bytes, StandardCharsets.ISO_8859_1));
+            arg.type = BYTE_STRING;
+        }
+        return scalarUndef.getList();
     }
 
     /**

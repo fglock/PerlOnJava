@@ -854,8 +854,8 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(resultReg);
             bytecodeCompiler.emitInt(1);
             bytecodeCompiler.lastResultReg = resultReg;
-        } else if (op.equals("eval")) {
-            // eval $string;
+        } else if (op.equals("eval") || op.equals("evalbytes")) {
+            // eval $string; / evalbytes $string;
             if (node.operand != null) {
                 node.operand.accept(bytecodeCompiler);
                 int stringReg = bytecodeCompiler.lastResultReg;

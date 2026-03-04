@@ -208,6 +208,7 @@ public class BitwiseOperators {
         // Must use 32-bit int (not long) to match ivsize=4 in Config.pm.
         // Using long would make ~3 return -4 as a 64-bit value, breaking bop.t tests
         // that expect 32-bit signed integer semantics under "use integer".
+
         int value = (int) val.getLong();
         int result = ~value;
         return new RuntimeScalar(result);
@@ -511,6 +512,7 @@ public class BitwiseOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
+        // Use (int) getLong() — see integerBitwiseNot comment for why not getInt().
         int value = (int) runtimeScalar.getLong();
         long shift = arg2.getLong();
         
@@ -554,6 +556,7 @@ public class BitwiseOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
+        // Use (int) getLong() — see integerBitwiseNot comment for why not getInt().
         int value = (int) runtimeScalar.getLong();
         long shift = arg2.getLong();
         
