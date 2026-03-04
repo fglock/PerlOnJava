@@ -70,6 +70,7 @@ public class FileTestOperator {
         lastStatOk = ok;
         lastStatErrno = errno;
         lastStatWasLstat = wasLstat;
+        Stat.lastNativeStatFields = null;
         if (!ok) {
             lastBasicAttr = null;
             lastPosixAttr = null;

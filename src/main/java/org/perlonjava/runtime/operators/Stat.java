@@ -1,9 +1,15 @@
 package org.perlonjava.runtime.operators;
 
+import com.sun.jna.Library;
+import com.sun.jna.Memory;
+import com.sun.jna.Native;
+import com.sun.jna.Platform;
+import com.sun.jna.Pointer;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
@@ -33,48 +39,134 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarIn
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
-/**
- * stat with context awareness
- * @param arg the file or filehandle to stat
- * @param ctx the calling context (SCALAR, LIST, VOID, or RUNTIME)
- * @return RuntimeScalar in scalar context, RuntimeList otherwise
- */
 public class Stat {
 
-    // Helper method to get permissions in octal format
+    private record NativeStatFields(
+        long dev, long ino, long mode, long nlink,
+        long uid, long gid, long rdev, long size,
+        long atime, long mtime, long ctime,
+        long blksize, long blocks
+    ) {}
+
+    static NativeStatFields lastNativeStatFields;
+
+    private interface MsvcrtLib extends Library {
+        int _stat64(String path, Pointer buf);
+    }
+
+    private static final MsvcrtLib MSVCRT;
+    static {
+        MsvcrtLib lib = null;
+        if (Platform.isWindows()) {
+            try { lib = Native.load("msvcrt", MsvcrtLib.class); } catch (Exception e) { }
+        }
+        MSVCRT = lib;
+    }
+
+    private static NativeStatFields nativeStat(String path, boolean followLinks) {
+        try {
+            if (Platform.isWindows()) return nativeStatWindows(path);
+            return nativeStatUnix(path, followLinks);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private static NativeStatFields nativeStatUnix(String path, boolean followLinks) {
+        Memory buf = new Memory(256);
+        int rc = followLinks
+            ? PosixLibrary.INSTANCE.stat(path, buf)
+            : PosixLibrary.INSTANCE.lstat(path, buf);
+        if (rc != 0) return null;
+        return Platform.isMac() ? parseMacOsStat(buf) : parseLinuxStat(buf);
+    }
+
+    private static NativeStatFields parseMacOsStat(Pointer buf) {
+        return new NativeStatFields(
+            buf.getInt(0) & 0xFFFFFFFFL,
+            buf.getLong(8),
+            buf.getShort(4) & 0xFFFF,
+            buf.getShort(6) & 0xFFFF,
+            buf.getInt(16) & 0xFFFFFFFFL,
+            buf.getInt(20) & 0xFFFFFFFFL,
+            buf.getInt(24) & 0xFFFFFFFFL,
+            buf.getLong(96),
+            buf.getLong(32),
+            buf.getLong(48),
+            buf.getLong(64),
+            buf.getInt(112) & 0xFFFFFFFFL,
+            buf.getLong(104)
+        );
+    }
+
+    private static NativeStatFields parseLinuxStat(Pointer buf) {
+        return new NativeStatFields(
+            buf.getLong(0),
+            buf.getLong(8),
+            buf.getInt(24) & 0xFFFFFFFFL,
+            buf.getLong(16),
+            buf.getInt(28) & 0xFFFFFFFFL,
+            buf.getInt(32) & 0xFFFFFFFFL,
+            buf.getLong(40),
+            buf.getLong(48),
+            buf.getLong(72),
+            buf.getLong(88),
+            buf.getLong(104),
+            buf.getLong(56),
+            buf.getLong(64)
+        );
+    }
+
+    private static NativeStatFields nativeStatWindows(String path) {
+        if (MSVCRT == null) return null;
+        Memory buf = new Memory(64);
+        int rc = MSVCRT._stat64(path, buf);
+        if (rc != 0) return null;
+        return new NativeStatFields(
+            buf.getInt(0) & 0xFFFFFFFFL,
+            buf.getShort(4) & 0xFFFF,
+            buf.getShort(6) & 0xFFFF,
+            buf.getShort(8) & 0xFFFF,
+            buf.getShort(10) & 0xFFFF,
+            buf.getShort(12) & 0xFFFF,
+            buf.getInt(16) & 0xFFFFFFFFL,
+            buf.getLong(24),
+            buf.getLong(32),
+            buf.getLong(40),
+            buf.getLong(48),
+            0, 0
+        );
+    }
+
     private static int getPermissionsOctal(BasicFileAttributes basicAttr, PosixFileAttributes attr) {
         int permissions = 0;
-
-        // File type bits (first)
-        if (basicAttr.isDirectory()) permissions |= 0040000;  // Directory
-        if (basicAttr.isRegularFile()) permissions |= 0100000;  // Regular file
-        if (basicAttr.isSymbolicLink()) permissions |= 0120000;  // Symbolic link
-
-        // Then add permission bits
+        if (basicAttr.isDirectory()) permissions |= 0040000;
+        if (basicAttr.isRegularFile()) permissions |= 0100000;
+        if (basicAttr.isSymbolicLink()) permissions |= 0120000;
         Set<PosixFilePermission> perms = attr.permissions();
-
         if (perms.contains(PosixFilePermission.OWNER_READ)) permissions |= 0400;
         if (perms.contains(PosixFilePermission.OWNER_WRITE)) permissions |= 0200;
         if (perms.contains(PosixFilePermission.OWNER_EXECUTE)) permissions |= 0100;
-
         if (perms.contains(PosixFilePermission.GROUP_READ)) permissions |= 0040;
         if (perms.contains(PosixFilePermission.GROUP_WRITE)) permissions |= 0020;
         if (perms.contains(PosixFilePermission.GROUP_EXECUTE)) permissions |= 0010;
-
         if (perms.contains(PosixFilePermission.OTHERS_READ)) permissions |= 0004;
         if (perms.contains(PosixFilePermission.OTHERS_WRITE)) permissions |= 0002;
         if (perms.contains(PosixFilePermission.OTHERS_EXECUTE)) permissions |= 0001;
-
         return permissions;
     }
 
     public static RuntimeList statLastHandle() {
         if (!lastStatOk) {
-            getGlobalVariable("main::!").set(9); // EBADF
+            getGlobalVariable("main::!").set(9);
             return new RuntimeList();
         }
         RuntimeList res = new RuntimeList();
-        statInternal(res, lastBasicAttr, lastPosixAttr);
+        if (lastNativeStatFields != null) {
+            statInternalNative(res, lastNativeStatFields);
+        } else {
+            statInternal(res, lastBasicAttr, lastPosixAttr);
+        }
         getGlobalVariable("main::!").set(0);
         return res;
     }
@@ -82,7 +174,7 @@ public class Stat {
     public static RuntimeBase statLastHandle(int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             if (!lastStatOk) {
-                getGlobalVariable("main::!").set(9); // EBADF
+                getGlobalVariable("main::!").set(9);
                 return new RuntimeScalar("");
             }
             getGlobalVariable("main::!").set(0);
@@ -93,11 +185,15 @@ public class Stat {
 
     public static RuntimeList lstatLastHandle() {
         if (!lastStatOk) {
-            getGlobalVariable("main::!").set(9); // EBADF
+            getGlobalVariable("main::!").set(9);
             return new RuntimeList();
         }
         RuntimeList res = new RuntimeList();
-        statInternal(res, lastBasicAttr, lastPosixAttr);
+        if (lastNativeStatFields != null) {
+            statInternalNative(res, lastNativeStatFields);
+        } else {
+            statInternal(res, lastBasicAttr, lastPosixAttr);
+        }
         getGlobalVariable("main::!").set(0);
         return res;
     }
@@ -105,7 +201,7 @@ public class Stat {
     public static RuntimeBase lstatLastHandle(int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             if (!lastStatOk) {
-                getGlobalVariable("main::!").set(9); // EBADF
+                getGlobalVariable("main::!").set(9);
                 return new RuntimeScalar("");
             }
             getGlobalVariable("main::!").set(0);
@@ -114,31 +210,17 @@ public class Stat {
         return lstatLastHandle();
     }
 
-    /**
-     * stat with context awareness
-     * @param arg the file or filehandle to stat
-     * @param ctx the calling context (SCALAR, LIST, VOID, or RUNTIME)
-     * @return RuntimeScalar in scalar context, RuntimeList otherwise
-     */
     public static RuntimeBase stat(RuntimeScalar arg, int ctx) {
         RuntimeList result = stat(arg);
         if (ctx == RuntimeContextType.SCALAR) {
-            // stat in scalar context: empty list -> "", non-empty list -> 1
             return result.isEmpty() ? new RuntimeScalar("") : scalarTrue;
         }
         return result;
     }
 
-    /**
-     * lstat with context awareness
-     * @param arg the file or filehandle to lstat
-     * @param ctx the calling context (SCALAR, LIST, VOID, or RUNTIME)
-     * @return RuntimeScalar in scalar context, RuntimeList otherwise
-     */
     public static RuntimeBase lstat(RuntimeScalar arg, int ctx) {
         RuntimeList result = lstat(arg);
         if (ctx == RuntimeContextType.SCALAR) {
-            // lstat in scalar context: empty list -> "", non-empty list -> 1
             return result.isEmpty() ? new RuntimeScalar("") : scalarTrue;
         }
         return result;
@@ -148,28 +230,19 @@ public class Stat {
         lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
 
-        // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
             RuntimeIO fh = arg.getRuntimeIO();
-
-            // Check if fh is null (invalid filehandle)
             if (fh == null) {
-                // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
                 updateLastStat(arg, false, 9, false);
-                return res; // Return empty list
+                return res;
             }
-
-            // Check for closed handle or no valid IO handles
             if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
                     fh.directoryIO == null) {
-                // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
                 updateLastStat(arg, false, 9, false);
-                return res; // Return empty list
+                return res;
             }
-
-            // Try to get the file path from the handle
             IOHandle innerHandle = fh.ioHandle;
             while (innerHandle instanceof LayeredIOHandle lh) {
                 innerHandle = lh.getDelegate();
@@ -180,40 +253,44 @@ public class Stat {
                     return stat(new RuntimeScalar(path.toString()));
                 }
             }
-            // For in-memory file handles (like PerlIO::scalar), we can't stat them
             getGlobalVariable("main::!").set(9);
             updateLastStat(arg, false, 9, false);
             return res;
         }
 
-        // Handle string arguments
         String filename = arg.toString();
-
-        // Handle regular filenames
         try {
             Path path = resolvePath(filename);
 
-            // Basic file attributes (similar to some Perl stat fields)
-            BasicFileAttributes basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
+            NativeStatFields nf = nativeStat(path.toString(), true);
 
-            // POSIX file attributes (for Unix-like systems)
-            PosixFileAttributes posixAttr = Files.readAttributes(path, PosixFileAttributes.class);
+            BasicFileAttributes basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
+            PosixFileAttributes posixAttr = null;
+            try {
+                posixAttr = Files.readAttributes(path, PosixFileAttributes.class);
+            } catch (UnsupportedOperationException e) {
+                // Not available on Windows
+            }
 
             lastBasicAttr = basicAttr;
             lastPosixAttr = posixAttr;
 
-            statInternal(res, basicAttr, posixAttr);
-            // Clear $! on success
+            if (nf != null) {
+                statInternalNative(res, nf);
+            } else if (posixAttr != null) {
+                statInternal(res, basicAttr, posixAttr);
+            } else {
+                statInternalBasic(res, basicAttr);
+            }
+
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, false);
+            lastNativeStatFields = nf;
         } catch (NoSuchFileException e) {
-            // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
             updateLastStat(arg, false, 2, false);
         } catch (IOException e) {
-            // Returns the empty list if "stat" fails.
-            // Set a generic error code for other IO errors
-            getGlobalVariable("main::!").set(5); // EIO (Input/output error)
+            getGlobalVariable("main::!").set(5);
             updateLastStat(arg, false, 5, false);
         }
         return res;
@@ -223,83 +300,113 @@ public class Stat {
         lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
 
-        // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
             RuntimeIO fh = arg.getRuntimeIO();
-
-            // Check if fh is null (invalid filehandle)
             if (fh == null) {
-                // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
                 updateLastStat(arg, false, 9, true);
-                return res; // Return empty list
+                return res;
             }
-
-            // Check for closed handle or no valid IO handles
             if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
                     fh.directoryIO == null) {
-                // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
                 updateLastStat(arg, false, 9, true);
-                return res; // Return empty list
+                return res;
             }
-
-            // For in-memory file handles (like PerlIO::scalar), we can't lstat them
-            // They should return EBADF
             getGlobalVariable("main::!").set(9);
             updateLastStat(arg, false, 9, true);
             return res;
         }
 
-        // Handle string arguments
         String filename = arg.toString();
-
-        // Handle regular filenames
         try {
             Path path = resolvePath(filename);
 
-            // Basic attributes without following symlink
+            NativeStatFields nf = nativeStat(path.toString(), false);
+
             BasicFileAttributes basicAttr = Files.readAttributes(path,
                     BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-
-            // POSIX attributes without following symlink
-            PosixFileAttributes posixAttr = Files.readAttributes(path,
-                    PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            PosixFileAttributes posixAttr = null;
+            try {
+                posixAttr = Files.readAttributes(path,
+                        PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            } catch (UnsupportedOperationException e) {
+                // Not available on Windows
+            }
 
             lastBasicAttr = basicAttr;
             lastPosixAttr = posixAttr;
 
-            statInternal(res, basicAttr, posixAttr);
-            // Clear $! on success
+            if (nf != null) {
+                statInternalNative(res, nf);
+            } else if (posixAttr != null) {
+                statInternal(res, basicAttr, posixAttr);
+            } else {
+                statInternalBasic(res, basicAttr);
+            }
+
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, true);
+            lastNativeStatFields = nf;
         } catch (NoSuchFileException e) {
-            // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
             updateLastStat(arg, false, 2, true);
         } catch (IOException e) {
-            // Returns the empty list if "lstat" fails.
-            // Set a generic error code for other IO errors
-            getGlobalVariable("main::!").set(5); // EIO (Input/output error)
+            getGlobalVariable("main::!").set(5);
             updateLastStat(arg, false, 5, true);
         }
         return res;
     }
 
+    private static void statInternalNative(RuntimeList res, NativeStatFields nf) {
+        res.add(getScalarInt(nf.dev));
+        res.add(getScalarInt(nf.ino));
+        res.add(getScalarInt(nf.mode));
+        res.add(getScalarInt(nf.nlink));
+        res.add(getScalarInt(nf.uid));
+        res.add(getScalarInt(nf.gid));
+        res.add(getScalarInt(nf.rdev));
+        res.add(getScalarInt(nf.size));
+        res.add(getScalarInt(nf.atime));
+        res.add(getScalarInt(nf.mtime));
+        res.add(getScalarInt(nf.ctime));
+        res.add(getScalarInt(nf.blksize));
+        res.add(getScalarInt(nf.blocks));
+    }
+
     public static void statInternal(RuntimeList res, BasicFileAttributes basicAttr, PosixFileAttributes posixAttr) {
-        // Emulating Perl's stat return list
-        res.add(scalarUndef);                            // 0 dev (device number) - not directly available in Java
-        res.add(scalarUndef);                            // 1 ino (inode number) - not directly available in Java
-        res.add(getScalarInt(getPermissionsOctal(basicAttr, posixAttr))); // 2 mode (file mode/permissions)
-        res.add(getScalarInt(1));                        // 3 nlink (number of hard links) - not easily obtainable in standard Java
-        res.add(scalarUndef);                            // 4 uid (user ID) - posixAttr.owner().getName() returns String
-        res.add(scalarUndef);                            // 5 gid (group ID) - posixAttr.group().getName() returns String
-        res.add(scalarUndef);                            // 6 rdev (device identifier for special files) - not available
-        res.add(getScalarInt(basicAttr.size()));         // 7 size (file size in bytes)
-        res.add(getScalarInt(basicAttr.lastAccessTime().toMillis() / 1000)); // 8 atime (last access time)
-        res.add(getScalarInt(basicAttr.lastModifiedTime().toMillis() / 1000)); // 9 mtime (last modified time)
-        res.add(getScalarInt(basicAttr.creationTime().toMillis() / 1000));    // 10 ctime (file creation time)
-        res.add(scalarUndef);                            // 11 blksize (preferred I/O block size) - not directly available
-        res.add(scalarUndef);                            // 12 blocks (number of blocks) - not directly available
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+        res.add(getScalarInt(getPermissionsOctal(basicAttr, posixAttr)));
+        res.add(getScalarInt(1));
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+        res.add(getScalarInt(basicAttr.size()));
+        res.add(getScalarInt(basicAttr.lastAccessTime().toMillis() / 1000));
+        res.add(getScalarInt(basicAttr.lastModifiedTime().toMillis() / 1000));
+        res.add(getScalarInt(basicAttr.creationTime().toMillis() / 1000));
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+    }
+
+    private static void statInternalBasic(RuntimeList res, BasicFileAttributes basicAttr) {
+        int mode = 0;
+        if (basicAttr.isDirectory()) mode = 0040755;
+        else if (basicAttr.isRegularFile()) mode = 0100644;
+        else if (basicAttr.isSymbolicLink()) mode = 0120777;
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+        res.add(getScalarInt(mode));
+        res.add(getScalarInt(1));
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+        res.add(scalarUndef);
+        res.add(getScalarInt(basicAttr.size()));
+        res.add(getScalarInt(basicAttr.lastAccessTime().toMillis() / 1000));
+        res.add(getScalarInt(basicAttr.lastModifiedTime().toMillis() / 1000));
+        res.add(getScalarInt(basicAttr.creationTime().toMillis() / 1000));
+        res.add(scalarUndef);
+        res.add(scalarUndef);
     }
 }
