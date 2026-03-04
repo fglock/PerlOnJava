@@ -175,7 +175,7 @@ public class InterpretedCode extends RuntimeCode {
      * @return A new InterpretedCode with captured variables
      */
     public InterpretedCode withCapturedVars(RuntimeBase[] capturedVars) {
-        return new InterpretedCode(
+        InterpretedCode copy = new InterpretedCode(
             this.bytecode,
             this.constants,
             this.stringPool,
@@ -192,6 +192,11 @@ public class InterpretedCode extends RuntimeCode {
             this.compilePackage,
             this.evalSiteRegistries
         );
+        copy.prototype = this.prototype;
+        copy.attributes = this.attributes;
+        copy.subName = this.subName;
+        copy.packageName = this.packageName;
+        return copy;
     }
 
     /**

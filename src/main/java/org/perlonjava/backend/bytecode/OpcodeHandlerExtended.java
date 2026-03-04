@@ -836,17 +836,7 @@ public class OpcodeHandlerExtended {
         }
 
         // Create a new InterpretedCode with the captured variables
-        InterpretedCode closureCode = new InterpretedCode(
-            template.bytecode,
-            template.constants,
-            template.stringPool,
-            template.maxRegisters,
-            capturedVars,  // The captured variables!
-            template.sourceName,
-            template.sourceLine,
-            template.pcToTokenIndex,
-            template.variableRegistry  // Preserve variable registry
-        );
+        InterpretedCode closureCode = template.withCapturedVars(capturedVars);
 
         // Wrap in RuntimeScalar
         registers[rd] = new RuntimeScalar((RuntimeCode) closureCode);

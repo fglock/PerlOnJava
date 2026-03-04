@@ -4050,6 +4050,8 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.prototype = node.prototype;
+        subCode.attributes = node.attributes;
 
         if (RuntimeCode.DISASSEMBLE) {
             System.out.println(subCode.disassemble());
