@@ -918,10 +918,14 @@ public class CompileOperator {
                 int stringReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Snapshot visible variables for this eval site
+                // Snapshot visible variables and pragma flags for this eval site
                 int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
                 bytecodeCompiler.evalSiteRegistries.add(
                     bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
+                bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
+                    bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
+                    bytecodeCompiler.symbolTable.featureFlagsStack.peek()
+                });
 
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);

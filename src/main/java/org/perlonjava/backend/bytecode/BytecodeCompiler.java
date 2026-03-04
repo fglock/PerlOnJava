@@ -106,6 +106,7 @@ public class BytecodeCompiler implements Visitor {
     // Per-eval-site variable registries: each eval STRING emission snapshots the
     // currently visible variables so at runtime the correct registers are captured.
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
+    final List<int[]> evalSitePragmaFlags = new ArrayList<>();
 
     // BEGIN support for named subroutine closures
     int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
@@ -546,7 +547,8 @@ public class BytecodeCompiler implements Visitor {
             featureFlags,
             warningFlags,
             symbolTable.getCurrentPackage(),
-            evalSiteRegistries.isEmpty() ? null : evalSiteRegistries
+            evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
+            evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags
         );
     }
 

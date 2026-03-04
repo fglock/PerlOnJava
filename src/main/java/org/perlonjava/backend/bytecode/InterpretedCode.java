@@ -30,6 +30,7 @@ public class InterpretedCode extends RuntimeCode {
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
+    public final List<int[]> evalSitePragmaFlags; // Per-eval-site [strictOptions, featureFlags]
 
     // Lexical pragma state (for eval STRING to inherit)
     public final int strictOptions;        // Strict flags at compile time
@@ -69,7 +70,7 @@ public class InterpretedCode extends RuntimeCode {
                           int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, "main", null);
+             strictOptions, featureFlags, warningFlags, "main", null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -82,7 +83,7 @@ public class InterpretedCode extends RuntimeCode {
                           String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, compilePackage, null);
+             strictOptions, featureFlags, warningFlags, compilePackage, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -93,7 +94,8 @@ public class InterpretedCode extends RuntimeCode {
                           ErrorMessageUtil errorUtil,
                           int strictOptions, int featureFlags, BitSet warningFlags,
                           String compilePackage,
-                          List<Map<String, Integer>> evalSiteRegistries) {
+                          List<Map<String, Integer>> evalSiteRegistries,
+                          List<int[]> evalSitePragmaFlags) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -105,6 +107,7 @@ public class InterpretedCode extends RuntimeCode {
         this.pcToTokenIndex = pcToTokenIndex;
         this.variableRegistry = variableRegistry;
         this.evalSiteRegistries = evalSiteRegistries;
+        this.evalSitePragmaFlags = evalSitePragmaFlags;
         this.errorUtil = errorUtil;
         this.strictOptions = strictOptions;
         this.featureFlags = featureFlags;
@@ -190,7 +193,8 @@ public class InterpretedCode extends RuntimeCode {
             this.featureFlags,
             this.warningFlags,
             this.compilePackage,
-            this.evalSiteRegistries
+            this.evalSiteRegistries,
+            this.evalSitePragmaFlags
         );
         copy.prototype = this.prototype;
         copy.attributes = this.attributes;

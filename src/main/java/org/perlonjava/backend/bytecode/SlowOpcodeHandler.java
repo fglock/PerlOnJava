@@ -288,6 +288,16 @@ public class SlowOpcodeHandler {
             siteRegistry = code.evalSiteRegistries.get(evalSiteIndex);
         }
 
+        // Look up per-eval-site pragma flags (strict/feature at compile time of eval site)
+        int siteStrictOptions = -1;
+        int siteFeatureFlags = -1;
+        if (evalSiteIndex >= 0 && code.evalSitePragmaFlags != null
+                && evalSiteIndex < code.evalSitePragmaFlags.size()) {
+            int[] pragmaFlags = code.evalSitePragmaFlags.get(evalSiteIndex);
+            siteStrictOptions = pragmaFlags[0];
+            siteFeatureFlags = pragmaFlags[1];
+        }
+
         RuntimeBase codeValue = registers[stringReg];
         RuntimeScalar codeScalar;
         if (codeValue instanceof RuntimeScalar) {
@@ -315,21 +325,25 @@ public class SlowOpcodeHandler {
                     code.sourceName,
                     code.sourceLine,
                     callContext,
-                    siteRegistry
+                    siteRegistry,
+                    siteStrictOptions,
+                    siteFeatureFlags
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " scalar=" + result.scalar().toString());
         } else {
-            RuntimeScalar result = EvalStringHandler.evalString(
+            RuntimeScalar result = EvalStringHandler.evalStringList(
                     perlCode,
                     code,
                     registers,
                     code.sourceName,
                     code.sourceLine,
                     callContext,
-                    siteRegistry
-            );
+                    siteRegistry,
+                    siteStrictOptions,
+                    siteFeatureFlags
+            ).scalar();
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " val=" + result.toString() + " bool=" + result.getBoolean());
