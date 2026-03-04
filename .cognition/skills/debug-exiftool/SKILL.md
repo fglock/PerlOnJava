@@ -93,6 +93,16 @@ cd perl5_t/t
 ../../jperl op/lexsub.t
 ```
 
+### Running Perl5 core tests that use subprocess tests
+Tests using `run_multiple_progs()` or `fresh_perl_is()` spawn `jperl` as a subprocess. This requires `jperl` to be in PATH:
+```bash
+# Using the test runner (handles PATH automatically):
+perl dev/tools/perl_test_runner.pl perl5_t/t/op/eval.t
+
+# Manual running (must set PATH):
+PATH="/Users/fglock/projects/PerlOnJava2:$PATH" cd perl5_t/t && ../../jperl op/eval.t
+```
+
 ## Comparing with System Perl
 
 When debugging, compare PerlOnJava output with native Perl to isolate the difference:
@@ -358,6 +368,10 @@ Various format-specific write issues. Many may share root causes with P1 (mandat
 | Dynamic variables | `runtime/runtimetypes/DynamicVariableManager.java` |
 | IO operations | `runtime/runtimetypes/RuntimeIO.java` |
 | IO operator (open/dup) | `runtime/operators/IOOperator.java` |
+| Control flow (goto/labels) | `backend/jvm/EmitControlFlow.java` |
+| Dereference / slicing | `backend/jvm/Dereference.java` |
+| Variable emission (refs) | `backend/jvm/EmitVariable.java` |
+| String parser (qw, heredoc) | `frontend/parser/StringParser.java` |
 | String operators | `runtime/operators/StringOperators.java` |
 | Pack/Unpack | `runtime/operators/PackOperator.java` |
 | Regex preprocessor | `runtime/regex/RegexPreprocessor.java` |
@@ -384,6 +398,18 @@ If a fix only patches ONE of these paths (e.g., `capturedVarIndices` check in `v
 
 ### Ordering matters for capturedVars
 `SubroutineParser` builds `paramList` by iterating `getAllVisibleVariables()` (TreeMap sorted by register index) with specific filters. `detectClosureVariables()` must use the **exact same iteration order and filters**. Any mismatch causes captured variable values to be assigned to wrong registers at runtime.
+
+### goto LABEL across JVM scope boundaries
+`EmitControlFlow.handleGotoLabel()` resolves labels at compile time within the current JVM scope. When the target label is outside the current scope (e.g., goto inside a `map` block to a label outside, or goto inside an `eval` block), the compile-time lookup fails. The fix is to emit a `RuntimeControlFlowList` marker with `ControlFlowType.GOTO` at runtime (the same mechanism used by dynamic `goto EXPR`), allowing the goto signal to propagate up the call stack. This was a blocker for both op/array.t and op/eval.t.
+
+### List slice with range indices
+In `Dereference.handleArrowArrayDeref()`, the check for single-index vs slice path must account for range expressions (`..` operator). A range like `0..5` is a single AST node but produces multiple indices. The correct condition is: use single-index path only if there's one element AND it's not a range. Otherwise, use the slice path. The old code had a complex `isArrayLiteral` check that was too restrictive.
+
+### qw() backslash processing
+`StringParser.parseWordsString()` must apply single-quote backslash rules to each word: `\\` → `\` and `\delimiter` → `delimiter`. Without this, backslashes are doubled in the output. The processing uses the closing delimiter from the qw construct.
+
+### `\(LIST)` must flatten arrays before creating refs
+`\(@array)` should create individual scalar refs to each array element (like `map { \$_ } @array`), not a single ref to the array. `EmitVariable` needs a `flattenElements()` method that detects `@` sigil nodes in the list and flattens them before creating element references.
 
 ## Adding Debug Instrumentation
 
