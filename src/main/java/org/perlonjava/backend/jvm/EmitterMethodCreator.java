@@ -14,10 +14,8 @@ import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
-import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
-import org.perlonjava.frontend.analysis.DepthFirstLiteralRefactorVisitor;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.Node;
@@ -351,52 +349,11 @@ public class EmitterMethodCreator implements Opcodes {
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
-        boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
-        boolean useInterpreterFallback = System.getenv("JPERL_DISABLE_INTERPRETER_FALLBACK") == null;
 
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
-            // Always try AST splitting first — interpreter lacks many operators
-            try {
-                // Notify user that automatic refactoring is happening
-                if (showFallback) {
-                    System.err.println("Note: Method too large, retrying with AST splitter (automatic refactoring).");
-                }
-
-                // First, try depth-first literal refactoring (refactors nested structures first)
-                DepthFirstLiteralRefactorVisitor.refactor(ast);
-
-                // Then, if it's a BlockNode, also try block-level refactoring
-                if (ast instanceof BlockNode blockAst) {
-                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
-                }
-
-                // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
-                if (ctx != null && ctx.javaClassInfo != null) {
-                    String previousName = ctx.javaClassInfo.javaClassName;
-                    ctx.javaClassInfo = new JavaClassInfo();
-                    ctx.javaClassInfo.javaClassName = previousName;
-                    ctx.clearContextCache();
-                }
-
-                byte[] result = getBytecodeInternal(ctx, ast, useTryCatch, false);
-                if (showFallback) {
-                    System.err.println("Note: AST splitter succeeded.");
-                }
-                return result;
-            } catch (MethodTooLargeException retryTooLarge) {
-                // Refactoring didn't help enough - give up
-                if (showFallback) {
-                    System.err.println("Note: AST splitter failed, propagating exception.");
-                }
-                throw retryTooLarge;
-            } catch (Throwable retryError) {
-                // Refactoring caused a different error - report both
-                System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
-                retryError.printStackTrace();
-                // Fall through to throw original exception
-            }
+            // Propagate directly — callers (createRuntimeCode) handle interpreter fallback
             throw tooLarge;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
             // In normal operation we MUST NOT fall back to no-frames output, as that will fail
