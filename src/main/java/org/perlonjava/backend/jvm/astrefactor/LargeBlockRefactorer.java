@@ -172,13 +172,7 @@ public class LargeBlockRefactorer {
      * @return true if the block should be refactored
      */
     private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor) {
-        // Minimal check: skip very small blocks to avoid estimation overhead
-        if (node.elements.size() <= MIN_CHUNK_SIZE) {
-            return false;
-        }
-
-        // Check if we're in a context that allows refactoring
-        return !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
+        return false;
     }
 
     /**

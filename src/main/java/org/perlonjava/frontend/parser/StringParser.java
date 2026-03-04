@@ -287,16 +287,37 @@ public class StringParser {
 
 
     public static ListNode parseWordsString(ParsedString rawStr) {
-        // Use a regular expression to split the string.
-        // "\\s+" matches any whitespace including \r\n, \n, \t, space, etc.
-        String trimmed = rawStr.buffers.getFirst().trim();
+        String input = rawStr.buffers.getFirst();
+        char startDelim = rawStr.startDelim;
+        char endDelim = rawStr.endDelim;
+
+        StringBuilder processed = new StringBuilder();
+        char[] chars = input.toCharArray();
+        int length = chars.length;
+        int index = 0;
+        while (index < length) {
+            char ch = chars[index];
+            if (ch == '\\') {
+                index++;
+                if (index < length) {
+                    char nextChar = chars[index];
+                    if (nextChar == '\\' || nextChar == startDelim || nextChar == endDelim) {
+                        processed.append(nextChar);
+                    } else {
+                        processed.append('\\').append(nextChar);
+                    }
+                }
+            } else {
+                processed.append(ch);
+            }
+            index++;
+        }
+
+        String trimmed = processed.toString().trim();
         ListNode list = new ListNode(rawStr.index);
-        
-        // If the string is empty after trimming, return an empty list
         if (trimmed.isEmpty()) {
             return list;
         }
-        
         String[] words = trimmed.split("\\s+");
         for (String word : words) {
             list.elements.add(new StringNode(word, rawStr.index));

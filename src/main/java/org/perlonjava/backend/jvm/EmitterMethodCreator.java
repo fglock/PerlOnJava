@@ -357,16 +357,7 @@ public class EmitterMethodCreator implements Opcodes {
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
-            // When interpreter fallback is enabled, skip AST splitter and let exception propagate
-            // The interpreter has no size limits, so AST splitting is unnecessary
-            if (useInterpreterFallback) {
-                if (showFallback) {
-                    System.err.println("Note: Method too large, skipping AST splitter (interpreter fallback enabled).");
-                }
-                throw tooLarge;  // Propagate to createRuntimeCode() which will use interpreter
-            }
-
-            // Automatic retry with AST splitting when interpreter fallback is not enabled
+            // Always try AST splitting first — interpreter lacks many operators
             try {
                 // Notify user that automatic refactoring is happening
                 if (showFallback) {
@@ -1570,12 +1561,11 @@ public class EmitterMethodCreator implements Opcodes {
 
         } catch (MethodTooLargeException e) {
             if (USE_INTERPRETER_FALLBACK) {
-                // Fall back to interpreter
-                System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                if (SHOW_FALLBACK) {
+                    System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                }
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
-
-            // If interpreter fallback disabled, re-throw to use existing AST splitter logic
             throw e;
         } catch (VerifyError e) {
             if (USE_INTERPRETER_FALLBACK) {
@@ -1584,9 +1574,14 @@ public class EmitterMethodCreator implements Opcodes {
             }
             throw new RuntimeException(e);
         } catch (PerlCompilerException e) {
-            if (USE_INTERPRETER_FALLBACK && e.getMessage() != null && e.getMessage().contains("ASM frame computation failed")) {
-                System.err.println("Note: ASM frame crash, using interpreter backend.");
-                return compileToInterpreter(ast, ctx, useTryCatch);
+            if (USE_INTERPRETER_FALLBACK && e.getMessage() != null) {
+                String msg = e.getMessage();
+                if (msg.contains("ASM frame computation failed") || msg.contains("requires interpreter fallback")) {
+                    if (SHOW_FALLBACK) {
+                        System.err.println("Note: JVM compilation needs interpreter fallback (" + msg.split("\n")[0] + ").");
+                    }
+                    return compileToInterpreter(ast, ctx, useTryCatch);
+                }
             }
             throw e;
         }
@@ -1685,6 +1680,10 @@ public class EmitterMethodCreator implements Opcodes {
 
         // Compile AST to interpreter bytecode (pass ctx for package context and closure detection)
         InterpretedCode code = compiler.compile(ast, ctx);
+
+        if (ctx.compilerOptions.disassembleEnabled) {
+            System.out.println(code.disassemble());
+        }
 
         // Handle captured variables if needed (for closures)
         if (ctx.capturedEnv != null && ctx.capturedEnv.length > skipVariables) {

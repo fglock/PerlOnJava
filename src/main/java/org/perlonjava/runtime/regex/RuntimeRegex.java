@@ -439,6 +439,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         boolean isPosDefined = posScalar.getDefinedBoolean();
         int startPos = isPosDefined ? posScalar.getInt() : 0;
         
+        // Only use pos() for /g matches - non-/g matches always start from 0
+        if (!regex.regexFlags.isGlobalMatch()) {
+            isPosDefined = false;
+            startPos = 0;
+        }
+
         // Check if previous call had zero-length match at this position (for SCALAR context)
         // This prevents infinite loops in: while ($str =~ /pat/g)  
         if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {

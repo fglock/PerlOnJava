@@ -367,6 +367,24 @@ public class RuntimeList extends RuntimeBase {
      *
      * @return A new RuntimeList with references to the elements of this list.
      */
+    public RuntimeList flattenElements() {
+        RuntimeList result = new RuntimeList();
+        for (RuntimeBase element : this.elements) {
+            if (element instanceof RuntimeArray array) {
+                for (int i = 0; i < array.size(); i++) {
+                    result.elements.add(array.get(i));
+                }
+            } else if (element instanceof RuntimeHash hash) {
+                for (RuntimeScalar val : hash.values()) {
+                    result.elements.add(val);
+                }
+            } else {
+                result.elements.add(element);
+            }
+        }
+        return result;
+    }
+
     public RuntimeList createListReference() {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> resultList = result.elements;

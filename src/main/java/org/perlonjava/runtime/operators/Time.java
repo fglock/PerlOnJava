@@ -8,7 +8,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.TextStyle;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -89,7 +91,7 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
-            long arg = args.getFirst().getInt();
+            long arg = args.getFirst().getLong();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
         }
         return getTimeComponents(ctx, date);
@@ -107,16 +109,29 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            long arg = args.getFirst().getInt();
+            long arg = args.getFirst().getLong();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
         }
         return getTimeComponents(ctx, date);
     }
 
+    // Perl's scalar gmtime/localtime returns ctime(3) format: "Sun Jan  1 00:00:00 1970"
+    // Do NOT use DateTimeFormatter.RFC_1123_DATE_TIME — it produces "Sun, 1 Jan 1970 00:00:00 GMT"
+    // which has wrong field order/format, and crashes with DateTimeException for years > 4 digits.
+    private static String formatCtime(ZonedDateTime date) {
+        String dow = date.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
+        String mon = date.getMonth().getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
+        int day = date.getDayOfMonth();
+        String dayStr = day < 10 ? " " + day : String.valueOf(day);
+        int h = date.getHour(), m = date.getMinute(), s = date.getSecond();
+        int year = date.getYear();
+        return String.format("%s %s %s %02d:%02d:%02d %d", dow, mon, dayStr, h, m, s, year);
+    }
+
     private static RuntimeList getTimeComponents(int ctx, ZonedDateTime date) {
         RuntimeList res = new RuntimeList();
         if (ctx == RuntimeContextType.SCALAR) {
-            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            res.add(formatCtime(date));
             return res;
         }
         //      0    1    2     3     4    5     6     7     8
@@ -127,7 +142,8 @@ public class Time {
         res.add(date.getDayOfMonth());
         res.add(date.getMonth().getValue() - 1);
         res.add(date.getYear() - 1900);
-        res.add(date.getDayOfWeek().getValue());
+        // Java DayOfWeek: 1=Mon..7=Sun; Perl wday: 0=Sun..6=Sat. The % 7 maps 7(Sun)->0, 1(Mon)->1, etc.
+        res.add(date.getDayOfWeek().getValue() % 7);
         res.add(date.getDayOfYear() - 1);
         res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;

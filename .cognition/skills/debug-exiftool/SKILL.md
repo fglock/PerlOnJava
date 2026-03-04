@@ -93,6 +93,16 @@ cd perl5_t/t
 ../../jperl op/lexsub.t
 ```
 
+### Running Perl5 core tests that use subprocess tests
+Tests using `run_multiple_progs()` or `fresh_perl_is()` spawn `jperl` as a subprocess. This requires `jperl` to be in PATH:
+```bash
+# Using the test runner (handles PATH automatically):
+perl dev/tools/perl_test_runner.pl perl5_t/t/op/eval.t
+
+# Manual running (must set PATH):
+PATH="/Users/fglock/projects/PerlOnJava2:$PATH" cd perl5_t/t && ../../jperl op/eval.t
+```
+
 ## Comparing with System Perl
 
 When debugging, compare PerlOnJava output with native Perl to isolate the difference:
@@ -285,7 +295,7 @@ Key files for the interpreter:
 
 ## Current Test Status (as of 2026-03-03)
 
-### ExifTool Test Results: 524/600 planned (87%)
+### ExifTool Test Results: 590/600 planned (98%)
 
 | Test | Pass/Planned | Status |
 |------|-------------|--------|
@@ -358,6 +368,10 @@ Various format-specific write issues. Many may share root causes with P1 (mandat
 | Dynamic variables | `runtime/runtimetypes/DynamicVariableManager.java` |
 | IO operations | `runtime/runtimetypes/RuntimeIO.java` |
 | IO operator (open/dup) | `runtime/operators/IOOperator.java` |
+| Control flow (goto/labels) | `backend/jvm/EmitControlFlow.java` |
+| Dereference / slicing | `backend/jvm/Dereference.java` |
+| Variable emission (refs) | `backend/jvm/EmitVariable.java` |
+| String parser (qw, heredoc) | `frontend/parser/StringParser.java` |
 | String operators | `runtime/operators/StringOperators.java` |
 | Pack/Unpack | `runtime/operators/PackOperator.java` |
 | Regex preprocessor | `runtime/regex/RegexPreprocessor.java` |
@@ -384,6 +398,46 @@ If a fix only patches ONE of these paths (e.g., `capturedVarIndices` check in `v
 
 ### Ordering matters for capturedVars
 `SubroutineParser` builds `paramList` by iterating `getAllVisibleVariables()` (TreeMap sorted by register index) with specific filters. `detectClosureVariables()` must use the **exact same iteration order and filters**. Any mismatch causes captured variable values to be assigned to wrong registers at runtime.
+
+### goto LABEL across JVM scope boundaries
+`EmitControlFlow.handleGotoLabel()` resolves labels at compile time within the current JVM scope. When the target label is outside the current scope (e.g., goto inside a `map` block to a label outside, or goto inside an `eval` block), the compile-time lookup fails. The fix is to emit a `RuntimeControlFlowList` marker with `ControlFlowType.GOTO` at runtime (the same mechanism used by dynamic `goto EXPR`), allowing the goto signal to propagate up the call stack. This was a blocker for both op/array.t and op/eval.t.
+
+### List slice with range indices
+In `Dereference.handleArrowArrayDeref()`, the check for single-index vs slice path must account for range expressions (`..` operator). A range like `0..5` is a single AST node but produces multiple indices. The correct condition is: use single-index path only if there's one element AND it's not a range. Otherwise, use the slice path. The old code had a complex `isArrayLiteral` check that was too restrictive.
+
+### qw() backslash processing
+`StringParser.parseWordsString()` must apply single-quote backslash rules to each word: `\\` → `\` and `\delimiter` → `delimiter`. Without this, backslashes are doubled in the output. The processing uses the closing delimiter from the qw construct.
+
+### `\(LIST)` must flatten arrays before creating refs
+`\(@array)` should create individual scalar refs to each array element (like `map { \$_ } @array`), not a single ref to the array. `EmitVariable` needs a `flattenElements()` method that detects `@` sigil nodes in the list and flattens them before creating element references.
+
+### Squashing a diverged branch with `git diff` + `git apply`
+When a feature branch has diverged far from master (thousands of commits in common history), both `git rebase` and `git merge --squash` can produce massive conflicts across dozens of files. The clean workaround:
+```bash
+# 1. Generate a patch of ONLY the branch's changes vs master
+git diff master..feature-branch > /tmp/branch-diff.patch
+# 2. Create a fresh branch from current master
+git checkout master && git checkout -b feature-branch-clean
+# 3. Apply the patch (no merge history = no conflicts)
+git apply /tmp/branch-diff.patch
+# 4. Commit as a single squashed commit
+git add -A && git commit -m "Squashed: ..."
+# 5. Force push to update the PR
+git push --force origin feature-branch-clean
+```
+This works because `git diff master..branch` produces the exact file-level delta, bypassing all the intermediate merge history that causes conflicts.
+
+### Always commit fixes before rebasing
+Uncommitted working tree changes are lost when `git rebase --abort` is run. If you have a fix in progress (e.g., a BitwiseOperators change), commit it first — even as a WIP commit — before attempting any rebase. The rebase abort restores the branch to its pre-rebase state, which does NOT include uncommitted changes.
+
+### `getInt()` vs `(int) getLong()` for 32-bit integer wrapping
+`RuntimeScalar.getInt()` clamps DOUBLE values to `Integer.MAX_VALUE` (e.g., `(int) 2147483648.0 == 2147483647`). But `(int) getLong()` wraps correctly via long→int truncation (e.g., `(int) 2147483648L == -2147483648`). For `use integer` operations where Config.pm reports `ivsize=4`, always use `(int) getLong()` to get proper 32-bit wrapping behavior matching Perl's semantics.
+
+### scalar gmtime/localtime ctime(3) format
+Perl's scalar `gmtime`/`localtime` returns ctime(3) format: `"Fri Mar  7 20:13:52 881"` — NOT RFC 1123 (`"Fri, 7 Mar 0881 20:13:52 GMT"`). Use `String.format()` with explicit field widths, not `DateTimeFormatter`. Also: wday must use `getValue() % 7` (Perl: 0=Sun..6=Sat) not `getValue()` (Java: 1=Mon..7=Sun). Large years (>9999) must not crash the formatter.
+
+### Regression testing: always compare branch vs master
+Before declaring a fix complete, run the same test on both master and the branch to distinguish real regressions from pre-existing failures. Use `perl5_t/t/` (not `perl5/t/`) for running Perl5 core tests — the `perl5_t` copy has test harness files (`test.pl`, `charset_tools.pl`) that PerlOnJava can load.
 
 ## Adding Debug Instrumentation
 

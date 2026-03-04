@@ -205,8 +205,10 @@ public class BitwiseOperators {
             return bitwiseNotDot(val);
         }
 
-        // Use signed 32-bit integer semantics
-        int value = val.getInt();
+        // Must use 32-bit int (not long) to match ivsize=4 in Config.pm.
+        // Using long would make ~3 return -4 as a 64-bit value, breaking bop.t tests
+        // that expect 32-bit signed integer semantics under "use integer".
+        int value = (int) val.getLong();
         int result = ~value;
         return new RuntimeScalar(result);
     }
@@ -486,12 +488,16 @@ public class BitwiseOperators {
      * Performs a left shift operation with signed (integer) semantics.
      * This is used when "use integer" pragma is in effect.
      *
+     * IMPORTANT: Must use 32-bit int arithmetic and >= 32 boundaries (not 64-bit long / >= 64).
+     * PerlOnJava reports ivsize=4 in Config.pm, so bop.t expects 32-bit word-size behavior:
+     * "use integer; 1 << 32" must return 0, and "1 << 31" must return -2147483648 (signed).
+     * The "shift < 0" guard after negation catches Long.MIN_VALUE overflow (-Long.MIN_VALUE == Long.MIN_VALUE).
+     *
      * @param runtimeScalar The operand to be shifted.
      * @param arg2          The number of positions to shift.
      * @return A new RuntimeScalar with the result of the integer left shift operation.
      */
     public static RuntimeScalar integerShiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Check for uninitialized values and generate warnings
         if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
                     RuntimeScalarCache.scalarEmptyString);
@@ -501,15 +507,13 @@ public class BitwiseOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int value = runtimeScalar.getInt();
+        int value = (int) runtimeScalar.getLong();
         long shift = arg2.getLong();
         
-        // Handle negative shift (reverse direction: left becomes right)
         if (shift < 0) {
             shift = -shift;
             if (shift < 0 || shift >= 32) {
@@ -530,13 +534,13 @@ public class BitwiseOperators {
     /**
      * Performs a right shift operation with signed (integer) semantics.
      * This is used when "use integer" pragma is in effect.
+     * See integerShiftLeft javadoc for ivsize=4 / 32-bit constraints.
      *
      * @param runtimeScalar The operand to be shifted.
      * @param arg2          The number of positions to shift.
      * @return A new RuntimeScalar with the result of the integer right shift operation.
      */
     public static RuntimeScalar integerShiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Check for uninitialized values and generate warnings
         if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
                     RuntimeScalarCache.scalarEmptyString);
@@ -546,15 +550,13 @@ public class BitwiseOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int value = runtimeScalar.getInt();
+        int value = (int) runtimeScalar.getLong();
         long shift = arg2.getLong();
         
-        // Handle negative shift (reverse direction: right becomes left)
         if (shift < 0) {
             shift = -shift;
             if (shift < 0 || shift >= 32) {

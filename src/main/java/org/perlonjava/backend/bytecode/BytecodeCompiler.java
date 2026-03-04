@@ -2138,28 +2138,6 @@ public class BytecodeCompiler implements Visitor {
                             continue;
                         }
 
-                        // local @x / local %x in list form
-                        if ((sigil.equals("@") || sigil.equals("%")) && sigilOp.operand instanceof IdentifierNode idNode) {
-                            String varName = sigil + idNode.name;
-                            if (hasVariable(varName)) {
-                                throwCompilerException("Can't localize lexical variable " + varName);
-                            }
-
-                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
-                            int nameIdx = addToStringPool(globalVarName);
-
-                            int rd = allocateRegister();
-                            if (sigil.equals("@")) {
-                                emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
-                            } else {
-                                emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
-                            }
-                            emitReg(rd);
-                            emit(nameIdx);
-                            varRegs.add(rd);
-                            continue;
-                        }
-
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
@@ -3206,7 +3184,10 @@ public class BytecodeCompiler implements Visitor {
                 BlockNode block = (BlockNode) node.operand;
 
                 // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
+                int savedCtx = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 block.accept(this);
+                currentCallContext = savedCtx;
                 int blockResultReg = lastResultReg;
                 int rd = allocateRegister();
                 if (isStrictRefsEnabled()) {
@@ -3336,7 +3317,10 @@ public class BytecodeCompiler implements Visitor {
                 // @{ block } - evaluate block and dereference the result
                 // The block should return an arrayref
                 BlockNode blockNode = (BlockNode) node.operand;
+                int savedCtx = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 blockNode.accept(this);
+                currentCallContext = savedCtx;
                 int refReg = lastResultReg;
 
                 // Dereference to get the array
@@ -3429,7 +3413,10 @@ public class BytecodeCompiler implements Visitor {
                 }
             } else if (node.operand instanceof BlockNode blockNode) {
                 // %{ block } — evaluate block and dereference to hash
+                int savedCtx = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 blockNode.accept(this);
+                currentCallContext = savedCtx;
                 int scalarReg = lastResultReg;
                 int hashReg = allocateRegister();
                 if (isStrictRefsEnabled()) {
@@ -3973,6 +3960,10 @@ public class BytecodeCompiler implements Visitor {
         // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
 
+        if (RuntimeCode.DISASSEMBLE) {
+            System.out.println(subCode.disassemble());
+        }
+
         // Step 5: Emit bytecode to create closure or simple code ref
         int codeReg = allocateRegister();
 
@@ -4059,6 +4050,10 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+
+        if (RuntimeCode.DISASSEMBLE) {
+            System.out.println(subCode.disassemble());
+        }
 
         // Step 5: Create closure or simple code ref
         int codeReg = allocateRegister();

@@ -1204,6 +1204,7 @@ public class Opcodes {
     public static final short INTEGER_RIGHT_SHIFT_ASSIGN = 366;
     public static final short INTEGER_DIV_ASSIGN = 367;
     public static final short INTEGER_MOD_ASSIGN = 368;
+    public static final short RESET = 369;
 
     private Opcodes() {} // Utility class - no instantiation
 }

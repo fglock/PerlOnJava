@@ -72,9 +72,8 @@ public class IOOperator {
     }
 
     public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            // File handle
-            RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
+        RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
+        if (runtimeIO != null) {
             if (runtimeIO.ioHandle != null) {
                 if (runtimeIO instanceof TieHandle tieHandle) {
                     return TieHandle.tiedSeek(tieHandle, runtimeList);

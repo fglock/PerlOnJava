@@ -1634,26 +1634,31 @@ public class CompileOperator {
             }
         } else if (op.equals("chop")) {
             // chop $x - remove last character, modifies argument in place
-            // operand: ListNode containing scalar variable reference
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("chop requires an argument");
-            }
+            boolean chopNoArgs = node.operand == null ||
+                    (node.operand instanceof ListNode && ((ListNode) node.operand).elements.isEmpty());
 
-            // Extract the actual operand from ListNode if needed
-            Node actualOperand = node.operand;
-            if (actualOperand instanceof ListNode) {
-                ListNode list = (ListNode) actualOperand;
-                if (list.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("chop requires an argument");
+            int scalarReg;
+            if (chopNoArgs) {
+                String varName = "$_";
+                if (bytecodeCompiler.hasVariable(varName)) {
+                    scalarReg = bytecodeCompiler.getVariableRegister(varName);
+                } else {
+                    scalarReg = bytecodeCompiler.allocateRegister();
+                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
+                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    bytecodeCompiler.emitReg(scalarReg);
+                    bytecodeCompiler.emit(nameIdx);
                 }
-                actualOperand = list.elements.get(0);
+            } else {
+                Node actualOperand = node.operand;
+                if (actualOperand instanceof ListNode) {
+                    ListNode list = (ListNode) actualOperand;
+                    actualOperand = list.elements.get(0);
+                }
+                actualOperand.accept(bytecodeCompiler);
+                scalarReg = bytecodeCompiler.lastResultReg;
             }
 
-            // Compile the operand (should be an lvalue)
-            actualOperand.accept(bytecodeCompiler);
-            int scalarReg = bytecodeCompiler.lastResultReg;
-
-            // Call chopScalar and store result back
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CHOP);
             bytecodeCompiler.emitReg(rd);
@@ -2070,8 +2075,9 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chomp")) {
             // chomp($x) or chomp - remove trailing newlines
-            if (node.operand == null) {
-                // chomp with no args - operates on $_
+            boolean noArgs = node.operand == null ||
+                    (node.operand instanceof ListNode && ((ListNode) node.operand).elements.isEmpty());
+            if (noArgs) {
                 String varName = "$_";
                 int targetReg;
                 if (bytecodeCompiler.hasVariable(varName)) {
@@ -2091,13 +2097,10 @@ public class CompileOperator {
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
-                // chomp with argument
                 if (node.operand instanceof ListNode) {
                     ListNode list = (ListNode) node.operand;
                     if (!list.elements.isEmpty()) {
                         list.elements.get(0).accept(bytecodeCompiler);
-                    } else {
-                        bytecodeCompiler.throwCompilerException("chomp requires an argument");
                     }
                 } else {
                     node.operand.accept(bytecodeCompiler);
@@ -2875,7 +2878,7 @@ public class CompileOperator {
                    op.equals("rename") || op.equals("link") || op.equals("readlink") ||
                    op.equals("umask") || op.equals("system") || op.equals("pack") ||
                    op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
-                   op.equals("localtime") || op.equals("gmtime") || op.equals("caller") ||
+                   op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") ||
                    op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
                    op.equals("close") ||
                    op.equals("binmode") || op.equals("seek") ||
@@ -2936,6 +2939,7 @@ public class CompileOperator {
                 case "vec" -> Opcodes.VEC;
                 case "localtime" -> Opcodes.LOCALTIME;
                 case "gmtime" -> Opcodes.GMTIME;
+                case "reset" -> Opcodes.RESET;
                 case "crypt" -> Opcodes.CRYPT;
                 case "close" -> Opcodes.CLOSE;
                 case "binmode" -> Opcodes.BINMODE;

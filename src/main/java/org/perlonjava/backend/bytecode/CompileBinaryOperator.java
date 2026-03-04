@@ -219,6 +219,13 @@ public class CompileBinaryOperator {
             // Code reference call: $code->() or $code->(@args)
             // right is ListNode with arguments
             else if (node.right instanceof ListNode) {
+                // Special case: eval { ... }->() is parsed as BinaryOperatorNode("->", SubroutineNode[useTryCatch], ListNode)
+                // The interpreter compiles eval blocks inline (EVAL_TRY/END), so we should NOT emit CALL_SUB
+                if (node.left instanceof SubroutineNode sn && sn.useTryCatch) {
+                    node.left.accept(bytecodeCompiler);
+                    return;
+                }
+
                 // This is a code reference call: $coderef->(args)
                 // Compile the code reference in scalar context
                 int savedContext = bytecodeCompiler.currentCallContext;
@@ -463,13 +470,21 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
 
             // NOW compile right operand (only executed if left was true)
+            // Force SCALAR context so the right operand always produces a result register
+            int savedContext2 = bytecodeCompiler.currentCallContext;
+            if (bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            }
             node.right.accept(bytecodeCompiler);
             int rs2 = bytecodeCompiler.lastResultReg;
+            bytecodeCompiler.currentCallContext = savedContext2;
 
             // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.ALIAS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs2);
+            if (rs2 >= 0) {
+                bytecodeCompiler.emit(Opcodes.ALIAS);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs2);
+            }
 
             // Patch the forward jump offset
             int skipRightTarget = bytecodeCompiler.bytecode.size();
@@ -505,13 +520,20 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
 
             // NOW compile right operand (only executed if left was false)
+            int savedContext2 = bytecodeCompiler.currentCallContext;
+            if (bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            }
             node.right.accept(bytecodeCompiler);
             int rs2 = bytecodeCompiler.lastResultReg;
+            bytecodeCompiler.currentCallContext = savedContext2;
 
             // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.ALIAS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs2);
+            if (rs2 >= 0) {
+                bytecodeCompiler.emit(Opcodes.ALIAS);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs2);
+            }
 
             // Patch the forward jump offset
             int skipRightTarget = bytecodeCompiler.bytecode.size();
@@ -553,13 +575,20 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
 
             // NOW compile right operand (only executed if left was undefined)
+            int savedContext2 = bytecodeCompiler.currentCallContext;
+            if (bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
+                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            }
             node.right.accept(bytecodeCompiler);
             int rs2 = bytecodeCompiler.lastResultReg;
+            bytecodeCompiler.currentCallContext = savedContext2;
 
             // Move right result to rd (overwriting left value)
-            bytecodeCompiler.emit(Opcodes.ALIAS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs2);
+            if (rs2 >= 0) {
+                bytecodeCompiler.emit(Opcodes.ALIAS);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs2);
+            }
 
             // Patch the forward jump offset
             int skipRightTarget = bytecodeCompiler.bytecode.size();
