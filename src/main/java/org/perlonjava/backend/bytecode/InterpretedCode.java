@@ -1421,7 +1421,13 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    sb.append("DEREF_GLOB r").append(rd).append(" = *{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
+                    sb.append("DEREF_GLOB r").append(rd).append(" = *{r").append(rs).append("} strict pkg=").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.DEREF_GLOB_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("DEREF_GLOB_NONSTRICT r").append(rd).append(" = *{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
                     break;
                 case Opcodes.DEREF_ARRAY:
                     rd = bytecode[pc++];

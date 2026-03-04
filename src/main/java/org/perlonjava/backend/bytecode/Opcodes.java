@@ -1206,5 +1206,10 @@ public class Opcodes {
     public static final short INTEGER_MOD_ASSIGN = 368;
     public static final short RESET = 369;
 
+    /** Dereference a scalar as a glob (no strict refs): rd = rs.globDerefNonStrict(pkg)
+     * Allows symbolic glob references (string names resolved to globs).
+     * Format: DEREF_GLOB_NONSTRICT rd rs pkgIdx */
+    public static final short DEREF_GLOB_NONSTRICT = 370;
+
     private Opcodes() {} // Utility class - no instantiation
 }

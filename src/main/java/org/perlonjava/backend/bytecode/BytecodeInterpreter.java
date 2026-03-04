@@ -1502,10 +1502,13 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.STORE_GLOB: {
-                        // Store to glob: glob.set(value)
                         int globReg = bytecode[pc++];
                         int valueReg = bytecode[pc++];
-                        ((RuntimeGlob) registers[globReg]).set((RuntimeScalar) registers[valueReg]);
+                        Object val = registers[valueReg];
+                        RuntimeScalar scalarVal = (val instanceof RuntimeScalar)
+                                ? (RuntimeScalar) val
+                                : ((RuntimeList) val).scalar();
+                        ((RuntimeGlob) registers[globReg]).set(scalarVal);
                         break;
                     }
 
@@ -2112,6 +2115,7 @@ public class BytecodeInterpreter {
                     case Opcodes.SLEEP_OP:
                     case Opcodes.ALARM_OP:
                     case Opcodes.DEREF_GLOB:
+                    case Opcodes.DEREF_GLOB_NONSTRICT:
                     case Opcodes.LOAD_GLOB_DYNAMIC:
                     case Opcodes.DEREF_SCALAR_STRICT:
                     case Opcodes.DEREF_SCALAR_NONSTRICT:
@@ -3267,6 +3271,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeAlarm(bytecode, pc, registers);
             case Opcodes.DEREF_GLOB:
                 return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers, code);
+            case Opcodes.DEREF_GLOB_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefGlobNonStrict(bytecode, pc, registers, code);
             case Opcodes.LOAD_GLOB_DYNAMIC:
                 return SlowOpcodeHandler.executeLoadGlobDynamic(bytecode, pc, registers, code);
             case Opcodes.DEREF_SCALAR_STRICT:

@@ -29,7 +29,8 @@ public class CompileAssignment {
                     rhsContext = RuntimeContextType.SCALAR;
                 }
             } else if (leftOp.operator.equals("$")) {
-                // Regular scalar assignment: $x = ...
+                rhsContext = RuntimeContextType.SCALAR;
+            } else if (leftOp.operator.equals("*")) {
                 rhsContext = RuntimeContextType.SCALAR;
             }
         }

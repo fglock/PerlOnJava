@@ -444,9 +444,9 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * DEREF_GLOB: rd = rs.globDerefNonStrict(currentPackage)
-     * Format: DEREF_GLOB rd rs nameIdx(currentPackage)
-     * Effect: Dereferences a scalar as a glob (for $ref->** postfix deref)
+     * DEREF_GLOB: rd = rs.globDeref()
+     * Format: DEREF_GLOB rd rs pkgIdx
+     * Effect: Dereferences a scalar as a glob (strict refs — throws for strings)
      */
     public static int executeDerefGlob(
             int[] bytecode,
@@ -456,11 +456,29 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        int nameIdx = bytecode[pc++];  // currentPackage (unused at runtime, consumed for alignment)
+        int pkgIdx = bytecode[pc++];
 
-        // Delegate to RuntimeScalar.globDeref() (after scalar context coercion).
-        // This centralizes PVIO / GLOBREFERENCE handling and matches the JVM path.
         registers[rd] = registers[rs].scalar().globDeref();
+        return pc;
+    }
+
+    /**
+     * DEREF_GLOB_NONSTRICT: rd = rs.globDerefNonStrict(pkg)
+     * Format: DEREF_GLOB_NONSTRICT rd rs pkgIdx
+     * Effect: Dereferences a scalar as a glob (no strict refs — allows symbolic names)
+     */
+    public static int executeDerefGlobNonStrict(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+        String pkg = code.stringPool[pkgIdx];
+
+        registers[rd] = registers[rs].scalar().globDerefNonStrict(pkg);
         return pc;
     }
 

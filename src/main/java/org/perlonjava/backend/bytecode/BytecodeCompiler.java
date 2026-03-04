@@ -3477,12 +3477,15 @@ public class BytecodeCompiler implements Visitor {
                 emit(nameIdx);
                 lastResultReg = rd;
             } else if (node.operand instanceof OperatorNode) {
-                // $ref->** — dereference a scalar as a glob (e.g. postfix deref)
                 node.operand.accept(this);
                 int refReg = lastResultReg;
                 int rd = allocateRegister();
-                int pkgIdx = addToStringPool(getCurrentPackage()); // consumed but unused at runtime
-                emitWithToken(Opcodes.DEREF_GLOB, node.getIndex());
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_GLOB, node.getIndex());
+                } else {
+                    emitWithToken(Opcodes.DEREF_GLOB_NONSTRICT, node.getIndex());
+                }
                 emitReg(rd);
                 emitReg(refReg);
                 emit(pkgIdx);
