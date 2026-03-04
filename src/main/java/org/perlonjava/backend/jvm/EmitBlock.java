@@ -84,25 +84,23 @@ public class EmitBlock {
         if (node == null) return;
         if (node instanceof LabelNode labelNode) {
             out.add(labelNode.label);
-        } else if (node instanceof IfNode ifNode) {
-            collectStatementLabelNamesRecursive(ifNode.thenBranch, out);
-            collectStatementLabelNamesRecursive(ifNode.elseBranch, out);
         } else if (node instanceof BlockNode block) {
             for (Node child : block.elements) {
                 collectStatementLabelNamesRecursive(child, out);
             }
-        } else if (node instanceof For1Node for1) {
-            collectStatementLabelNamesRecursive(for1.body, out);
-        } else if (node instanceof For3Node for3) {
-            collectStatementLabelNamesRecursive(for3.body, out);
-        } else if (node instanceof TryNode tryNode) {
-            collectStatementLabelNamesRecursive(tryNode.tryBlock, out);
-            collectStatementLabelNamesRecursive(tryNode.catchBlock, out);
-            collectStatementLabelNamesRecursive(tryNode.finallyBlock, out);
         }
     }
 
-    private static int pushNewGotoLabels(JavaClassInfo javaClassInfo, List<String> labelNames) {
+    static void collectIfChainLabels(IfNode ifNode, List<String> out) {
+        collectStatementLabelNamesRecursive(ifNode.thenBranch, out);
+        if (ifNode.elseBranch instanceof IfNode elseIf) {
+            collectIfChainLabels(elseIf, out);
+        } else {
+            collectStatementLabelNamesRecursive(ifNode.elseBranch, out);
+        }
+    }
+
+    static int pushNewGotoLabels(JavaClassInfo javaClassInfo, List<String> labelNames) {
         int pushed = 0;
         for (String labelName : labelNames) {
             if (javaClassInfo.findGotoLabelsByName(labelName) == null) {

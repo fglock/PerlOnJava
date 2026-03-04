@@ -7,6 +7,9 @@ import org.perlonjava.frontend.astnode.For3Node;
 import org.perlonjava.frontend.astnode.IfNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TryNode;
+
+import java.util.ArrayList;
+import java.util.List;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -40,6 +43,10 @@ public class EmitStatement {
      */
     public static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
         emitterVisitor.ctx.logDebug("IF start: " + node.operator);
+
+        List<String> branchLabels = new ArrayList<>();
+        EmitBlock.collectIfChainLabels(node, branchLabels);
+        int branchLabelsPushed = EmitBlock.pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, branchLabels);
 
         // Enter a new scope in the symbol table
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
@@ -81,6 +88,10 @@ public class EmitStatement {
 
         // Exit the scope in the symbol table
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
+
+        for (int i = 0; i < branchLabelsPushed; i++) {
+            emitterVisitor.ctx.javaClassInfo.popGotoLabels();
+        }
 
         emitterVisitor.ctx.logDebug("IF end");
     }
