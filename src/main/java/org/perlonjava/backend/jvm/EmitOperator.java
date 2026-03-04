@@ -630,17 +630,45 @@ public class EmitOperator {
 
     // Handles the 'repeat' operator, which repeats a string or list a specified number of times.
     static void handleRepeat(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // Determine the context for the left operand.
-        // When x operator is in scalar context, left operand must be in scalar context too
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        } else if (node.left instanceof ListNode) {
-            node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        if (ENABLE_SPILL_BINARY_LHS) {
+            int leftCtx;
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                leftCtx = RuntimeContextType.SCALAR;
+            } else if (node.left instanceof ListNode) {
+                leftCtx = RuntimeContextType.LIST;
+            } else {
+                leftCtx = RuntimeContextType.SCALAR;
+            }
+            node.left.accept(emitterVisitor.with(leftCtx));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
         } else {
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            } else if (node.left instanceof ListNode) {
+                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            } else {
+                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            }
+            node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         }
-        // Accept the right operand in SCALAR context.
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
         // Invoke the static method for the 'repeat' operator.
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/Operator",

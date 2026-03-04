@@ -172,7 +172,12 @@ public class LargeBlockRefactorer {
      * @return true if the block should be refactored
      */
     private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor) {
-        return false;
+        if (node.elements.size() <= MIN_CHUNK_SIZE) {
+            return false;
+        }
+        long estimatedSize = estimateTotalBytecodeSizeCapped(
+                node.elements, (long) LARGE_BYTECODE_SIZE * 2);
+        return estimatedSize > LARGE_BYTECODE_SIZE;
     }
 
     /**

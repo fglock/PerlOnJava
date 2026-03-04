@@ -76,10 +76,41 @@ public class EmitBlock {
 
     private static void collectStatementLabelNames(List<Node> elements, List<String> out) {
         for (Node element : elements) {
-            if (element instanceof LabelNode labelNode) {
-                out.add(labelNode.label);
+            collectStatementLabelNamesRecursive(element, out);
+        }
+    }
+
+    private static void collectStatementLabelNamesRecursive(Node node, List<String> out) {
+        if (node == null) return;
+        if (node instanceof LabelNode labelNode) {
+            out.add(labelNode.label);
+        } else if (node instanceof IfNode ifNode) {
+            collectStatementLabelNamesRecursive(ifNode.thenBranch, out);
+            collectStatementLabelNamesRecursive(ifNode.elseBranch, out);
+        } else if (node instanceof BlockNode block) {
+            for (Node child : block.elements) {
+                collectStatementLabelNamesRecursive(child, out);
+            }
+        } else if (node instanceof For1Node for1) {
+            collectStatementLabelNamesRecursive(for1.body, out);
+        } else if (node instanceof For3Node for3) {
+            collectStatementLabelNamesRecursive(for3.body, out);
+        } else if (node instanceof TryNode tryNode) {
+            collectStatementLabelNamesRecursive(tryNode.tryBlock, out);
+            collectStatementLabelNamesRecursive(tryNode.catchBlock, out);
+            collectStatementLabelNamesRecursive(tryNode.finallyBlock, out);
+        }
+    }
+
+    private static int pushNewGotoLabels(JavaClassInfo javaClassInfo, List<String> labelNames) {
+        int pushed = 0;
+        for (String labelName : labelNames) {
+            if (javaClassInfo.findGotoLabelsByName(labelName) == null) {
+                javaClassInfo.pushGotoLabels(labelName, new Label());
+                pushed++;
             }
         }
+        return pushed;
     }
 
     /**
@@ -143,9 +174,7 @@ public class EmitBlock {
         // their own EmitBlock invocation and maintain proper scoping/shadowing via the stack.
         List<String> statementLabelNames = new ArrayList<>();
         collectStatementLabelNames(list, statementLabelNames);
-        for (String labelName : statementLabelNames) {
-            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelName, new Label());
-        }
+        int statementLabelsPushed = pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, statementLabelNames);
 
         // Create labels used inside the block, like `{ L1: ... }`
         for (int i = 0; i < node.labels.size(); i++) {
@@ -264,7 +293,7 @@ public class EmitBlock {
         }
 
         // Pop statement labels registered for this block
-        for (int i = 0; i < statementLabelNames.size(); i++) {
+        for (int i = 0; i < statementLabelsPushed; i++) {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 
