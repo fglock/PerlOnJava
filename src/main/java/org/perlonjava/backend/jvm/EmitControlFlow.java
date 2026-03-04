@@ -393,8 +393,29 @@ public class EmitControlFlow {
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            throw new PerlCompilerException(node.tokenIndex,
-                    "goto label not in JVM scope, requires interpreter fallback", ctx.errorUtil);
+            // Label not in current JVM scope - use RuntimeControlFlowList to signal
+            // goto to the caller, same mechanism as dynamic goto
+            String fileName = ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)";
+            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
+                    "org/perlonjava/runtime/runtimetypes/ControlFlowType",
+                    "GOTO",
+                    "Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;");
+            ctx.mv.visitLdcInsn(labelName);
+            ctx.mv.visitLdcInsn(fileName);
+            ctx.mv.visitLdcInsn(lineNumber);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "<init>",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
+                    false);
+
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+            return;
         }
 
         // Local goto: use fast GOTO (existing code)
