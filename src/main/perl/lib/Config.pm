@@ -106,6 +106,7 @@ $os_name =~ s/\s+/_/g;
     ## usethreads => 'define',
 
     # Sizes (Java platform - guaranteed minimums)
+    shortsize => '2',
     intsize => '4',
     longsize => '8',
     ptrsize => '8',
@@ -209,14 +210,12 @@ sub bincompat_options() {}
 
 # Helper functions
 sub _determine_byteorder {
-    # Java is big-endian in its bytecode, but native byte order varies
-    # This is a simplified check
     my $test = pack("L", 0x12345678);
     my @bytes = unpack("C4", $test);
     if ($bytes[0] == 0x78) {
-        return "1234";  # little-endian
+        return "1234";  # little-endian (32-bit)
     } elsif ($bytes[0] == 0x12) {
-        return "4321";  # big-endian
+        return "4321";  # big-endian (32-bit)
     } else {
         return "unknown";
     }

@@ -2992,10 +2992,11 @@ public class BytecodeInterpreter {
             }
 
             case Opcodes.NOT: {
-                // Logical NOT: rd = !rs
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
-                RuntimeScalar val = (RuntimeScalar) registers[rs];
+                RuntimeScalar val = (registers[rs] instanceof RuntimeScalar)
+                    ? (RuntimeScalar) registers[rs]
+                    : ((RuntimeList) registers[rs]).scalar();
                 registers[rd] = val.getBoolean() ?
                     RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
                 return pc;

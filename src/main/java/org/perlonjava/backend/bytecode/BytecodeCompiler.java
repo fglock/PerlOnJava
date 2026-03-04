@@ -9,6 +9,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.*;
 
@@ -191,6 +192,11 @@ public class BytecodeCompiler implements Visitor {
 
     boolean hasVariable(String name) {
         return symbolTable.getVariableIndex(name) != -1;
+    }
+
+    boolean isOurVariable(String name) {
+        SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(name);
+        return entry != null && "our".equals(entry.decl());
     }
 
     int getVariableRegister(String name) {
@@ -572,6 +578,7 @@ public class BytecodeCompiler implements Visitor {
 
         List<String> outerVarNames = new ArrayList<>();
         List<RuntimeBase> outerValues = new ArrayList<>();
+        List<String> outerVarDecls = new ArrayList<>();
         capturedVarIndices = new HashMap<>();
 
         int reg = 3;
@@ -580,22 +587,19 @@ public class BytecodeCompiler implements Visitor {
             if (e.getKey() < skipVariables) continue;
             org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry entry = e.getValue();
             String name = entry.name();
-            // Match SubroutineParser filters: skip @_, empty decl, fields, code refs
             if (name.equals("@_")) continue;
             if (entry.decl().isEmpty()) continue;
             if (entry.decl().equals("field")) continue;
             if (name.startsWith("&")) continue;
             capturedVarIndices.put(name, reg);
             outerVarNames.add(name);
+            outerVarDecls.add(entry.decl());
             outerValues.add(getVariableValueFromContext(name, ctx));
             reg++;
         }
 
-        // Register captured variables in the compiler's symbol table so that
-        // all existing hasVariable()/getVariableRegister() lookups find them.
-        // This is critical for handleHashElementAccess, handleArrayElementAccess, etc.
         for (int i = 0; i < outerVarNames.size(); i++) {
-            symbolTable.addVariableWithIndex(outerVarNames.get(i), 3 + i, "my");
+            symbolTable.addVariableWithIndex(outerVarNames.get(i), 3 + i, outerVarDecls.get(i));
         }
 
         // Reserve registers for captured variables so local my declarations don't collide
@@ -2771,17 +2775,14 @@ public class BytecodeCompiler implements Visitor {
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                    // Check if it's a lexical variable (should not be localized)
-                    if (hasVariable(varName)) {
+                    if (hasVariable(varName) && !isOurVariable(varName)) {
                         throwCompilerException("Can't localize lexical variable " + varName);
                         return;
                     }
 
-                    // Check if this is a declared reference (local \$x)
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
-                    // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
                     String globalVarName = NameNormalizer.normalizeVariableName(((IdentifierNode) sigilOp.operand).name, getCurrentPackage());
                     int nameIdx = addToStringPool(globalVarName);
 
@@ -2807,7 +2808,7 @@ public class BytecodeCompiler implements Visitor {
                 if ((sigil.equals("@") || sigil.equals("%")) && sigilOp.operand instanceof IdentifierNode idNode) {
                     String varName = sigil + idNode.name;
 
-                    if (hasVariable(varName)) {
+                    if (hasVariable(varName) && !isOurVariable(varName)) {
                         throwCompilerException("Can't localize lexical variable " + varName);
                         return;
                     }
@@ -2858,13 +2859,11 @@ public class BytecodeCompiler implements Visitor {
                             String originalSigil = innerOp.operator;
                             String varName = originalSigil + idNode.name;
 
-                            // Check if it's a lexical variable
-                            if (hasVariable(varName)) {
+                            if (hasVariable(varName) && !isOurVariable(varName)) {
                                 throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
 
-                            // Localize global variable
                             String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                             int nameIdx = addToStringPool(globalVarName);
 
@@ -2981,12 +2980,10 @@ public class BytecodeCompiler implements Visitor {
 
                                     String varName = varNode.operator + idNode.name;
 
-                                    // Check if it's a lexical variable
-                                    if (hasVariable(varName)) {
+                                    if (hasVariable(varName) && !isOurVariable(varName)) {
                                         throwCompilerException("Can't localize lexical variable " + varName);
                                     }
 
-                                    // Localize global variable
                                     String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                                     int nameIdx = addToStringPool(globalVarName);
 
@@ -3033,12 +3030,10 @@ public class BytecodeCompiler implements Visitor {
                                         nestedVarNode.operand instanceof IdentifierNode idNode) {
                                         String varName = nestedVarNode.operator + idNode.name;
 
-                                        // Check if it's a lexical variable
-                                        if (hasVariable(varName)) {
+                                        if (hasVariable(varName) && !isOurVariable(varName)) {
                                             throwCompilerException("Can't localize lexical variable " + varName);
                                         }
 
-                                        // Localize global variable
                                         String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                                         int nameIdx = addToStringPool(globalVarName);
 
@@ -3067,12 +3062,10 @@ public class BytecodeCompiler implements Visitor {
                                 String originalSigil = varNode.operator;
                                 String varName = originalSigil + idNode.name;
 
-                                // Check if it's a lexical variable
-                                if (hasVariable(varName)) {
+                                if (hasVariable(varName) && !isOurVariable(varName)) {
                                     throwCompilerException("Can't localize lexical variable " + varName);
                                 }
 
-                                // Localize global variable
                                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                                 int nameIdx = addToStringPool(globalVarName);
 
@@ -3107,7 +3100,7 @@ public class BytecodeCompiler implements Visitor {
                                 varRegs.add(rd);
                             } else {
                                 String varName = sigil + idNode.name;
-                                if (hasVariable(varName)) {
+                                if (hasVariable(varName) && !isOurVariable(varName)) {
                                     throwCompilerException("Can't localize lexical variable " + varName);
                                 }
                                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());

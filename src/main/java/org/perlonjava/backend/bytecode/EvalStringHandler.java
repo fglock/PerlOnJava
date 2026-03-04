@@ -118,14 +118,12 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }
 
-            // Determine the compile-time package for this eval STRING.
-            // Prefer currentCode.compilePackage (baked at compile time) over
-            // InterpreterState.currentPackage (runtime). This matters for INIT/END
-            // blocks where the runtime package has been restored to "main" but
-            // the block was compiled inside a different package.
-            String compilePackage = (currentCode != null && currentCode.compilePackage != null)
-                    ? currentCode.compilePackage
-                    : InterpreterState.currentPackage.get().toString();
+            // Use runtime package (maintained by PUSH_PACKAGE/SET_PACKAGE opcodes).
+            // This correctly reflects the current package scope when eval STRING runs
+            // inside dynamic package blocks like: package Foo { eval("__PACKAGE__") }
+            // For INIT/END blocks, the runtime package is set by the block's own
+            // PUSH_PACKAGE opcode before execution begins.
+            String compilePackage = InterpreterState.currentPackage.get().toString();
             symbolTable.setCurrentPackage(compilePackage, false);
 
             evalTrace("EvalStringHandler compilePackage=" + compilePackage + " fileName=" + opts.fileName);

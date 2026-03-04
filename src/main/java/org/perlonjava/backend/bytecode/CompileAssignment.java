@@ -399,8 +399,7 @@ public class CompileAssignment {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if it's a lexical variable (should not be localized)
-                            if (bytecodeCompiler.hasVariable(varName)) {
+                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                                 bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
@@ -430,8 +429,7 @@ public class CompileAssignment {
                             // Handle local @array = value
                             String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if it's a lexical variable (should not be localized)
-                            if (bytecodeCompiler.hasVariable(varName)) {
+                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                                 bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
@@ -465,8 +463,7 @@ public class CompileAssignment {
                             // Handle local %hash = value
                             String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if it's a lexical variable (should not be localized)
-                            if (bytecodeCompiler.hasVariable(varName)) {
+                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                                 bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
