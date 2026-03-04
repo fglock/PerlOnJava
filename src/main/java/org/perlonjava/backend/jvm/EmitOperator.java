@@ -373,8 +373,14 @@ public class EmitOperator {
             operand.elements.addFirst(operand.handle);
         }
 
-        // Accept the operand in LIST context.
-        operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        try {
+            // Accept the operand in LIST context.
+            operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        } finally {
+            if (hasHandle) {
+                operand.elements.removeFirst();
+            }
+        }
 
         // Push the boolean value of hasHandle to the stack
         MethodVisitor mv = emitterVisitor.ctx.mv;
