@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci
+.PHONY: all clean test test-unit test-interpreter test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci
 
 all: build
 
@@ -40,6 +40,11 @@ ifeq ($(OS),Windows_NT)
 else
 	./gradlew testUnitParallel --parallel
 endif
+
+# Unit tests using bytecode interpreter backend (feature parity check)
+test-interpreter:
+	@echo "Running unit tests with bytecode interpreter..."
+	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
 
 # Perl 5 core test suite (perl5_t/t/ directory)
 # Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
