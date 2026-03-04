@@ -1053,7 +1053,8 @@ public class SlowOpcodeHandler {
         RuntimeBase stringBase = registers[stringReg];
         RuntimeScalar stringScalar = stringBase.scalar();
 
-        int length = stringScalar.toString().length();
+        String str = stringScalar.toString();
+        int length = str.codePointCount(0, str.length());
         registers[rd] = new RuntimeScalar(length);
 
         return pc;

@@ -1211,5 +1211,10 @@ public class Opcodes {
      * Format: DEREF_GLOB_NONSTRICT rd rs pkgIdx */
     public static final short DEREF_GLOB_NONSTRICT = 370;
 
+    /** Array exists: rd = array_reg.exists(index_reg) */
+    public static final short ARRAY_EXISTS = 371;
+    /** Array delete: rd = array_reg.delete(index_reg) */
+    public static final short ARRAY_DELETE = 372;
+
     private Opcodes() {} // Utility class - no instantiation
 }

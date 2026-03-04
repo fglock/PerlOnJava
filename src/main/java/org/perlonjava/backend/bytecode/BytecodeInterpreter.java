@@ -640,7 +640,9 @@ public class BytecodeInterpreter {
                         RuntimeScalar count = (countVal instanceof RuntimeScalar)
                             ? (RuntimeScalar) countVal
                             : ((RuntimeList) countVal).scalar();
-                        registers[rd] = Operator.repeat(registers[rs1], count, 1);
+                        int repeatCtx = (registers[rs1] instanceof RuntimeScalar)
+                            ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
+                        registers[rd] = Operator.repeat(registers[rs1], count, repeatCtx);
                         break;
                     }
 
@@ -1079,6 +1081,26 @@ public class BytecodeInterpreter {
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         registers[rd] = hash.delete(key);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_EXISTS: {
+                        int rd = bytecode[pc++];
+                        int arrayReg = bytecode[pc++];
+                        int indexReg = bytecode[pc++];
+                        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+                        RuntimeScalar index = (RuntimeScalar) registers[indexReg];
+                        registers[rd] = array.exists(index);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_DELETE: {
+                        int rd = bytecode[pc++];
+                        int arrayReg = bytecode[pc++];
+                        int indexReg = bytecode[pc++];
+                        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+                        RuntimeScalar index = (RuntimeScalar) registers[indexReg];
+                        registers[rd] = array.delete(index);
                         break;
                     }
 
@@ -2614,10 +2636,12 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs1 = bytecode[pc++];
                 int rs2 = bytecode[pc++];
+                int repeatCtx = (registers[rs1] instanceof RuntimeScalar)
+                    ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
                 registers[rd] = Operator.repeat(
                     registers[rs1],
                     (RuntimeScalar) registers[rs2],
-                    1  // scalar context
+                    repeatCtx
                 );
                 return pc;
             }

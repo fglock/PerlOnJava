@@ -1058,6 +1058,18 @@ public class InterpretedCode extends RuntimeCode {
                     int keyDeleteReg = bytecode[pc++];
                     sb.append("HASH_DELETE r").append(rd).append(" = delete r").append(hashDeleteReg).append("{r").append(keyDeleteReg).append("}\n");
                     break;
+                case Opcodes.ARRAY_EXISTS:
+                    rd = bytecode[pc++];
+                    int arrExistsReg = bytecode[pc++];
+                    int idxExistsReg = bytecode[pc++];
+                    sb.append("ARRAY_EXISTS r").append(rd).append(" = exists r").append(arrExistsReg).append("[r").append(idxExistsReg).append("]\n");
+                    break;
+                case Opcodes.ARRAY_DELETE:
+                    rd = bytecode[pc++];
+                    int arrDeleteReg = bytecode[pc++];
+                    int idxDeleteReg = bytecode[pc++];
+                    sb.append("ARRAY_DELETE r").append(rd).append(" = delete r").append(arrDeleteReg).append("[r").append(idxDeleteReg).append("]\n");
+                    break;
                 case Opcodes.HASH_KEYS:
                     rd = bytecode[pc++];
                     int hashKeysReg = bytecode[pc++];
