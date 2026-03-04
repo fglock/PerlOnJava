@@ -517,6 +517,61 @@ public class CompileAssignment {
 
                             bytecodeCompiler.lastResultReg = globReg;
                             return;
+                        } else if (sigilOp.operator.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
+                                && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                            String innerSigil = innerSigilOp.operator;
+                            String varName = innerSigil + idNode.name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
+                            int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
+
+                            int ourReg = bytecodeCompiler.hasVariable(varName) ? bytecodeCompiler.getVariableRegister(varName) : bytecodeCompiler.addVariable(varName, "our");
+
+                            node.right.accept(bytecodeCompiler);
+                            int valueReg = bytecodeCompiler.lastResultReg;
+
+                            switch (innerSigil) {
+                                case "$" -> {
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    int localReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emitReg(valueReg);
+                                    bytecodeCompiler.lastResultReg = localReg;
+                                }
+                                case "@" -> {
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    int localReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emitReg(valueReg);
+                                    bytecodeCompiler.lastResultReg = localReg;
+                                }
+                                case "%" -> {
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    int localReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emitReg(valueReg);
+                                    bytecodeCompiler.lastResultReg = localReg;
+                                }
+                                default -> bytecodeCompiler.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                            }
+                            return;
                         }
                     } else if (localOperand instanceof ListNode) {
                         // Handle local($x) = value or local($x, $y) = (v1, v2)

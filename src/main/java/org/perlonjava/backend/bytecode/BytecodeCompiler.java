@@ -2909,6 +2909,46 @@ public class BytecodeCompiler implements Visitor {
                         }
                     }
                 }
+
+                if (sigil.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
+                        && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                    String innerSigil = innerSigilOp.operator;
+                    String varName = innerSigil + idNode.name;
+                    String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalVarName);
+
+                    int ourReg = hasVariable(varName) ? getVariableRegister(varName) : addVariable(varName, "our");
+                    int rd = allocateRegister();
+                    switch (innerSigil) {
+                        case "$" -> {
+                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                            emitReg(ourReg);
+                            emit(nameIdx);
+                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                            emitReg(rd);
+                            emit(nameIdx);
+                        }
+                        case "@" -> {
+                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            emitReg(ourReg);
+                            emit(nameIdx);
+                            emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                            emitReg(rd);
+                            emit(nameIdx);
+                        }
+                        case "%" -> {
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(ourReg);
+                            emit(nameIdx);
+                            emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                            emitReg(rd);
+                            emit(nameIdx);
+                        }
+                        default -> throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                    }
+                    lastResultReg = rd;
+                    return;
+                }
             } else if (node.operand instanceof ListNode) {
                 // local ($x, $y) - list of localized global variables
                 ListNode listNode = (ListNode) node.operand;
