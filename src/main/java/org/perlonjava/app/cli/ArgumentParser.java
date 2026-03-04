@@ -923,6 +923,7 @@ public class ArgumentParser {
             case "--interpreter":
                 // Use bytecode interpreter instead of JVM compiler
                 parsedArgs.useInterpreter = true;
+                RuntimeCode.setUseInterpreter(true);
                 break;
             case "--help":
                 // Print help message and exit

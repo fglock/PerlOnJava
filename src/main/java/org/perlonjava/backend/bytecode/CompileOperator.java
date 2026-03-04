@@ -12,6 +12,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileOperator {
+    private static void compileScalarOperand(BytecodeCompiler bc, OperatorNode node, String opName) {
+        int savedContext = bc.currentCallContext;
+        bc.currentCallContext = RuntimeContextType.SCALAR;
+        try {
+            if (node.operand instanceof ListNode list) {
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(bc);
+                } else {
+                    bc.throwCompilerException(opName + " requires an argument");
+                }
+            } else {
+                node.operand.accept(bc);
+            }
+        } finally {
+            bc.currentCallContext = savedContext;
+        }
+    }
+
     public static void visitOperator(BytecodeCompiler bytecodeCompiler, OperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
@@ -2115,28 +2133,10 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             }
         } else if (op.equals("+")) {
-            // Unary + operator: forces numeric context on its operand
-            // For arrays/hashes in scalar context, this returns the size
-            // For scalars, this ensures the value is numeric
+            // Unary + operator: a no-op used for disambiguation (e.g., map +(...), LIST)
+            // It passes through the operand transparently without changing context.
             if (node.operand != null) {
-                // Evaluate operand in scalar context
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
-
-                    // Emit ARRAY_SIZE to convert to scalar
-                    // This handles arrays/hashes (converts to size) and passes through scalars
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
-                }
+                node.operand.accept(bytecodeCompiler);
             } else {
                 bytecodeCompiler.throwCompilerException("unary + operator requires an operand");
             }
@@ -2193,17 +2193,7 @@ public class CompileOperator {
             }
             // GENERATED_OPERATORS_START
         } else if (op.equals("int")) {
-            // int($x) - MathOperators.integer
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("int requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "int");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.INT);
@@ -2211,17 +2201,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("log")) {
-            // log($x) - MathOperators.log
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("log requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "log");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.LOG);
@@ -2229,17 +2209,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("sqrt")) {
-            // sqrt($x) - MathOperators.sqrt
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("sqrt requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "sqrt");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.SQRT);
@@ -2247,17 +2217,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("cos")) {
-            // cos($x) - MathOperators.cos
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("cos requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "cos");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.COS);
@@ -2265,17 +2225,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("sin")) {
-            // sin($x) - MathOperators.sin
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("sin requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "sin");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.SIN);
@@ -2283,17 +2233,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("exp")) {
-            // exp($x) - MathOperators.exp
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("exp requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "exp");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.EXP);
@@ -2301,17 +2241,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("abs")) {
-            // abs($x) - MathOperators.abs
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("abs requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "abs");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.ABS);
@@ -2319,17 +2249,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("binary~")) {
-            // binary~($x) - BitwiseOperators.bitwiseNotBinary
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("binary~ requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "binary~");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.BINARY_NOT);
@@ -2337,17 +2257,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("integerBitwiseNot")) {
-            // integerBitwiseNot($x) - BitwiseOperators.integerBitwiseNot
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("integerBitwiseNot requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "integerBitwiseNot");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.INTEGER_BITWISE_NOT);
@@ -2355,17 +2265,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("ord")) {
-            // ord($x) - ScalarOperators.ord
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("ord requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "ord");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.ORD);
@@ -2373,17 +2273,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("ordBytes")) {
-            // ordBytes($x) - ScalarOperators.ordBytes
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("ordBytes requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "ordBytes");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.ORD_BYTES);
@@ -2391,17 +2281,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("oct")) {
-            // oct($x) - ScalarOperators.oct
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("oct requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "oct");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.OCT);
@@ -2409,17 +2289,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("hex")) {
-            // hex($x) - ScalarOperators.hex
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("hex requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "hex");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.HEX);
@@ -2427,17 +2297,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("srand")) {
-            // srand($x) - Random.srand
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("srand requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "srand");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.SRAND);
@@ -2445,17 +2305,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chr")) {
-            // chr($x) - StringOperators.chr
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("chr requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "chr");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CHR);
@@ -2463,17 +2313,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chrBytes")) {
-            // chrBytes($x) - StringOperators.chrBytes
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("chrBytes requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "chrBytes");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CHR_BYTES);
@@ -2481,17 +2321,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("lengthBytes")) {
-            // lengthBytes($x) - StringOperators.lengthBytes
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("lengthBytes requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "lengthBytes");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.LENGTH_BYTES);
@@ -2499,17 +2329,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("quotemeta")) {
-            // quotemeta($x) - StringOperators.quotemeta
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("quotemeta requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "quotemeta");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.QUOTEMETA);
@@ -2517,17 +2337,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("fc")) {
-            // fc($x) - StringOperators.fc
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("fc requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "fc");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.FC);
@@ -2535,17 +2345,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("lc")) {
-            // lc($x) - StringOperators.lc
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("lc requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "lc");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.LC);
@@ -2553,17 +2353,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("lcfirst")) {
-            // lcfirst($x) - StringOperators.lcfirst
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("lcfirst requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "lcfirst");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.LCFIRST);
@@ -2571,17 +2361,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("uc")) {
-            // uc($x) - StringOperators.uc
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("uc requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "uc");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.UC);
@@ -2589,17 +2369,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("ucfirst")) {
-            // ucfirst($x) - StringOperators.ucfirst
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("ucfirst requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "ucfirst");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.UCFIRST);
@@ -2607,17 +2377,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("sleep")) {
-            // sleep($x) - Time.sleep
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("sleep requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "sleep");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.SLEEP);
@@ -2625,17 +2385,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("tell")) {
-            // tell($x) - IOOperator.tell
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("tell requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "tell");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.TELL);
@@ -2643,17 +2393,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("rmdir")) {
-            // rmdir($x) - Directory.rmdir
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("rmdir requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "rmdir");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.RMDIR);
@@ -2661,17 +2401,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("closedir")) {
-            // closedir($x) - Directory.closedir
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("closedir requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "closedir");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CLOSEDIR);
@@ -2679,17 +2409,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("rewinddir")) {
-            // rewinddir($x) - Directory.rewinddir
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("rewinddir requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "rewinddir");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.REWINDDIR);
@@ -2697,17 +2417,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("telldir")) {
-            // telldir($x) - Directory.telldir
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("telldir requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "telldir");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.TELLDIR);
@@ -2715,17 +2425,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chdir")) {
-            // chdir($x) - Directory.chdir
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("chdir requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "chdir");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CHDIR);
@@ -2733,17 +2433,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(argReg);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("exit")) {
-            // exit($x) - WarnDie.exit
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bytecodeCompiler);
-                } else {
-                    bytecodeCompiler.throwCompilerException("exit requires an argument");
-                }
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
+            compileScalarOperand(bytecodeCompiler, node, "exit");
             int argReg = bytecodeCompiler.lastResultReg;
             int rd = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.EXIT);

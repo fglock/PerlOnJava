@@ -89,6 +89,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         DISASSEMBLE = value;
     }
 
+    public static boolean USE_INTERPRETER =
+            System.getenv("JPERL_INTERPRETER") != null;
+
+    public static void setUseInterpreter(boolean value) {
+        USE_INTERPRETER = value;
+    }
+
     /**
      * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
      *

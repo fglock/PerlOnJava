@@ -175,7 +175,7 @@ public class InterpretedCode extends RuntimeCode {
      * @return A new InterpretedCode with captured variables
      */
     public InterpretedCode withCapturedVars(RuntimeBase[] capturedVars) {
-        return new InterpretedCode(
+        InterpretedCode copy = new InterpretedCode(
             this.bytecode,
             this.constants,
             this.stringPool,
@@ -192,6 +192,11 @@ public class InterpretedCode extends RuntimeCode {
             this.compilePackage,
             this.evalSiteRegistries
         );
+        copy.prototype = this.prototype;
+        copy.attributes = this.attributes;
+        copy.subName = this.subName;
+        copy.packageName = this.packageName;
+        return copy;
     }
 
     /**
@@ -1416,7 +1421,13 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    sb.append("DEREF_GLOB r").append(rd).append(" = *{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
+                    sb.append("DEREF_GLOB r").append(rd).append(" = *{r").append(rs).append("} strict pkg=").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.DEREF_GLOB_NONSTRICT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("DEREF_GLOB_NONSTRICT r").append(rd).append(" = *{r").append(rs).append("} pkg=").append(stringPool[nameIdx]).append("\n");
                     break;
                 case Opcodes.DEREF_ARRAY:
                     rd = bytecode[pc++];

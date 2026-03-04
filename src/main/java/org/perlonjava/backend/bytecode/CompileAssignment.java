@@ -29,7 +29,8 @@ public class CompileAssignment {
                     rhsContext = RuntimeContextType.SCALAR;
                 }
             } else if (leftOp.operator.equals("$")) {
-                // Regular scalar assignment: $x = ...
+                rhsContext = RuntimeContextType.SCALAR;
+            } else if (leftOp.operator.equals("*")) {
                 rhsContext = RuntimeContextType.SCALAR;
             }
         }
@@ -398,8 +399,7 @@ public class CompileAssignment {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if it's a lexical variable (should not be localized)
-                            if (bytecodeCompiler.hasVariable(varName)) {
+                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                                 bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
@@ -429,8 +429,7 @@ public class CompileAssignment {
                             // Handle local @array = value
                             String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if it's a lexical variable (should not be localized)
-                            if (bytecodeCompiler.hasVariable(varName)) {
+                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                                 bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
@@ -464,8 +463,7 @@ public class CompileAssignment {
                             // Handle local %hash = value
                             String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if it's a lexical variable (should not be localized)
-                            if (bytecodeCompiler.hasVariable(varName)) {
+                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                                 bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
@@ -515,6 +513,61 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(valueReg);
 
                             bytecodeCompiler.lastResultReg = globReg;
+                            return;
+                        } else if (sigilOp.operator.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
+                                && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                            String innerSigil = innerSigilOp.operator;
+                            String varName = innerSigil + idNode.name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
+                            int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
+
+                            int ourReg = bytecodeCompiler.hasVariable(varName) ? bytecodeCompiler.getVariableRegister(varName) : bytecodeCompiler.addVariable(varName, "our");
+
+                            node.right.accept(bytecodeCompiler);
+                            int valueReg = bytecodeCompiler.lastResultReg;
+
+                            switch (innerSigil) {
+                                case "$" -> {
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    int localReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emitReg(valueReg);
+                                    bytecodeCompiler.lastResultReg = localReg;
+                                }
+                                case "@" -> {
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    int localReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emitReg(valueReg);
+                                    bytecodeCompiler.lastResultReg = localReg;
+                                }
+                                case "%" -> {
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    int localReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emit(nameIdx);
+                                    bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
+                                    bytecodeCompiler.emitReg(localReg);
+                                    bytecodeCompiler.emitReg(valueReg);
+                                    bytecodeCompiler.lastResultReg = localReg;
+                                }
+                                default -> bytecodeCompiler.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                            }
                             return;
                         }
                     } else if (localOperand instanceof ListNode) {
@@ -733,8 +786,11 @@ public class CompileAssignment {
                         // Lexical variable - check if it's captured
                         int targetReg = bytecodeCompiler.getVariableRegister(varName);
 
-                        if (bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName)) {
-                            // Captured variable - use SET_SCALAR to preserve aliasing
+                        if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
+                                || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
+                            // Captured variable - use SET_SCALAR to preserve aliasing.
+                            // LOAD_UNDEF would replace the register with a new RuntimeScalar,
+                            // breaking the shared reference that closures depend on.
                             bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
@@ -1072,11 +1128,20 @@ public class CompileAssignment {
 
                 if (bytecodeCompiler.hasVariable(varName)) {
                     int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                    bytecodeCompiler.emitReg(targetReg);
-                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                    bytecodeCompiler.emitReg(targetReg);
-                    bytecodeCompiler.emitReg(valueReg);
+                    String varNameWithSigil = varName.startsWith("$") ? varName : "$" + varName;
+                    if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varNameWithSigil))
+                            || bytecodeCompiler.closureCapturedVarNames.contains(varNameWithSigil)
+                            || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
+                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    } else {
+                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    }
                     bytecodeCompiler.lastResultReg = targetReg;
                 } else {
                     // Global variable (varName has no sigil here)
@@ -1660,7 +1725,8 @@ public class CompileAssignment {
 
                                 if (bytecodeCompiler.hasVariable(varName)) {
                                     int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                                    if (bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName)) {
+                                    if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
+                                            || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
                                         bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                         bytecodeCompiler.emitReg(targetReg);
                                         bytecodeCompiler.emitReg(elementReg);

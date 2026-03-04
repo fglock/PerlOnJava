@@ -1502,10 +1502,13 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.STORE_GLOB: {
-                        // Store to glob: glob.set(value)
                         int globReg = bytecode[pc++];
                         int valueReg = bytecode[pc++];
-                        ((RuntimeGlob) registers[globReg]).set((RuntimeScalar) registers[valueReg]);
+                        Object val = registers[valueReg];
+                        RuntimeScalar scalarVal = (val instanceof RuntimeScalar)
+                                ? (RuntimeScalar) val
+                                : ((RuntimeList) val).scalar();
+                        ((RuntimeGlob) registers[globReg]).set(scalarVal);
                         break;
                     }
 
@@ -1965,13 +1968,7 @@ public class BytecodeInterpreter {
                         RuntimeList list = listBase.getList();
                         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
                         RuntimeList result = ListOperators.grep(list, closure, ctx);
-
-                        // In scalar context, return the count of elements
-                        if (ctx == RuntimeContextType.SCALAR) {
-                            registers[rd] = new RuntimeScalar(result.elements.size());
-                        } else {
-                            registers[rd] = result;
-                        }
+                        registers[rd] = result;
                         break;
                     }
 
@@ -2112,6 +2109,7 @@ public class BytecodeInterpreter {
                     case Opcodes.SLEEP_OP:
                     case Opcodes.ALARM_OP:
                     case Opcodes.DEREF_GLOB:
+                    case Opcodes.DEREF_GLOB_NONSTRICT:
                     case Opcodes.LOAD_GLOB_DYNAMIC:
                     case Opcodes.DEREF_SCALAR_STRICT:
                     case Opcodes.DEREF_SCALAR_NONSTRICT:
@@ -2994,10 +2992,11 @@ public class BytecodeInterpreter {
             }
 
             case Opcodes.NOT: {
-                // Logical NOT: rd = !rs
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
-                RuntimeScalar val = (RuntimeScalar) registers[rs];
+                RuntimeScalar val = (registers[rs] instanceof RuntimeScalar)
+                    ? (RuntimeScalar) registers[rs]
+                    : ((RuntimeList) registers[rs]).scalar();
                 registers[rd] = val.getBoolean() ?
                     RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
                 return pc;
@@ -3267,6 +3266,8 @@ public class BytecodeInterpreter {
                 return SlowOpcodeHandler.executeAlarm(bytecode, pc, registers);
             case Opcodes.DEREF_GLOB:
                 return SlowOpcodeHandler.executeDerefGlob(bytecode, pc, registers, code);
+            case Opcodes.DEREF_GLOB_NONSTRICT:
+                return SlowOpcodeHandler.executeDerefGlobNonStrict(bytecode, pc, registers, code);
             case Opcodes.LOAD_GLOB_DYNAMIC:
                 return SlowOpcodeHandler.executeLoadGlobDynamic(bytecode, pc, registers, code);
             case Opcodes.DEREF_SCALAR_STRICT:

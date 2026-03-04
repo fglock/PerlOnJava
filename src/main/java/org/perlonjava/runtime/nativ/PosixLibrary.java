@@ -46,6 +46,10 @@ public interface PosixLibrary extends Library {
 
     int umask(int mask);
 
+    int stat(String path, Pointer buf);
+
+    int lstat(String path, Pointer buf);
+
     int unlink(String path) throws LastErrorException;
 
     int rename(String oldpath, String newpath) throws LastErrorException;
