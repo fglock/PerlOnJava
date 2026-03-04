@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.operators.ChownOperator;
+import org.perlonjava.runtime.operators.Operator;
 import org.perlonjava.runtime.operators.Directory;
 import org.perlonjava.runtime.operators.WaitpidOperator;
 import org.perlonjava.runtime.operators.Unpack;
@@ -58,6 +59,7 @@ public class MiscOpcodeHandler {
             case Opcodes.VEC -> Vec.vec(args);
             case Opcodes.LOCALTIME -> Time.localtime(args, ctx);
             case Opcodes.GMTIME -> Time.gmtime(args, ctx);
+            case Opcodes.RESET -> Operator.reset(args, ctx);
             case Opcodes.CRYPT -> Crypt.crypt(args);
             // I/O operators
             case Opcodes.CLOSE -> IOOperator.close(ctx, argsArray);

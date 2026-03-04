@@ -1004,6 +1004,15 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
+                } else if (leftOp.operator.equals("substr")) {
+                    node.left.accept(bytecodeCompiler);
+                    int lvalueReg = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(lvalueReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode) {
                     // Array dereference assignment: @$r = ...
                     // The operand should be a scalar variable containing an array reference

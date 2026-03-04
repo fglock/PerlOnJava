@@ -2346,6 +2346,7 @@ public class BytecodeInterpreter {
                     case Opcodes.VEC:
                     case Opcodes.LOCALTIME:
                     case Opcodes.GMTIME:
+                    case Opcodes.RESET:
                     case Opcodes.CRYPT:
                     case Opcodes.CLOSE:
                     case Opcodes.BINMODE:
