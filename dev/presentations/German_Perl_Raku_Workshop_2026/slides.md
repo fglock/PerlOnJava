@@ -59,7 +59,7 @@ You have **50,000 lines of Perl** data-processing code. Your company is moving t
 - Access any JDBC database (PostgreSQL, MySQL, Oracle, SQLite) — no C drivers needed
 - Package as a single JAR for deployment (future)
 - Embed Perl scripting in Java apps via the standard JSR-223 scripting API
-- Use JNA (Java Native Access) for platform-specific native libraries
+- Use jnr-posix for platform-specific native POSIX operations
 - Deploy to Docker, Kubernetes, Debian packages — anywhere Java runs
 
 ---
@@ -879,9 +879,9 @@ Aliasing works by sharing references in maps, not copying. `globalGlobs` tracks 
 - Direct access to Java libraries and JVM ecosystem
 - Examples: `DBI` (uses JDBC), native Java library bindings
 
-**Key difference:** XS → JNA (Java Native Access) for native libraries
+**Key difference:** XS → jnr-posix for native POSIX operations
 
-JNA is the Java equivalent of Perl's XS: it lets Java code call native C libraries without writing C. Perl 5 XS modules won't work directly, but Java equivalents with the same API can be created — easier to write and maintain than C/XS, with access to the entire Java ecosystem.
+jnr-posix provides direct access to POSIX APIs (file permissions, signals, process control) without writing C. Perl 5 XS modules won't work directly, but Java equivalents with the same API can be created — easier to write and maintain than C/XS, with access to the entire Java ecosystem.
 
 ---
 
@@ -899,7 +899,7 @@ JNA is the Java equivalent of Perl's XS: it lets Java code call native C librari
 -  Taint checks
 
 **Workarounds available:**
-- Use JNA for native library access instead of XS
+- Use jnr-posix for native POSIX access instead of XS
 - Use Java threading APIs instead of Perl threads
 - File auto-close happens at program end
 

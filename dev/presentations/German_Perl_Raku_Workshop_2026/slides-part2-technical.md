@@ -537,7 +537,7 @@ say "Caught: $@" if $@;
 4. Check is a volatile boolean read (~2 CPU cycles) — zero cost when idle
 
 Note:
-The kill() operator also uses this mechanism for self-signals. On Unix, external signals use JNA to call POSIX kill(). On Windows, signals map to GenerateConsoleCtrlEvent and TerminateProcess. The signal queue pattern ensures handlers always execute in the original thread context, not the timer thread.
+The kill() operator also uses this mechanism for self-signals. On Unix, external signals use jnr-posix to call POSIX kill(). On Windows, signals map to GenerateConsoleCtrlEvent and TerminateProcess. The signal queue pattern ensures handlers always execute in the original thread context, not the timer thread.
 
 ---
 
@@ -591,7 +591,7 @@ Also: globalIORefs → IO, globalFormatRefs → FORMAT. Slot access: *foo{CODE} 
 ## XSLoader: Java Instead of C
 
 - Loads **Java extensions** instead of C shared libraries
-- **JNA** (Java Native Access) replaces XS for native calls
+- **jnr-posix** replaces XS for native POSIX calls
 - No C compiler needed
 
 Note:
@@ -646,7 +646,7 @@ This is why the dual backend matters beyond performance. GraalVM native image gi
 - Some regex features, taint checks
 
 Note:
-Workarounds: JNA for native access, Java threading APIs, file auto-close at exit. XS modules use Java equivalents.
+Workarounds: jnr-posix for native access, Java threading APIs, file auto-close at exit. XS modules use Java equivalents.
 
 ---
 

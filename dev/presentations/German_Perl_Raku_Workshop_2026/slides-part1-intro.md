@@ -73,7 +73,7 @@ JSR-223 is the standard Java scripting API, available since Java 6. It allows bi
 perlonjava.jar
 ├── org/perlonjava/   ← 392 Java compiled classes
 ├── lib/              ← 341 Perl modules (DBI, JSON, HTTP::Tiny…)
-├── ASM, ICU4J, JNA   ← Java libraries bundled
+├── ASM, ICU4J, jnr-posix ← Java libraries bundled
 └── META-INF/services ← JSR-223 auto-discovery
 ```
 
