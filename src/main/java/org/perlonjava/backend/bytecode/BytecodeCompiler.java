@@ -423,6 +423,20 @@ public class BytecodeCompiler implements Visitor {
             return false;
         }
 
+        // Allow variables that already exist in the global registry
+        // (e.g., created by `use vars` at parse time)
+        // This mirrors the allowIfAlreadyExists logic in EmitVariable.java
+        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+        if (sigil.equals("$") && GlobalVariable.existsGlobalVariable(normalizedName)) {
+            return false;
+        }
+        if (sigil.equals("@") && GlobalVariable.existsGlobalArray(normalizedName)) {
+            return false;
+        }
+        if (sigil.equals("%") && !normalizedName.endsWith("::") && GlobalVariable.existsGlobalHash(normalizedName)) {
+            return false;
+        }
+
         // BLOCK: Unqualified variable under strict vars
         return true;
     }
