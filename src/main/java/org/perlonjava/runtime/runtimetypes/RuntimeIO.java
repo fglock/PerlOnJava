@@ -912,7 +912,7 @@ public class RuntimeIO extends RuntimeScalar {
 
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
-            throw new PerlCompilerException("Unsupported file mode: " + mode);
+            throw new PerlCompilerException("Unknown open() mode '" + mode + "'");
         }
         return new HashSet<>(options);
     }

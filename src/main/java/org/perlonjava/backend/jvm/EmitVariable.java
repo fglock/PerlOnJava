@@ -361,7 +361,7 @@ public class EmitVariable {
 
                 // Compute createIfNotExists flag - determines if variable can be auto-vivified
                 boolean createIfNotExists = name.contains("::")  // Fully qualified: $Package::var
-                        || ScalarUtils.isInteger(name)           // Regex capture: $1, $2, etc.
+                        || (ScalarUtils.isInteger(name) && !name.startsWith("0"))  // Regex capture: $1, $2, etc.
                         || isSpecialSortVar                      // Sort variables: $a, $b
                         || isBuiltinSpecialLengthOneVar(sigil, name) // $%, $-, $[, $}, etc.
                         || isBuiltinSpecialScalarVar(sigil, name) // ${^GLOBAL_PHASE}, $ARGV, $ENV, etc.
