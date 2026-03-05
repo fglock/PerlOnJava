@@ -336,12 +336,9 @@ public class GlobalVariable {
             }
         }
         
-        // Check if it's a user-defined subroutine
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
-            // Check if the subroutine has actual implementation (not just a placeholder)
-            boolean result = (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null || runtimeCode.isBuiltin);
-            return result ? scalarTrue : scalarFalse;
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
         }
         return scalarFalse;
     }
