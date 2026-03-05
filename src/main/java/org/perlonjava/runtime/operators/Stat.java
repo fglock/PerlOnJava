@@ -1,14 +1,11 @@
 package org.perlonjava.runtime.operators;
 
-import com.sun.jna.Library;
-import com.sun.jna.Memory;
-import com.sun.jna.Native;
-import com.sun.jna.Platform;
-import com.sun.jna.Pointer;
+import jnr.posix.FileStat;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -50,92 +47,22 @@ public class Stat {
 
     static NativeStatFields lastNativeStatFields;
 
-    private interface MsvcrtLib extends Library {
-        int _stat64(String path, Pointer buf);
-    }
-
-    private static final MsvcrtLib MSVCRT;
-    static {
-        MsvcrtLib lib = null;
-        if (Platform.isWindows()) {
-            try { lib = Native.load("msvcrt", MsvcrtLib.class); } catch (Exception e) { }
-        }
-        MSVCRT = lib;
-    }
-
     static NativeStatFields nativeStat(String path, boolean followLinks) {
         try {
-            if (Platform.isWindows()) return nativeStatWindows(path);
-            return nativeStatUnix(path, followLinks);
+            if (NativeUtils.IS_WINDOWS) return null;
+            FileStat fs = followLinks
+                ? PosixLibrary.INSTANCE.stat(path)
+                : PosixLibrary.INSTANCE.lstat(path);
+            if (fs == null) return null;
+            return new NativeStatFields(
+                fs.dev(), fs.ino(), fs.mode(), fs.nlink(),
+                fs.uid(), fs.gid(), fs.rdev(), fs.st_size(),
+                fs.atime(), fs.mtime(), fs.ctime(),
+                fs.blockSize(), fs.blocks()
+            );
         } catch (Throwable e) {
             return null;
         }
-    }
-
-    private static NativeStatFields nativeStatUnix(String path, boolean followLinks) {
-        Memory buf = new Memory(256);
-        int rc = followLinks
-            ? PosixLibrary.INSTANCE.stat(path, buf)
-            : PosixLibrary.INSTANCE.lstat(path, buf);
-        if (rc != 0) return null;
-        return Platform.isMac() ? parseMacOsStat(buf) : parseLinuxStat(buf);
-    }
-
-    private static NativeStatFields parseMacOsStat(Pointer buf) {
-        return new NativeStatFields(
-            buf.getInt(0) & 0xFFFFFFFFL,
-            buf.getLong(8),
-            buf.getShort(4) & 0xFFFF,
-            buf.getShort(6) & 0xFFFF,
-            buf.getInt(16) & 0xFFFFFFFFL,
-            buf.getInt(20) & 0xFFFFFFFFL,
-            buf.getInt(24) & 0xFFFFFFFFL,
-            buf.getLong(96),
-            buf.getLong(32),
-            buf.getLong(48),
-            buf.getLong(64),
-            buf.getInt(112) & 0xFFFFFFFFL,
-            buf.getLong(104)
-        );
-    }
-
-    private static NativeStatFields parseLinuxStat(Pointer buf) {
-        return new NativeStatFields(
-            buf.getLong(0),
-            buf.getLong(8),
-            buf.getInt(24) & 0xFFFFFFFFL,
-            buf.getLong(16),
-            buf.getInt(28) & 0xFFFFFFFFL,
-            buf.getInt(32) & 0xFFFFFFFFL,
-            buf.getLong(40),
-            buf.getLong(48),
-            buf.getLong(72),
-            buf.getLong(88),
-            buf.getLong(104),
-            buf.getLong(56),
-            buf.getLong(64)
-        );
-    }
-
-    private static NativeStatFields nativeStatWindows(String path) {
-        if (MSVCRT == null) return null;
-        Memory buf = new Memory(64);
-        int rc = MSVCRT._stat64(path, buf);
-        if (rc != 0) return null;
-        return new NativeStatFields(
-            buf.getInt(0) & 0xFFFFFFFFL,
-            buf.getShort(4) & 0xFFFF,
-            buf.getShort(6) & 0xFFFF,
-            buf.getShort(8) & 0xFFFF,
-            buf.getShort(10) & 0xFFFF,
-            buf.getShort(12) & 0xFFFF,
-            buf.getInt(16) & 0xFFFFFFFFL,
-            buf.getLong(24),
-            buf.getLong(32),
-            buf.getLong(40),
-            buf.getLong(48),
-            0, 0
-        );
     }
 
     private static int getPermissionsOctal(BasicFileAttributes basicAttr, PosixFileAttributes attr) {

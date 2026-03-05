@@ -1,12 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import com.sun.jna.LastErrorException;
-import com.sun.jna.Native;
-import com.sun.jna.Platform;
-import com.sun.jna.platform.win32.Kernel32;
-import com.sun.jna.platform.win32.WinBase;
-import com.sun.jna.platform.win32.WinNT;
-import com.sun.jna.ptr.IntByReference;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -19,68 +13,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
-/**
- * Native implementation of Perl's waitpid operator using JNA
- * <p>
- * - On POSIX systems: Uses native waitpid() system call
- * - On Windows: Uses Windows process APIs for equivalent functionality
- * - Properly retrieves exit codes and signal information
- * - Supports WNOHANG for non-blocking waits
- * - Better performance (no external process spawning)
- */
 public class WaitpidOperator {
 
-    // POSIX wait flags
-    public static final int WNOHANG = 1;      // Non-blocking wait
-    public static final int WUNTRACED = 2;    // Also return if child stopped
-    public static final int WCONTINUED = 8;   // Also return if stopped child continued
+    public static final int WNOHANG = 1;
+    public static final int WUNTRACED = 2;
+    public static final int WCONTINUED = 8;
 
-    // Windows-specific constants
-    private static final int STILL_ACTIVE = 259;
-    private static final int INFINITE = -1;
-    private static final int WAIT_TIMEOUT = 0x00000102;
+    private static final Map<Long, Process> windowsChildProcesses = new ConcurrentHashMap<>();
 
-    // Track child processes on Windows (since Windows doesn't have parent-child waitpid semantics)
-    private static final Map<Integer, WinNT.HANDLE> windowsChildProcesses = new ConcurrentHashMap<>();
+    private static final boolean IS_WINDOWS = NativeUtils.IS_WINDOWS;
 
-    private static final boolean IS_WINDOWS = Platform.isWindows();
-
-    /**
-     * Clean up any remaining Windows handles on shutdown
-     */
-    static {
-        if (IS_WINDOWS) {
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                for (WinNT.HANDLE handle : windowsChildProcesses.values()) {
-                    try {
-                        Kernel32.INSTANCE.CloseHandle(handle);
-                    } catch (Exception ignored) {
-                    }
-                }
-                windowsChildProcesses.clear();
-            }));
-        }
-    }
-
-    /**
-     * Implements Perl's wait operator (waits for any child process)
-     *
-     * @return RuntimeScalar with PID of terminated child, or -1 if no children
-     */
     public static RuntimeScalar waitForChild() {
-        // wait() is equivalent to waitpid(-1, 0)
         return waitpid(SCALAR, new RuntimeScalar(-1), new RuntimeScalar(0));
     }
 
-    /**
-     * Implements Perl's waitpid operator using native system calls
-     *
-     * @param args RuntimeBase containing the PID to wait for; RuntimeBase containing wait flags
-     * @return RuntimeScalar with:
-     * - PID: if the specified process has terminated
-     * - 0: if WNOHANG is set and process is still running
-     * - -1: for error conditions
-     */
     public static RuntimeScalar waitpid(int ctx, RuntimeBase... args) {
         var list = new RuntimeArray(args);
 
@@ -102,23 +48,23 @@ public class WaitpidOperator {
             }
         }
         try {
-            IntByReference status = new IntByReference();
-            int result = PosixLibrary.INSTANCE.waitpid(pid, status, flags);
+            int[] status = new int[1];
+            long result = PosixLibrary.INSTANCE.waitpid(pid, status, flags);
 
             if (result > 0) {
-                setExitStatus(status.getValue());
-                return new RuntimeScalar(result);
+                setExitStatus(status[0]);
+                return new RuntimeScalar((int) result);
             } else if (result == 0) {
                 return new RuntimeScalar(0);
             } else {
-                int errno = Native.getLastError();
+                int errno = PosixLibrary.INSTANCE.errno();
                 if (errno == 10) { // ECHILD
                     return new RuntimeScalar(-1);
                 }
                 setExitStatus(-1);
                 return new RuntimeScalar(-1);
             }
-        } catch (LastErrorException e) {
+        } catch (Exception e) {
             return new RuntimeScalar(-1);
         }
     }
@@ -143,159 +89,85 @@ public class WaitpidOperator {
         }
     }
 
-    /**
-     * Windows implementation using Windows process APIs
-     */
     private static RuntimeScalar waitpidWindows(int pid, int flags) {
         boolean nonBlocking = (flags & WNOHANG) != 0;
 
         if (pid <= 0) {
-            // Windows doesn't support process groups in the same way
-            // Return -1 to indicate no matching processes
             return new RuntimeScalar(-1);
         }
 
-        // First check if this is one of our tracked child processes
-        WinNT.HANDLE childHandle = windowsChildProcesses.get(pid);
-
-        WinNT.HANDLE processHandle;
-        boolean isOurChild = false;
-
-        if (childHandle != null) {
-            processHandle = childHandle;
-            isOurChild = true;
-        } else {
-            // Try to open the process (may fail if it doesn't exist or we lack permissions)
-            processHandle = Kernel32.INSTANCE.OpenProcess(
-                    WinNT.PROCESS_QUERY_INFORMATION | WinNT.SYNCHRONIZE,
-                    false,
-                    pid
-            );
-
-            if (processHandle == null) {
-                // Process doesn't exist or we can't access it
-                return new RuntimeScalar(-1);
-            }
-        }
-
-        try {
-            // Wait for the process
-            int waitTime = nonBlocking ? 0 : INFINITE;
-            int waitResult = Kernel32.INSTANCE.WaitForSingleObject(processHandle, waitTime);
-
-            if (waitResult == WinBase.WAIT_OBJECT_0) {
-                // Process has terminated
-                IntByReference exitCode = new IntByReference();
-                if (Kernel32.INSTANCE.GetExitCodeProcess(processHandle, exitCode)) {
-                    // Windows exit codes are just the value, not encoded like POSIX
-                    // Shift left by 8 to match POSIX convention
-                    setExitStatus(exitCode.getValue() << 8);
-                } else {
-                    setExitStatus(0);
-                }
-
-                // Remove from our tracked children if it was there
-                if (isOurChild) {
-                    windowsChildProcesses.remove(pid);
-                }
-
-                return new RuntimeScalar(pid);
-            } else if (waitResult == WAIT_TIMEOUT) {
-                // WNOHANG was specified and process is still running
-                return new RuntimeScalar(0);
+        Process childProcess = windowsChildProcesses.get((long) pid);
+        if (childProcess != null) {
+            if (nonBlocking) {
+                if (childProcess.isAlive()) return new RuntimeScalar(0);
             } else {
-                // Error occurred
-                return new RuntimeScalar(-1);
+                try {
+                    childProcess.waitFor();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return new RuntimeScalar(-1);
+                }
             }
-        } finally {
-            // Clean up handle if we opened it
-            if (!isOurChild && processHandle != null) {
-                Kernel32.INSTANCE.CloseHandle(processHandle);
-            }
+            int exitCode = childProcess.exitValue();
+            windowsChildProcesses.remove((long) pid);
+            setExitStatus(exitCode << 8);
+            return new RuntimeScalar(pid);
         }
+
+        var ph = ProcessHandle.of(pid);
+        if (ph.isEmpty()) return new RuntimeScalar(-1);
+        if (nonBlocking) {
+            if (ph.get().isAlive()) return new RuntimeScalar(0);
+            setExitStatus(0);
+            return new RuntimeScalar(pid);
+        }
+        ph.get().onExit().join();
+        setExitStatus(0);
+        return new RuntimeScalar(pid);
     }
 
-    /**
-     * Register a child process on Windows
-     * This should be called when creating child processes on Windows
-     * to enable proper parent-child waitpid semantics
-     */
-    public static void registerWindowsChildProcess(int pid, WinNT.HANDLE handle) {
-        if (IS_WINDOWS) {
-            windowsChildProcesses.put(pid, handle);
-        }
+    public static void registerChildProcess(long pid, Process process) {
+        windowsChildProcesses.put(pid, process);
     }
 
-    /**
-     * Set Perl's exit status variables
-     *
-     * @param status The raw status value from waitpid
-     */
     private static void setExitStatus(int status) {
-        // Set $? (CHILD_ERROR)
         getGlobalVariable("main::?").set(new RuntimeScalar(status));
 
-        // Set ${^CHILD_ERROR_NATIVE}
         try {
             getGlobalVariable("main::^CHILD_ERROR_NATIVE").set(new RuntimeScalar(status));
         } catch (Exception e) {
-            // Variable might not exist in all Perl versions
         }
     }
 
-    /**
-     * Check if a process is running (utility method)
-     *
-     * @param pid Process ID to check
-     * @return true if process appears to be running, false if terminated/not found
-     */
     public static boolean isProcessRunning(int pid) {
         RuntimeScalar result = waitpid(SCALAR,
                 new RuntimeScalar(pid),
                 new RuntimeScalar(WNOHANG)
         );
-        return result.getInt() == 0; // 0 means still running with WNOHANG
+        return result.getInt() == 0;
     }
 
-    /**
-     * Extract exit code from status value (WEXITSTATUS macro)
-     */
     public static int getExitCode(int status) {
         return (status >> 8) & 0xFF;
     }
 
-    /**
-     * Check if process exited normally (WIFEXITED macro)
-     */
     public static boolean exitedNormally(int status) {
         return (status & 0xFF) == 0;
     }
 
-    /**
-     * Get signal that terminated process (WTERMSIG macro)
-     */
     public static int getTerminationSignal(int status) {
         return status & 0x7F;
     }
 
-    /**
-     * Check if process was terminated by signal (WIFSIGNALED macro)
-     */
     public static boolean wasSignaled(int status) {
         int sig = getTerminationSignal(status);
         return sig != 0 && sig != 0x7F;
     }
 
-    /**
-     * Check if process was stopped (WIFSTOPPED macro)
-     */
     public static boolean wasStopped(int status) {
         return (status & 0xFF) == 0x7F;
     }
 
-    /**
-     * Get signal that stopped process (WSTOPSIG macro)
-     */
     public static int getStopSignal(int status) {
         return (status >> 8) & 0xFF;
     }

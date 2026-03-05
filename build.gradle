@@ -73,8 +73,7 @@ dependencies {
     implementation libs.snakeyaml.engine              // YAML processing
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
-    implementation libs.jna                           // Native access
-    implementation libs.jna.platform                  // Native access
+    implementation libs.jnr.posix                      // Native access
 
     // Testing dependencies
     testImplementation libs.junit.jupiter.api

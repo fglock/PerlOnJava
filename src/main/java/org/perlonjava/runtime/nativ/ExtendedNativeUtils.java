@@ -3,8 +3,7 @@ package org.perlonjava.runtime.nativ;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import com.sun.jna.Platform;
-import com.sun.jna.Pointer;
+import jnr.posix.Passwd;
 
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
@@ -13,17 +12,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
-/**
- * Extended native operations for missing Perl operators
- */
 public class ExtendedNativeUtils extends NativeUtils {
 
-    // Cache for network and user info lookups
     private static final Map<String, RuntimeArray> userInfoCache = new ConcurrentHashMap<>();
     private static final Map<String, RuntimeArray> groupInfoCache = new ConcurrentHashMap<>();
     private static final Map<String, RuntimeArray> hostInfoCache = new ConcurrentHashMap<>();
 
-    // Thread-local iterator state for *ent functions
     private static final ThreadLocal<Iterator<String>> userIterator = new ThreadLocal<>();
     private static final ThreadLocal<Iterator<String>> groupIterator = new ThreadLocal<>();
     private static final ThreadLocal<Iterator<String>> hostIterator = new ThreadLocal<>();
@@ -31,7 +25,6 @@ public class ExtendedNativeUtils extends NativeUtils {
     private static final ThreadLocal<Iterator<String>> protoIterator = new ThreadLocal<>();
     private static final ThreadLocal<Iterator<String>> servIterator = new ThreadLocal<>();
 
-    // System V IPC structures simulation
     private static final Map<Integer, RuntimeArray> messageQueues = new ConcurrentHashMap<>();
     private static final Map<Integer, RuntimeArray> semaphores = new ConcurrentHashMap<>();
     private static final Map<Integer, RuntimeArray> sharedMemory = new ConcurrentHashMap<>();
@@ -39,9 +32,6 @@ public class ExtendedNativeUtils extends NativeUtils {
 
     // ================== User/Group Information Functions ==================
 
-    /**
-     * Get login name of current user
-     */
     public static RuntimeScalar getlogin(int ctx, RuntimeBase... args) {
         try {
             String username = System.getProperty("user.name");
@@ -51,25 +41,19 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
     }
 
-    private static String ptrString(Pointer p, long offset) {
-        Pointer s = p.getPointer(offset);
-        return s != null ? s.getString(0) : "";
-    }
-
-    private static RuntimeList passwdPointerToList(Pointer pw) {
+    private static RuntimeList passwdToList(Passwd pw) {
         if (pw == null) return new RuntimeList();
         RuntimeArray result = new RuntimeArray();
-        String name = ptrString(pw, 0);
-        String passwd = ptrString(pw, 8);
-        int uid = pw.getInt(16);
-        int gid = pw.getInt(20);
-        if (Platform.isMac()) {
-            // macOS struct passwd: name(0) passwd(8) uid(16) gid(20) change(24) class(32) gecos(40) dir(48) shell(56) expire(64)
-            long change = pw.getLong(24);
-            String gecos = ptrString(pw, 40);
-            String dir = ptrString(pw, 48);
-            String shell = ptrString(pw, 56);
-            long expire = pw.getLong(64);
+        String name = pw.getLoginName();
+        String passwd = pw.getPassword();
+        int uid = (int) pw.getUID();
+        int gid = (int) pw.getGID();
+        if (IS_MAC) {
+            long change = pw.getPasswdChangeTime();
+            String gecos = pw.getGECOS();
+            String dir = pw.getHome();
+            String shell = pw.getShell();
+            long expire = pw.getExpire();
             RuntimeArray.push(result, new RuntimeScalar(name));
             RuntimeArray.push(result, new RuntimeScalar(passwd));
             RuntimeArray.push(result, new RuntimeScalar(uid));
@@ -81,10 +65,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, new RuntimeScalar(shell));
             RuntimeArray.push(result, new RuntimeScalar(expire));
         } else {
-            // Linux struct passwd: name(0) passwd(8) uid(16) gid(20) gecos(24) dir(32) shell(40)
-            String gecos = ptrString(pw, 24);
-            String dir = ptrString(pw, 32);
-            String shell = ptrString(pw, 40);
+            String gecos = pw.getGECOS();
+            String dir = pw.getHome();
+            String shell = pw.getShell();
             RuntimeArray.push(result, new RuntimeScalar(name));
             RuntimeArray.push(result, new RuntimeScalar(passwd));
             RuntimeArray.push(result, new RuntimeScalar(uid));
@@ -100,26 +83,26 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     private static RuntimeList nativeGetpwnam(String username) {
-        Pointer pw = PosixLibrary.INSTANCE.getpwnam(username);
-        return passwdPointerToList(pw);
+        Passwd pw = PosixLibrary.INSTANCE.getpwnam(username);
+        return passwdToList(pw);
     }
 
     private static RuntimeList nativeGetpwuid(int uid) {
-        Pointer pw = PosixLibrary.INSTANCE.getpwuid(uid);
-        return passwdPointerToList(pw);
+        Passwd pw = PosixLibrary.INSTANCE.getpwuid(uid);
+        return passwdToList(pw);
     }
 
     public static RuntimeList getpwnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeList();
         String username = args[0].toString();
-        if (Platform.isWindows()) {
+        if (IS_WINDOWS) {
             if (ctx == RuntimeContextType.SCALAR) return new RuntimeList();
             return windowsGetpwnam(username);
         }
         try {
             if (ctx == RuntimeContextType.SCALAR) {
-                Pointer pw = PosixLibrary.INSTANCE.getpwnam(username);
-                if (pw != null) return new RuntimeScalar(pw.getInt(16)).getList();
+                Passwd pw = PosixLibrary.INSTANCE.getpwnam(username);
+                if (pw != null) return new RuntimeScalar((int) pw.getUID()).getList();
                 return new RuntimeList();
             }
             return nativeGetpwnam(username);
@@ -131,14 +114,14 @@ public class ExtendedNativeUtils extends NativeUtils {
     public static RuntimeList getpwuid(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeList();
         int uid = args[0].scalar().getInt();
-        if (Platform.isWindows()) {
+        if (IS_WINDOWS) {
             if (ctx == RuntimeContextType.SCALAR) return new RuntimeList();
             return windowsGetpwuid(uid);
         }
         try {
             if (ctx == RuntimeContextType.SCALAR) {
-                Pointer pw = PosixLibrary.INSTANCE.getpwuid(uid);
-                if (pw != null) return new RuntimeScalar(ptrString(pw, 0)).getList();
+                Passwd pw = PosixLibrary.INSTANCE.getpwuid(uid);
+                if (pw != null) return new RuntimeScalar(pw.getLoginName()).getList();
                 return new RuntimeList();
             }
             return nativeGetpwuid(uid);
@@ -175,9 +158,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeList();
     }
 
-    /**
-     * Get group entry by name
-     */
     public static RuntimeArray getgrnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String groupname = args[0].toString();
@@ -189,20 +169,17 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         RuntimeArray result = new RuntimeArray();
         try {
-            // Simplified group info - in real implementation would query system
             if (IS_WINDOWS) {
-                // Use computer workgroup or domain
                 String computerName = System.getenv("COMPUTERNAME");
                 if (groupname.equals("Users") || groupname.equals(computerName)) {
-                    RuntimeArray.push(result, new RuntimeScalar(groupname)); // name
-                    RuntimeArray.push(result, new RuntimeScalar("x")); // passwd
-                    RuntimeArray.push(result, getgid(SCALAR)); // gid
+                    RuntimeArray.push(result, new RuntimeScalar(groupname));
+                    RuntimeArray.push(result, new RuntimeScalar("x"));
+                    RuntimeArray.push(result, getgid(SCALAR));
                     RuntimeArray members = new RuntimeArray();
                     RuntimeArray.push(members, new RuntimeScalar(System.getProperty("user.name")));
-                    RuntimeArray.push(result, members); // members
+                    RuntimeArray.push(result, members);
                 }
             } else {
-                // POSIX - simplified
                 if (groupname.equals("users") || groupname.equals(System.getProperty("user.name"))) {
                     RuntimeArray.push(result, new RuntimeScalar(groupname));
                     RuntimeArray.push(result, new RuntimeScalar("x"));
@@ -215,15 +192,11 @@ public class ExtendedNativeUtils extends NativeUtils {
 
             groupInfoCache.put(cacheKey, result);
         } catch (Exception e) {
-            // Return empty on error
         }
 
         return result;
     }
 
-    /**
-     * Get group entry by GID
-     */
     public static RuntimeArray getgrgid(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
 
@@ -239,14 +212,14 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeList getpwent(int ctx, RuntimeBase... args) {
-        if (Platform.isWindows()) return new RuntimeList();
+        if (IS_WINDOWS) return new RuntimeList();
         try {
-            Pointer pw = PosixLibrary.INSTANCE.getpwent();
+            Passwd pw = PosixLibrary.INSTANCE.getpwent();
             if (pw == null) return new RuntimeList();
             if (ctx == RuntimeContextType.SCALAR) {
-                return new RuntimeScalar(ptrString(pw, 0)).getList();
+                return new RuntimeScalar(pw.getLoginName()).getList();
             }
-            return passwdPointerToList(pw);
+            return passwdToList(pw);
         } catch (Exception e) {
             return new RuntimeList();
         }
@@ -268,7 +241,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
-        if (!Platform.isWindows()) {
+        if (!IS_WINDOWS) {
             try { PosixLibrary.INSTANCE.setpwent(); } catch (Exception e) { }
         }
         userIterator.remove();
@@ -277,13 +250,13 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar setgrent(int ctx, RuntimeBase... args) {
-        groupIterator.remove(); // Clear this thread's iterator
+        groupIterator.remove();
         groupInfoCache.clear();
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar endpwent(int ctx, RuntimeBase... args) {
-        if (!Platform.isWindows()) {
+        if (!IS_WINDOWS) {
             try { PosixLibrary.INSTANCE.endpwent(); } catch (Exception e) { }
         }
         userIterator.remove();
@@ -291,15 +264,12 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar endgrent(int ctx, RuntimeBase... args) {
-        groupIterator.remove(); // Clear this thread's iterator
+        groupIterator.remove();
         return new RuntimeScalar(1);
     }
 
     // ================== Network Information Functions ==================
 
-    /**
-     * Get host information by name
-     */
     public static RuntimeArray gethostbyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String hostname = args[0].toString();
@@ -307,9 +277,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         String cacheKey = "host:" + hostname;
         if (hostInfoCache.containsKey(cacheKey)) {
             RuntimeArray cached = hostInfoCache.get(cacheKey);
-            // In scalar context, return the packed IP address (4th element)
             if (ctx == SCALAR && cached.size() >= 5) {
-                // The packed IP address is now directly at index 4
                 RuntimeBase packedAddress = cached.get(4);
                 RuntimeArray scalarResult = new RuntimeArray();
                 RuntimeArray.push(scalarResult, packedAddress);
@@ -322,34 +290,28 @@ public class ExtendedNativeUtils extends NativeUtils {
         try {
             InetAddress addr = InetAddress.getByName(hostname);
 
-            RuntimeArray.push(result, new RuntimeScalar(addr.getHostName())); // name
-            RuntimeArray aliases = new RuntimeArray(); // aliases (empty for now)
+            RuntimeArray.push(result, new RuntimeScalar(addr.getHostName()));
+            RuntimeArray aliases = new RuntimeArray();
             RuntimeArray.push(result, aliases);
-            RuntimeArray.push(result, new RuntimeScalar(2)); // addrtype (AF_INET)
-            RuntimeArray.push(result, new RuntimeScalar(4)); // length (IPv4 = 4 bytes)
+            RuntimeArray.push(result, new RuntimeScalar(2));
+            RuntimeArray.push(result, new RuntimeScalar(4));
 
-            // Add the packed IP addresses as individual elements (not as an array)
             RuntimeScalar packedAddress = new RuntimeScalar(addr.getAddress());
-            RuntimeArray.push(result, packedAddress); // packed address
+            RuntimeArray.push(result, packedAddress);
 
             hostInfoCache.put(cacheKey, result);
 
-            // In scalar context, return the packed IP address
             if (ctx == SCALAR) {
                 RuntimeArray scalarResult = new RuntimeArray();
                 RuntimeArray.push(scalarResult, packedAddress);
                 return scalarResult;
             }
         } catch (Exception e) {
-            // Return empty array on error
         }
 
         return result;
     }
 
-    /**
-     * Get host information by address
-     */
     public static RuntimeArray gethostbyaddr(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
@@ -359,10 +321,8 @@ public class ExtendedNativeUtils extends NativeUtils {
                 String addrStr = args[0].toString();
                 StringParser.assertNoWideCharacters(addrStr, "gethostbyaddr");
                 if (addrStr.length() == 4) {
-                    // Packed address
                     addr = addrStr.getBytes(StandardCharsets.ISO_8859_1);
                 } else {
-                    // String IP address
                     String[] parts = addrStr.split("\\.");
                     addr = new byte[4];
                     for (int i = 0; i < 4 && i < parts.length; i++) {
@@ -377,9 +337,9 @@ public class ExtendedNativeUtils extends NativeUtils {
 
             RuntimeArray result = new RuntimeArray();
             RuntimeArray.push(result, new RuntimeScalar(inetAddr.getHostName()));
-            RuntimeArray.push(result, new RuntimeArray()); // aliases
-            RuntimeArray.push(result, new RuntimeScalar(2)); // addrtype
-            RuntimeArray.push(result, new RuntimeScalar(4)); // length
+            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(2));
+            RuntimeArray.push(result, new RuntimeScalar(4));
 
             RuntimeArray addresses = new RuntimeArray();
             RuntimeArray.push(addresses, new RuntimeScalar(new String(addr, StandardCharsets.ISO_8859_1)));
@@ -393,16 +353,12 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
     }
 
-    /**
-     * Get service information by name and protocol
-     */
     public static RuntimeArray getservbyname(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
         String service = args[0].toString();
         String protocol = args[1].toString();
 
-        // Common services mapping
         Map<String, Integer> commonPorts = Map.of(
                 "http", 80, "https", 443, "ftp", 21, "ssh", 22,
                 "telnet", 23, "smtp", 25, "dns", 53, "pop3", 110,
@@ -412,25 +368,21 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeArray result = new RuntimeArray();
         Integer port = commonPorts.get(service.toLowerCase());
         if (port != null) {
-            RuntimeArray.push(result, new RuntimeScalar(service)); // name
-            RuntimeArray.push(result, new RuntimeArray()); // aliases
-            RuntimeArray.push(result, new RuntimeScalar(port)); // port
-            RuntimeArray.push(result, new RuntimeScalar(protocol)); // proto
+            RuntimeArray.push(result, new RuntimeScalar(service));
+            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(port));
+            RuntimeArray.push(result, new RuntimeScalar(protocol));
         }
 
         return result;
     }
 
-    /**
-     * Get service information by port and protocol
-     */
     public static RuntimeArray getservbyport(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
         int port = args[0].scalar().getInt();
         String protocol = args[1].toString();
 
-        // Reverse lookup of common ports
         Map<Integer, String> commonServices = Map.of(
                 80, "http", 443, "https", 21, "ftp", 22, "ssh",
                 23, "telnet", 25, "smtp", 53, "dns", 110, "pop3",
@@ -440,18 +392,15 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeArray result = new RuntimeArray();
         String service = commonServices.get(port);
         if (service != null) {
-            RuntimeArray.push(result, new RuntimeScalar(service)); // name
-            RuntimeArray.push(result, new RuntimeArray()); // aliases
-            RuntimeArray.push(result, new RuntimeScalar(port)); // port
-            RuntimeArray.push(result, new RuntimeScalar(protocol)); // proto
+            RuntimeArray.push(result, new RuntimeScalar(service));
+            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(port));
+            RuntimeArray.push(result, new RuntimeScalar(protocol));
         }
 
         return result;
     }
 
-    /**
-     * Get protocol information by name
-     */
     public static RuntimeArray getprotobyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String protocol = args[0].toString().toLowerCase();
@@ -463,17 +412,14 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeArray result = new RuntimeArray();
         Integer protoNum = protocols.get(protocol);
         if (protoNum != null) {
-            RuntimeArray.push(result, new RuntimeScalar(protocol)); // name
-            RuntimeArray.push(result, new RuntimeArray()); // aliases
-            RuntimeArray.push(result, new RuntimeScalar(protoNum)); // proto number
+            RuntimeArray.push(result, new RuntimeScalar(protocol));
+            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(protoNum));
         }
 
         return result;
     }
 
-    /**
-     * Get protocol information by number
-     */
     public static RuntimeArray getprotobynumber(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         int protoNum = args[0].scalar().getInt();
@@ -485,30 +431,25 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeArray result = new RuntimeArray();
         String protocol = protocols.get(protoNum);
         if (protocol != null) {
-            RuntimeArray.push(result, new RuntimeScalar(protocol)); // name
-            RuntimeArray.push(result, new RuntimeArray()); // aliases
-            RuntimeArray.push(result, new RuntimeScalar(protoNum)); // proto number
+            RuntimeArray.push(result, new RuntimeScalar(protocol));
+            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(protoNum));
         }
 
         return result;
     }
 
-    /**
-     * Get list of system users (cross-platform)
-     */
     private static List<String> getSystemUsers() {
         List<String> users = new ArrayList<>();
 
         try {
             if (IS_WINDOWS) {
-                // Windows: Use 'net user' command
                 Process proc = Runtime.getRuntime().exec(new String[]{"net", "user"});
                 try (Scanner scanner = new Scanner(proc.getInputStream())) {
                     boolean inUserList = false;
                     while (scanner.hasNextLine()) {
                         String line = scanner.nextLine().trim();
 
-                        // Skip header lines
                         if (line.contains("User accounts for")) {
                             inUserList = true;
                             continue;
@@ -520,7 +461,6 @@ public class ExtendedNativeUtils extends NativeUtils {
                             break;
                         }
 
-                        // Parse user names (they're space-separated)
                         String[] usernames = line.split("\\s+");
                         for (String username : usernames) {
                             if (!username.isEmpty() && !username.equals("Administrator") &&
@@ -531,7 +471,6 @@ public class ExtendedNativeUtils extends NativeUtils {
                     }
                 }
             } else {
-                // POSIX: Read /etc/passwd
                 try (Scanner scanner = new Scanner(new java.io.File("/etc/passwd"))) {
                     while (scanner.hasNextLine()) {
                         String line = scanner.nextLine();
@@ -544,24 +483,20 @@ public class ExtendedNativeUtils extends NativeUtils {
                             String username = parts[0];
                             int uid = Integer.parseInt(parts[2]);
 
-                            // Include system users like root (uid 0) and regular users
-                            if (uid <= 65534) { // Exclude nobody/nogroup
+                            if (uid <= 65534) {
                                 users.add(username);
                             }
                         }
                     }
                 } catch (Exception e) {
-                    // Fallback if can't read /etc/passwd
                     users.add("root");
                     users.add(System.getProperty("user.name"));
                 }
             }
         } catch (Exception e) {
-            // Fallback to current user only
             users.add(System.getProperty("user.name"));
         }
 
-        // Ensure we always have at least the current user
         String currentUser = System.getProperty("user.name");
         if (!users.contains(currentUser)) {
             users.add(currentUser);
@@ -570,18 +505,13 @@ public class ExtendedNativeUtils extends NativeUtils {
         return users;
     }
 
-    /**
-     * Get list of system groups (cross-platform)
-     */
     private static List<String> getSystemGroups() {
         List<String> groups = new ArrayList<>();
 
         try {
             if (IS_WINDOWS) {
-                // Windows: Common built-in groups
                 groups.addAll(Arrays.asList("Users", "Administrators", "Guests", "Power Users"));
             } else {
-                // POSIX: Read /etc/group
                 try (Scanner scanner = new Scanner(new java.io.File("/etc/group"))) {
                     while (scanner.hasNextLine()) {
                         String line = scanner.nextLine();
@@ -594,19 +524,16 @@ public class ExtendedNativeUtils extends NativeUtils {
                             String groupname = parts[0];
                             int gid = Integer.parseInt(parts[2]);
 
-                            // Include system and user groups
                             if (gid <= 65534) {
                                 groups.add(groupname);
                             }
                         }
                     }
                 } catch (Exception e) {
-                    // Fallback
                     groups.addAll(Arrays.asList("root", "users", "wheel"));
                 }
             }
         } catch (Exception e) {
-            // Fallback
             groups.add(IS_WINDOWS ? "Users" : "users");
         }
 
@@ -615,9 +542,6 @@ public class ExtendedNativeUtils extends NativeUtils {
 
     // ================== System V IPC Functions ==================
 
-    /**
-     * Message queue control operations
-     */
     public static RuntimeScalar msgctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
 
@@ -625,37 +549,32 @@ public class ExtendedNativeUtils extends NativeUtils {
         int cmd = args[1].scalar().getInt();
         RuntimeBase buf = args[2];
 
-        // Simulate basic msgctl operations
         switch (cmd) {
             case 0: // IPC_STAT
                 if (messageQueues.containsKey(msqid)) {
-                    return new RuntimeScalar(0); // Success
+                    return new RuntimeScalar(0);
                 }
                 break;
             case 1: // IPC_SET
                 if (messageQueues.containsKey(msqid)) {
-                    return new RuntimeScalar(0); // Success
+                    return new RuntimeScalar(0);
                 }
                 break;
             case 2: // IPC_RMID
                 if (messageQueues.remove(msqid) != null) {
-                    return new RuntimeScalar(0); // Success
+                    return new RuntimeScalar(0);
                 }
                 break;
         }
-        return new RuntimeScalar(-1); // Error
+        return new RuntimeScalar(-1);
     }
 
-    /**
-     * Get message queue identifier
-     */
     public static RuntimeScalar msgget(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeScalar(-1);
 
         int key = args[0].scalar().getInt();
         int msgflg = args[1].scalar().getInt();
 
-        // Create or get existing message queue
         int msqid = nextIpcId++;
         RuntimeArray msgQueue = new RuntimeArray();
         messageQueues.put(msqid, msgQueue);
@@ -663,9 +582,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeScalar(msqid);
     }
 
-    /**
-     * Receive message from queue
-     */
     public static RuntimeScalar msgrcv(int ctx, RuntimeBase... args) {
         if (args.length < 5) return new RuntimeScalar(-1);
 
@@ -677,19 +593,15 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         RuntimeArray msgQueue = messageQueues.get(msqid);
         if (msgQueue == null || msgQueue.size() == 0) {
-            return new RuntimeScalar(-1); // No messages
+            return new RuntimeScalar(-1);
         }
 
-        // Simulate receiving first message
         RuntimeBase message = msgQueue.get(0);
         msgQueue.elements.remove(0);
 
         return new RuntimeScalar(message.toString().length());
     }
 
-    /**
-     * Send message to queue
-     */
     public static RuntimeScalar msgsnd(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
 
@@ -699,17 +611,13 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         RuntimeArray msgQueue = messageQueues.get(msqid);
         if (msgQueue == null) {
-            return new RuntimeScalar(-1); // Queue doesn't exist
+            return new RuntimeScalar(-1);
         }
 
-        // Add message to queue
         RuntimeArray.push(msgQueue, msgp);
-        return new RuntimeScalar(0); // Success
+        return new RuntimeScalar(0);
     }
 
-    /**
-     * Semaphore control operations
-     */
     public static RuntimeScalar semctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
 
@@ -719,10 +627,9 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         RuntimeArray semArray = semaphores.get(semid);
         if (semArray == null) {
-            return new RuntimeScalar(-1); // Semaphore doesn't exist
+            return new RuntimeScalar(-1);
         }
 
-        // Simulate basic semctl operations
         switch (cmd) {
             case 0: // GETVAL
                 if (semnum < semArray.size()) {
@@ -744,9 +651,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeScalar(-1);
     }
 
-    /**
-     * Get semaphore identifier
-     */
     public static RuntimeScalar semget(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
 
@@ -754,7 +658,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         int nsems = args[1].scalar().getInt();
         int semflg = args[2].scalar().getInt();
 
-        // Create semaphore array
         int semid = nextIpcId++;
         RuntimeArray semArray = new RuntimeArray();
         for (int i = 0; i < nsems; i++) {
@@ -765,9 +668,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeScalar(semid);
     }
 
-    /**
-     * Semaphore operations
-     */
     public static RuntimeScalar semop(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeScalar(-1);
 
@@ -776,16 +676,12 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         RuntimeArray semArray = semaphores.get(semid);
         if (semArray == null) {
-            return new RuntimeScalar(-1); // Semaphore doesn't exist
+            return new RuntimeScalar(-1);
         }
 
-        // Simulate semaphore operation (simplified)
-        return new RuntimeScalar(0); // Success
+        return new RuntimeScalar(0);
     }
 
-    /**
-     * Shared memory control operations
-     */
     public static RuntimeScalar shmctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
 
@@ -815,9 +711,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeScalar(-1);
     }
 
-    /**
-     * Get shared memory identifier
-     */
     public static RuntimeScalar shmget(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
 
@@ -825,10 +718,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         int size = args[1].scalar().getInt();
         int shmflg = args[2].scalar().getInt();
 
-        // Create shared memory segment
         int shmid = nextIpcId++;
         RuntimeArray shmSeg = new RuntimeArray();
-        // Initialize with zeros
         for (int i = 0; i < size; i++) {
             RuntimeArray.push(shmSeg, new RuntimeScalar(0));
         }
@@ -837,9 +728,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeScalar(shmid);
     }
 
-    /**
-     * Read from shared memory
-     */
     public static RuntimeScalar shmread(int ctx, RuntimeBase... args) {
         if (args.length < 4) return new RuntimeScalar(-1);
 
@@ -853,13 +741,11 @@ public class ExtendedNativeUtils extends NativeUtils {
             return new RuntimeScalar(-1);
         }
 
-        // Read data from shared memory segment
         StringBuilder data = new StringBuilder();
         for (int i = pos; i < Math.min(pos + size, shmSeg.size()); i++) {
             data.append((char) shmSeg.get(i).scalar().getInt());
         }
 
-        // Set the variable to the read data
         if (var instanceof RuntimeScalar) {
             ((RuntimeScalar) var).set(data.toString());
         }
@@ -867,9 +753,6 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeScalar(data.length());
     }
 
-    /**
-     * Write to shared memory
-     */
     public static RuntimeScalar shmwrite(int ctx, RuntimeBase... args) {
         if (args.length < 4) return new RuntimeScalar(-1);
 
@@ -883,11 +766,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             return new RuntimeScalar(-1);
         }
 
-        // Write data to shared memory segment
         byte[] bytes = string.getBytes();
         int writeSize = Math.min(size, bytes.length);
 
-        // Extend segment if necessary
         while (shmSeg.size() <= pos + writeSize) {
             RuntimeArray.push(shmSeg, new RuntimeScalar(0));
         }
@@ -901,41 +782,26 @@ public class ExtendedNativeUtils extends NativeUtils {
 
     // ================== Network Enumeration Functions ==================
 
-    /**
-     * End host entries enumeration
-     */
     public static RuntimeScalar endhostent(int ctx, RuntimeBase... args) {
         hostIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * End network entries enumeration
-     */
     public static RuntimeScalar endnetent(int ctx, RuntimeBase... args) {
         netIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * End protocol entries enumeration
-     */
     public static RuntimeScalar endprotoent(int ctx, RuntimeBase... args) {
         protoIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * End service entries enumeration
-     */
     public static RuntimeScalar endservent(int ctx, RuntimeBase... args) {
         servIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * Get next host entry
-     */
     public static RuntimeArray gethostent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = hostIterator.get();
         if (iterator == null) {
@@ -949,51 +815,40 @@ public class ExtendedNativeUtils extends NativeUtils {
             return gethostbyname(ctx, new RuntimeScalar(hostname));
         }
 
-        return new RuntimeArray(); // End of entries
+        return new RuntimeArray();
     }
 
-    /**
-     * Get network by address
-     */
     public static RuntimeArray getnetbyaddr(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
         String addr = args[0].toString();
         int addrtype = args[1].scalar().getInt();
 
-        // Simplified network lookup
         RuntimeArray result = new RuntimeArray();
-        RuntimeArray.push(result, new RuntimeScalar("loopback")); // name
-        RuntimeArray.push(result, new RuntimeArray()); // aliases
-        RuntimeArray.push(result, new RuntimeScalar(addrtype)); // addrtype
-        RuntimeArray.push(result, new RuntimeScalar("127.0.0.1")); // net
+        RuntimeArray.push(result, new RuntimeScalar("loopback"));
+        RuntimeArray.push(result, new RuntimeArray());
+        RuntimeArray.push(result, new RuntimeScalar(addrtype));
+        RuntimeArray.push(result, new RuntimeScalar("127.0.0.1"));
 
         return result;
     }
 
-    /**
-     * Get network by name
-     */
     public static RuntimeArray getnetbyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
 
         String name = args[0].toString();
 
-        // Simplified network lookup
         RuntimeArray result = new RuntimeArray();
         if (name.equals("loopback") || name.equals("localhost")) {
-            RuntimeArray.push(result, new RuntimeScalar(name)); // name
-            RuntimeArray.push(result, new RuntimeArray()); // aliases
-            RuntimeArray.push(result, new RuntimeScalar(2)); // addrtype (AF_INET)
-            RuntimeArray.push(result, new RuntimeScalar("127.0.0.1")); // net
+            RuntimeArray.push(result, new RuntimeScalar(name));
+            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(2));
+            RuntimeArray.push(result, new RuntimeScalar("127.0.0.1"));
         }
 
         return result;
     }
 
-    /**
-     * Get next network entry
-     */
     public static RuntimeArray getnetent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = netIterator.get();
         if (iterator == null) {
@@ -1007,12 +862,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             return getnetbyname(ctx, new RuntimeScalar(netname));
         }
 
-        return new RuntimeArray(); // End of entries
+        return new RuntimeArray();
     }
 
-    /**
-     * Get next protocol entry
-     */
     public static RuntimeArray getprotoent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = protoIterator.get();
         if (iterator == null) {
@@ -1026,12 +878,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             return getprotobyname(ctx, new RuntimeScalar(protoname));
         }
 
-        return new RuntimeArray(); // End of entries
+        return new RuntimeArray();
     }
 
-    /**
-     * Get next service entry
-     */
     public static RuntimeArray getservent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = servIterator.get();
         if (iterator == null) {
@@ -1045,57 +894,40 @@ public class ExtendedNativeUtils extends NativeUtils {
             return getservbyname(ctx, new RuntimeScalar(servicename), new RuntimeScalar("tcp"));
         }
 
-        return new RuntimeArray(); // End of entries
+        return new RuntimeArray();
     }
 
-    /**
-     * Set host entries enumeration
-     */
     public static RuntimeScalar sethostent(int ctx, RuntimeBase... args) {
-        hostIterator.remove(); // Reset iterator
+        hostIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * Set network entries enumeration
-     */
     public static RuntimeScalar setnetent(int ctx, RuntimeBase... args) {
-        netIterator.remove(); // Reset iterator
+        netIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * Set protocol entries enumeration
-     */
     public static RuntimeScalar setprotoent(int ctx, RuntimeBase... args) {
-        protoIterator.remove(); // Reset iterator
+        protoIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * Set service entries enumeration
-     */
     public static RuntimeScalar setservent(int ctx, RuntimeBase... args) {
-        servIterator.remove(); // Reset iterator
+        servIterator.remove();
         return new RuntimeScalar(1);
     }
 
-    /**
-     * Get list of system hosts (simplified)
-     */
     private static List<String> getSystemHosts() {
         List<String> hosts = new ArrayList<>();
         hosts.add("localhost");
         hosts.add("127.0.0.1");
 
         try {
-            // Add local hostname
             String hostname = java.net.InetAddress.getLocalHost().getHostName();
             if (!hosts.contains(hostname)) {
                 hosts.add(hostname);
             }
         } catch (Exception e) {
-            // Ignore
         }
 
         return hosts;
