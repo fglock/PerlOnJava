@@ -887,6 +887,12 @@ public class SlowOpcodeHandler {
             registers[rd] = scalarBase;
             return pc;
         }
+        if (scalarBase instanceof RuntimeList) {
+            RuntimeArray arr = new RuntimeArray();
+            ((RuntimeList) scalarBase).addToArray(arr);
+            registers[rd] = arr;
+            return pc;
+        }
         RuntimeScalar scalar = scalarBase.scalar();
         registers[rd] = scalar.arrayDerefNonStrict(pkg);
         return pc;

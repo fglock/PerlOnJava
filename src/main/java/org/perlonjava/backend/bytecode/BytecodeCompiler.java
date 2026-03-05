@@ -1641,7 +1641,12 @@ public class BytecodeCompiler implements Visitor {
      */
     void handleGeneralArrayAccess(BinaryOperatorNode node) {
         // Compile the left side (the expression that should yield an array or arrayref)
+        // Force LIST context so comma expressions like (0,0,1,1) create a list,
+        // not just return the last value (which happens in scalar context)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.LIST;
         node.left.accept(this);
+        currentCallContext = savedContext;
         int baseReg = lastResultReg;
 
         // Compile the index expression (right side)
