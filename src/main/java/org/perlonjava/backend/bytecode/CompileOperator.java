@@ -1272,7 +1272,7 @@ public class CompileOperator {
             bytecodeCompiler.emit(Opcodes.REVERSE);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(RuntimeContextType.LIST);  // Context
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("exists")) {

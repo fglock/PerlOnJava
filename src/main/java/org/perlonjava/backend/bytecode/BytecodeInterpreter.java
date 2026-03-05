@@ -1801,49 +1801,22 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SCALAR_TO_LIST: {
-                        // Convert scalar to RuntimeList (flattened)
+                        // Convert value to RuntimeList, preserving aggregate types (PerlRange, RuntimeArray)
+                        // so that consumers like Pack.pack() can iterate them via RuntimeList's iterator.
+                        // This matches the JVM backend which passes aggregates as-is in RuntimeList.
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
                         if (val instanceof RuntimeList) {
-                            RuntimeList srcList = (RuntimeList) val;
-                            boolean needsFlatten = false;
-                            for (RuntimeBase elem : srcList.elements) {
-                                if (!(elem instanceof RuntimeScalar)) {
-                                    needsFlatten = true;
-                                    break;
-                                }
-                            }
-                            if (needsFlatten) {
-                                RuntimeList flat = new RuntimeList();
-                                for (RuntimeBase elem : srcList.elements) {
-                                    if (elem instanceof RuntimeScalar) {
-                                        flat.elements.add(elem);
-                                    } else if (elem instanceof RuntimeArray) {
-                                        for (RuntimeScalar s : (RuntimeArray) elem) {
-                                            flat.elements.add(s);
-                                        }
-                                    } else if (elem instanceof RuntimeList) {
-                                        flat.elements.addAll(((RuntimeList) elem).elements);
-                                    } else {
-                                        flat.elements.add(elem.scalar());
-                                    }
-                                }
-                                registers[rd] = flat;
-                            } else {
-                                registers[rd] = val;
-                            }
-                        } else if (val instanceof RuntimeArray) {
-                            // Convert array to list
+                            registers[rd] = val;
+                        } else if (val instanceof RuntimeScalar) {
                             RuntimeList list = new RuntimeList();
-                            for (RuntimeScalar elem : (RuntimeArray) val) {
-                                list.elements.add(elem);
-                            }
+                            list.elements.add(val);
                             registers[rd] = list;
                         } else {
-                            // Scalar to list - wrap in a list
+                            // RuntimeArray, PerlRange, etc. - wrap in list, preserving type
                             RuntimeList list = new RuntimeList();
-                            list.elements.add(val.scalar());
+                            list.elements.add(val);
                             registers[rd] = list;
                         }
                         break;
