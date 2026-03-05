@@ -329,7 +329,8 @@ public class RuntimeList extends RuntimeBase {
             return scalarUndef; // Return undefined if empty
         }
         // XXX expand the last element
-        return elements.getLast().scalar();
+        RuntimeBase last = elements.getLast();
+        return (last == null) ? scalarUndef : last.scalar();
     }
 
     /**
@@ -464,8 +465,8 @@ public class RuntimeList extends RuntimeBase {
                     rhsIndex++;
                 }
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
-                RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : new RuntimeScalar();
-                runtimeScalar.set(assigned);
+                RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
+                runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
