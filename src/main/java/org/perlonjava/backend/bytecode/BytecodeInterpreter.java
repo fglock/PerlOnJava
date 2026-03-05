@@ -225,16 +225,35 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.LOAD_STRING: {
-                        // Load string: rd = new RuntimeScalar(stringPool[index])
                         int rd = bytecode[pc++];
                         int strIndex = bytecode[pc++];
-                        registers[rd] = new RuntimeScalar(code.stringPool[strIndex]);
+                        String s = code.stringPool[strIndex];
+                        RuntimeBase existing = registers[rd];
+                        if (!(existing instanceof RuntimeScalar rs
+                                && rs.type == RuntimeScalarType.STRING
+                                && s.equals(rs.value))) {
+                            registers[rd] = new RuntimeScalar(s);
+                        }
+                        break;
+                    }
+
+                    case Opcodes.LOAD_BYTE_STRING: {
+                        int rd = bytecode[pc++];
+                        int strIndex = bytecode[pc++];
+                        String s = code.stringPool[strIndex];
+                        RuntimeBase existing = registers[rd];
+                        if (existing instanceof RuntimeScalar rs
+                                && rs.type == RuntimeScalarType.BYTE_STRING
+                                && s.equals(rs.value)) {
+                            break;
+                        }
+                        RuntimeScalar bs = new RuntimeScalar(s);
+                        bs.type = RuntimeScalarType.BYTE_STRING;
+                        registers[rd] = bs;
                         break;
                     }
 
                     case Opcodes.LOAD_VSTRING: {
-                        // Load v-string literal with VSTRING type (e.g. v5.5.640)
-                        // Mirrors JVM EmitLiteral isVString handling.
                         int rd = bytecode[pc++];
                         int strIndex = bytecode[pc++];
                         RuntimeScalar vs = new RuntimeScalar(code.stringPool[strIndex]);
@@ -2510,7 +2529,8 @@ public class BytecodeInterpreter {
             // Check if we're running inside an eval STRING context
             // (sourceName starts with "(eval " when code is from eval STRING)
             // In this case, don't wrap the exception - let the outer eval handler catch it
-            boolean insideEvalString = code.sourceName != null && code.sourceName.startsWith("(eval ");
+            boolean insideEvalString = code.sourceName != null
+                    && (code.sourceName.startsWith("(eval ") || code.sourceName.endsWith("(eval)"));
             if (insideEvalString) {
                 // Re-throw as-is - will be caught by EvalStringHandler.evalString()
                 throw e;

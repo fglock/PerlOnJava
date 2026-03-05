@@ -1219,5 +1219,10 @@ public class Opcodes {
      * Format: SET_FROM_LIST rd lhsListReg rhsListReg */
     public static final short SET_FROM_LIST = 373;
 
+    /** Load byte string: rd = new RuntimeScalar(stringPool[index]) with BYTE_STRING type.
+     * Used for string literals under `no utf8` (the default).
+     * Format: LOAD_BYTE_STRING rd strIndex */
+    public static final short LOAD_BYTE_STRING = 374;
+
     private Opcodes() {} // Utility class - no instantiation
 }

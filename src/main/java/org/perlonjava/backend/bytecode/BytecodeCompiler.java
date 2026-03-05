@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 
+import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
@@ -503,6 +504,13 @@ public class BytecodeCompiler implements Visitor {
             nextRegister = 3 + capturedVars.length;
         }
 
+        // The top-level compile() always returns a value (used by executePerlAST for
+        // import args, eval results, etc.), so ensure the block tracks its result even
+        // if the caller specified VOID context.
+        if (currentCallContext == RuntimeContextType.VOID) {
+            currentCallContext = RuntimeContextType.LIST;
+        }
+
         // Visit the node to generate bytecode
         node.accept(this);
 
@@ -734,16 +742,23 @@ public class BytecodeCompiler implements Visitor {
                 && node.elements.get(0) instanceof OperatorNode localOp
                 && localOp.operator.equals("local");
 
-        // If the first statement is a scoped package (package Foo { }),
-        // save the DynamicVariableManager level before the block body so PUSH_PACKAGE is restored.
-        int scopedPackageLevelReg = -1;
-        if (!node.elements.isEmpty()
-                && node.elements.get(0) instanceof OperatorNode firstOp
-                && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
-                && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"))) {
-            scopedPackageLevelReg = allocateRegister();
-            emit(Opcodes.GET_LOCAL_LEVEL);
-            emitReg(scopedPackageLevelReg);
+        // Save DynamicVariableManager level before the block body when the block contains
+        // `local` operators or a scoped package declaration, so locals are restored on block exit.
+        // This matches the JVM compiler's Local.localSetup/localTeardown pattern.
+        int localLevelReg = -1;
+        boolean needsLocalRestore = false;
+        if (!node.getBooleanAnnotation("blockIsSubroutine")) {
+            boolean hasScopedPackage = !node.elements.isEmpty()
+                    && node.elements.get(0) instanceof OperatorNode firstOp
+                    && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
+                    && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"));
+            boolean hasLocal = FindDeclarationVisitor.findOperator(node, "local") != null;
+            if (hasScopedPackage || hasLocal) {
+                needsLocalRestore = true;
+                localLevelReg = allocateRegister();
+                emit(Opcodes.GET_LOCAL_LEVEL);
+                emitReg(localLevelReg);
+            }
         }
 
         enterScope();
@@ -817,11 +832,9 @@ public class BytecodeCompiler implements Visitor {
         // Exit scope restores register state
         exitScope();
 
-        // Restore DynamicVariableManager level after scoped package block
-        // (undoes PUSH_PACKAGE emitted by the package operator inside the block)
-        if (scopedPackageLevelReg >= 0) {
+        if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
-            emitReg(scopedPackageLevelReg);
+            emitReg(localLevelReg);
         }
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
@@ -956,12 +969,20 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        // Emit LOAD_STRING or LOAD_VSTRING depending on whether this is a v-string literal.
-        // LOAD_VSTRING sets type=VSTRING so that ModuleOperators.require() recognises version strings.
         int rd = allocateRegister();
         int strIndex = addToStringPool(node.value);
 
-        emit(node.isVString ? Opcodes.LOAD_VSTRING : Opcodes.LOAD_STRING);
+        short opcode;
+        if (node.isVString) {
+            opcode = Opcodes.LOAD_VSTRING;
+        } else if (emitterContext != null && emitterContext.symbolTable != null
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+                && !emitterContext.compilerOptions.isUnicodeSource) {
+            opcode = Opcodes.LOAD_BYTE_STRING;
+        } else {
+            opcode = Opcodes.LOAD_STRING;
+        }
+        emit(opcode);
         emitReg(rd);
         emit(strIndex);
 

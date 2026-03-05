@@ -339,10 +339,12 @@ public class InterpretedCode extends RuntimeCode {
                     pc += 1;
                     sb.append("LOAD_INT r").append(rd).append(" = ").append(value).append("\n");
                     break;
+                case Opcodes.LOAD_BYTE_STRING:
                 case Opcodes.LOAD_STRING:
                     rd = bytecode[pc++];
                     int strIdx = bytecode[pc++];
-                    sb.append("LOAD_STRING r").append(rd).append(" = \"");
+                    sb.append(opcode == Opcodes.LOAD_BYTE_STRING ? "LOAD_BYTE_STRING r" : "LOAD_STRING r")
+                      .append(rd).append(" = \"");
                     if (stringPool != null && strIdx < stringPool.length) {
                         String str = stringPool[strIdx];
                         // Escape special characters for readability

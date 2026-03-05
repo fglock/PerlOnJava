@@ -81,13 +81,13 @@ public class CompileAssignment {
                             }
 
                             // Regular lexical variable (not captured)
-                            // Allocate register for new lexical variable and add to symbol table
-                            int reg = bytecodeCompiler.addVariable(varName, "my");
-
-                            // Compile RHS in the appropriate context
-                            // @ operator will check currentCallContext and emit ARRAY_SIZE if needed
+                            // Compile RHS first, before adding variable to scope,
+                            // so that `my $x = $x` reads the outer $x on the RHS
                             node.right.accept(bytecodeCompiler);
                             int valueReg = bytecodeCompiler.lastResultReg;
+
+                            // Now allocate register for new lexical variable and add to symbol table
+                            int reg = bytecodeCompiler.addVariable(varName, "my");
 
                             bytecodeCompiler.emit(Opcodes.MY_SCALAR);
                             bytecodeCompiler.emitReg(reg);
@@ -136,16 +136,18 @@ public class CompileAssignment {
                             }
 
                             // Regular lexical array (not captured)
-                            // Allocate register for new lexical array and add to symbol table
-                            int arrayReg = bytecodeCompiler.addVariable(varName, "my");
+                            // Allocate register but don't add to scope yet,
+                            // so that `my @a = @a` reads the outer @a on the RHS
+                            int arrayReg = bytecodeCompiler.allocateRegister();
 
-                            // Create empty array
-                            bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
-                            bytecodeCompiler.emitReg(arrayReg);
-
-                            // Compile RHS (should evaluate to a list)
+                            // Compile RHS first, before adding variable to scope
                             node.right.accept(bytecodeCompiler);
                             int listReg = bytecodeCompiler.lastResultReg;
+
+                            // Now add to symbol table and create array
+                            bytecodeCompiler.registerVariable(varName, arrayReg);
+                            bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
+                            bytecodeCompiler.emitReg(arrayReg);
 
                             // Populate array from list using setFromList
                             bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
@@ -194,16 +196,18 @@ public class CompileAssignment {
                             }
 
                             // Regular lexical hash (not captured)
-                            // Allocate register for new lexical hash and add to symbol table
-                            int hashReg = bytecodeCompiler.addVariable(varName, "my");
+                            // Allocate register but don't add to scope yet,
+                            // so that `my %h = %h` reads the outer %h on the RHS
+                            int hashReg = bytecodeCompiler.allocateRegister();
 
-                            // Create empty hash
-                            bytecodeCompiler.emit(Opcodes.NEW_HASH);
-                            bytecodeCompiler.emitReg(hashReg);
-
-                            // Compile RHS (should evaluate to a list)
+                            // Compile RHS first, before adding variable to scope
                             node.right.accept(bytecodeCompiler);
                             int listReg = bytecodeCompiler.lastResultReg;
+
+                            // Now add to symbol table and create hash
+                            bytecodeCompiler.registerVariable(varName, hashReg);
+                            bytecodeCompiler.emit(Opcodes.NEW_HASH);
+                            bytecodeCompiler.emitReg(hashReg);
 
                             // Populate hash from list
                             bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
@@ -219,12 +223,12 @@ public class CompileAssignment {
                     if (myOperand instanceof IdentifierNode) {
                         String varName = ((IdentifierNode) myOperand).name;
 
-                        // Allocate register for new lexical variable and add to symbol table
-                        int reg = bytecodeCompiler.addVariable(varName, "my");
-
-                        // Compile RHS
+                        // Compile RHS first, before adding variable to scope
                         node.right.accept(bytecodeCompiler);
                         int valueReg = bytecodeCompiler.lastResultReg;
+
+                        // Now allocate register and add to symbol table
+                        int reg = bytecodeCompiler.addVariable(varName, "my");
 
                         bytecodeCompiler.emit(Opcodes.MY_SCALAR);
                         bytecodeCompiler.emitReg(reg);
@@ -506,6 +510,11 @@ public class CompileAssignment {
                                     bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                     bytecodeCompiler.emitReg(localReg);
                                     bytecodeCompiler.emitReg(valueReg);
+                                    // After localization, reload ourReg so subsequent accesses
+                                    // to the `our` variable see the new localized scalar.
+                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    bytecodeCompiler.emitReg(ourReg);
+                                    bytecodeCompiler.emit(nameIdx);
                                     bytecodeCompiler.lastResultReg = localReg;
                                 }
                                 case "@" -> {
@@ -1637,17 +1646,12 @@ public class CompileAssignment {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS
                 // In list context, returns the RHS list
-                // Validate lvalue context - throws PerlCompilerException for invalid LHS
-                // (e.g. "($a ? $x : ($y)) = 5" -> "Assignment to both a list and a scalar")
                 LValueVisitor.getContext(node.left);
                 ListNode listNode = (ListNode) node.left;
 
-                // Compile RHS in LIST context to get all elements
-                int savedRhsContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                node.right.accept(bytecodeCompiler);
-                int rhsReg = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.currentCallContext = savedRhsContext;
+                // RHS was already compiled at the "regular assignment" fallthrough above (valueReg).
+                // Reuse it instead of compiling again.
+                int rhsReg = valueReg;
 
                 // Convert RHS to RuntimeList if needed
                 int rhsListReg = bytecodeCompiler.allocateRegister();
@@ -1729,6 +1733,14 @@ public class CompileAssignment {
                     }
                 }
 
+                int countReg = -1;
+                if (savedContext == RuntimeContextType.SCALAR) {
+                    countReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                    bytecodeCompiler.emitReg(countReg);
+                    bytecodeCompiler.emitReg(rhsListReg);
+                }
+
                 // Build LHS list and assign via SET_FROM_LIST
                 if (!varRegs.isEmpty()) {
                     int lhsListReg = bytecodeCompiler.allocateRegister();
@@ -1746,12 +1758,7 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(rhsListReg);
                 }
 
-                // Return value depends on savedContext (the context this assignment was called in)
-                if (savedContext == RuntimeContextType.SCALAR) {
-                    int countReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(countReg);
-                    bytecodeCompiler.emitReg(rhsListReg);
+                if (countReg >= 0) {
                     bytecodeCompiler.lastResultReg = countReg;
                 } else {
                     bytecodeCompiler.lastResultReg = rhsListReg;

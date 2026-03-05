@@ -322,7 +322,7 @@ public class PerlLanguageProvider {
                 1,  // sourceLine (legacy parameter)
                 ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
             );
-            InterpretedCode interpretedCode = compiler.compile(ast);
+            InterpretedCode interpretedCode = compiler.compile(ast, ctx);
 
             // If --disassemble is enabled, print the bytecode
             if (ctx.compilerOptions.disassembleEnabled) {
@@ -362,26 +362,24 @@ public class PerlLanguageProvider {
                 );
                 return compiled;
 
-            } catch (RuntimeException e) {
+            } catch (Throwable e) {
                 // Check if this is a recoverable compilation error that can use interpreter fallback
+                // Catch Throwable (not just RuntimeException) because ClassFormatError
+                // ("Too many arguments in method signature") extends Error, not Exception
                 if (needsInterpreterFallback(e)) {
-                    // Interpreter fallback is enabled by default and can be disabled with JPERL_DISABLE_INTERPRETER_FALLBACK
-                    // automatically fall back to the interpreter backend
                     boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
                     if (showFallback) {
                         System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
                     }
 
-                    // Fall back to interpreter path
                     ctx.logDebug("Falling back to bytecode interpreter due to method size");
                     BytecodeCompiler compiler = new BytecodeCompiler(
                         ctx.compilerOptions.fileName,
-                        1,  // sourceLine (legacy parameter)
-                        ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
+                        1,
+                        ctx.errorUtil
                     );
-                    InterpretedCode interpretedCode = compiler.compile(ast);
+                    InterpretedCode interpretedCode = compiler.compile(ast, ctx);
 
-                    // If --disassemble is enabled, print the bytecode
                     if (ctx.compilerOptions.disassembleEnabled) {
                         System.out.println("=== Interpreter Bytecode ===");
                         System.out.println(interpretedCode.disassemble());
@@ -389,9 +387,10 @@ public class PerlLanguageProvider {
                     }
 
                     return interpretedCode;
+                } else if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
                 } else {
-                    // Not a size error, rethrow
-                    throw e;
+                    throw new RuntimeException(e);
                 }
             }
         }
@@ -402,6 +401,7 @@ public class PerlLanguageProvider {
             String msg = t.getMessage();
             if (msg != null && (
                     msg.contains("Method too large") ||
+                    msg.contains("Too many arguments in method signature") ||
                     msg.contains("ASM frame computation failed") ||
                     msg.contains("Unexpected runtime error during bytecode generation") ||
                     msg.contains("dstFrame") ||
