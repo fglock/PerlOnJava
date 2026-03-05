@@ -916,12 +916,11 @@ public class BytecodeInterpreter {
                             RuntimeArray arr = (RuntimeArray) arrayBase;
                             registers[rd] = arr.get(idx.getInt());
                         } else if (arrayBase instanceof RuntimeList) {
-                            RuntimeList flat = ((RuntimeList) arrayBase).flattenElements();
+                            RuntimeList list = (RuntimeList) arrayBase;
                             int index = idx.getInt();
-                            int size = flat.elements.size();
-                            if (index < 0) index = size + index;
-                            registers[rd] = (index >= 0 && index < size)
-                                ? flat.elements.get(index)
+                            if (index < 0) index = list.elements.size() + index;
+                            registers[rd] = (index >= 0 && index < list.elements.size())
+                                ? list.elements.get(index)
                                 : new RuntimeScalar();
                         } else {
                             throw new RuntimeException("ARRAY_GET: register " + arrayReg + " contains " +
@@ -1806,7 +1805,7 @@ public class BytecodeInterpreter {
                     case Opcodes.SCALAR_TO_LIST: {
                         // Convert value to RuntimeList, preserving aggregate types (PerlRange, RuntimeArray)
                         // so that consumers like Pack.pack() can iterate them via RuntimeList's iterator.
-                        // This matches the JVM backend which passes aggregates as-is in RuntimeList.
+                        // List assignment flattening is handled by SET_FROM_LIST (setFromList method).
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
@@ -2013,6 +2012,20 @@ public class BytecodeInterpreter {
 
                         // setFromList clears and repopulates the array
                         array.setFromList(list);
+                        break;
+                    }
+
+                    case Opcodes.SET_FROM_LIST: {
+                        // List assignment: rd = lhsList.setFromList(rhsList)
+                        // Matches JVM backend's RuntimeBase.setFromList() call
+                        int rd = bytecode[pc++];
+                        int lhsReg = bytecode[pc++];
+                        int rhsReg = bytecode[pc++];
+                        RuntimeList lhsList = (RuntimeList) registers[lhsReg];
+                        RuntimeBase rhsBase = registers[rhsReg];
+                        RuntimeList rhsList = (rhsBase instanceof RuntimeList rl) ? rl : rhsBase.getList();
+                        RuntimeArray result = lhsList.setFromList(rhsList);
+                        registers[rd] = result;
                         break;
                     }
 

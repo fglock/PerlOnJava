@@ -484,6 +484,12 @@ public class BytecodeCompiler implements Visitor {
             if (ctx.symbolTable != null) {
                 symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
                     ctx.symbolTable.currentPackageIsClass());
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+                symbolTable.warningFlagsStack.pop();
+                symbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
             }
         }
 
@@ -4708,21 +4714,21 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(CompilerFlagNode node) {
-        // Process compiler flags - they modify the symbolTable's pragma stacks
-        // This is critical for handling `use strict`, `no strict`, etc. during compilation
         if (emitterContext != null && emitterContext.symbolTable != null) {
-            ScopedSymbolTable symbolTable = emitterContext.symbolTable;
-
-            // Pop and push new flags - this updates the current scope's pragmas
-            symbolTable.warningFlagsStack.pop();
-            symbolTable.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
-
-            symbolTable.featureFlagsStack.pop();
-            symbolTable.featureFlagsStack.push(node.getFeatureFlags());
-
-            symbolTable.strictOptionsStack.pop();
-            symbolTable.strictOptionsStack.push(node.getStrictOptions());
+            ScopedSymbolTable st = emitterContext.symbolTable;
+            st.warningFlagsStack.pop();
+            st.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+            st.featureFlagsStack.pop();
+            st.featureFlagsStack.push(node.getFeatureFlags());
+            st.strictOptionsStack.pop();
+            st.strictOptionsStack.push(node.getStrictOptions());
         }
+        symbolTable.featureFlagsStack.pop();
+        symbolTable.featureFlagsStack.push(node.getFeatureFlags());
+        symbolTable.strictOptionsStack.pop();
+        symbolTable.strictOptionsStack.push(node.getStrictOptions());
+        symbolTable.warningFlagsStack.pop();
+        symbolTable.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
 
         lastResultReg = -1;
     }

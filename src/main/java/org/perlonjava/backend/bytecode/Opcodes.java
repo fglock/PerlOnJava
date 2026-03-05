@@ -1215,6 +1215,9 @@ public class Opcodes {
     public static final short ARRAY_EXISTS = 371;
     /** Array delete: rd = array_reg.delete(index_reg) */
     public static final short ARRAY_DELETE = 372;
+    /** List assignment: rd = lhs_list_reg.setFromList(rhs_list_reg)
+     * Format: SET_FROM_LIST rd lhsListReg rhsListReg */
+    public static final short SET_FROM_LIST = 373;
 
     private Opcodes() {} // Utility class - no instantiation
 }

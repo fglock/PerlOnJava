@@ -1185,6 +1185,12 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];  // list register
                     sb.append("ARRAY_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
                     break;
+                case Opcodes.SET_FROM_LIST:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];  // lhs list
+                    rs2 = bytecode[pc++];  // rhs list
+                    sb.append("SET_FROM_LIST r").append(rd).append(" = r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
+                    break;
                 case Opcodes.HASH_SET_FROM_LIST:
                     rs1 = bytecode[pc++];  // hash register
                     rs2 = bytecode[pc++];  // list register
