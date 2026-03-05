@@ -1,10 +1,5 @@
 package org.perlonjava.runtime.operators;
 
-import com.sun.jna.LastErrorException;
-import com.sun.jna.Native;
-import com.sun.jna.platform.win32.Kernel32;
-import com.sun.jna.platform.win32.WinDef;
-import com.sun.jna.platform.win32.WinNT;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
@@ -47,7 +42,7 @@ public class Operator {
         int successCount = 0;
 
         // Detect platform
-        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
+        boolean isWindows = NativeUtils.IS_WINDOWS;
 
         // Process each file in the list
         for (int i = 1; i < runtimeList.size(); i++) {
@@ -61,21 +56,16 @@ public class Operator {
             boolean success;
 
             if (isWindows) {
-                // Windows: use File attributes
-                int attributes = 0;
-                if ((mode & 0200) == 0) { // Write bit not set
-                    attributes |= WinNT.FILE_ATTRIBUTE_READONLY;
-                }
-
-                success = Kernel32.INSTANCE.SetFileAttributes(path, new WinDef.DWORD(attributes));
-            } else {
-                // POSIX systems
                 try {
-                    int result = PosixLibrary.INSTANCE.chmod(path, mode);
-                    success = (result == 0);
-                } catch (LastErrorException e) {
+                    boolean readOnly = (mode & 0200) == 0;
+                    java.nio.file.Files.setAttribute(resolved, "dos:readonly", readOnly);
+                    success = true;
+                } catch (Exception ex) {
                     success = false;
                 }
+            } else {
+                int result = PosixLibrary.INSTANCE.chmod(path, mode);
+                success = (result == 0);
             }
 
             if (success) {
@@ -695,7 +685,6 @@ public class Operator {
             if (!Files.exists(linkPath)) {
                 // Set $! to "No such file or directory"
                 getGlobalVariable("main::!").set("No such file or directory");
-                Native.setLastError(2); // ENOENT
                 return RuntimeScalar.undef();
             }
 
@@ -703,9 +692,7 @@ public class Operator {
                 Path targetPath = Files.readSymbolicLink(linkPath);
                 return new RuntimeScalar(targetPath.toString());
             } else {
-                // Not a symbolic link - set $! to appropriate error
                 getGlobalVariable("main::!").set("Invalid argument");
-                Native.setLastError(22); // EINVAL
                 return RuntimeScalar.undef();
             }
         } catch (UnsupportedOperationException e) {
@@ -716,7 +703,6 @@ public class Operator {
             String errorMessage = e.getMessage();
             if (errorMessage != null && errorMessage.contains("Access is denied")) {
                 getGlobalVariable("main::!").set("Permission denied");
-                Native.setLastError(13); // EACCES
             } else {
                 getGlobalVariable("main::!").set(errorMessage != null ? errorMessage : "I/O error");
             }
@@ -749,7 +735,6 @@ public class Operator {
             // Check if source file exists
             if (!Files.exists(oldPath)) {
                 getGlobalVariable("main::!").set("No such file or directory");
-                Native.setLastError(2); // ENOENT
                 return scalarFalse;
             }
 
@@ -761,15 +746,12 @@ public class Operator {
 
         } catch (AccessDeniedException e) {
             getGlobalVariable("main::!").set("Permission denied");
-            Native.setLastError(13); // EACCES
             return scalarFalse;
         } catch (FileAlreadyExistsException e) {
             getGlobalVariable("main::!").set("File exists");
-            Native.setLastError(17); // EEXIST
             return scalarFalse;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set("No such file or directory");
-            Native.setLastError(2); // ENOENT
             return scalarFalse;
         } catch (IOException e) {
             // Handle other IO errors
@@ -777,10 +759,8 @@ public class Operator {
             if (errorMessage != null) {
                 if (errorMessage.contains("cross-device link")) {
                     getGlobalVariable("main::!").set("Invalid cross-device link");
-                    Native.setLastError(18); // EXDEV
                 } else if (errorMessage.contains("directory not empty")) {
                     getGlobalVariable("main::!").set("Directory not empty");
-                    Native.setLastError(39); // ENOTEMPTY
                 } else {
                     getGlobalVariable("main::!").set(errorMessage);
                 }

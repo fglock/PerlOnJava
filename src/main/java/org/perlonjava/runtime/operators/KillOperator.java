@@ -1,9 +1,5 @@
 package org.perlonjava.runtime.operators;
 
-import com.sun.jna.LastErrorException;
-import com.sun.jna.platform.win32.Kernel32;
-import com.sun.jna.platform.win32.WinNT;
-import com.sun.jna.platform.win32.Wincon;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.PerlSignalQueue;
@@ -96,48 +92,30 @@ public class KillOperator {
         }
         if (NativeUtils.IS_WINDOWS) {
             switch (signal) {
-                case 0: // Check if process exists
-                    WinNT.HANDLE handle = Kernel32.INSTANCE.OpenProcess(
-                            WinNT.PROCESS_QUERY_INFORMATION, false, pid);
-                    if (handle != null) {
-                        Kernel32.INSTANCE.CloseHandle(handle);
-                        return true;
-                    }
-                    setErrno(3); // ESRCH - No such process
+                case 0:
+                    var ph = ProcessHandle.of(pid);
+                    if (ph.isPresent() && ph.get().isAlive()) return true;
+                    setErrno(3);
                     return false;
 
-                case 2: // SIGINT - try Ctrl+C event
-                    boolean result = Kernel32.INSTANCE.GenerateConsoleCtrlEvent(
-                            Wincon.CTRL_C_EVENT, pid);
-                    if (!result) {
-                        setErrno(Kernel32.INSTANCE.GetLastError());
+                case 2:
+                case 3:
+                    var proc = ProcessHandle.of(pid);
+                    if (proc.isPresent()) {
+                        proc.get().destroy();
+                        return true;
                     }
-                    return result;
+                    setErrno(3);
+                    return false;
 
-                case 3: // SIGQUIT - try Ctrl+Break event
-                    result = Kernel32.INSTANCE.GenerateConsoleCtrlEvent(
-                            Wincon.CTRL_BREAK_EVENT, pid);
-                    if (!result) {
-                        setErrno(Kernel32.INSTANCE.GetLastError());
+                case 9:
+                case 15:
+                    var p = ProcessHandle.of(pid);
+                    if (p.isPresent()) {
+                        if (signal == 9) p.get().destroyForcibly(); else p.get().destroy();
+                        return true;
                     }
-                    return result;
-
-                case 9: // SIGKILL
-                case 15: // SIGTERM
-                    WinNT.HANDLE processHandle = Kernel32.INSTANCE.OpenProcess(
-                            WinNT.PROCESS_TERMINATE, false, pid);
-                    if (processHandle != null) {
-                        try {
-                            result = Kernel32.INSTANCE.TerminateProcess(processHandle, 1);
-                            if (!result) {
-                                setErrno(Kernel32.INSTANCE.GetLastError());
-                            }
-                            return result;
-                        } finally {
-                            Kernel32.INSTANCE.CloseHandle(processHandle);
-                        }
-                    }
-                    setErrno(Kernel32.INSTANCE.GetLastError());
+                    setErrno(3);
                     return false;
 
                 default:
@@ -146,26 +124,23 @@ public class KillOperator {
                     return false;
             }
         } else {
-            try {
-                int result = PosixLibrary.INSTANCE.kill(pid, signal);
-                return result == 0;
-            } catch (LastErrorException e) {
-                setErrno(e.getErrorCode());
+            int result = PosixLibrary.INSTANCE.kill(pid, signal);
+            if (result != 0) {
+                setErrno(PosixLibrary.INSTANCE.errno());
                 return false;
             }
+            return true;
         }
     }
 
     // Helper method for sending signals to process groups (Unix only)
     private static boolean sendSignalToProcessGroup(int pgid, int signal) {
-        try {
-            // kill with negative PID targets process group
-            int result = PosixLibrary.INSTANCE.kill(-pgid, signal);
-            return result == 0;
-        } catch (LastErrorException e) {
-            setErrno(e.getErrorCode());
+        int result = PosixLibrary.INSTANCE.kill(-pgid, signal);
+        if (result != 0) {
+            setErrno(PosixLibrary.INSTANCE.errno());
             return false;
         }
+        return true;
     }
 
     // Convert signal names to numbers

@@ -62,9 +62,6 @@ public class UnlinkOperator {
                 return false;
             }
 
-            // Avoid native/JNA unlink implementations.
-            // Some environments (including perl5 test runs) may not have JNA available,
-            // and loading com.sun.jna classes can crash the test harness during cleanup.
             Files.delete(path);
             return true;
         } catch (NoSuchFileException e) {

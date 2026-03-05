@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import com.sun.jna.Platform;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -20,7 +20,7 @@ public class UmaskOperator {
 
     // Default umask value (022 = no write permission for group/others)
     private static final int DEFAULT_UMASK = 022;
-    private static final boolean IS_WINDOWS = Platform.isWindows();
+    private static final boolean IS_WINDOWS = NativeUtils.IS_WINDOWS;
     // Windows simulation of umask (thread-safe)
     private static volatile int windowsSimulatedUmask = DEFAULT_UMASK;
 
