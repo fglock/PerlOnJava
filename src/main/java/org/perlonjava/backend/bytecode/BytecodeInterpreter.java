@@ -916,11 +916,12 @@ public class BytecodeInterpreter {
                             RuntimeArray arr = (RuntimeArray) arrayBase;
                             registers[rd] = arr.get(idx.getInt());
                         } else if (arrayBase instanceof RuntimeList) {
-                            RuntimeList list = (RuntimeList) arrayBase;
+                            RuntimeList flat = ((RuntimeList) arrayBase).flattenElements();
                             int index = idx.getInt();
-                            if (index < 0) index = list.elements.size() + index;
-                            registers[rd] = (index >= 0 && index < list.elements.size())
-                                ? list.elements.get(index)
+                            int size = flat.elements.size();
+                            if (index < 0) index = size + index;
+                            registers[rd] = (index >= 0 && index < size)
+                                ? flat.elements.get(index)
                                 : new RuntimeScalar();
                         } else {
                             throw new RuntimeException("ARRAY_GET: register " + arrayReg + " contains " +
