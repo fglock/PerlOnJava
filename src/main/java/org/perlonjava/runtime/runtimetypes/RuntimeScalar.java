@@ -640,6 +640,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
+        if (value == null) {
+            this.type = RuntimeScalarType.UNDEF;
+            this.value = null;
+            return this;
+        }
         if (value.type == TIED_SCALAR) {
             return set(value.tiedFetch());
         }
