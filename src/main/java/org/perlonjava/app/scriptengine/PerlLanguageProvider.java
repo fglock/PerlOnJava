@@ -238,7 +238,7 @@ public class PerlLanguageProvider {
         // Compile to executable (compiler or interpreter based on flag)
         RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
-        // executePerlAST is always called from BEGIN blocks which use VOID context
+        // executePerlAST is always called from special blocks which use VOID context
         return executeCode(runtimeCode, ctx, false, RuntimeContextType.VOID);
     }
 
@@ -373,6 +373,15 @@ public class PerlLanguageProvider {
                     }
 
                     ctx.logDebug("Falling back to bytecode interpreter due to method size");
+                    // Reset strict/feature/warning flags before fallback compilation.
+                    // The JVM compiler already processed BEGIN blocks (use strict, etc.)
+                    // which set these flags on ctx.symbolTable. But the interpreter will
+                    // re-process those pragmas during execution, so inheriting them causes
+                    // false strict violations (e.g. bareword filehandles rejected).
+                    if (ctx.symbolTable != null) {
+                        ctx.symbolTable.strictOptionsStack.pop();
+                        ctx.symbolTable.strictOptionsStack.push(0);
+                    }
                     BytecodeCompiler compiler = new BytecodeCompiler(
                         ctx.compilerOptions.fileName,
                         1,

@@ -99,6 +99,9 @@ public class BytecodeCompiler implements Visitor {
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
 
+    // True when this compiler was constructed for eval STRING (has parentRegistry)
+    private boolean isEvalString;
+
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
     private String[] capturedVarNames;            // Parallel array of names
@@ -158,6 +161,8 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.addVariableWithIndex("this", 0, "reserved");
         symbolTable.addVariableWithIndex("@_", 1, "reserved");
         symbolTable.addVariableWithIndex("wantarray", 2, "reserved");
+
+        this.isEvalString = true;
 
         if (parentRegistry != null) {
             // Add parent scope variables to symbolTable (for eval STRING variable capture)
@@ -504,10 +509,10 @@ public class BytecodeCompiler implements Visitor {
             nextRegister = 3 + capturedVars.length;
         }
 
-        // The top-level compile() always returns a value (used by executePerlAST for
-        // import args, eval results, etc.), so ensure the block tracks its result even
-        // if the caller specified VOID context.
-        if (currentCallContext == RuntimeContextType.VOID) {
+        // For non-eval-STRING compilations (special blocks, top-level scripts),
+        // override VOID→LIST so the block tracks its result. eval STRING must
+        // preserve the caller's context so wantarray() works correctly inside.
+        if (!isEvalString && currentCallContext == RuntimeContextType.VOID) {
             currentCallContext = RuntimeContextType.LIST;
         }
 
