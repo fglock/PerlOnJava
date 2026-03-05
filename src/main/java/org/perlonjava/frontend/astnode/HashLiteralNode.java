@@ -72,7 +72,7 @@ public class HashLiteralNode extends AbstractNode {
      * @return a new ListNode containing this hash's key-value pairs
      */
     public ListNode asListNode() {
-        return new ListNode(elements, tokenIndex);
+        return new ListNode(new java.util.ArrayList<>(elements), tokenIndex);
     }
 
     /**

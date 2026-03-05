@@ -23,11 +23,21 @@ public class EmitOperatorDeleteExists {
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node operand2 = listNode.elements.getFirst();
             if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
-                // Unwrap the `+` operation
+                Node saved = operand2;
                 listNode.elements.set(0, operatorNode.operand);
+                try {
+                    handleDeleteExistsInner(node, emitterVisitor);
+                } finally {
+                    listNode.elements.set(0, saved);
+                }
+                return;
             }
         }
 
+        handleDeleteExistsInner(node, emitterVisitor);
+    }
+
+    private static void handleDeleteExistsInner(OperatorNode node, EmitterVisitor emitterVisitor) {
         String operator = node.operator;
         if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 1) {
@@ -166,8 +176,14 @@ public class EmitOperatorDeleteExists {
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node operand2 = listNode.elements.getFirst();
             if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
-                // Unwrap the `+` operation
+                Node saved = operand2;
                 listNode.elements.set(0, operatorNode.operand);
+                try {
+                    handleDefined(node, operator, emitterVisitor);
+                } finally {
+                    listNode.elements.set(0, saved);
+                }
+                return;
             }
         }
 

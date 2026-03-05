@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 
+import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
@@ -98,6 +99,9 @@ public class BytecodeCompiler implements Visitor {
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
 
+    // True when this compiler was constructed for eval STRING (has parentRegistry)
+    private boolean isEvalString;
+
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
     private String[] capturedVarNames;            // Parallel array of names
@@ -106,6 +110,7 @@ public class BytecodeCompiler implements Visitor {
     // Per-eval-site variable registries: each eval STRING emission snapshots the
     // currently visible variables so at runtime the correct registers are captured.
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
+    final List<int[]> evalSitePragmaFlags = new ArrayList<>();
 
     // BEGIN support for named subroutine closures
     int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
@@ -156,6 +161,8 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.addVariableWithIndex("this", 0, "reserved");
         symbolTable.addVariableWithIndex("@_", 1, "reserved");
         symbolTable.addVariableWithIndex("wantarray", 2, "reserved");
+
+        this.isEvalString = true;
 
         if (parentRegistry != null) {
             // Add parent scope variables to symbolTable (for eval STRING variable capture)
@@ -483,6 +490,12 @@ public class BytecodeCompiler implements Visitor {
             if (ctx.symbolTable != null) {
                 symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
                     ctx.symbolTable.currentPackageIsClass());
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+                symbolTable.warningFlagsStack.pop();
+                symbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
             }
         }
 
@@ -494,6 +507,13 @@ public class BytecodeCompiler implements Visitor {
             // Registers 0-2 are reserved (this, @_, wantarray)
             // Registers 3+ are captured variables
             nextRegister = 3 + capturedVars.length;
+        }
+
+        // For non-eval-STRING compilations (special blocks, top-level scripts),
+        // override VOID→LIST so the block tracks its result. eval STRING must
+        // preserve the caller's context so wantarray() works correctly inside.
+        if (!isEvalString && currentCallContext == RuntimeContextType.VOID) {
+            currentCallContext = RuntimeContextType.LIST;
         }
 
         // Visit the node to generate bytecode
@@ -546,7 +566,8 @@ public class BytecodeCompiler implements Visitor {
             featureFlags,
             warningFlags,
             symbolTable.getCurrentPackage(),
-            evalSiteRegistries.isEmpty() ? null : evalSiteRegistries
+            evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
+            evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags
         );
     }
 
@@ -726,16 +747,23 @@ public class BytecodeCompiler implements Visitor {
                 && node.elements.get(0) instanceof OperatorNode localOp
                 && localOp.operator.equals("local");
 
-        // If the first statement is a scoped package (package Foo { }),
-        // save the DynamicVariableManager level before the block body so PUSH_PACKAGE is restored.
-        int scopedPackageLevelReg = -1;
-        if (!node.elements.isEmpty()
-                && node.elements.get(0) instanceof OperatorNode firstOp
-                && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
-                && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"))) {
-            scopedPackageLevelReg = allocateRegister();
-            emit(Opcodes.GET_LOCAL_LEVEL);
-            emitReg(scopedPackageLevelReg);
+        // Save DynamicVariableManager level before the block body when the block contains
+        // `local` operators or a scoped package declaration, so locals are restored on block exit.
+        // This matches the JVM compiler's Local.localSetup/localTeardown pattern.
+        int localLevelReg = -1;
+        boolean needsLocalRestore = false;
+        if (!node.getBooleanAnnotation("blockIsSubroutine")) {
+            boolean hasScopedPackage = !node.elements.isEmpty()
+                    && node.elements.get(0) instanceof OperatorNode firstOp
+                    && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
+                    && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"));
+            boolean hasLocal = FindDeclarationVisitor.findOperator(node, "local") != null;
+            if (hasScopedPackage || hasLocal) {
+                needsLocalRestore = true;
+                localLevelReg = allocateRegister();
+                emit(Opcodes.GET_LOCAL_LEVEL);
+                emitReg(localLevelReg);
+            }
         }
 
         enterScope();
@@ -809,11 +837,9 @@ public class BytecodeCompiler implements Visitor {
         // Exit scope restores register state
         exitScope();
 
-        // Restore DynamicVariableManager level after scoped package block
-        // (undoes PUSH_PACKAGE emitted by the package operator inside the block)
-        if (scopedPackageLevelReg >= 0) {
+        if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
-            emitReg(scopedPackageLevelReg);
+            emitReg(localLevelReg);
         }
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
@@ -948,12 +974,20 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        // Emit LOAD_STRING or LOAD_VSTRING depending on whether this is a v-string literal.
-        // LOAD_VSTRING sets type=VSTRING so that ModuleOperators.require() recognises version strings.
         int rd = allocateRegister();
         int strIndex = addToStringPool(node.value);
 
-        emit(node.isVString ? Opcodes.LOAD_VSTRING : Opcodes.LOAD_STRING);
+        short opcode;
+        if (node.isVString) {
+            opcode = Opcodes.LOAD_VSTRING;
+        } else if (emitterContext != null && emitterContext.symbolTable != null
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+                && !emitterContext.compilerOptions.isUnicodeSource) {
+            opcode = Opcodes.LOAD_BYTE_STRING;
+        } else {
+            opcode = Opcodes.LOAD_STRING;
+        }
+        emit(opcode);
         emitReg(rd);
         emit(strIndex);
 
@@ -1612,7 +1646,12 @@ public class BytecodeCompiler implements Visitor {
      */
     void handleGeneralArrayAccess(BinaryOperatorNode node) {
         // Compile the left side (the expression that should yield an array or arrayref)
+        // Force LIST context so comma expressions like (0,0,1,1) create a list,
+        // not just return the last value (which happens in scalar context)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.LIST;
         node.left.accept(this);
+        currentCallContext = savedContext;
         int baseReg = lastResultReg;
 
         // Compile the index expression (right side)
@@ -4098,6 +4137,7 @@ public class BytecodeCompiler implements Visitor {
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.prototype = node.prototype;
         subCode.attributes = node.attributes;
+        subCode.packageName = getCurrentPackage();
 
         if (RuntimeCode.DISASSEMBLE) {
             System.out.println(subCode.disassemble());
@@ -4705,21 +4745,21 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(CompilerFlagNode node) {
-        // Process compiler flags - they modify the symbolTable's pragma stacks
-        // This is critical for handling `use strict`, `no strict`, etc. during compilation
         if (emitterContext != null && emitterContext.symbolTable != null) {
-            ScopedSymbolTable symbolTable = emitterContext.symbolTable;
-
-            // Pop and push new flags - this updates the current scope's pragmas
-            symbolTable.warningFlagsStack.pop();
-            symbolTable.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
-
-            symbolTable.featureFlagsStack.pop();
-            symbolTable.featureFlagsStack.push(node.getFeatureFlags());
-
-            symbolTable.strictOptionsStack.pop();
-            symbolTable.strictOptionsStack.push(node.getStrictOptions());
+            ScopedSymbolTable st = emitterContext.symbolTable;
+            st.warningFlagsStack.pop();
+            st.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+            st.featureFlagsStack.pop();
+            st.featureFlagsStack.push(node.getFeatureFlags());
+            st.strictOptionsStack.pop();
+            st.strictOptionsStack.push(node.getStrictOptions());
         }
+        symbolTable.featureFlagsStack.pop();
+        symbolTable.featureFlagsStack.push(node.getFeatureFlags());
+        symbolTable.strictOptionsStack.pop();
+        symbolTable.strictOptionsStack.push(node.getStrictOptions());
+        symbolTable.warningFlagsStack.pop();
+        symbolTable.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
 
         lastResultReg = -1;
     }

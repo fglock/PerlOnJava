@@ -1211,5 +1211,18 @@ public class Opcodes {
      * Format: DEREF_GLOB_NONSTRICT rd rs pkgIdx */
     public static final short DEREF_GLOB_NONSTRICT = 370;
 
+    /** Array exists: rd = array_reg.exists(index_reg) */
+    public static final short ARRAY_EXISTS = 371;
+    /** Array delete: rd = array_reg.delete(index_reg) */
+    public static final short ARRAY_DELETE = 372;
+    /** List assignment: rd = lhs_list_reg.setFromList(rhs_list_reg)
+     * Format: SET_FROM_LIST rd lhsListReg rhsListReg */
+    public static final short SET_FROM_LIST = 373;
+
+    /** Load byte string: rd = new RuntimeScalar(stringPool[index]) with BYTE_STRING type.
+     * Used for string literals under `no utf8` (the default).
+     * Format: LOAD_BYTE_STRING rd strIndex */
+    public static final short LOAD_BYTE_STRING = 374;
+
     private Opcodes() {} // Utility class - no instantiation
 }

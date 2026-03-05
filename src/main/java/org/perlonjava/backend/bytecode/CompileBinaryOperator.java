@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class CompileBinaryOperator {
@@ -697,7 +698,17 @@ public class CompileBinaryOperator {
     }
 
     private static void compileBinaryAsListOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
-        node.left.accept(bytecodeCompiler);
+        if (node.left instanceof IdentifierNode idNode) {
+            String name = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
+            int fhReg = bytecodeCompiler.allocateRegister();
+            int nameIdx = bytecodeCompiler.addToStringPool(name);
+            bytecodeCompiler.emit(Opcodes.LOAD_GLOB);
+            bytecodeCompiler.emitReg(fhReg);
+            bytecodeCompiler.emit(nameIdx);
+            bytecodeCompiler.lastResultReg = fhReg;
+        } else {
+            node.left.accept(bytecodeCompiler);
+        }
         int fhReg = bytecodeCompiler.lastResultReg;
 
         java.util.List<Integer> argRegs = new java.util.ArrayList<>();

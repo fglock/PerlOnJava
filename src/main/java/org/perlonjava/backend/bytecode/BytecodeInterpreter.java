@@ -101,6 +101,8 @@ public class BytecodeInterpreter {
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = DynamicVariableManager.getLocalLevel();
+        String savedPackage = InterpreterState.currentPackage.get().toString();
+        InterpreterState.currentPackage.get().set(framePackageName);
         RegexState.save();
         try {
         outer:
@@ -223,16 +225,35 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.LOAD_STRING: {
-                        // Load string: rd = new RuntimeScalar(stringPool[index])
                         int rd = bytecode[pc++];
                         int strIndex = bytecode[pc++];
-                        registers[rd] = new RuntimeScalar(code.stringPool[strIndex]);
+                        String s = code.stringPool[strIndex];
+                        RuntimeBase existing = registers[rd];
+                        if (!(existing instanceof RuntimeScalar rs
+                                && rs.type == RuntimeScalarType.STRING
+                                && s.equals(rs.value))) {
+                            registers[rd] = new RuntimeScalar(s);
+                        }
+                        break;
+                    }
+
+                    case Opcodes.LOAD_BYTE_STRING: {
+                        int rd = bytecode[pc++];
+                        int strIndex = bytecode[pc++];
+                        String s = code.stringPool[strIndex];
+                        RuntimeBase existing = registers[rd];
+                        if (existing instanceof RuntimeScalar rs
+                                && rs.type == RuntimeScalarType.BYTE_STRING
+                                && s.equals(rs.value)) {
+                            break;
+                        }
+                        RuntimeScalar bs = new RuntimeScalar(s);
+                        bs.type = RuntimeScalarType.BYTE_STRING;
+                        registers[rd] = bs;
                         break;
                     }
 
                     case Opcodes.LOAD_VSTRING: {
-                        // Load v-string literal with VSTRING type (e.g. v5.5.640)
-                        // Mirrors JVM EmitLiteral isVString handling.
                         int rd = bytecode[pc++];
                         int strIndex = bytecode[pc++];
                         RuntimeScalar vs = new RuntimeScalar(code.stringPool[strIndex]);
@@ -640,7 +661,9 @@ public class BytecodeInterpreter {
                         RuntimeScalar count = (countVal instanceof RuntimeScalar)
                             ? (RuntimeScalar) countVal
                             : ((RuntimeList) countVal).scalar();
-                        registers[rd] = Operator.repeat(registers[rs1], count, 1);
+                        int repeatCtx = (registers[rs1] instanceof RuntimeScalar)
+                            ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
+                        registers[rd] = Operator.repeat(registers[rs1], count, repeatCtx);
                         break;
                     }
 
@@ -1079,6 +1102,26 @@ public class BytecodeInterpreter {
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         registers[rd] = hash.delete(key);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_EXISTS: {
+                        int rd = bytecode[pc++];
+                        int arrayReg = bytecode[pc++];
+                        int indexReg = bytecode[pc++];
+                        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+                        RuntimeScalar index = (RuntimeScalar) registers[indexReg];
+                        registers[rd] = array.exists(index);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_DELETE: {
+                        int rd = bytecode[pc++];
+                        int arrayReg = bytecode[pc++];
+                        int indexReg = bytecode[pc++];
+                        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+                        RuntimeScalar index = (RuntimeScalar) registers[indexReg];
+                        registers[rd] = array.delete(index);
                         break;
                     }
 
@@ -1779,49 +1822,22 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SCALAR_TO_LIST: {
-                        // Convert scalar to RuntimeList (flattened)
+                        // Convert value to RuntimeList, preserving aggregate types (PerlRange, RuntimeArray)
+                        // so that consumers like Pack.pack() can iterate them via RuntimeList's iterator.
+                        // List assignment flattening is handled by SET_FROM_LIST (setFromList method).
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase val = registers[rs];
                         if (val instanceof RuntimeList) {
-                            RuntimeList srcList = (RuntimeList) val;
-                            boolean needsFlatten = false;
-                            for (RuntimeBase elem : srcList.elements) {
-                                if (!(elem instanceof RuntimeScalar)) {
-                                    needsFlatten = true;
-                                    break;
-                                }
-                            }
-                            if (needsFlatten) {
-                                RuntimeList flat = new RuntimeList();
-                                for (RuntimeBase elem : srcList.elements) {
-                                    if (elem instanceof RuntimeScalar) {
-                                        flat.elements.add(elem);
-                                    } else if (elem instanceof RuntimeArray) {
-                                        for (RuntimeScalar s : (RuntimeArray) elem) {
-                                            flat.elements.add(s);
-                                        }
-                                    } else if (elem instanceof RuntimeList) {
-                                        flat.elements.addAll(((RuntimeList) elem).elements);
-                                    } else {
-                                        flat.elements.add(elem.scalar());
-                                    }
-                                }
-                                registers[rd] = flat;
-                            } else {
-                                registers[rd] = val;
-                            }
-                        } else if (val instanceof RuntimeArray) {
-                            // Convert array to list
+                            registers[rd] = val;
+                        } else if (val instanceof RuntimeScalar) {
                             RuntimeList list = new RuntimeList();
-                            for (RuntimeScalar elem : (RuntimeArray) val) {
-                                list.elements.add(elem);
-                            }
+                            list.elements.add(val);
                             registers[rd] = list;
                         } else {
-                            // Scalar to list - wrap in a list
+                            // RuntimeArray, PerlRange, etc. - wrap in list, preserving type
                             RuntimeList list = new RuntimeList();
-                            list.elements.add(val.scalar());
+                            list.elements.add(val);
                             registers[rd] = list;
                         }
                         break;
@@ -2015,6 +2031,20 @@ public class BytecodeInterpreter {
 
                         // setFromList clears and repopulates the array
                         array.setFromList(list);
+                        break;
+                    }
+
+                    case Opcodes.SET_FROM_LIST: {
+                        // List assignment: rd = lhsList.setFromList(rhsList)
+                        // Matches JVM backend's RuntimeBase.setFromList() call
+                        int rd = bytecode[pc++];
+                        int lhsReg = bytecode[pc++];
+                        int rhsReg = bytecode[pc++];
+                        RuntimeList lhsList = (RuntimeList) registers[lhsReg];
+                        RuntimeBase rhsBase = registers[rhsReg];
+                        RuntimeList rhsList = (rhsBase instanceof RuntimeList rl) ? rl : rhsBase.getList();
+                        RuntimeArray result = lhsList.setFromList(rhsList);
+                        registers[rd] = result;
                         break;
                     }
 
@@ -2499,7 +2529,8 @@ public class BytecodeInterpreter {
             // Check if we're running inside an eval STRING context
             // (sourceName starts with "(eval " when code is from eval STRING)
             // In this case, don't wrap the exception - let the outer eval handler catch it
-            boolean insideEvalString = code.sourceName != null && code.sourceName.startsWith("(eval ");
+            boolean insideEvalString = code.sourceName != null
+                    && (code.sourceName.startsWith("(eval ") || code.sourceName.endsWith("(eval)"));
             if (insideEvalString) {
                 // Re-throw as-is - will be caught by EvalStringHandler.evalString()
                 throw e;
@@ -2520,6 +2551,7 @@ public class BytecodeInterpreter {
         } // end outer while
         } finally {
             DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            InterpreterState.currentPackage.get().set(savedPackage);
             InterpreterState.pop();
         }
     }
@@ -2614,10 +2646,12 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs1 = bytecode[pc++];
                 int rs2 = bytecode[pc++];
+                int repeatCtx = (registers[rs1] instanceof RuntimeScalar)
+                    ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
                 registers[rd] = Operator.repeat(
                     registers[rs1],
                     (RuntimeScalar) registers[rs2],
-                    1  // scalar context
+                    repeatCtx
                 );
                 return pc;
             }

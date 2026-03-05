@@ -375,8 +375,9 @@ public class RuntimeList extends RuntimeBase {
                     result.elements.add(array.get(i));
                 }
             } else if (element instanceof RuntimeHash hash) {
-                for (RuntimeScalar val : hash.values()) {
-                    result.elements.add(val);
+                for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+                    result.elements.add(new RuntimeScalar(entry.getKey()));
+                    result.elements.add(entry.getValue());
                 }
             } else {
                 result.elements.add(element);

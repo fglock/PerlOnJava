@@ -30,6 +30,45 @@ public class CompileOperator {
         }
     }
 
+    private static int compileArrayForExistsDelete(BytecodeCompiler bc, BinaryOperatorNode arrayAccess, int tokenIndex) {
+        if (!(arrayAccess.left instanceof OperatorNode leftOp) || !leftOp.operator.equals("$")
+                || !(leftOp.operand instanceof IdentifierNode)) {
+            bc.throwCompilerException("Array exists/delete requires simple array variable");
+            return -1;
+        }
+        String varName = ((IdentifierNode) leftOp.operand).name;
+        String arrayVarName = "@" + varName;
+        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
+                && bc.currentSubroutineClosureVars.contains(arrayVarName)) {
+            int arrayReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(arrayVarName);
+            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, tokenIndex);
+            bc.emitReg(arrayReg);
+            bc.emit(nameIdx);
+            bc.emit(bc.currentSubroutineBeginId);
+            return arrayReg;
+        } else if (bc.hasVariable(arrayVarName)) {
+            return bc.getVariableRegister(arrayVarName);
+        } else {
+            int arrayReg = bc.allocateRegister();
+            String globalArrayName = NameNormalizer.normalizeVariableName(varName, bc.getCurrentPackage());
+            int nameIdx = bc.addToStringPool(globalArrayName);
+            bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            bc.emitReg(arrayReg);
+            bc.emit(nameIdx);
+            return arrayReg;
+        }
+    }
+
+    private static int compileArrayIndex(BytecodeCompiler bc, BinaryOperatorNode arrayAccess) {
+        if (!(arrayAccess.right instanceof ArrayLiteralNode indexNode) || indexNode.elements.isEmpty()) {
+            bc.throwCompilerException("Array exists/delete requires index");
+            return -1;
+        }
+        indexNode.elements.get(0).accept(bc);
+        return bc.lastResultReg;
+    }
+
     public static void visitOperator(BytecodeCompiler bytecodeCompiler, OperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
@@ -879,10 +918,14 @@ public class CompileOperator {
                 int stringReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateRegister();
 
-                // Snapshot visible variables for this eval site
+                // Snapshot visible variables and pragma flags for this eval site
                 int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
                 bytecodeCompiler.evalSiteRegistries.add(
                     bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
+                bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
+                    bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
+                    bytecodeCompiler.symbolTable.featureFlagsStack.peek()
+                });
 
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 bytecodeCompiler.emitReg(rd);
@@ -1229,7 +1272,7 @@ public class CompileOperator {
             bytecodeCompiler.emit(Opcodes.REVERSE);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(RuntimeContextType.LIST);  // Context
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("exists")) {
@@ -1350,8 +1393,19 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(keyReg);
 
                 bytecodeCompiler.lastResultReg = rd;
+            } else if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("[")) {
+                BinaryOperatorNode arrayAccess = (BinaryOperatorNode) arg;
+                int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
+                int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
+
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_EXISTS);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(indexReg);
+
+                bytecodeCompiler.lastResultReg = rd;
             } else {
-                // For now, use SLOW_OP for other cases (array exists, etc.)
                 arg.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
 
@@ -1603,8 +1657,19 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(keyReg);
 
                 bytecodeCompiler.lastResultReg = rd;
+            } else if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("[")) {
+                BinaryOperatorNode arrayAccess = (BinaryOperatorNode) arg;
+                int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
+                int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
+
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_DELETE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(indexReg);
+
+                bytecodeCompiler.lastResultReg = rd;
             } else {
-                // For now, use SLOW_OP for other cases (hash slice delete, array delete, etc.)
                 arg.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
 

@@ -90,6 +90,19 @@ public class EvalStringHandler {
                                              int sourceLine,
                                              int callContext,
                                              Map<String, Integer> siteRegistry) {
+        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine,
+                callContext, siteRegistry, -1, -1);
+    }
+
+    public static RuntimeList evalStringList(String perlCode,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags) {
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1));
@@ -109,11 +122,12 @@ public class EvalStringHandler {
 
             // Inherit lexical pragma flags from parent if available
             if (currentCode != null) {
-                // Replace default values with parent's flags
+                int strictOpts = (siteStrictOptions >= 0) ? siteStrictOptions : currentCode.strictOptions;
+                int featFlags = (siteFeatureFlags >= 0) ? siteFeatureFlags : currentCode.featureFlags;
                 symbolTable.strictOptionsStack.pop();
-                symbolTable.strictOptionsStack.push(currentCode.strictOptions);
+                symbolTable.strictOptionsStack.push(strictOpts);
                 symbolTable.featureFlagsStack.pop();
-                symbolTable.featureFlagsStack.push(currentCode.featureFlags);
+                symbolTable.featureFlagsStack.push(featFlags);
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
             }

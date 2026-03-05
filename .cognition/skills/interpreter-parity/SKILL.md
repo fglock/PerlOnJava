@@ -200,6 +200,48 @@ Test::More → Test::Builder → Test::Builder::Formatter → Test2::Formatter::
 ```
 The failure is a ClassCastException in `Test/Builder/Formatter.pm` BEGIN block where `*OUT_STD = Test2::Formatter::TAP->can('OUT_STD')` — method call result (RuntimeList) is stored to glob (expects RuntimeScalar).
 
+## Design Decision: JVM Emitter Must Not Mutate the AST
+
+When the JVM backend fails with `MethodTooLargeException` (or `VerifyError`, etc.), `createRuntimeCode()` in `EmitterMethodCreator.java` falls back to the interpreter via `compileToInterpreter(ast, ...)`. The same fallback exists in `PerlLanguageProvider.compileToExecutable()`.
+
+**Problem**: The JVM emitter (EmitterVisitor and helpers) mutates the AST during code generation. If JVM compilation fails partway through, the interpreter receives a corrupted AST, producing wrong results. This is the root cause of mixed-mode failures (e.g., pack.t gets 45 extra failures when the main script falls back to interpreter after partial JVM emission).
+
+**Rule**: The JVM emitter must NEVER permanently mutate AST nodes. All mutations must either:
+1. Be avoided entirely (work on local copies), OR
+2. Use save/restore in try/finally (already done in `EmitLogicalOperator.java`)
+
+### Known AST mutation sites
+
+| File | Line(s) | What it mutates | Status |
+|------|---------|-----------------|--------|
+| `EmitOperator.java` | ~373 | `operand.elements.addFirst(operand.handle)` in `handleSystemBuiltin` — adds handle to elements list, never removed | **DANGEROUS** |
+| `Dereference.java` | ~347,442,511,579,911 | `nodeRight.elements.set(0, new StringNode(...))` — converts IdentifierNode to StringNode for hash autoquoting. `nodeRight` comes from `asListNode()` which creates a new ListNode but shares the same `elements` list | **DANGEROUS** — mutates shared elements list |
+| `EmitLogicalOperator.java` | ~188,300,340 | Temporarily rewrites `declaration.operator`/`.operand` | **SAFE** — uses save/restore in try/finally |
+| `EmitControlFlow.java` | ~280 | `argsNode.elements.add(atUnderscore)` | **SAFE** — `argsNode` is a freshly created ListNode |
+| `EmitOperator.java` | ~398,410 | `handleSpliceBuiltin` removes/restores first element | **SAFE** — uses try/finally restore |
+| Annotations (`setAnnotation`) | various | Sets `blockIsSubroutine`, `skipRegexSaveRestore`, `isDeclaredReference` | **Likely safe** — annotations are additive hints, but verify interpreter handles them |
+
+### How to fix dangerous sites
+
+**`handleSystemBuiltin` (EmitOperator.java:373)**: Wrap in try/finally to remove the added element after accept():
+```java
+if (operand.handle != null) {
+    hasHandle = true;
+    operand.elements.addFirst(operand.handle);
+}
+try {
+    operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+} finally {
+    if (hasHandle) {
+        operand.elements.removeFirst();
+    }
+}
+```
+
+**Dereference.java autoquoting**: `asListNode()` creates a new ListNode but passes the SAME `elements` list reference. The `elements.set(0, ...)` call mutates the original HashLiteralNode's elements. Fix by either:
+- Making `asListNode()` copy the elements list: `new ListNode(new ArrayList<>(elements), tokenIndex)`
+- Or saving/restoring the original element in try/finally
+
 ## Lessons Learned
 
 ### InterpretedCode constructor drops metadata

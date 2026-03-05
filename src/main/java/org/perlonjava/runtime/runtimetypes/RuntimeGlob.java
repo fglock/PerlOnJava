@@ -47,7 +47,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar set(RuntimeScalar value) {
         markGlobAsAssigned();
 
-        // System.out.println("glob set " + this.globName + " to " + value.type);
         switch (value.type) {
             case CODE:
                 GlobalVariable.getGlobalCodeRef(this.globName).set(value);

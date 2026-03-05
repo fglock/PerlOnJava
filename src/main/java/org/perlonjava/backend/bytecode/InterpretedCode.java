@@ -30,6 +30,7 @@ public class InterpretedCode extends RuntimeCode {
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
+    public final List<int[]> evalSitePragmaFlags; // Per-eval-site [strictOptions, featureFlags]
 
     // Lexical pragma state (for eval STRING to inherit)
     public final int strictOptions;        // Strict flags at compile time
@@ -69,7 +70,7 @@ public class InterpretedCode extends RuntimeCode {
                           int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, "main", null);
+             strictOptions, featureFlags, warningFlags, "main", null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -82,7 +83,7 @@ public class InterpretedCode extends RuntimeCode {
                           String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, compilePackage, null);
+             strictOptions, featureFlags, warningFlags, compilePackage, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -93,7 +94,8 @@ public class InterpretedCode extends RuntimeCode {
                           ErrorMessageUtil errorUtil,
                           int strictOptions, int featureFlags, BitSet warningFlags,
                           String compilePackage,
-                          List<Map<String, Integer>> evalSiteRegistries) {
+                          List<Map<String, Integer>> evalSiteRegistries,
+                          List<int[]> evalSitePragmaFlags) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -105,11 +107,15 @@ public class InterpretedCode extends RuntimeCode {
         this.pcToTokenIndex = pcToTokenIndex;
         this.variableRegistry = variableRegistry;
         this.evalSiteRegistries = evalSiteRegistries;
+        this.evalSitePragmaFlags = evalSitePragmaFlags;
         this.errorUtil = errorUtil;
         this.strictOptions = strictOptions;
         this.featureFlags = featureFlags;
         this.warningFlags = warningFlags;
         this.compilePackage = compilePackage;
+        if (this.packageName == null && compilePackage != null) {
+            this.packageName = compilePackage;
+        }
     }
 
     // Legacy constructor for backward compatibility
@@ -190,7 +196,8 @@ public class InterpretedCode extends RuntimeCode {
             this.featureFlags,
             this.warningFlags,
             this.compilePackage,
-            this.evalSiteRegistries
+            this.evalSiteRegistries,
+            this.evalSitePragmaFlags
         );
         copy.prototype = this.prototype;
         copy.attributes = this.attributes;
@@ -332,10 +339,12 @@ public class InterpretedCode extends RuntimeCode {
                     pc += 1;
                     sb.append("LOAD_INT r").append(rd).append(" = ").append(value).append("\n");
                     break;
+                case Opcodes.LOAD_BYTE_STRING:
                 case Opcodes.LOAD_STRING:
                     rd = bytecode[pc++];
                     int strIdx = bytecode[pc++];
-                    sb.append("LOAD_STRING r").append(rd).append(" = \"");
+                    sb.append(opcode == Opcodes.LOAD_BYTE_STRING ? "LOAD_BYTE_STRING r" : "LOAD_STRING r")
+                      .append(rd).append(" = \"");
                     if (stringPool != null && strIdx < stringPool.length) {
                         String str = stringPool[strIdx];
                         // Escape special characters for readability
@@ -1058,6 +1067,18 @@ public class InterpretedCode extends RuntimeCode {
                     int keyDeleteReg = bytecode[pc++];
                     sb.append("HASH_DELETE r").append(rd).append(" = delete r").append(hashDeleteReg).append("{r").append(keyDeleteReg).append("}\n");
                     break;
+                case Opcodes.ARRAY_EXISTS:
+                    rd = bytecode[pc++];
+                    int arrExistsReg = bytecode[pc++];
+                    int idxExistsReg = bytecode[pc++];
+                    sb.append("ARRAY_EXISTS r").append(rd).append(" = exists r").append(arrExistsReg).append("[r").append(idxExistsReg).append("]\n");
+                    break;
+                case Opcodes.ARRAY_DELETE:
+                    rd = bytecode[pc++];
+                    int arrDeleteReg = bytecode[pc++];
+                    int idxDeleteReg = bytecode[pc++];
+                    sb.append("ARRAY_DELETE r").append(rd).append(" = delete r").append(arrDeleteReg).append("[r").append(idxDeleteReg).append("]\n");
+                    break;
                 case Opcodes.HASH_KEYS:
                     rd = bytecode[pc++];
                     int hashKeysReg = bytecode[pc++];
@@ -1165,6 +1186,12 @@ public class InterpretedCode extends RuntimeCode {
                     rs1 = bytecode[pc++];  // array register
                     rs2 = bytecode[pc++];  // list register
                     sb.append("ARRAY_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
+                    break;
+                case Opcodes.SET_FROM_LIST:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];  // lhs list
+                    rs2 = bytecode[pc++];  // rhs list
+                    sb.append("SET_FROM_LIST r").append(rd).append(" = r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
                     break;
                 case Opcodes.HASH_SET_FROM_LIST:
                     rs1 = bytecode[pc++];  // hash register
