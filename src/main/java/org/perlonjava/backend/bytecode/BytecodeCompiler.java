@@ -396,8 +396,8 @@ public class BytecodeCompiler implements Visitor {
             return false;
         }
 
-        // Allow regex capture variables ($1, $2, etc.)
-        if (ScalarUtils.isInteger(bareVarName)) {
+        // Allow regex capture variables ($1, $2, etc.) but not leading-zero variants ($01, $02)
+        if (ScalarUtils.isInteger(bareVarName) && !bareVarName.startsWith("0")) {
             return false;
         }
 
@@ -420,6 +420,39 @@ public class BytecodeCompiler implements Visitor {
         // Allow non-ASCII length-1 scalars under 'no utf8'
         // e.g., $ª, $µ, $º under 'no utf8' are treated as special variables
         if (isNonAsciiLengthOneScalarAllowedUnderNoUtf8(sigil, bareVarName)) {
+            return false;
+        }
+
+        // Allow variables that already exist in the global registry
+        // (e.g., created by `use vars` at parse time)
+        // This mirrors the allowIfAlreadyExists logic in EmitVariable.java
+        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+        boolean allowIfAlreadyExists = false;
+        if (sigil.equals("$") && GlobalVariable.existsGlobalVariable(normalizedName)) {
+            allowIfAlreadyExists = true;
+        }
+        if (sigil.equals("@") && GlobalVariable.existsGlobalArray(normalizedName)) {
+            allowIfAlreadyExists = true;
+        }
+        if (sigil.equals("%") && !normalizedName.endsWith("::") && GlobalVariable.existsGlobalHash(normalizedName)) {
+            allowIfAlreadyExists = true;
+        }
+
+        // Perl's strict 'vars' requires declaration for unqualified single-letter globals
+        // even if they were previously created under 'no strict'.
+        // This mirrors EmitVariable.java lines 349-359.
+        boolean isSpecialSortVar = sigil.equals("$")
+                && (bareVarName.equals("a") || bareVarName.equals("b"));
+        if (sigil.equals("$")
+                && bareVarName != null
+                && bareVarName.length() == 1
+                && Character.isLetter(bareVarName.charAt(0))
+                && !bareVarName.contains("::")
+                && !isSpecialSortVar) {
+            allowIfAlreadyExists = false;
+        }
+
+        if (allowIfAlreadyExists) {
             return false;
         }
 
