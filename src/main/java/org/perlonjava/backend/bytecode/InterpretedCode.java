@@ -113,6 +113,9 @@ public class InterpretedCode extends RuntimeCode {
         this.featureFlags = featureFlags;
         this.warningFlags = warningFlags;
         this.compilePackage = compilePackage;
+        if (this.packageName == null && compilePackage != null) {
+            this.packageName = compilePackage;
+        }
     }
 
     // Legacy constructor for backward compatibility

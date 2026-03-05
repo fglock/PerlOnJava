@@ -4100,6 +4100,7 @@ public class BytecodeCompiler implements Visitor {
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.prototype = node.prototype;
         subCode.attributes = node.attributes;
+        subCode.packageName = getCurrentPackage();
 
         if (RuntimeCode.DISASSEMBLE) {
             System.out.println(subCode.disassemble());
