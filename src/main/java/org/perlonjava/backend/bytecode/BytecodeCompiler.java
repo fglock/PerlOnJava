@@ -1557,26 +1557,14 @@ public class BytecodeCompiler implements Visitor {
                 }
             } else {
                 // Other operator (not simple variable) - compile as expression in SCALAR context
-                node.left.accept(this);
+                compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 targetReg = lastResultReg;
             }
         } else {
             // Not an OperatorNode (could be BinaryOperatorNode like ($x &= $y))
             // Compile the left side as an expression in SCALAR context
-            node.left.accept(this);
+            compileNode(node.left, -1, RuntimeContextType.SCALAR);
             targetReg = lastResultReg;
-
-            // Convert to scalar if it's a list
-            if (!(lastResultReg == targetReg)) {
-                // Already handled
-            } else {
-                // May need to convert list to scalar
-                int scalarReg = allocateRegister();
-                emit(Opcodes.LIST_TO_COUNT);
-                emitReg(scalarReg);
-                emitReg(targetReg);
-                targetReg = scalarReg;
-            }
         }
 
         // Emit the appropriate compound assignment opcode
