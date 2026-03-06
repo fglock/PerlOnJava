@@ -229,26 +229,13 @@ public class BytecodeInterpreter {
                             case Opcodes.LOAD_STRING -> {
                                 int rd = bytecode[pc++];
                                 int strIndex = bytecode[pc++];
-                                String s = code.stringPool[strIndex];
-                                RuntimeBase existing = registers[rd];
-                                if (!(existing instanceof RuntimeScalar rs
-                                        && rs.type == RuntimeScalarType.STRING
-                                        && s.equals(rs.value))) {
-                                    registers[rd] = new RuntimeScalar(s);
-                                }
+                                registers[rd] = new RuntimeScalar(code.stringPool[strIndex]);
                             }
 
                             case Opcodes.LOAD_BYTE_STRING -> {
                                 int rd = bytecode[pc++];
                                 int strIndex = bytecode[pc++];
-                                String s = code.stringPool[strIndex];
-                                RuntimeBase existing = registers[rd];
-                                if (existing instanceof RuntimeScalar rs
-                                        && rs.type == RuntimeScalarType.BYTE_STRING
-                                        && s.equals(rs.value)) {
-                                    break;
-                                }
-                                RuntimeScalar bs = new RuntimeScalar(s);
+                                RuntimeScalar bs = new RuntimeScalar(code.stringPool[strIndex]);
                                 bs.type = RuntimeScalarType.BYTE_STRING;
                                 registers[rd] = bs;
                             }
