@@ -1047,7 +1047,10 @@ public class BytecodeCompiler implements Visitor {
                 // Strip sigil and normalize name (e.g., "$x" → "main::x")
                 String bareVarName = varName.substring(1);  // Remove sigil
                 String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
-                int rd = allocateOutputRegister();
+                // Use allocateRegister() instead of allocateOutputRegister() because
+                // LOAD_GLOBAL_SCALAR for special variables like $1 returns a proxy object.
+                // The ALIAS operation is needed to copy the value before RESTORE_REGEX_STATE.
+                int rd = allocateRegister();
                 int nameIdx = addToStringPool(normalizedName);
 
                 emit(Opcodes.LOAD_GLOBAL_SCALAR);
@@ -3215,7 +3218,10 @@ public class BytecodeCompiler implements Visitor {
                             getCurrentPackage()
                     );
 
-                    int rd = allocateOutputRegister();
+                    // Use allocateRegister() instead of allocateOutputRegister() because
+                    // LOAD_GLOBAL_SCALAR for special variables like $1 returns a proxy object.
+                    // The ALIAS operation is needed to copy the value before RESTORE_REGEX_STATE.
+                    int rd = allocateRegister();
                     int nameIdx = addToStringPool(globalVarName);
 
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
