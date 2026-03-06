@@ -265,6 +265,7 @@ public class InterpretedCode extends RuntimeCode {
         sb.append("Bytecode length: ").append(bytecode.length).append(" shorts\n\n");
 
         int pc = 0;
+        try {
         while (pc < bytecode.length) {
             int startPc = pc;
             int opcode = bytecode[pc++];
@@ -1961,8 +1962,11 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
                     int rbhBeginId = bytecode[pc++];
+                    String rbhName = (nameIdx >= 0 && nameIdx < stringPool.length) 
+                            ? stringPool[nameIdx] 
+                            : "<invalid:" + nameIdx + ">";
                     sb.append("RETRIEVE_BEGIN_HASH r").append(rd).append(" = BEGIN_").append(rbhBeginId)
-                            .append("::").append(stringPool[nameIdx]).append("\n");
+                            .append("::").append(rbhName).append("\n");
                     break;
                 }
 
@@ -2298,11 +2302,25 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("RESTORE_REGEX_STATE r").append(rrsDummy).append("\n");
                     break;
                 }
+                case Opcodes.SLOW_OP: {
+                    // Deprecated: SLOW_OP was removed, all operations now use direct opcodes
+                    // Format was: SLOW_OP slow_op_id rd argsReg ctx
+                    int slowOpId = bytecode[pc++];
+                    rd = bytecode[pc++];
+                    int slowArgsReg = bytecode[pc++];
+                    int slowCtx = bytecode[pc++];
+                    sb.append("SLOW_OP(").append(slowOpId).append(") r").append(rd)
+                            .append(" = slow(r").append(slowArgsReg).append(", ctx=").append(slowCtx).append(")\n");
+                    break;
+                }
 
                 default:
                     sb.append("UNKNOWN(").append(opcode).append(")\n");
                     break;
             }
+        }
+        } catch (ArrayIndexOutOfBoundsException e) {
+            sb.append("\n*** Disassembly error at pc=").append(pc).append(": ").append(e.getMessage()).append(" ***\n");
         }
         return sb.toString();
     }
