@@ -59,6 +59,21 @@ public class RuntimePosLvalue {
         return position;
     }
 
+    /**
+     * Invalidate the pos() for a scalar when its string value is modified.
+     * This should be called on any string modification operation (.=, substr assignment, etc.)
+     * to ensure pos() returns undef after the modification.
+     *
+     * @param perlVariable the scalar whose pos should be invalidated
+     */
+    public static void invalidatePos(RuntimeScalar perlVariable) {
+        if (perlVariable == null) {
+            return;
+        }
+        // Remove the cache entry entirely so pos() returns undef
+        positionCache.remove(perlVariable);
+    }
+
     private static void clearZeroLengthMatchTracking(RuntimeScalar perlVariable) {
         CacheEntry cachedEntry = positionCache.get(perlVariable);
         if (cachedEntry != null) {

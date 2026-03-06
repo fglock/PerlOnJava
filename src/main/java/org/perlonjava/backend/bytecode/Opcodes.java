@@ -1816,6 +1816,12 @@ public class Opcodes {
      */
     public static final short TIMES = 373;
 
+    /**
+     * Quote regex with /o modifier support: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg, callsite_id)
+     * Format: QUOTE_REGEX_O rd pattern_reg flags_reg callsite_id
+     */
+    public static final short QUOTE_REGEX_O = 374;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

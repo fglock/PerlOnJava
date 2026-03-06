@@ -1273,6 +1273,14 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
                             .append("}r").append(flagsReg).append("\n");
                     break;
+                case Opcodes.QUOTE_REGEX_O:
+                    rd = bytecode[pc++];
+                    patternReg = bytecode[pc++];
+                    flagsReg = bytecode[pc++];
+                    int callsiteId = bytecode[pc++];
+                    sb.append("QUOTE_REGEX_O r").append(rd).append(" = qr{r").append(patternReg)
+                            .append("}r").append(flagsReg).append(" callsite=").append(callsiteId).append("\n");
+                    break;
                 case Opcodes.ITERATOR_CREATE:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

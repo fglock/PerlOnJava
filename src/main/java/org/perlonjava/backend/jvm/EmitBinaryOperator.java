@@ -291,6 +291,17 @@ public class EmitBinaryOperator {
             }
             // assign to the Lvalue
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            
+            // For string concat assign (.=), invalidate pos() since string was modified
+            if (node.operator.equals(".=")) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, 
+                        "org/perlonjava/runtime/runtimetypes/RuntimePosLvalue", 
+                        "invalidatePos", 
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", 
+                        false);
+            }
+            
             EmitOperator.handleVoidContext(emitterVisitor);
         }
     }

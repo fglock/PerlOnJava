@@ -297,21 +297,39 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
             }
 
+            // Check if /o modifier is used (flags are typically a StringNode)
+            boolean hasOModifier = false;
+            Node flagsNode = operand.elements.get(1);
+            if (flagsNode instanceof StringNode) {
+                hasOModifier = ((StringNode) flagsNode).value.contains("o");
+            }
+
             // Compile pattern and flags
             operand.elements.get(0).accept(bytecodeCompiler);  // Pattern
             int patternReg = bytecodeCompiler.lastResultReg;
 
-            operand.elements.get(1).accept(bytecodeCompiler);  // Flags
+            flagsNode.accept(bytecodeCompiler);  // Flags
             int flagsReg = bytecodeCompiler.lastResultReg;
 
             // Allocate result register
             int rd = bytecodeCompiler.allocateOutputRegister();
 
-            // Emit QUOTE_REGEX opcode
-            bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(patternReg);
-            bytecodeCompiler.emitReg(flagsReg);
+            // Emit appropriate opcode based on /o modifier
+            if (hasOModifier) {
+                // Use QUOTE_REGEX_O with callsite ID for /o modifier
+                int callsiteId = bytecodeCompiler.allocateCallsiteId();
+                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(patternReg);
+                bytecodeCompiler.emitReg(flagsReg);
+                bytecodeCompiler.emitReg(callsiteId);
+            } else {
+                // Normal QUOTE_REGEX
+                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(patternReg);
+                bytecodeCompiler.emitReg(flagsReg);
+            }
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
@@ -1995,20 +2013,37 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("matchRegex requires pattern and flags");
             }
 
+            // Check if /o modifier is used (flags are typically a StringNode)
+            boolean hasOModifier = false;
+            Node flagsNode = args.elements.get(1);
+            if (flagsNode instanceof StringNode) {
+                hasOModifier = ((StringNode) flagsNode).value.contains("o");
+            }
+
             // Compile pattern
             args.elements.get(0).accept(bytecodeCompiler);
             int patternReg = bytecodeCompiler.lastResultReg;
 
             // Compile flags
-            args.elements.get(1).accept(bytecodeCompiler);
+            flagsNode.accept(bytecodeCompiler);
             int flagsReg = bytecodeCompiler.lastResultReg;
 
-            // Create quoted regex using QUOTE_REGEX opcode
+            // Create quoted regex using appropriate opcode
             int regexReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-            bytecodeCompiler.emitReg(regexReg);
-            bytecodeCompiler.emitReg(patternReg);
-            bytecodeCompiler.emitReg(flagsReg);
+            if (hasOModifier) {
+                // Use QUOTE_REGEX_O with callsite ID for /o modifier
+                int callsiteId = bytecodeCompiler.allocateCallsiteId();
+                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
+                bytecodeCompiler.emitReg(regexReg);
+                bytecodeCompiler.emitReg(patternReg);
+                bytecodeCompiler.emitReg(flagsReg);
+                bytecodeCompiler.emitReg(callsiteId);
+            } else {
+                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
+                bytecodeCompiler.emitReg(regexReg);
+                bytecodeCompiler.emitReg(patternReg);
+                bytecodeCompiler.emitReg(flagsReg);
+            }
 
             // Check if a string was provided (from =~ binding)
             if (args.elements.size() > 2) {
