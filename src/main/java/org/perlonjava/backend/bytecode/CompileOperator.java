@@ -389,88 +389,6 @@ public class CompileOperator {
         bc.lastResultReg = rd;
     }
 
-    private static short getGenericOpcode(String op) {
-        return switch (op) {
-            case "chmod" -> Opcodes.CHMOD;
-            case "unlink" -> Opcodes.UNLINK;
-            case "utime" -> Opcodes.UTIME;
-            case "rename" -> Opcodes.RENAME;
-            case "link" -> Opcodes.LINK;
-            case "readlink" -> Opcodes.READLINK;
-            case "umask" -> Opcodes.UMASK;
-            case "getc" -> Opcodes.GETC;
-            case "fileno" -> Opcodes.FILENO;
-            case "qx" -> Opcodes.QX;
-            case "system" -> Opcodes.SYSTEM;
-            case "caller" -> Opcodes.CALLER;
-
-            case "pack" -> Opcodes.PACK;
-            case "unpack" -> Opcodes.UNPACK;
-            case "vec" -> Opcodes.VEC;
-            case "localtime" -> Opcodes.LOCALTIME;
-            case "gmtime" -> Opcodes.GMTIME;
-            case "reset" -> Opcodes.RESET;
-            case "times" -> Opcodes.TIMES;
-            case "crypt" -> Opcodes.CRYPT;
-            case "close" -> Opcodes.CLOSE;
-            case "binmode" -> Opcodes.BINMODE;
-            case "seek" -> Opcodes.SEEK;
-            case "eof" -> Opcodes.EOF_OP;
-            case "sysread" -> Opcodes.SYSREAD;
-            case "syswrite" -> Opcodes.SYSWRITE;
-            case "sysopen" -> Opcodes.SYSOPEN;
-            case "socket" -> Opcodes.SOCKET;
-            case "bind" -> Opcodes.BIND;
-            case "connect" -> Opcodes.CONNECT;
-            case "listen" -> Opcodes.LISTEN;
-            case "write" -> Opcodes.WRITE;
-            case "formline" -> Opcodes.FORMLINE;
-            case "printf" -> Opcodes.PRINTF;
-            case "accept" -> Opcodes.ACCEPT;
-            case "sysseek" -> Opcodes.SYSSEEK;
-            case "truncate" -> Opcodes.TRUNCATE;
-            case "read" -> Opcodes.READ;
-            case "chown" -> Opcodes.CHOWN;
-            case "waitpid" -> Opcodes.WAITPID;
-            case "setsockopt" -> Opcodes.SETSOCKOPT;
-            case "getsockopt" -> Opcodes.GETSOCKOPT;
-            case "getpgrp" -> Opcodes.GETPGRP;
-            case "setpgrp" -> Opcodes.SETPGRP;
-            case "getpriority" -> Opcodes.GETPRIORITY;
-            case "setpriority" -> Opcodes.SETPRIORITY;
-            case "opendir" -> Opcodes.OPENDIR;
-            case "readdir" -> Opcodes.READDIR;
-            case "seekdir" -> Opcodes.SEEKDIR;
-            default -> -1;
-        };
-    }
-
-    private static boolean visitGenericListOp(BytecodeCompiler bc, OperatorNode node, String op) {
-        short opcode = getGenericOpcode(op);
-        if (opcode < 0) return false;
-        int argsReg;
-        if (node.operand != null) {
-            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
-            int operandReg = bc.lastResultReg;
-            argsReg = bc.allocateRegister();
-            bc.emit(Opcodes.SCALAR_TO_LIST);
-            bc.emitReg(argsReg);
-            bc.emitReg(operandReg);
-        } else {
-            argsReg = bc.allocateRegister();
-            bc.emit(Opcodes.CREATE_LIST);
-            bc.emitReg(argsReg);
-            bc.emit(0);
-        }
-        int rd = bc.allocateOutputRegister();
-        bc.emitWithToken(opcode, node.getIndex());
-        bc.emitReg(rd);
-        bc.emitReg(argsReg);
-        bc.emit(bc.currentCallContext);
-        bc.lastResultReg = rd;
-        return true;
-    }
-
     private static void emitSimpleUnary(BytecodeCompiler bc, OperatorNode node, short opcode) {
         node.operand.accept(bc);
         int rs = bc.lastResultReg;
@@ -491,48 +409,7 @@ public class CompileOperator {
         bc.lastResultReg = rd;
     }
 
-    private static boolean dispatchOperator(BytecodeCompiler bc, OperatorNode node, String op) {
-        switch (op) {
-            case "not", "!" -> { emitSimpleUnaryScalar(bc, node, Opcodes.NOT); return true; }
-            case "~", "binary~" -> { emitSimpleUnary(bc, node, Opcodes.BITWISE_NOT_BINARY); return true; }
-            case "~." -> { emitSimpleUnary(bc, node, Opcodes.BITWISE_NOT_STRING); return true; }
-            case "defined" -> { emitSimpleUnary(bc, node, Opcodes.DEFINED); return true; }
-            case "wantarray" -> {
-                int rd = bc.allocateOutputRegister();
-                bc.emit(Opcodes.WANTARRAY);
-                bc.emitReg(rd);
-                bc.emitReg(2);
-                bc.lastResultReg = rd;
-                return true;
-            }
-            case "time" -> {
-                int rd = bc.allocateOutputRegister();
-                bc.emit(Opcodes.TIME_OP);
-                bc.emitReg(rd);
-                bc.lastResultReg = rd;
-                return true;
-            }
-            case "getppid" -> {
-                int rd = bc.allocateOutputRegister();
-                bc.emitWithToken(Opcodes.GETPPID, node.getIndex());
-                bc.emitReg(rd);
-                bc.lastResultReg = rd;
-                return true;
-            }
-            case "open" -> { visitOpen(bc, node); return true; }
-            case "matchRegex" -> { visitMatchRegex(bc, node); return true; }
-            case "replaceRegex" -> { visitReplaceRegex(bc, node); return true; }
-            case "substr" -> { visitSubstr(bc, node); return true; }
-            case "chomp" -> { visitChomp(bc, node); return true; }
-            case "sprintf" -> { visitSprintf(bc, node); return true; }
-            case "exists" -> { CompileExistsDelete.visitExists(bc, node); return true; }
-            case "delete" -> { CompileExistsDelete.visitDelete(bc, node); return true; }
-            case "die", "warn" -> { visitDieWarn(bc, node, op); return true; }
-            default -> { return false; }
-        }
-    }
-
-    private static boolean visitDieWarn(BytecodeCompiler bc, OperatorNode node, String op) {
+    private static void visitDieWarn(BytecodeCompiler bc, OperatorNode node, String op) {
         short opcode = op.equals("die") ? Opcodes.DIE : Opcodes.WARN;
         int msgReg;
         if (node.operand != null) {
@@ -556,67 +433,48 @@ public class CompileOperator {
             bc.emitInt(1);
             bc.lastResultReg = resultReg;
         }
-        return true;
     }
 
-    private static boolean visitPopShift(BytecodeCompiler bc, OperatorNode node, String op) {
-        short opcode = switch (op) {
-            case "pop" -> Opcodes.ARRAY_POP;
-            case "shift" -> Opcodes.ARRAY_SHIFT;
-            default -> -1;
-        };
-        if (opcode == -1) return false;
-        int arrayReg = resolveArrayOperand(bc, node, op);
+    private static void visitPopShiftOp(BytecodeCompiler bc, OperatorNode node, short opcode) {
+        int arrayReg = resolveArrayOperand(bc, node, node.operator);
         int rd = bc.allocateOutputRegister();
         bc.emit(opcode);
         bc.emitReg(rd);
         bc.emitReg(arrayReg);
         bc.lastResultReg = rd;
-        return true;
     }
 
-    private static boolean visitSimpleUnaryOp(BytecodeCompiler bc, OperatorNode node, String op) {
-        short opcode = switch (op) {
-            case "int" -> Opcodes.INT;
-            case "log" -> Opcodes.LOG;
-            case "sqrt" -> Opcodes.SQRT;
-            case "cos" -> Opcodes.COS;
-            case "sin" -> Opcodes.SIN;
-            case "exp" -> Opcodes.EXP;
-            case "abs" -> Opcodes.ABS;
-            case "integerBitwiseNot" -> Opcodes.INTEGER_BITWISE_NOT;
-            case "ord" -> Opcodes.ORD;
-            case "ordBytes" -> Opcodes.ORD_BYTES;
-            case "oct" -> Opcodes.OCT;
-            case "hex" -> Opcodes.HEX;
-            case "srand" -> Opcodes.SRAND;
-            case "chr" -> Opcodes.CHR;
-            case "chrBytes" -> Opcodes.CHR_BYTES;
-            case "lengthBytes" -> Opcodes.LENGTH_BYTES;
-            case "quotemeta" -> Opcodes.QUOTEMETA;
-            case "fc" -> Opcodes.FC;
-            case "lc" -> Opcodes.LC;
-            case "lcfirst" -> Opcodes.LCFIRST;
-            case "uc" -> Opcodes.UC;
-            case "ucfirst" -> Opcodes.UCFIRST;
-            case "tell" -> Opcodes.TELL;
-            case "rmdir" -> Opcodes.RMDIR;
-            case "closedir" -> Opcodes.CLOSEDIR;
-            case "rewinddir" -> Opcodes.REWINDDIR;
-            case "telldir" -> Opcodes.TELLDIR;
-            case "chdir" -> Opcodes.CHDIR;
-            case "exit" -> Opcodes.EXIT;
-            default -> -1;
-        };
-        if (opcode == -1) return false;
-        compileScalarOperand(bc, node, op);
+    private static void visitSimpleUnaryWithDefault(BytecodeCompiler bc, OperatorNode node, short opcode) {
+        compileScalarOperand(bc, node, node.operator);
         int argReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
         bc.emit(opcode);
         bc.emitReg(rd);
         bc.emitReg(argReg);
         bc.lastResultReg = rd;
-        return true;
+    }
+
+    private static void visitGenericListOpCase(BytecodeCompiler bc, OperatorNode node, short opcode) {
+        int argsReg;
+        if (node.operand != null) {
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+            int operandReg = bc.lastResultReg;
+            argsReg = bc.allocateRegister();
+            bc.emit(Opcodes.SCALAR_TO_LIST);
+            bc.emitReg(argsReg);
+            bc.emitReg(operandReg);
+        } else {
+            argsReg = bc.allocateRegister();
+            bc.emit(Opcodes.CREATE_LIST);
+            bc.emitReg(argsReg);
+            bc.emit(0);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emitWithToken(opcode, node.getIndex());
+        bc.emitReg(rd);
+        bc.emitReg(argsReg);
+        bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
     }
 
     private static void visitFileTestOp(BytecodeCompiler bc, OperatorNode node, String op) {
@@ -718,26 +576,120 @@ public class CompileOperator {
         bytecodeCompiler.currentTokenIndex = node.getIndex();
         String op = node.operator;
 
-        // Variable declarations and references
         switch (op) {
+            // Variable declarations and references
             case "my", "our", "local", "state" -> { bytecodeCompiler.compileVariableDeclaration(node, op); return; }
             case "$", "@", "%", "*", "&", "\\" -> { bytecodeCompiler.compileVariableReference(node, op); return; }
-        }
 
-        // Dispatch common operators, then helpers
-        if (dispatchOperator(bytecodeCompiler, node, op)) return;
-        if (visitPopShift(bytecodeCompiler, node, op)) return;
-        if (visitSimpleUnaryOp(bytecodeCompiler, node, op)) return;
-        if (visitGenericListOp(bytecodeCompiler, node, op)) return;
+            // Simple unary ops (dispatchOperator)
+            case "not", "!" -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.NOT);
+            case "~", "binary~" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
+            case "~." -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
+            case "defined" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.DEFINED);
+            case "wantarray" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WANTARRAY); bytecodeCompiler.emitReg(rd); bytecodeCompiler.emitReg(2); bytecodeCompiler.lastResultReg = rd; }
+            case "time" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.TIME_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
+            case "getppid" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex()); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
+            case "open" -> visitOpen(bytecodeCompiler, node);
+            case "matchRegex" -> visitMatchRegex(bytecodeCompiler, node);
+            case "replaceRegex" -> visitReplaceRegex(bytecodeCompiler, node);
+            case "substr" -> visitSubstr(bytecodeCompiler, node);
+            case "chomp" -> visitChomp(bytecodeCompiler, node);
+            case "sprintf" -> visitSprintf(bytecodeCompiler, node);
+            case "exists" -> CompileExistsDelete.visitExists(bytecodeCompiler, node);
+            case "delete" -> CompileExistsDelete.visitDelete(bytecodeCompiler, node);
+            case "die", "warn" -> visitDieWarn(bytecodeCompiler, node, op);
 
-        // File test operators (but not --)
-        if (op.startsWith("-") && op.length() == 2 && !op.equals("--")) {
-            visitFileTestOp(bytecodeCompiler, node, op);
-            return;
-        }
+            // Pop/shift
+            case "pop" -> visitPopShiftOp(bytecodeCompiler, node, Opcodes.ARRAY_POP);
+            case "shift" -> visitPopShiftOp(bytecodeCompiler, node, Opcodes.ARRAY_SHIFT);
 
-        // Main operator switch
-        switch (op) {
+            // Simple unary ops with default operand
+            case "int" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.INT);
+            case "log" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LOG);
+            case "sqrt" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.SQRT);
+            case "cos" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.COS);
+            case "sin" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.SIN);
+            case "exp" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.EXP);
+            case "abs" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.ABS);
+            case "integerBitwiseNot" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.INTEGER_BITWISE_NOT);
+            case "ord" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.ORD);
+            case "ordBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.ORD_BYTES);
+            case "oct" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.OCT);
+            case "hex" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.HEX);
+            case "srand" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.SRAND);
+            case "chr" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR);
+            case "chrBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR_BYTES);
+            case "lengthBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LENGTH_BYTES);
+            case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.QUOTEMETA);
+            case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.FC);
+            case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LC);
+            case "lcfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LCFIRST);
+            case "uc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.UC);
+            case "ucfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.UCFIRST);
+            case "tell" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.TELL);
+            case "rmdir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.RMDIR);
+            case "closedir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CLOSEDIR);
+            case "rewinddir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.REWINDDIR);
+            case "telldir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.TELLDIR);
+            case "chdir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHDIR);
+            case "exit" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.EXIT);
+
+            // Generic list ops
+            case "chmod" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CHMOD);
+            case "unlink" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.UNLINK);
+            case "utime" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.UTIME);
+            case "rename" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.RENAME);
+            case "link" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LINK);
+            case "readlink" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.READLINK);
+            case "umask" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.UMASK);
+            case "getc" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETC);
+            case "fileno" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.FILENO);
+            case "qx" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.QX);
+            case "system" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSTEM);
+            case "caller" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CALLER);
+            case "pack" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PACK);
+            case "unpack" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.UNPACK);
+            case "vec" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.VEC);
+            case "localtime" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LOCALTIME);
+            case "gmtime" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GMTIME);
+            case "reset" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.RESET);
+            case "times" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.TIMES);
+            case "crypt" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CRYPT);
+            case "close" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CLOSE);
+            case "binmode" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BINMODE);
+            case "seek" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SEEK);
+            case "eof" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.EOF_OP);
+            case "sysread" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSREAD);
+            case "syswrite" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSWRITE);
+            case "sysopen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSOPEN);
+            case "socket" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKET);
+            case "bind" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BIND);
+            case "connect" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CONNECT);
+            case "listen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LISTEN);
+            case "write" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.WRITE);
+            case "formline" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.FORMLINE);
+            case "printf" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PRINTF);
+            case "accept" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ACCEPT);
+            case "sysseek" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSSEEK);
+            case "truncate" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.TRUNCATE);
+            case "read" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.READ);
+            case "chown" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CHOWN);
+            case "waitpid" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.WAITPID);
+            case "setsockopt" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETSOCKOPT);
+            case "getsockopt" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETSOCKOPT);
+            case "getpgrp" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPGRP);
+            case "setpgrp" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETPGRP);
+            case "getpriority" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPRIORITY);
+            case "setpriority" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETPRIORITY);
+            case "opendir" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.OPENDIR);
+            case "readdir" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.READDIR);
+            case "seekdir" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SEEKDIR);
+
+            // File test operators
+            case "-r", "-w", "-x", "-o", "-R", "-W", "-X", "-O", "-e", "-z", "-s", "-f", "-d", "-l",
+                 "-p", "-S", "-b", "-c", "-t", "-u", "-g", "-k", "-T", "-B", "-M", "-A", "-C" -> visitFileTestOp(bytecodeCompiler, node, op);
+
+            // Main operators
             case "scalar" -> {
                 if (node.operand != null) {
                     bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
