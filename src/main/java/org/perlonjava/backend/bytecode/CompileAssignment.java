@@ -362,8 +362,8 @@ public class CompileAssignment {
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // It's a global variable - call makeLocal which returns the localized scalar
-                            String packageName = bytecodeCompiler.getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
                             int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
 
                             int localReg = bytecodeCompiler.allocateRegister();
@@ -392,8 +392,8 @@ public class CompileAssignment {
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // It's a global array - get it and push to local stack
-                            String packageName = bytecodeCompiler.getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
                             int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
 
                             int arrayReg = bytecodeCompiler.allocateRegister();
@@ -426,8 +426,8 @@ public class CompileAssignment {
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // It's a global hash - get it and push to local stack
-                            String packageName = bytecodeCompiler.getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
                             int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
 
                             int hashReg = bytecodeCompiler.allocateRegister();

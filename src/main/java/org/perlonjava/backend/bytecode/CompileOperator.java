@@ -2664,6 +2664,14 @@ public class CompileOperator {
             bytecodeCompiler.emit(Opcodes.TIME_OP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("__SUB__")) {
+            // __SUB__ returns the current subroutine being executed
+            int rd = bytecodeCompiler.allocateOutputRegister();
+            int nameIdx = bytecodeCompiler.addToStringPool("__SUB__");
+            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_CODE);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emit(nameIdx);
+            bytecodeCompiler.lastResultReg = rd;
         } else {
             bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }

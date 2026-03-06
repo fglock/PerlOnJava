@@ -429,7 +429,12 @@ public class BytecodeInterpreter {
                                 int rd = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
                                 String name = code.stringPool[nameIdx];
-                                registers[rd] = GlobalVariable.getGlobalCodeRef(name);
+                                if (name.equals("__SUB__")) {
+                                    // __SUB__ returns the current subroutine being executed
+                                    registers[rd] = RuntimeCode.selfReferenceMaybeNull(code.__SUB__);
+                                } else {
+                                    registers[rd] = GlobalVariable.getGlobalCodeRef(name);
+                                }
                             }
 
                             case Opcodes.STORE_GLOBAL_CODE -> {

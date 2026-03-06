@@ -838,8 +838,10 @@ public class OpcodeHandlerExtended {
         // Create a new InterpretedCode with the captured variables
         InterpretedCode closureCode = template.withCapturedVars(capturedVars);
 
-        // Wrap in RuntimeScalar
-        registers[rd] = new RuntimeScalar(closureCode);
+        // Wrap in RuntimeScalar and set __SUB__ for self-reference
+        RuntimeScalar codeRef = new RuntimeScalar(closureCode);
+        closureCode.__SUB__ = codeRef;
+        registers[rd] = codeRef;
         return pc;
     }
 

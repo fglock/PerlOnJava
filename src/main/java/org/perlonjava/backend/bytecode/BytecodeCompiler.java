@@ -3178,6 +3178,16 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
+            // local $hash{key} or local $array[index] - localize a hash/array element
+            if (node.operand instanceof BinaryOperatorNode binOp
+                    && (binOp.operator.equals("{") || binOp.operator.equals("["))) {
+                compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                int elemReg = lastResultReg;
+                emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                emitReg(elemReg);
+                lastResultReg = elemReg;
+                return;
+            }
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
         throwCompilerException("Unsupported variable declaration operator: " + op);
@@ -4033,6 +4043,7 @@ public class BytecodeCompiler implements Visitor {
 
         if (closureVarIndices.isEmpty()) {
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
+            subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);
@@ -4122,6 +4133,7 @@ public class BytecodeCompiler implements Visitor {
         if (closureVarIndices.isEmpty()) {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
+            subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);

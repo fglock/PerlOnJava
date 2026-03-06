@@ -838,6 +838,9 @@ public class SubroutineParser {
                     interpretedCode.subName = placeholder.subName;
                     interpretedCode.packageName = placeholder.packageName;
 
+                    // Set the __SUB__ field for self-reference
+                    interpretedCode.__SUB__ = codeRef;
+
                     // Update placeholder in-place: set methodHandle to delegate to InterpretedCode
                     placeholder.methodHandle = RuntimeCode.lookup.findVirtual(
                             InterpretedCode.class, "apply", RuntimeCode.methodType);

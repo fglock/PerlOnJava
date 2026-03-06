@@ -153,6 +153,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeList constantValue;
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
+    // Self-reference for __SUB__ (set after construction for InterpretedCode)
+    public RuntimeScalar __SUB__;
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
