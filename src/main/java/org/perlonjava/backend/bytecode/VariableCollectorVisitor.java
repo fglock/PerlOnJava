@@ -37,7 +37,7 @@ public class VariableCollectorVisitor implements Visitor {
         // Check if this is a variable reference (sigil + identifier)
         String op = node.operator;
         if ((op.equals("$") || op.equals("@") || op.equals("%") || op.equals("&"))
-            && node.operand instanceof IdentifierNode) {
+                && node.operand instanceof IdentifierNode) {
             // This is a variable reference
             IdentifierNode idNode = (IdentifierNode) node.operand;
             String varName = op + idNode.name;

@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * Maintains state during unpack operations, managing the dual representation
  * of data as both character codes and bytes, along with position tracking.
- * 
+ *
  * <p><b>Data Representation:</b></p>
  * <ul>
  *   <li><b>Character codes (codePoints array):</b> Logical view of the string as an array
@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
  *   <li><b>isUTF8Data flag:</b> True if the string contains characters > 255, indicating
  *       that originalBytes contains UTF-8 encoded data.</li>
  * </ul>
- * 
+ *
  * <p><b>Position Tracking:</b></p>
  * <ul>
  *   <li><b>Character position (codePointIndex):</b> Current index in the codePoints array.</li>
@@ -30,7 +30,7 @@ import java.nio.charset.StandardCharsets;
  *   <li><b>Group baselines:</b> Stacks (groupCharBase, groupByteBase) track the starting
  *       positions of nested groups for relative addressing (e.g., .(.). format).</li>
  * </ul>
- * 
+ *
  * <p><b>Mode Management:</b></p>
  * <ul>
  *   <li><b>Character mode (default):</b> Formats read from the codePoints array.
@@ -39,7 +39,7 @@ import java.nio.charset.StandardCharsets;
  *       Used by: s, S, i, I, l, L, q, Q, n, N, v, V, f, d formats.</li>
  *   <li><b>Mode switches:</b> C0 forces byte mode, U0 forces character mode.</li>
  * </ul>
- * 
+ *
  * <p><b>Critical Insight:</b> Perl internally stores UTF-8 bytes but tracks character
  * length separately. When unpacking strings with the UTF-8 flag set:
  * <ul>
@@ -47,7 +47,7 @@ import java.nio.charset.StandardCharsets;
  *   <li>N/V/I formats read raw bytes from originalBytes (UTF-8 encoded)</li>
  *   <li>x format skips characters in character mode, bytes in byte mode</li>
  * </ul>
- * 
+ *
  * <p><b>Group-Relative Positioning:</b> The . and .! formats support multi-level
  * group-relative positioning:
  * <ul>
@@ -56,7 +56,7 @@ import java.nio.charset.StandardCharsets;
  *   <li>.2 - Position relative to parent group</li>
  *   <li>.* - Absolute position from start of string</li>
  * </ul>
- * 
+ *
  * @see Unpack
  * @see UnpackGroupProcessor
  * @see DotFormatHandler
@@ -88,10 +88,10 @@ public class UnpackState {
         java.util.List<Integer> codePointList = new java.util.ArrayList<>();
         int i = 0;
         while (i < dataString.length()) {
-            if (i < dataString.length() - 10 && 
-                dataString.charAt(i) == '\uFFFD' && 
-                dataString.charAt(i + 1) == '<' &&
-                dataString.charAt(i + 10) == '>') {
+            if (i < dataString.length() - 10 &&
+                    dataString.charAt(i) == '\uFFFD' &&
+                    dataString.charAt(i + 1) == '<' &&
+                    dataString.charAt(i + 10) == '>') {
                 // Extract the hex code point
                 String hexStr = dataString.substring(i + 2, i + 10);
                 try {
@@ -106,7 +106,7 @@ public class UnpackState {
             codePointList.add(dataString.codePointAt(i));
             i += Character.charCount(dataString.codePointAt(i));
         }
-        
+
         this.codePoints = codePointList.stream().mapToInt(Integer::intValue).toArray();
 
         // Determine if this is binary data or a Unicode string
@@ -139,6 +139,45 @@ public class UnpackState {
             // This handles both ASCII and binary packed data correctly
             this.originalBytes = dataString.getBytes(StandardCharsets.ISO_8859_1);
         }
+    }
+
+    /**
+     * Compute the extended UTF-8 length (Perl semantics) for a code point.
+     * Supports 1 to 6 byte sequences.
+     */
+    private static int utf8Len(int cp) {
+        if (cp <= 0x7F) return 1;
+        if (cp <= 0x7FF) return 2;
+        if (cp <= 0xFFFF) return 3;
+        if (cp <= 0x1FFFFF) return 4;
+        if (cp <= 0x3FFFFFF) return 5;
+        return 6;
+    }
+
+    /**
+     * Encode an array of code points into extended UTF-8 bytes (Perl semantics).
+     */
+    private static byte[] encodeUtf8Extended(int[] cps) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        for (int cp : cps) {
+            int len = utf8Len(cp);
+            byte[] out = new byte[len];
+            int val = cp;
+            // Fill continuation bytes from the end
+            for (int i = len - 1; i >= 1; i--) {
+                out[i] = (byte) (0x80 | (val & 0x3F));
+                val >>= 6;
+            }
+            // First byte prefix: 0xxxxxxx, 110xxxxx, 1110xxxx, 11110xxx, 111110xx, 1111110x
+            if (len == 1) {
+                out[0] = (byte) (val & 0x7F);
+            } else {
+                int prefix = (0xFF << (8 - len)) & 0xFF; // 11000000, 11100000, 11110000, 11111000, 11111100
+                out[0] = (byte) (prefix | (val & ((1 << (8 - (len + 1))) - 1)));
+            }
+            baos.write(out, 0, out.length);
+        }
+        return baos.toByteArray();
     }
 
     /**
@@ -193,7 +232,7 @@ public class UnpackState {
 
     /**
      * Get the byte position relative to the Nth group level up.
-     * 
+     *
      * @param level 1 = innermost group, 2 = parent group, etc.
      * @return byte position relative to the specified group level, or absolute if level > depth
      */
@@ -206,7 +245,7 @@ public class UnpackState {
         // Get the base at the specified level
         int baseIndex = depth - level;
         if (baseIndex < 0) baseIndex = 0;
-        
+
         Integer[] bases = groupByteBase.toArray(new Integer[0]);
         int base = bases[baseIndex];
         return getBytePosition() - base;
@@ -222,7 +261,7 @@ public class UnpackState {
     /**
      * Returns the current group nesting depth.
      * Used by dot format to determine which group level to use as baseline.
-     * 
+     *
      * @return number of active groups (0 if no groups, 1 for innermost, etc.)
      */
     public int getGroupDepth() {
@@ -231,7 +270,7 @@ public class UnpackState {
 
     /**
      * Get the position relative to the Nth group level up.
-     * 
+     *
      * @param level 1 = innermost group, 2 = parent group, etc.
      * @return position relative to the specified group level, or absolute if level > depth
      */
@@ -246,7 +285,7 @@ public class UnpackState {
             // Stack index: size-level gives us the Nth element from top
             int baseIndex = depth - level;
             if (baseIndex < 0) baseIndex = 0;
-            
+
             // Convert Deque to array to access by index
             Integer[] bases = groupCharBase.toArray(new Integer[0]);
             int base = bases[baseIndex];
@@ -259,7 +298,7 @@ public class UnpackState {
             }
             int baseIndex = depth - level;
             if (baseIndex < 0) baseIndex = 0;
-            
+
             Integer[] bases = groupByteBase.toArray(new Integer[0]);
             int base = bases[baseIndex];
             return getBytePosition() - base;
@@ -457,44 +496,5 @@ public class UnpackState {
             }
             return bytePos;
         }
-    }
-
-    /**
-     * Compute the extended UTF-8 length (Perl semantics) for a code point.
-     * Supports 1 to 6 byte sequences.
-     */
-    private static int utf8Len(int cp) {
-        if (cp <= 0x7F) return 1;
-        if (cp <= 0x7FF) return 2;
-        if (cp <= 0xFFFF) return 3;
-        if (cp <= 0x1FFFFF) return 4;
-        if (cp <= 0x3FFFFFF) return 5;
-        return 6;
-    }
-
-    /**
-     * Encode an array of code points into extended UTF-8 bytes (Perl semantics).
-     */
-    private static byte[] encodeUtf8Extended(int[] cps) {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        for (int cp : cps) {
-            int len = utf8Len(cp);
-            byte[] out = new byte[len];
-            int val = cp;
-            // Fill continuation bytes from the end
-            for (int i = len - 1; i >= 1; i--) {
-                out[i] = (byte) (0x80 | (val & 0x3F));
-                val >>= 6;
-            }
-            // First byte prefix: 0xxxxxxx, 110xxxxx, 1110xxxx, 11110xxx, 111110xx, 1111110x
-            if (len == 1) {
-                out[0] = (byte) (val & 0x7F);
-            } else {
-                int prefix = (0xFF << (8 - len)) & 0xFF; // 11000000, 11100000, 11110000, 11111000, 11111100
-                out[0] = (byte) (prefix | (val & ((1 << (8 - (len + 1))) - 1)));
-            }
-            baos.write(out, 0, out.length);
-        }
-        return baos.toByteArray();
     }
 }

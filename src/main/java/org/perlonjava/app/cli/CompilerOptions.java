@@ -77,8 +77,8 @@ public class CompilerOptions implements Cloneable {
     public boolean unicodeOutput = false; // -CO (same as stdout)
     public boolean unicodeArgs = false; // -CA
     public boolean unicodeLocale = false; // -CL
-    List<ArgumentParser.ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
     public RuntimeScalar incHook = null; // For storing @INC hook reference
+    List<ArgumentParser.ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 
     @Override
     public CompilerOptions clone() {

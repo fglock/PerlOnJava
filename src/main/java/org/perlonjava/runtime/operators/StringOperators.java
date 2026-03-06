@@ -279,7 +279,7 @@ public class StringOperators {
         String bStr = b.toString();
 
         if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(runtimeScalar.toString() + bStr);
+            return new RuntimeScalar(runtimeScalar + bStr);
         }
 
         if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
@@ -292,10 +292,16 @@ public class StringOperators {
             if (aIsByte && bIsByte) {
                 boolean safe = true;
                 for (int i = 0; safe && i < aStr.length(); i++) {
-                    if (aStr.charAt(i) > 255) safe = false;
+                    if (aStr.charAt(i) > 255) {
+                        safe = false;
+                        break;
+                    }
                 }
                 for (int i = 0; safe && i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) safe = false;
+                    if (bStr.charAt(i) > 255) {
+                        safe = false;
+                        break;
+                    }
                 }
                 if (safe) {
                     byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
@@ -308,7 +314,7 @@ public class StringOperators {
             }
         }
 
-        return new RuntimeScalar(runtimeScalar.toString() + bStr);
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -320,7 +326,7 @@ public class StringOperators {
         String bStr = b.toString();
 
         if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(runtimeScalar.toString() + bStr);
+            return new RuntimeScalar(runtimeScalar + bStr);
         }
 
         if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
@@ -333,10 +339,16 @@ public class StringOperators {
             if (aIsByte && bIsByte) {
                 boolean safe = true;
                 for (int i = 0; safe && i < aStr.length(); i++) {
-                    if (aStr.charAt(i) > 255) safe = false;
+                    if (aStr.charAt(i) > 255) {
+                        safe = false;
+                        break;
+                    }
                 }
                 for (int i = 0; safe && i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) safe = false;
+                    if (bStr.charAt(i) > 255) {
+                        safe = false;
+                        break;
+                    }
                 }
                 if (safe) {
                     byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
@@ -349,7 +361,7 @@ public class StringOperators {
             }
         }
 
-        return new RuntimeScalar(runtimeScalar.toString() + bStr);
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
@@ -441,7 +453,7 @@ public class StringOperators {
         // Perl's chr() accepts any non-negative integer value and creates a character
         // with that code point, even if it's not valid Unicode (surrogates, beyond 0x10FFFF).
         // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
-        
+
         // For values 0-0x10FFFF that Java accepts, use Java's built-in support
         if (Character.isValidCodePoint(codePoint) && codePoint <= 0x10FFFF) {
             RuntimeScalar res = new RuntimeScalar(new String(Character.toChars(codePoint)));
@@ -451,13 +463,13 @@ public class StringOperators {
             }
             return res;
         }
-        
+
         // For surrogates (0xD800-0xDFFF) and values beyond Unicode (> 0x10FFFF),
         // Perl still creates a character with that code point. We store it as a
         // special marker that will be properly encoded when converted to UTF-8.
         // For now, we create a string with the code point value, which will be
         // handled by the UTF-8 encoding logic in pack/unpack.
-        
+
         // Create a character using the code point directly
         // Note: This may create invalid Unicode, but that's what Perl does
         if (codePoint <= 0x10FFFF) {
@@ -466,7 +478,7 @@ public class StringOperators {
             RuntimeScalar res = new RuntimeScalar(new String(new int[]{codePoint}, 0, 1));
             return res;
         }
-        
+
         // For values beyond 0x10FFFF, Java's String can't represent them.
         // We need to store the code point value separately so UnpackState can encode it.
         // As a workaround, we'll store a special marker string with the code point embedded.
@@ -523,8 +535,8 @@ public class StringOperators {
      * Used for both explicit join() calls and string interpolation.
      *
      * @param runtimeScalar The separator
-     * @param list The list to join
-     * @param warnOnUndef Whether to warn about undef values
+     * @param list          The list to join
+     * @param warnOnUndef   Whether to warn about undef values
      * @return The joined string
      */
     private static RuntimeScalar joinInternal(RuntimeScalar runtimeScalar, RuntimeBase list, boolean warnOnUndef) {
@@ -539,10 +551,10 @@ public class StringOperators {
         String delimiter = runtimeScalar.toString();
 
         boolean isByteString = runtimeScalar.type == BYTE_STRING || delimiter.isEmpty();
-        
+
         // String interpolation uses empty delimiter - don't warn about undef in that case
         boolean isStringInterpolation = delimiter.isEmpty();
-        
+
         // Join the list into a string
         StringBuilder sb = new StringBuilder();
 
@@ -577,7 +589,7 @@ public class StringOperators {
      * This is used internally by the compiler for string interpolation.
      *
      * @param runtimeScalar The separator (usually empty string)
-     * @param list The list to join
+     * @param list          The list to join
      * @return The joined string
      */
     public static RuntimeScalar joinForInterpolation(RuntimeScalar runtimeScalar, RuntimeBase list) {
@@ -608,17 +620,17 @@ public class StringOperators {
     private static RuntimeScalar caseFoldBytesAsciiOnly(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         StringBuilder result = new StringBuilder(str.length());
-        
+
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
             // Only lowercase ASCII A-Z (0x41-0x5A)
             if (c >= 'A' && c <= 'Z') {
-                result.append((char)(c + 32)); // Convert to lowercase
+                result.append((char) (c + 32)); // Convert to lowercase
             } else {
                 result.append(c);
             }
         }
-        
+
         RuntimeScalar out = new RuntimeScalar(result.toString());
         out.type = BYTE_STRING;
         return out;
@@ -631,17 +643,17 @@ public class StringOperators {
     private static RuntimeScalar uppercaseBytesAsciiOnly(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         StringBuilder result = new StringBuilder(str.length());
-        
+
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
             // Only uppercase ASCII a-z (0x61-0x7A)
             if (c >= 'a' && c <= 'z') {
-                result.append((char)(c - 32)); // Convert to uppercase
+                result.append((char) (c - 32)); // Convert to uppercase
             } else {
                 result.append(c);
             }
         }
-        
+
         RuntimeScalar out = new RuntimeScalar(result.toString());
         out.type = BYTE_STRING;
         return out;

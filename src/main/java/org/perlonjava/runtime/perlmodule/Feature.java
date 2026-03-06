@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.FeatureFlags.getFeatureList;

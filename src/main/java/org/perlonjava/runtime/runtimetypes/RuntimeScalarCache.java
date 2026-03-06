@@ -21,7 +21,6 @@ public class RuntimeScalarCache {
     private static final AtomicInteger nextByteStringIndex = new AtomicInteger(0);
     private static final ConcurrentHashMap<String, Integer> byteStringToIndex = new ConcurrentHashMap<>();
     private static final Object byteStringCacheLock = new Object();
-    private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
     // Cached RuntimeScalarReadOnly objects for common boolean and undefined values
     public static RuntimeScalarReadOnly scalarTrue;
     public static RuntimeScalarReadOnly scalarFalse;
@@ -34,6 +33,7 @@ public class RuntimeScalarCache {
     static int maxInt = 100;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
+    private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
     private static volatile RuntimeScalarReadOnly[] scalarString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
 
     // Static block to initialize the cache

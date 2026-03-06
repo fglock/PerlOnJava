@@ -9,9 +9,9 @@ package org.perlonjava.runtime.runtimetypes;
  */
 
 import org.perlonjava.runtime.io.*;
+import org.perlonjava.runtime.operators.IOOperator;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
-import org.perlonjava.runtime.operators.IOOperator;
 
 import java.io.File;
 import java.io.IOException;
@@ -96,44 +96,26 @@ public class RuntimeIO extends RuntimeScalar {
     };
 
     private static final Map<Long, Process> childProcesses = new java.util.concurrent.ConcurrentHashMap<>();
-
-    public static void registerChildProcess(Process p) {
-        if (p != null) childProcesses.put(p.pid(), p);
-    }
-
-    public static Process getChildProcess(long pid) {
-        return childProcesses.get(pid);
-    }
-
-    public static Process removeChildProcess(long pid) {
-        return childProcesses.remove(pid);
-    }
-
     /**
      * Standard output stream handle (STDOUT)
      */
     public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
-
     /**
      * Standard error stream handle (STDERR)
      */
     public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
-
     /**
      * Standard input stream handle (STDIN)
      */
     public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
-
     /**
      * The last accessed filehandle, used for Perl's ${^LAST_FH} special variable.
      * Updated whenever a filehandle is used for I/O operations.
      */
     public static RuntimeIO lastAccesseddHandle;
-
     // Tracks the last handle used for output writes (print/say/etc). This must not
     // clobber lastAccesseddHandle, which is used for ${^LAST_FH} and $.
     public static RuntimeIO lastWrittenHandle;
-
     /**
      * The currently selected filehandle for output operations.
      * Used by print/printf when no filehandle is specified.
@@ -155,46 +137,27 @@ public class RuntimeIO extends RuntimeScalar {
      * Incremented for each line read from this handle.
      */
     public int currentLineNumber = 0;
-
     /**
      * The underlying I/O handle that performs actual I/O operations.
      * Can be a file, socket, pipe, or custom I/O implementation.
      */
     public IOHandle ioHandle = new ClosedIOHandle(); // Initialize with ClosedIOHandle
-
-    public long getPid() {
-        Process p = null;
-        if (ioHandle instanceof PipeInputChannel pic) {
-            p = pic.getProcess();
-        } else if (ioHandle instanceof PipeOutputChannel poc) {
-            p = poc.getProcess();
-        }
-        if (p != null) {
-            registerChildProcess(p);
-            return p.pid();
-        }
-        return -1;
-    }
-
     /**
      * Directory handle for directory operations (opendir, readdir, etc.).
      * Mutually exclusive with ioHandle - a RuntimeIO is either a file or directory handle.
      */
     public DirectoryIO directoryIO;
-
     /**
      * The name of the glob that owns this IO handle (e.g., "main::STDOUT").
      * Used for stringification when the filehandle is used in string context.
      * Null if this handle is not associated with a named glob.
      */
     public String globName;
-
     /**
      * Flag indicating if this handle has unflushed output.
      * Used to determine when automatic flushing is needed.
      */
     boolean needFlush;
-
     boolean autoFlush;
 
     /**
@@ -221,6 +184,18 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public RuntimeIO(DirectoryIO directoryIO) {
         this.directoryIO = directoryIO;
+    }
+
+    public static void registerChildProcess(Process p) {
+        if (p != null) childProcesses.put(p.pid(), p);
+    }
+
+    public static Process getChildProcess(long pid) {
+        return childProcesses.get(pid);
+    }
+
+    public static Process removeChildProcess(long pid) {
+        return childProcesses.remove(pid);
     }
 
     /**
@@ -500,7 +475,7 @@ public class RuntimeIO extends RuntimeScalar {
 
         // Create ScalarBackedIO
         ScalarBackedIO scalarIO = new ScalarBackedIO(targetScalar);
-        
+
         if (mode.equals(">>")) {
             // Enable append mode - writes always go to the end
             scalarIO.setAppendMode(true);
@@ -854,6 +829,20 @@ public class RuntimeIO extends RuntimeScalar {
         return sourceHandle;
     }
 
+    public long getPid() {
+        Process p = null;
+        if (ioHandle instanceof PipeInputChannel pic) {
+            p = pic.getProcess();
+        } else if (ioHandle instanceof PipeOutputChannel poc) {
+            p = poc.getProcess();
+        }
+        if (p != null) {
+            registerChildProcess(p);
+            return p.pid();
+        }
+        return -1;
+    }
+
     /**
      * Sets or changes the I/O layers for this handle.
      *
@@ -1055,9 +1044,9 @@ public class RuntimeIO extends RuntimeScalar {
         // Only flush lastAccessedHandle if it's a different handle AND doesn't share the same ioHandle
         // (duplicated handles share the same ioHandle, so flushing would be redundant and could cause deadlocks)
         if (lastWrittenHandle != null &&
-            lastWrittenHandle != this &&
-            lastWrittenHandle.needFlush &&
-            lastWrittenHandle.ioHandle != this.ioHandle) {
+                lastWrittenHandle != this &&
+                lastWrittenHandle.needFlush &&
+                lastWrittenHandle.ioHandle != this.ioHandle) {
             // Synchronize terminal output for stdout and stderr
             lastWrittenHandle.flush();
         }
@@ -1069,7 +1058,7 @@ public class RuntimeIO extends RuntimeScalar {
                 System.err.println("[JPERL_IO_DEBUG] write failed: glob=" + globName +
                         " ioHandle=" + (ioHandle == null ? "null" : ioHandle.getClass().getName()) +
                         " defined=" + result.getDefinedBoolean() +
-                        " errno=" + getGlobalVariable("main::!").toString());
+                        " errno=" + getGlobalVariable("main::!"));
                 System.err.flush();
             }
         }

@@ -272,8 +272,8 @@ public class ScopedSymbolTable {
             if (existing != null) {
                 // Replace with new entry using the same index
                 currentScope.variableIndex.put(name,
-                    new SymbolTable.SymbolEntry(existing.index(), name, variableDeclType,
-                        getCurrentPackage(), ast));
+                        new SymbolTable.SymbolEntry(existing.index(), name, variableDeclType,
+                                getCurrentPackage(), ast));
             } else {
                 // If it doesn't exist in current scope, just add it
                 currentScope.addVariable(name, variableDeclType, getCurrentPackage(), ast);

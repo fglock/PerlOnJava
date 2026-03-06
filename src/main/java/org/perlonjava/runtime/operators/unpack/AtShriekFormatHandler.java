@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Handler for the '@!' format character in unpack operations.
  * This format sets the absolute position in the string using byte offsets.
- * 
+ *
  * <p>Unlike '@' which uses character positions for UTF-8 strings,
  * '@!' always uses byte positions even for UTF-8 strings.
  */
@@ -24,7 +24,7 @@ public class AtShriekFormatHandler implements FormatHandler {
         if (wasCharMode) {
             state.switchToCharacterMode();
         }
-        
+
         // @! doesn't produce any output values
     }
 

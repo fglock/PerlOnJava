@@ -4,7 +4,6 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
 
 /**
  * Provides basic arithmetic operations for RuntimeScalar objects.
@@ -270,18 +269,18 @@ public class MathOperators {
             }
             return new RuntimeScalar(result);
         }
-        
+
         // Use long arithmetic to handle large integers (beyond int range)
         long dividend = arg1.getLong();
         long divisor = arg2.getLong();
         long result = dividend % divisor;
-        
+
         // Adjust result for Perl-style modulus behavior
         // In Perl, the result has the same sign as the divisor
         if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
             result += divisor;
         }
-        
+
         // Return as int if it fits, otherwise as long
         if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
             return new RuntimeScalar((int) result);
@@ -727,7 +726,7 @@ public class MathOperators {
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
             case STRING, BYTE_STRING -> {
                 String s = (String) runtimeScalar.value;
-                yield getScalarBoolean(s.isEmpty() || s.equals("0"));
+                yield getScalarBoolean (s.isEmpty() || s.equals("0"));
             }
             case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
             case GLOB -> scalarFalse;

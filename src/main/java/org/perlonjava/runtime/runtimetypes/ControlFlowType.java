@@ -5,19 +5,29 @@ package org.perlonjava.runtime.runtimetypes;
  * Used to mark RuntimeList objects with control flow information.
  */
 public enum ControlFlowType {
-    /** Exit loop immediately (like C's break) */
+    /**
+     * Exit loop immediately (like C's break)
+     */
     LAST,
-    
-    /** Start next iteration of loop (like C's continue) */
+
+    /**
+     * Start next iteration of loop (like C's continue)
+     */
     NEXT,
-    
-    /** Restart loop block without re-evaluating conditional */
+
+    /**
+     * Restart loop block without re-evaluating conditional
+     */
     REDO,
-    
-    /** Jump to a labeled statement */
+
+    /**
+     * Jump to a labeled statement
+     */
     GOTO,
-    
-    /** Tail call optimization for goto &NAME */
+
+    /**
+     * Tail call optimization for goto &NAME
+     */
     TAILCALL
 }
 

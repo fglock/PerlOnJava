@@ -4,7 +4,7 @@ import java.io.Serial;
 
 /**
  * Exception used to implement Perl's die semantics.
- *
+ * <p>
  * This carries the original die payload (string or reference) so eval can
  * propagate it into $@ without stringifying.
  */

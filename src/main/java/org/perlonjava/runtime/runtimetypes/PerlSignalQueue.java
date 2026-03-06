@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class PerlSignalQueue {
     private static final Queue<SignalEvent> signalQueue = new ConcurrentLinkedQueue<>();
-    
+
     // Volatile flag for ultra-fast signal checking in hot paths
     // Reading a volatile boolean is ~2 CPU cycles, much faster than queue.isEmpty()
     private static volatile boolean hasPendingSignal = false;
@@ -47,7 +47,7 @@ public class PerlSignalQueue {
     public static void processSignals() {
         processSignalsImpl();
     }
-    
+
     /**
      * Internal implementation of signal processing.
      */

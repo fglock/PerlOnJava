@@ -10,7 +10,7 @@ import java.io.StringWriter;
 /**
  * The PerlScriptEngine class is a custom implementation of the AbstractScriptEngine
  * that supports the Compilable interface for improved performance.
- *
+ * <p>
  * It allows the execution of Perl scripts within the Java environment using the Java Scripting API (JSR 223).
  * <p>
  * This class provides the necessary methods to evaluate Perl scripts, manage script contexts, and integrate

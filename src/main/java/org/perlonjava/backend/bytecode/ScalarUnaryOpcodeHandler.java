@@ -1,16 +1,8 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.operators.BitwiseOperators;
-import org.perlonjava.runtime.operators.Directory;
-import org.perlonjava.runtime.operators.IOOperator;
-import org.perlonjava.runtime.operators.MathOperators;
-import org.perlonjava.runtime.operators.Random;
-import org.perlonjava.runtime.operators.ScalarOperators;
-import org.perlonjava.runtime.operators.StringOperators;
-import org.perlonjava.runtime.operators.Time;
-import org.perlonjava.runtime.operators.WarnDie;
 
 /**
  * Handler for scalar unary operations (chr, ord, abs, sin, cos, lc, uc, etc.)
@@ -71,7 +63,7 @@ public class ScalarUnaryOpcodeHandler {
      * Disassemble scalar unary operations (chr, ord, abs, sin, cos, lc, uc, etc.) operation.
      */
     public static int disassemble(int opcode, int[] bytecode, int pc,
-                                   StringBuilder sb) {
+                                  StringBuilder sb) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
 
@@ -83,17 +75,23 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.SIN -> sb.append("SIN r").append(rd).append(" = sin(r").append(rs).append(")\n");
             case Opcodes.EXP -> sb.append("EXP r").append(rd).append(" = exp(r").append(rs).append(")\n");
             case Opcodes.ABS -> sb.append("ABS r").append(rd).append(" = abs(r").append(rs).append(")\n");
-            case Opcodes.BINARY_NOT -> sb.append("BINARY_NOT r").append(rd).append(" = binary~(r").append(rs).append(")\n");
-            case Opcodes.INTEGER_BITWISE_NOT -> sb.append("INTEGER_BITWISE_NOT r").append(rd).append(" = integerBitwiseNot(r").append(rs).append(")\n");
+            case Opcodes.BINARY_NOT ->
+                    sb.append("BINARY_NOT r").append(rd).append(" = binary~(r").append(rs).append(")\n");
+            case Opcodes.INTEGER_BITWISE_NOT ->
+                    sb.append("INTEGER_BITWISE_NOT r").append(rd).append(" = integerBitwiseNot(r").append(rs).append(")\n");
             case Opcodes.ORD -> sb.append("ORD r").append(rd).append(" = ord(r").append(rs).append(")\n");
-            case Opcodes.ORD_BYTES -> sb.append("ORD_BYTES r").append(rd).append(" = ordBytes(r").append(rs).append(")\n");
+            case Opcodes.ORD_BYTES ->
+                    sb.append("ORD_BYTES r").append(rd).append(" = ordBytes(r").append(rs).append(")\n");
             case Opcodes.OCT -> sb.append("OCT r").append(rd).append(" = oct(r").append(rs).append(")\n");
             case Opcodes.HEX -> sb.append("HEX r").append(rd).append(" = hex(r").append(rs).append(")\n");
             case Opcodes.SRAND -> sb.append("SRAND r").append(rd).append(" = srand(r").append(rs).append(")\n");
             case Opcodes.CHR -> sb.append("CHR r").append(rd).append(" = chr(r").append(rs).append(")\n");
-            case Opcodes.CHR_BYTES -> sb.append("CHR_BYTES r").append(rd).append(" = chrBytes(r").append(rs).append(")\n");
-            case Opcodes.LENGTH_BYTES -> sb.append("LENGTH_BYTES r").append(rd).append(" = lengthBytes(r").append(rs).append(")\n");
-            case Opcodes.QUOTEMETA -> sb.append("QUOTEMETA r").append(rd).append(" = quotemeta(r").append(rs).append(")\n");
+            case Opcodes.CHR_BYTES ->
+                    sb.append("CHR_BYTES r").append(rd).append(" = chrBytes(r").append(rs).append(")\n");
+            case Opcodes.LENGTH_BYTES ->
+                    sb.append("LENGTH_BYTES r").append(rd).append(" = lengthBytes(r").append(rs).append(")\n");
+            case Opcodes.QUOTEMETA ->
+                    sb.append("QUOTEMETA r").append(rd).append(" = quotemeta(r").append(rs).append(")\n");
             case Opcodes.FC -> sb.append("FC r").append(rd).append(" = fc(r").append(rs).append(")\n");
             case Opcodes.LC -> sb.append("LC r").append(rd).append(" = lc(r").append(rs).append(")\n");
             case Opcodes.LCFIRST -> sb.append("LCFIRST r").append(rd).append(" = lcfirst(r").append(rs).append(")\n");
@@ -102,8 +100,10 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.SLEEP -> sb.append("SLEEP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
             case Opcodes.TELL -> sb.append("TELL r").append(rd).append(" = tell(r").append(rs).append(")\n");
             case Opcodes.RMDIR -> sb.append("RMDIR r").append(rd).append(" = rmdir(r").append(rs).append(")\n");
-            case Opcodes.CLOSEDIR -> sb.append("CLOSEDIR r").append(rd).append(" = closedir(r").append(rs).append(")\n");
-            case Opcodes.REWINDDIR -> sb.append("REWINDDIR r").append(rd).append(" = rewinddir(r").append(rs).append(")\n");
+            case Opcodes.CLOSEDIR ->
+                    sb.append("CLOSEDIR r").append(rd).append(" = closedir(r").append(rs).append(")\n");
+            case Opcodes.REWINDDIR ->
+                    sb.append("REWINDDIR r").append(rd).append(" = rewinddir(r").append(rs).append(")\n");
             case Opcodes.TELLDIR -> sb.append("TELLDIR r").append(rd).append(" = telldir(r").append(rs).append(")\n");
             case Opcodes.CHDIR -> sb.append("CHDIR r").append(rd).append(" = chdir(r").append(rs).append(")\n");
             case Opcodes.EXIT -> sb.append("EXIT r").append(rd).append(" = exit(r").append(rs).append(")\n");

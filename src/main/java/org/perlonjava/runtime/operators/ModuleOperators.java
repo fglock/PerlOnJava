@@ -1,10 +1,10 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -23,7 +23,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
  * ModuleOperators implements Perl's module loading operators: `do`, `require`, and `use`.
- * 
+ *
  * <p>This class handles multiple forms of code loading:
  * <ul>
  *   <li><b>do FILE</b> - Executes a file without checking %INC</li>
@@ -34,7 +34,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  *   <li><b>require FILE</b> - Loads module once, checks %INC, requires true value</li>
  *   <li><b>require VERSION</b> - Version checking</li>
  * </ul>
- * 
+ *
  * <h2>@INC Filter Support</h2>
  * <p>When a code reference is passed to `do`, it's called repeatedly as a generator:
  * <ul>
@@ -43,27 +43,27 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  *   <li>Return true to continue reading</li>
  *   <li>Optional state parameters are passed as @_ (starting at $_[1])</li>
  * </ul>
- * 
+ *
  * <h2>Error Handling</h2>
  * <p>Errors are stored in special variables:
  * <ul>
  *   <li><b>$@</b> - Compilation/execution errors</li>
  *   <li><b>$!</b> - I/O errors (file not found, permissions, etc.)</li>
  * </ul>
- * 
+ *
  * @see <a href="https://perldoc.perl.org/functions/do">perldoc do</a>
  * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
  */
 public class ModuleOperators {
-    
+
     /**
      * Public entry point for `do` operator.
-     * 
+     *
      * <p>Always sets %INC and keeps the entry regardless of execution result.
      * This differs from `require` which removes %INC entries on failure.
-     * 
+     *
      * @param runtimeScalar The file, coderef, filehandle, or array reference to execute
-     * @param ctx Execution context (scalar or list)
+     * @param ctx           Execution context (scalar or list)
      * @return Result of execution (undef on error)
      */
     public static RuntimeBase doFile(RuntimeScalar runtimeScalar, int ctx) {
@@ -72,9 +72,9 @@ public class ModuleOperators {
 
     /**
      * Internal implementation of `do` and `require` operators.
-     * 
+     *
      * <p>This method handles the complex dispatch logic for different argument types:
-     * 
+     *
      * <h3>1. Array Reference: [\&coderef, state...]</h3>
      * <p>When the first element is a code reference:
      * <ul>
@@ -83,7 +83,7 @@ public class ModuleOperators {
      *   <li>Call coderef repeatedly until it returns false</li>
      *   <li>Each call populates $_ with code chunks</li>
      * </ul>
-     * 
+     *
      * <h3>2. Code Reference: \&generator</h3>
      * <p>When a coderef is passed directly:
      * <ul>
@@ -91,10 +91,10 @@ public class ModuleOperators {
      *   <li>Each call should set $_ to next chunk</li>
      *   <li>Return false to signal EOF</li>
      * </ul>
-     * 
+     *
      * <h3>3. Filehandle: $fh</h3>
      * <p>Read entire contents from filehandle and execute.
-     * 
+     *
      * <h3>4. Filename: "Module/Name.pm"</h3>
      * <p>Standard file loading:
      * <ul>
@@ -102,11 +102,11 @@ public class ModuleOperators {
      *   <li>Check for .pmc (compiled) version first</li>
      *   <li>Read file and execute</li>
      * </ul>
-     * 
+     *
      * @param runtimeScalar The argument to do/require
-     * @param setINC Whether to set %INC entry for this file
-     * @param isRequire True if called from require (affects %INC cleanup on failure)
-     * @param ctx Execution context (scalar or list)
+     * @param setINC        Whether to set %INC entry for this file
+     * @param isRequire     True if called from require (affects %INC cleanup on failure)
+     * @param ctx           Execution context (scalar or list)
      * @return Result of execution (undef on error, with $@ or $! set)
      */
     private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
@@ -122,10 +122,10 @@ public class ModuleOperators {
         // Variables for handling array references with state
         RuntimeCode codeRef = null;
         RuntimeArray stateArgs = null;
-        
+
         // Variable for storing @INC hook reference
         RuntimeScalar incHookRef = null;
-        
+
         // Flag to indicate if source filters should be applied
         boolean shouldApplyFilters = false;
 
@@ -136,7 +136,7 @@ public class ModuleOperators {
             RuntimeArray arr = (RuntimeArray) runtimeScalar.value;
             if (arr.size() > 0) {
                 RuntimeScalar firstElem = arr.get(0);
-                
+
                 // Case 1a: Array with CODE reference [&coderef, state...]
                 // Extract coderef and state parameters for later execution
                 if (firstElem.type == RuntimeScalarType.CODE ||
@@ -154,7 +154,7 @@ public class ModuleOperators {
                             codeRef = (RuntimeCode) deref.value;
                         }
                     }
-                    
+
                     // Create arguments array from remaining elements (state parameters)
                     // These will be passed as @_ to the coderef
                     // Note: $_[0] is reserved for filename (undef for generators), state starts at $_[1]
@@ -171,7 +171,7 @@ public class ModuleOperators {
                         firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
                     // Read content from filehandle
                     code = Readline.readline(firstElem, RuntimeContextType.LIST).toString();
-                    
+
                     // Check if there's a filter (second element)
                     if (arr.size() > 1) {
                         RuntimeScalar secondElem = arr.get(1);
@@ -191,24 +191,24 @@ public class ModuleOperators {
                                     filterRef = (RuntimeCode) deref.value;
                                 }
                             }
-                            
+
                             if (filterRef != null) {
                                 // Apply filter to the content
                                 RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
                                 try {
                                     // Set $_ to the content
                                     GlobalVariable.getGlobalVariable("main::_").set(code);
-                                    
+
                                     // Build filter args: $_[0] = undef, $_[1..N] = state
                                     RuntimeArray filterArgs = new RuntimeArray();
                                     filterArgs.push(new RuntimeScalar());  // $_[0] = undef
                                     for (int i = 2; i < arr.size(); i++) {
                                         filterArgs.push(arr.get(i));  // $_[1..N] = state
                                     }
-                                    
+
                                     // Call the filter
                                     filterRef.apply(filterArgs, RuntimeContextType.SCALAR);
-                                    
+
                                     // Get modified content from $_
                                     code = GlobalVariable.getGlobalVariable("main::_").toString();
                                 } finally {
@@ -230,17 +230,17 @@ public class ModuleOperators {
                     StringBuilder filterableContent = new StringBuilder(); // Filehandle content (filterable)
                     RuntimeCode filterRef = null;
                     int filterIndex = -1;
-                    
+
                     // Process array elements
                     for (int i = 0; i < arr.size(); i++) {
                         RuntimeScalar elem = arr.get(i);
-                        
+
                         // Check if this is a filter (CODE ref)
                         boolean isFilter = elem.type == RuntimeScalarType.CODE ||
-                                          (elem.type == RuntimeScalarType.REFERENCE &&
-                                           elem.scalarDeref() != null &&
-                                           elem.scalarDeref().type == RuntimeScalarType.CODE);
-                        
+                                (elem.type == RuntimeScalarType.REFERENCE &&
+                                        elem.scalarDeref() != null &&
+                                        elem.scalarDeref().type == RuntimeScalarType.CODE);
+
                         if (isFilter) {
                             // Found the filter - extract it
                             filterIndex = i;
@@ -260,7 +260,7 @@ public class ModuleOperators {
                         else if (elem.type == RuntimeScalarType.REFERENCE) {
                             RuntimeScalar deref = elem.scalarDeref();
                             if (deref != null) {
-                                unfilteredPrefix.append(deref.toString());
+                                unfilteredPrefix.append(deref);
                             }
                         }
                         // Filehandle - goes to filterable content
@@ -268,35 +268,35 @@ public class ModuleOperators {
                             filterableContent.append(Readline.readline(elem, RuntimeContextType.LIST).toString());
                         }
                     }
-                    
+
                     // Apply filter to filehandle content only
                     if (filterRef != null) {
                         RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
                         try {
                             GlobalVariable.getGlobalVariable("main::_").set(filterableContent.toString());
-                            
+
                             // Build filter args with remaining elements as state
                             RuntimeArray filterArgs = new RuntimeArray();
                             filterArgs.push(new RuntimeScalar());  // $_[0] = undef
                             for (int j = filterIndex + 1; j < arr.size(); j++) {
                                 filterArgs.push(arr.get(j));  // $_[1..N] = state
                             }
-                            
+
                             filterRef.apply(filterArgs, RuntimeContextType.SCALAR);
                             filterableContent = new StringBuilder(GlobalVariable.getGlobalVariable("main::_").toString());
                         } finally {
                             GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
                         }
                     }
-                    
+
                     // Concatenate unfiltered prefix + filtered filehandle content
-                    code = unfilteredPrefix.toString() + filterableContent.toString();
+                    code = unfilteredPrefix.toString() + filterableContent;
                     // Enable BEGIN filter preprocessing
                     shouldApplyFilters = true;
                 }
             }
         }
-        
+
         // ===== STEP 2: Handle direct CODE reference =====
         // Check if the argument is a CODE reference (not already extracted from array)
         if (codeRef == null && (runtimeScalar.type == RuntimeScalarType.CODE ||
@@ -316,7 +316,7 @@ public class ModuleOperators {
                     }
                 }
             }
-            
+
             // Create args with filename placeholder if not already set (no state for direct coderef)
             if (stateArgs == null) {
                 stateArgs = new RuntimeArray();
@@ -335,29 +335,29 @@ public class ModuleOperators {
                 // Each call should populate $_ with a chunk of code
                 // State parameters (if any) are passed as @_
                 boolean continueReading = true;
-                
+
                 while (continueReading) {
                     // Clear $_ before each call
                     GlobalVariable.getGlobalVariable("main::_").set("");
-                    
+
                     // Call the CODE reference with state arguments
                     // The coderef should populate $_ with content
                     RuntimeBase result = codeRef.apply(stateArgs, RuntimeContextType.SCALAR);
-                    
+
                     // Get the content from $_
                     RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
                     String chunk = defaultVar.toString();
-                    
+
                     // Accumulate the chunk if not empty
                     if (!chunk.isEmpty()) {
                         accumulatedCode.append(chunk);
                     }
-                    
+
                     // Check if we should continue
                     // Return value of 0/false means EOF
                     continueReading = result.scalar().getBoolean();
                 }
-                
+
                 code = accumulatedCode.toString();
                 if (code.isEmpty()) {
                     code = null;
@@ -370,7 +370,7 @@ public class ModuleOperators {
                 // Restore $_ to its previous value
                 GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
             }
-        } 
+        }
         // ===== STEP 4: Handle filehandle =====
         else if (runtimeScalar.type == RuntimeScalarType.GLOB || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
             // Read entire contents from filehandle
@@ -401,7 +401,7 @@ public class ModuleOperators {
             // and if it exists on the filesystem
             Path filePath = Paths.get(fileName);
             boolean tryDirectPath = filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../");
-            
+
             if (tryDirectPath) {
                 // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
                 filePath = RuntimeIO.resolvePath(fileName);
@@ -415,7 +415,7 @@ public class ModuleOperators {
                     actualFileName = fullName.toString();
                 }
             }
-            
+
             // If we haven't found the file yet, search in INC directories
             // This handles:
             // 1. Relative module names (e.g., Foo::Bar)
@@ -446,37 +446,37 @@ public class ModuleOperators {
                 incSize = incArray.size();
                 for (int i = 0; i < incSize; i++) {
                     RuntimeScalar dirScalar = incArray.get(i);
-                    
+
                     // If this is a tied scalar, fetch the actual value
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
                         dirScalar = dirScalar.tiedFetch();
                     }
-                    
+
                     // For absolute/relative paths (starting with /, ./, ../), only try hooks
                     // Regular directory entries should be skipped for such paths
-                    boolean isHook = dirScalar.type == RuntimeScalarType.CODE || 
-                                     dirScalar.type == RuntimeScalarType.REFERENCE ||
-                                     dirScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
-                                     dirScalar.type == RuntimeScalarType.HASHREFERENCE;
-                    
+                    boolean isHook = dirScalar.type == RuntimeScalarType.CODE ||
+                            dirScalar.type == RuntimeScalarType.REFERENCE ||
+                            dirScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
+                            dirScalar.type == RuntimeScalarType.HASHREFERENCE;
+
                     if (tryDirectPath && !isHook) {
                         // Skip regular directory entries for absolute/relative paths
                         continue;
                     }
-                    
+
                     // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
                     if (isHook) {
-                        
+
                         RuntimeBase hookResult = tryIncHook(dirScalar, fileName);
                         if (hookResult != null) {
                             // Hook returned something useful
                             RuntimeScalar hookResultScalar = hookResult.scalar();
-                            
+
                             // Check if it's a filehandle (GLOB), array ref with filehandle, or scalar ref with code
                             RuntimeScalar filehandle = null;
-                            
-                            if (hookResultScalar.type == RuntimeScalarType.GLOB || 
-                                hookResultScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+
+                            if (hookResultScalar.type == RuntimeScalarType.GLOB ||
+                                    hookResultScalar.type == RuntimeScalarType.GLOBREFERENCE) {
                                 filehandle = hookResultScalar;
                             } else if (hookResultScalar.type == RuntimeScalarType.REFERENCE) {
                                 // Hook returned a scalar reference - treat the dereferenced value as code
@@ -490,13 +490,13 @@ public class ModuleOperators {
                                 RuntimeArray resultArray = (RuntimeArray) hookResultScalar.value;
                                 if (resultArray.size() > 0) {
                                     RuntimeScalar firstElem = resultArray.get(0);
-                                    if (firstElem.type == RuntimeScalarType.GLOB || 
-                                        firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
+                                    if (firstElem.type == RuntimeScalarType.GLOB ||
+                                            firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
                                         filehandle = firstElem;
                                     }
                                 }
                             }
-                            
+
                             if (filehandle != null) {
                                 // Read content from the filehandle using the same method as STEP 4
                                 try {
@@ -512,7 +512,7 @@ public class ModuleOperators {
                         // If hook returned undef or we couldn't use the result, continue to next @INC entry
                         continue;
                     }
-                    
+
                     // Original string handling for directory paths
                     String dirName = dirScalar.toString();
                     if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
@@ -600,13 +600,13 @@ public class ModuleOperators {
             // Check if the hook already set %INC to a custom value
             RuntimeHash incHash = getGlobalHash("main::INC");
             RuntimeScalar existingIncValue = incHash.elements.get(fileName);
-            
+
             // Only set %INC if the hook didn't already set it
             if (existingIncValue == null || !existingIncValue.defined().getBoolean()) {
                 // If we used an @INC hook, store the hook reference; otherwise store the filename
-                RuntimeScalar incValue = (parsedArgs.incHook != null) 
-                    ? parsedArgs.incHook 
-                    : new RuntimeScalar(parsedArgs.fileName);
+                RuntimeScalar incValue = (parsedArgs.incHook != null)
+                        ? parsedArgs.incHook
+                        : new RuntimeScalar(parsedArgs.fileName);
                 incHash.put(fileName, incValue);
             } else if (parsedArgs.incHook != null) {
                 // Hook set %INC to a custom value - use that for actualFileName if it's a string
@@ -667,9 +667,9 @@ public class ModuleOperators {
 
     /**
      * Implements Perl's `require` operator.
-     * 
+     *
      * <p>The `require` operator has two distinct behaviors:
-     * 
+     *
      * <h3>1. Version Checking: require VERSION</h3>
      * <p>When given a numeric or vstring value:
      * <ul>
@@ -677,7 +677,7 @@ public class ModuleOperators {
      *   <li>Throw exception if version requirement not met</li>
      *   <li>Return 1 if version is sufficient</li>
      * </ul>
-     * 
+     *
      * <h3>2. Module Loading: require MODULE</h3>
      * <p>When given a string (module name or filename):
      * <ul>
@@ -688,7 +688,7 @@ public class ModuleOperators {
      *   <li>Add entry to %INC on success</li>
      *   <li>Remove from %INC or mark as undef on failure</li>
      * </ul>
-     * 
+     *
      * <h3>Error Handling</h3>
      * <p>`require` is stricter than `do`:
      * <ul>
@@ -697,11 +697,11 @@ public class ModuleOperators {
      *   <li>Throws exception if module returns false value</li>
      *   <li>Marks compilation failures as undef in %INC (cached failure)</li>
      * </ul>
-     * 
+     *
      * @param runtimeScalar Module name, filename, or version to require
      * @return Always returns 1 on success (or throws exception)
-     * @throws PerlCompilerException if version insufficient, file not found, 
-     *         compilation fails, or module returns false
+     * @throws PerlCompilerException if version insufficient, file not found,
+     *                               compilation fails, or module returns false
      * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
      */
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
@@ -788,32 +788,32 @@ public class ModuleOperators {
 
     /**
      * Try to call an @INC hook to load a module.
-     * 
+     *
      * <p>@INC can contain:
      * <ul>
      *   <li>CODE reference: call it with ($coderef, $filename)</li>
      *   <li>ARRAY reference: call $array->[0] with ($array, $filename)</li>
      *   <li>Blessed object: call $obj->INC($filename) if the method exists</li>
      * </ul>
-     * 
+     *
      * <p>The hook can return:
      * <ul>
      *   <li>undef: this hook can't handle it, continue to next @INC entry</li>
      *   <li>A filehandle: read the module code from this filehandle</li>
      *   <li>An array ref [$fh, \&filter, state...]: filehandle with optional filter and state</li>
      * </ul>
-     * 
-     * @param hook The @INC hook (CODE, ARRAY, or blessed reference)
+     *
+     * @param hook     The @INC hook (CODE, ARRAY, or blessed reference)
      * @param fileName The file name being required
      * @return The result from the hook (undef, filehandle, or array ref), or null if hook can't be called
      */
     private static RuntimeBase tryIncHook(RuntimeScalar hook, String fileName) {
         RuntimeCode codeRef = null;
         RuntimeScalar selfArg = hook;
-        
+
         // First check if it's a blessed object (takes priority over plain refs)
         int blessIdInt = RuntimeScalarType.blessedId(hook);
-        
+
         // Case 1: Blessed object - try to call INC method
         if (blessIdInt != 0) {
             String blessId = NameNormalizer.getBlessStr(blessIdInt);
@@ -859,24 +859,24 @@ public class ModuleOperators {
                 }
             }
         }
-        
+
         if (codeRef == null) {
             return null;
         }
-        
+
         // Call the hook with ($self, $filename)
         RuntimeArray args = new RuntimeArray();
         args.push(selfArg);
         args.push(new RuntimeScalar(fileName));
-        
+
         try {
             RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
-            
+
             // If result is undef, return null to continue to next @INC entry
             if (result == null || !result.scalar().defined().getBoolean()) {
                 return null;
             }
-            
+
             return result;
         } catch (Exception e) {
             // If hook throws an exception, continue to next @INC entry

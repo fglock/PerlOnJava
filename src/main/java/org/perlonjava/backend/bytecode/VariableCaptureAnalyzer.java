@@ -2,7 +2,10 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Analyzes which lexical variables in the main script are captured by named subroutines.
@@ -37,7 +40,7 @@ public class VariableCaptureAnalyzer {
     /**
      * Analyzes which variables in the main script are captured by named subroutines.
      *
-     * @param mainScript The AST of the main script (typically a BlockNode)
+     * @param mainScript     The AST of the main script (typically a BlockNode)
      * @param outerScopeVars Set of variable names declared in the outer (main) scope
      * @return Set of variable names that need persistent storage
      */

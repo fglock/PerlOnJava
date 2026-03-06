@@ -28,7 +28,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         // We do this by checking if the scalar is a proxy and creating a proper copy.
         RuntimeScalar evalStart = start;
         RuntimeScalar evalEnd = end;
-        
+
         // Force evaluation of special variables by creating new RuntimeScalar with the actual value
         // But only if they're defined - undef special variables should stay undef
         if (start instanceof RuntimeBaseProxy) {
@@ -49,7 +49,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 evalEnd = new RuntimeScalar();
             }
         }
-        
+
         // Handle undef values: treat as 0 for numeric context or "" for string context
         // We'll determine context based on the other operand or default to numeric
         if (evalStart.type == RuntimeScalarType.UNDEF) {

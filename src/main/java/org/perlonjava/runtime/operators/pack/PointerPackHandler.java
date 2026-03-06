@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * Handler for pointer formats 'p' and 'P'.
- * 
+ * <p>
  * - 'p' format: count is a repeat count (p3 packs 3 pointers)
  * - 'P' format: count is minimum string length (P3 packs 1 pointer with min 3 bytes)
  */
@@ -18,13 +18,15 @@ public class PointerPackHandler implements PackFormatHandler {
      * Maps hash codes to their corresponding string values for later retrieval by unpack.
      */
     private static final Map<Integer, String> pointerMap = new HashMap<>();
-    
-    /** The format character ('p' or 'P') */
+
+    /**
+     * The format character ('p' or 'P')
+     */
     private final char format;
 
     /**
      * Creates a new PointerPackHandler for the specified format.
-     * 
+     *
      * @param format The format character ('p' or 'P')
      */
     public PointerPackHandler(char format) {

@@ -1,8 +1,8 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
-import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.math.BigInteger;
@@ -309,7 +309,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for getInt()
     public int getInt() {
-        if (type == INTEGER ) {
+        if (type == INTEGER) {
             return (int) this.value;
         }
         return getIntLarge();
@@ -332,7 +332,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // Parse as long first so we can handle values outside 32-bit range
                             // (Perl IV is commonly 64-bit). getInt() is used for array indices
                             // and similar contexts, which should behave like (int)getLong().
-                            yield (int) Long.parseLong(t);
+                            yield( int)Long.parseLong(t);
                         } catch (NumberFormatException ignored) {
                             // Fall through to full numification.
                         }
@@ -524,7 +524,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for getDouble()
     public double getDouble() {
-        if (type == INTEGER ) {
+        if (type == INTEGER) {
             return (int) this.value;
         }
         return getDoubleLarge();
@@ -752,7 +752,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     @Override
     // Inlineable fast path for toString()
-    public String  toString() {
+    public String toString() {
         if (type == STRING || type == BYTE_STRING) {
             return (String) this.value;
         }
@@ -776,7 +776,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case CODE -> Overload.stringify(this).toString();
             default -> {
                 if (type == REGEX) yield value.toString();
-                yield  Overload.stringify(this).toString();
+                yield Overload.stringify(this).toString();
             }
         };
     }
@@ -788,32 +788,32 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (value == null) {
                     yield "CODE(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield ((RuntimeCode) value).toStringRef();
+                yield((RuntimeCode) value).toStringRef();
             }
             case GLOB -> {
                 if (value == null) {
                     yield "GLOB(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield ((RuntimeGlob) value).toStringRef();
+                yield((RuntimeGlob) value).toStringRef();
             }
             case VSTRING -> "VSTRING(0x" + value.hashCode() + ")";
             case ARRAYREFERENCE -> {
                 if (value == null) {
                     yield "ARRAY(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield ((RuntimeArray) value).toStringRef();
+                yield((RuntimeArray) value).toStringRef();
             }
             case HASHREFERENCE -> {
                 if (value == null) {
                     yield "HASH(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield ((RuntimeHash) value).toStringRef();
+                yield((RuntimeHash) value).toStringRef();
             }
             case GLOBREFERENCE -> {
                 if (value == null) {
                     yield "GLOB(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield ((RuntimeBase) value).toStringRef();
+                yield((RuntimeBase) value).toStringRef();
             }
             case REFERENCE -> {
                 // Determine the proper type name for the reference
@@ -831,7 +831,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
                 String refStr = typeName + "(0x" + Integer.toHexString(value.hashCode()) + ")";
                 // For REFERENCE type, the blessId is on the value, not on the reference itself
-                yield (valueBlessId == 0 ? refStr : NameNormalizer.getBlessStr(valueBlessId) + "=" + refStr);
+                yield(valueBlessId == 0 ? refStr : NameNormalizer.getBlessStr(valueBlessId) + "=" + refStr);
             }
             default -> "SCALAR(0x" + Integer.toHexString(value.hashCode()) + ")";
         };
@@ -1297,7 +1297,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tmp.setIO(io);
                     yield tmp;
                 }
-                yield (RuntimeGlob) value;
+                yield(RuntimeGlob) value;
             }
             case GLOB -> {
                 // PVIO (like *STDOUT{IO}) is stored as type GLOB with a RuntimeIO value.
@@ -1308,7 +1308,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tmp.setIO(io);
                     yield tmp;
                 }
-                yield (RuntimeGlob) value;
+                yield(RuntimeGlob) value;
             }
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a symbol ref while \"strict refs\" in use");
@@ -1341,7 +1341,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tmp.setIO(io);
                     yield tmp;
                 }
-                yield (RuntimeGlob) value;
+                yield(RuntimeGlob) value;
             }
             case GLOB -> {
                 // PVIO (like *STDOUT{IO}) is stored as type GLOB with a RuntimeIO value.
@@ -1352,7 +1352,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tmp.setIO(io);
                     yield tmp;
                 }
-                yield (RuntimeGlob) value;
+                yield(RuntimeGlob) value;
             }
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
@@ -1453,7 +1453,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean(); // 10
             case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean(); // 11
             // Reference types (with REFERENCE_BIT) fall through to default
-            default -> type == CODE ? ((RuntimeCode) value).defined() : true;
+            default -> type != CODE || ((RuntimeCode) value).defined();
         };
     }
 
@@ -1554,8 +1554,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Slow path for $v++
     private RuntimeScalar postAutoIncrementLarge() {
         // For undef, the old value should be 0, not undef
-        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ? 
-            new RuntimeScalar(0) : new RuntimeScalar(this);
+        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ?
+                new RuntimeScalar(0) : new RuntimeScalar(this);
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {

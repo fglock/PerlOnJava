@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -7,9 +8,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
-import org.perlonjava.runtime.operators.ReferenceOperators;
-
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 public class CompressZlib extends PerlModuleBase {
 
@@ -160,8 +159,7 @@ public class CompressZlib extends PerlModuleBase {
             return result;
         }
 
-        byte[] outputBytes = baos.toByteArray();
-        String outputStr = new String(outputBytes, StandardCharsets.ISO_8859_1);
+        String outputStr = baos.toString(StandardCharsets.ISO_8859_1);
 
         RuntimeList result = new RuntimeList();
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
@@ -198,8 +196,7 @@ public class CompressZlib extends PerlModuleBase {
             baos.write(outputBuf, 0, count);
         }
 
-        byte[] outputBytes = baos.toByteArray();
-        String outputStr = new String(outputBytes, StandardCharsets.ISO_8859_1);
+        String outputStr = baos.toString(StandardCharsets.ISO_8859_1);
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
         outputScalar.type = RuntimeScalarType.BYTE_STRING;
         return outputScalar.getList();
@@ -232,8 +229,7 @@ public class CompressZlib extends PerlModuleBase {
             }
         }
 
-        byte[] outputBytes = baos.toByteArray();
-        String outputStr = new String(outputBytes, StandardCharsets.ISO_8859_1);
+        String outputStr = baos.toString(StandardCharsets.ISO_8859_1);
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
         outputScalar.type = RuntimeScalarType.BYTE_STRING;
         return outputScalar.getList();

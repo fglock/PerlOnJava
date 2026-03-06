@@ -4,9 +4,9 @@ import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.util.Base64Util;
 
 import java.nio.charset.StandardCharsets;
-import org.perlonjava.runtime.util.Base64Util;
 
 public class MIMEBase64 extends PerlModuleBase {
 

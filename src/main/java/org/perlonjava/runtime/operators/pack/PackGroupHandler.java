@@ -30,7 +30,7 @@ public class PackGroupHandler {
      * Set to true to debug group nesting and processing.
      */
     private static final boolean TRACE_PACK = false;
-    
+
     // Thread-local to track group nesting depth
     private static final ThreadLocal<Integer> nestingDepth = ThreadLocal.withInitial(() -> 0);
     private static final int MAX_NESTING_DEPTH = 100;
@@ -42,13 +42,13 @@ public class PackGroupHandler {
      * This method processes the group content according to the specified repeat count
      * and handles special cases like backup operations within groups.</p>
      *
-     * @param template     The template string
-     * @param openPos      The starting position of the group (points to '(')
-     * @param values       The list of values to pack
-     * @param output       The output stream
-     * @param valueIndex   The current index in the values list
-     * @param byteMode     The current byte mode
-     * @param byteModeUsed Whether byte mode has been used
+     * @param template               The template string
+     * @param openPos                The starting position of the group (points to '(')
+     * @param values                 The list of values to pack
+     * @param output                 The output stream
+     * @param valueIndex             The current index in the values list
+     * @param byteMode               The current byte mode
+     * @param byteModeUsed           Whether byte mode has been used
      * @param hasUnicodeInNormalMode Whether Unicode has been used in normal mode
      * @return GroupResult containing the position after the group and updated value index
      * @throws PerlCompilerException if parentheses are unmatched or endianness conflicts
@@ -58,20 +58,20 @@ public class PackGroupHandler {
                                           boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
         /**
          * Track recursion depth to prevent stack overflow from deeply nested groups.
-         * 
+         *
          * Example that should fail:
          *   pack( "(" x 105 . "A" . ")" x 105 )
-         * 
+         *
          * This creates 105 levels of nesting. Perl limits this to ~100 levels.
          * Without this check, Java would eventually throw StackOverflowError.
-         * 
+         *
          * Implementation uses ThreadLocal to:
          * - Support multiple threads packing simultaneously
          * - Maintain separate depth counters per thread
          * - Automatically reset when thread ends
          */
         int currentDepth = nestingDepth.get() + 1;
-        
+
         if (TRACE_PACK) {
             System.err.println("TRACE PackGroupHandler.handleGroup:");
             System.err.println("  depth: " + currentDepth);
@@ -79,12 +79,12 @@ public class PackGroupHandler {
             System.err.println("  template: [" + template + "]");
             System.err.flush();
         }
-        
+
         if (currentDepth > MAX_NESTING_DEPTH) {
             throw new PerlCompilerException("Too deeply nested ()-groups in pack");
         }
         nestingDepth.set(currentDepth);
-        
+
         try {
             return handleGroupInternal(template, openPos, values, output, valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
         } finally {
@@ -92,10 +92,10 @@ public class PackGroupHandler {
             nestingDepth.set(currentDepth - 1);
         }
     }
-    
+
     private static GroupResult handleGroupInternal(String template, int openPos, List<RuntimeScalar> values,
-                                          PackBuffer output, int valueIndex,
-                                          boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
+                                                   PackBuffer output, int valueIndex,
+                                                   boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
         // Find matching closing parenthesis
         int closePos = PackHelper.findMatchingParen(template, openPos);
         if (closePos == -1) {
@@ -104,7 +104,7 @@ public class PackGroupHandler {
 
         // Extract group content
         String groupContent = template.substring(openPos + 1, closePos);
-        
+
         if (TRACE_PACK) {
             System.err.println("TRACE PackGroupHandler.handleGroupInternal:");
             System.err.println("  positions: " + openPos + " to " + closePos);
@@ -155,7 +155,7 @@ public class PackGroupHandler {
                     // Process the rest of the group normally
                     if (xPos < groupContent.length()) {
                         String remainingContent = groupContent.substring(xPos);
-                        
+
                         // Pack directly into the parent buffer
                         Pack.PackResult result = Pack.packInto(remainingContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode);
                         valueIndex = result.valueIndex();
@@ -250,16 +250,16 @@ public class PackGroupHandler {
      * <p>This method handles both string formats (a, A, Z, U) and numeric
      * formats after the slash, with proper length calculation and data packing.</p>
      *
-     * @param template     The template string
-     * @param position     The starting position of the slash construct
-     * @param slashPos     The position of the slash character
-     * @param format       The format character before the slash
-     * @param values       The list of values to pack
-     * @param valueIndex   The current index in the values list
-     * @param output       The output stream
-     * @param modifiers    The modifiers for the format
-     * @param byteMode     The current byte mode
-     * @param byteModeUsed Whether byte mode has been used
+     * @param template               The template string
+     * @param position               The starting position of the slash construct
+     * @param slashPos               The position of the slash character
+     * @param format                 The format character before the slash
+     * @param values                 The list of values to pack
+     * @param valueIndex             The current index in the values list
+     * @param output                 The output stream
+     * @param modifiers              The modifiers for the format
+     * @param byteMode               The current byte mode
+     * @param byteModeUsed           Whether byte mode has been used
      * @param hasUnicodeInNormalMode Whether Unicode has been used in normal mode
      * @return GroupResult containing template position and updated value index
      * @throws PerlCompilerException if slash construct is malformed

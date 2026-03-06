@@ -3,16 +3,16 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.For3Node;
 import org.perlonjava.frontend.astnode.IfNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TryNode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.perlonjava.frontend.analysis.EmitterVisitor;
-import org.perlonjava.frontend.analysis.RegexUsageDetector;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 /**
  * The EmitStatement class is responsible for handling various control flow statements
@@ -285,7 +285,7 @@ public class EmitStatement {
 
         // Visit the loop body
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-        
+
         // Check RuntimeControlFlowRegistry for non-local control flow
         // Use the loop labels we created earlier (don't look them up)
         LoopLabels loopLabels = new LoopLabels(
@@ -410,29 +410,29 @@ public class EmitStatement {
 
         emitterVisitor.ctx.logDebug("emitTryCatch end");
     }
-    
+
     /**
      * Emit bytecode to check RuntimeControlFlowRegistry and handle any registered control flow.
      * This is called after loop body execution to catch non-local control flow markers.
-     * 
-     * @param mv The MethodVisitor
+     *
+     * @param mv         The MethodVisitor
      * @param loopLabels The current loop's labels
-     * @param redoLabel The redo target
-     * @param nextLabel The next/continue target  
-     * @param lastLabel The last/exit target
+     * @param redoLabel  The redo target
+     * @param nextLabel  The next/continue target
+     * @param lastLabel  The last/exit target
      */
-    private static void emitRegistryCheck(MethodVisitor mv, LoopLabels loopLabels, 
-                                         Label redoLabel, Label nextLabel, Label lastLabel) {
+    private static void emitRegistryCheck(MethodVisitor mv, LoopLabels loopLabels,
+                                          Label redoLabel, Label nextLabel, Label lastLabel) {
         // ULTRA-SIMPLE pattern to avoid ASM issues:
         // Call a single helper method that does ALL the checking and returns an action code
-        
+
         String labelName = loopLabels.labelName;
         if (labelName != null) {
             mv.visitLdcInsn(labelName);
         } else {
             mv.visitInsn(Opcodes.ACONST_NULL);
         }
-        
+
         // Call: int action = RuntimeControlFlowRegistry.checkLoopAndGetAction(String labelName)
         // Returns: 0=none, 1=last, 2=next, 3=redo
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -440,7 +440,7 @@ public class EmitStatement {
                 "checkLoopAndGetAction",
                 "(Ljava/lang/String;)I",
                 false);
-        
+
         // Use TABLESWITCH for clean bytecode.
         // IMPORTANT: action 0 means "no marker" and must *not* jump.
         Label noAction = new Label();

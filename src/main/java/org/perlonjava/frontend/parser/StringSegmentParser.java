@@ -397,8 +397,8 @@ public abstract class StringSegmentParser {
             // Special case: empty identifier for $ sigil (like $ at end of string)
             if ("$".equals(sigil) && identifier.isEmpty()) {
                 // Check if we're at end of string
-                if (parser.tokenIndex >= parser.tokens.size() || 
-                    parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                if (parser.tokenIndex >= parser.tokens.size() ||
+                        parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
                     throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
                 }
             }
@@ -407,11 +407,11 @@ public abstract class StringSegmentParser {
         } else {
             // No identifier found after sigil
             // Check if we're at end of string for $ sigil
-            if ("$".equals(sigil) && (parser.tokenIndex >= parser.tokens.size() || 
-                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF)) {
+            if ("$".equals(sigil) && (parser.tokenIndex >= parser.tokens.size() ||
+                    parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF)) {
                 throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
             }
-            
+
             // For array sigils, check if next token starts with $ (e.g., @$b means array of $b)
             if ("@".equals(sigil) && parser.tokenIndex < parser.tokens.size()) {
                 LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
@@ -431,10 +431,10 @@ public abstract class StringSegmentParser {
             if (!"$".equals(sigil)) {
                 throw new PerlCompilerException(tokenIndex, "Missing identifier after " + sigil, ctx.errorUtil);
             }
-            
+
             // For $ sigil with no identifier, check if we're at end of string
-            if (parser.tokenIndex >= parser.tokens.size() || 
-                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+            if (parser.tokenIndex >= parser.tokens.size() ||
+                    parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
                 throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
             }
         }
@@ -819,17 +819,17 @@ public abstract class StringSegmentParser {
     }
 
     /**
-     * Sets the original string content for better error context.
-     */
-    public void setOriginalStringContent(String content) {
-        this.originalStringContent = content;
-    }
-
-    /**
      * Gets the original string content.
      */
     protected String getOriginalStringContent() {
         return originalStringContent;
+    }
+
+    /**
+     * Sets the original string content for better error context.
+     */
+    public void setOriginalStringContent(String content) {
+        this.originalStringContent = content;
     }
 
     /**
@@ -942,10 +942,7 @@ public abstract class StringSegmentParser {
         if (nextToken.type == LexerTokenType.EOF) {
             // Special case: $ at EOF in double-quoted string should generate error
             // But only for StringDoubleQuoted, not for other contexts like regex
-            if ("$".equals(sigil) && interpolateVariable && !isRegex && !isRegexReplacement) {
-                return true;
-            }
-            return false;
+            return "$".equals(sigil) && interpolateVariable && !isRegex && !isRegexReplacement;
         }
 
         // Regex: don't interpolate "$" if followed by whitespace or newlines

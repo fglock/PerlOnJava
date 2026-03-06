@@ -1,11 +1,11 @@
 package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.IdentifierNode;
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;

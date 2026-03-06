@@ -1,11 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.ArrayList;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -592,6 +587,18 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Check if this RuntimeList represents non-local control flow.
+     * Uses instanceof check which is optimized by JIT compiler.
+     *
+     * @return true if this is a RuntimeControlFlowList, false otherwise
+     */
+    public boolean isNonLocalGoto() {
+        return this instanceof RuntimeControlFlowList;
+    }
+
+    // ========== Control Flow Support ==========
+
+    /**
      * Inner class implementing the Iterator interface for RuntimeList.
      */
     private static class RuntimeListIterator implements Iterator<RuntimeScalar> {
@@ -630,17 +637,5 @@ public class RuntimeList extends RuntimeBase {
             }
             return currentIterator.next();
         }
-    }
-    
-    // ========== Control Flow Support ==========
-    
-    /**
-     * Check if this RuntimeList represents non-local control flow.
-     * Uses instanceof check which is optimized by JIT compiler.
-     * 
-     * @return true if this is a RuntimeControlFlowList, false otherwise
-     */
-    public boolean isNonLocalGoto() {
-        return this instanceof RuntimeControlFlowList;
     }
 }

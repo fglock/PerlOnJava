@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,7 +74,7 @@ public class ExceptionFormatter {
                     callerStackIndex++;
                 }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
-                       element.getMethodName().equals("execute")) {
+                    element.getMethodName().equals("execute")) {
                 // Consume the next interpreter frame in order.
                 // Using current() always returned the same topmost frame; consuming
                 // in order correctly maps each JVM execute() frame to its Perl level.
@@ -128,12 +128,12 @@ public class ExceptionFormatter {
                 if (loc != null) {
                     // Get subroutine name from the source location (now preserved in bytecode metadata)
                     String subName = loc.subroutineName();
-                    
+
                     // Prepend package name if subroutine name doesn't already include it
                     if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
                         subName = loc.packageName() + "::" + subName;
                     }
-                    
+
                     var entry = new ArrayList<String>();
                     entry.add(loc.packageName());
                     entry.add(loc.sourceFileName());

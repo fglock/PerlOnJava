@@ -1,11 +1,11 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.runtime.runtimetypes.RuntimeBase;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.operators.BitwiseOperators;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.Operator;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 /**
  * Handler for scalar binary operations (atan2, eq, ne, lt, le, gt, ge, cmp, etc.)
@@ -27,9 +27,12 @@ public class ScalarBinaryOpcodeHandler {
         // Dispatch based on specific opcode
         registers[rd] = switch (opcode) {
             case Opcodes.ATAN2 -> MathOperators.atan2((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
-            case Opcodes.BINARY_AND -> BitwiseOperators.bitwiseAndBinary((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
-            case Opcodes.BINARY_OR -> BitwiseOperators.bitwiseOrBinary((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
-            case Opcodes.BINARY_XOR -> BitwiseOperators.bitwiseXorBinary((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
+            case Opcodes.BINARY_AND ->
+                    BitwiseOperators.bitwiseAndBinary((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
+            case Opcodes.BINARY_OR ->
+                    BitwiseOperators.bitwiseOrBinary((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
+            case Opcodes.BINARY_XOR ->
+                    BitwiseOperators.bitwiseXorBinary((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
             case Opcodes.EQ -> CompareOperators.eq((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
             case Opcodes.NE -> CompareOperators.ne((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
             case Opcodes.LT -> CompareOperators.lt((RuntimeScalar) registers[rs1], (RuntimeScalar) registers[rs2]);
@@ -48,24 +51,36 @@ public class ScalarBinaryOpcodeHandler {
      * Disassemble scalar binary operations (atan2, eq, ne, lt, le, gt, ge, cmp, etc.) operation.
      */
     public static int disassemble(int opcode, int[] bytecode, int pc,
-                                   StringBuilder sb) {
+                                  StringBuilder sb) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
 
         switch (opcode) {
-            case Opcodes.ATAN2 -> sb.append("ATAN2 r").append(rd).append(" = atan2(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.BINARY_AND -> sb.append("BINARY_AND r").append(rd).append(" = binary&(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.BINARY_OR -> sb.append("BINARY_OR r").append(rd).append(" = binary|(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.BINARY_XOR -> sb.append("BINARY_XOR r").append(rd).append(" = binary^(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.EQ -> sb.append("EQ r").append(rd).append(" = eq(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.NE -> sb.append("NE r").append(rd).append(" = ne(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.LT -> sb.append("LT r").append(rd).append(" = lt(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.LE -> sb.append("LE r").append(rd).append(" = le(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.GT -> sb.append("GT r").append(rd).append(" = gt(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.GE -> sb.append("GE r").append(rd).append(" = ge(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.CMP -> sb.append("CMP r").append(rd).append(" = cmp(r").append(rs1).append(", r").append(rs2).append(")\n");
-            case Opcodes.X -> sb.append("X r").append(rd).append(" = x(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.ATAN2 ->
+                    sb.append("ATAN2 r").append(rd).append(" = atan2(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.BINARY_AND ->
+                    sb.append("BINARY_AND r").append(rd).append(" = binary&(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.BINARY_OR ->
+                    sb.append("BINARY_OR r").append(rd).append(" = binary|(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.BINARY_XOR ->
+                    sb.append("BINARY_XOR r").append(rd).append(" = binary^(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.EQ ->
+                    sb.append("EQ r").append(rd).append(" = eq(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.NE ->
+                    sb.append("NE r").append(rd).append(" = ne(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.LT ->
+                    sb.append("LT r").append(rd).append(" = lt(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.LE ->
+                    sb.append("LE r").append(rd).append(" = le(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.GT ->
+                    sb.append("GT r").append(rd).append(" = gt(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.GE ->
+                    sb.append("GE r").append(rd).append(" = ge(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.CMP ->
+                    sb.append("CMP r").append(rd).append(" = cmp(r").append(rs1).append(", r").append(rs2).append(")\n");
+            case Opcodes.X ->
+                    sb.append("X r").append(rd).append(" = x(r").append(rs1).append(", r").append(rs2).append(")\n");
             default -> sb.append("UNKNOWN_").append(opcode).append("\n");
         }
 

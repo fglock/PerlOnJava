@@ -37,7 +37,7 @@ public class Directory {
         //            fchdir(2), passing handles raises an exception.
 
         String dirName;
-        
+
         // Check if argument is a filehandle or dirhandle
         if (runtimeScalar.value instanceof RuntimeIO || runtimeScalar.value instanceof RuntimeGlob) {
             // Try to get RuntimeIO from the scalar
@@ -47,7 +47,7 @@ public class Directory {
                 throw new PerlCompilerException("The fchdir function is unimplemented");
             }
         }
-        
+
         // Handle chdir() with no arguments - check environment variables
         if (!runtimeScalar.defined().getBoolean()) {
             // Try HOME, then LOGDIR, then SYS$LOGIN (for VMS only)
@@ -81,13 +81,13 @@ public class Directory {
         } else {
             dirName = runtimeScalar.toString();
         }
-        
+
         // Check for empty string - should fail with ENOENT
         if (dirName.isEmpty()) {
             getGlobalVariable("main::!").set(2);  // ENOENT
             return scalarFalse;
         }
-        
+
         File absoluteDir = RuntimeIO.resolveFile(dirName);
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {

@@ -1,8 +1,8 @@
 package org.perlonjava.frontend.parser;
 
-import org.perlonjava.runtime.io.ScalarBackedIO;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.io.ScalarBackedIO;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -31,7 +31,7 @@ public class DataSection {
      */
     public static void createPlaceholderDataHandle(Parser parser) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
-        
+
         if (placeholderCreated.contains(handleName)) {
             return; // Already created placeholder for this package
         }
@@ -96,7 +96,7 @@ public class DataSection {
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
-        
+
         // Check if this package has already processed its DATA section
         if (processedPackages.contains(handleName)) {
             return tokens.size();

@@ -6,14 +6,13 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
-
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.LinkedHashSet;
-import java.util.ArrayList;
 
 public class EmitBlock {
 
@@ -224,16 +223,16 @@ public class EmitBlock {
         For1Node preEvalForNode = null;
         int savedPreEvaluatedArrayIndex = -1;
 
-        if (list.size() >= 2 && 
-            list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
-            list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
-            
+        if (list.size() >= 2 &&
+                list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
+                list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
+
             // Pre-evaluate the For1Node's list to array of aliases before localizing $_
             int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
-            
+
             // Mark the For1Node to use the pre-evaluated array
             preEvalForNode = forNode;
             savedPreEvaluatedArrayIndex = forNode.preEvaluatedArrayIndex;
@@ -243,7 +242,7 @@ public class EmitBlock {
         try {
             for (int i = 0; i < list.size(); i++) {
                 Node element = list.get(i);
-                
+
                 // Skip null elements - these occur when parseStatement returns null to signal
                 // "not a statement, continue parsing" (e.g., AUTOLOAD without {}, try without feature enabled)
                 // ParseBlock.parseBlock() adds these null results to the statements list
@@ -264,7 +263,7 @@ public class EmitBlock {
                     emitterVisitor.ctx.logDebug("Element: " + element);
                     element.accept(voidVisitor);
                 }
-                
+
                 // NOTE: Registry checks are DISABLED in EmitBlock because:
                 // 1. They cause ASM frame computation errors in nested/refactored code
                 // 2. Bare labeled blocks (like TODO:) don't need non-local control flow

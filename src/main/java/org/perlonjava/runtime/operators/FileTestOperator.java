@@ -4,27 +4,15 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
-import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeCode;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.runtime.runtimetypes.RuntimeIO;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
-import java.nio.file.attribute.PosixFileAttributes;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.UserPrincipal;
+import java.nio.file.attribute.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.resolvePath;
@@ -177,7 +165,7 @@ public class FileTestOperator {
             case "-d" -> getScalarBoolean(lastBasicAttr.isDirectory());
             case "-s" -> {
                 long size = lastBasicAttr.size();
-                yield size > 0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
+                yield size >0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
             }
             case "-z" -> getScalarBoolean(lastBasicAttr.size() == 0);
             case "-l" -> getScalarBoolean(lastBasicAttr.isSymbolicLink());
@@ -327,7 +315,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isReadable(path));
+                    yield getScalarBoolean (Files.isReadable(path));
                 }
                 case "-w" -> {
                     // Check if file is writable
@@ -336,7 +324,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isWritable(path));
+                    yield getScalarBoolean (Files.isWritable(path));
                 }
                 case "-x" -> {
                     // Check if file is executable
@@ -345,7 +333,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isExecutable(path));
+                    yield getScalarBoolean (Files.isExecutable(path));
                 }
                 case "-e" -> {
                     // Check if file exists
@@ -364,7 +352,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.size(path) == 0);
+                    yield getScalarBoolean (Files.size(path) == 0);
                 }
                 case "-s" -> {
                     // Return file size if non-zero, otherwise return false
@@ -372,7 +360,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     long size = lastBasicAttr.size();
-                    yield size > 0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
+                    yield size >0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
                 }
                 case "-f" -> {
                     // Check if path is a regular file
@@ -381,7 +369,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isRegularFile(path));
+                    yield getScalarBoolean (Files.isRegularFile(path));
                 }
                 case "-d" -> {
                     // Check if path is a directory
@@ -390,14 +378,14 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isDirectory(path));
+                    yield getScalarBoolean (Files.isDirectory(path));
                 }
                 case "-l" -> {
                     // Check if path is a symbolic link
                     if (!lastStatOk) {
                         yield scalarUndef;
                     }
-                    yield getScalarBoolean(lastBasicAttr.isSymbolicLink());
+                    yield getScalarBoolean (lastBasicAttr.isSymbolicLink());
                 }
                 case "-o" -> {
                     // Check if file is owned by the effective user id (approximate with current user)
@@ -409,7 +397,7 @@ public class FileTestOperator {
                     UserPrincipal owner = Files.getOwner(path);
                     UserPrincipal currentUser = path.getFileSystem().getUserPrincipalLookupService()
                             .lookupPrincipalByName(System.getProperty("user.name"));
-                    yield getScalarBoolean(owner.equals(currentUser));
+                    yield getScalarBoolean (owner.equals(currentUser));
                 }
                 case "-p" -> {
                     // Approximate check for named pipe (FIFO)
@@ -418,7 +406,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".fifo"));
+                    yield getScalarBoolean (Files.isRegularFile(path) && filename.endsWith(".fifo"));
                 }
                 case "-S" -> {
                     // Approximate check for socket
@@ -427,7 +415,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".sock"));
+                    yield getScalarBoolean (Files.isRegularFile(path) && filename.endsWith(".sock"));
                 }
                 case "-b" -> {
                     // Approximate check for block special file
@@ -436,7 +424,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
+                    yield getScalarBoolean (Files.isRegularFile(path) && filename.startsWith("/dev/"));
                 }
                 case "-c" -> {
                     // Approximate check for character special file
@@ -445,7 +433,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
+                    yield getScalarBoolean (Files.isRegularFile(path) && filename.startsWith("/dev/"));
                 }
                 case "-u" -> {
                     // Check if setuid bit is set
@@ -454,7 +442,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
+                    yield getScalarBoolean
+                    ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
                 }
                 case "-g" -> {
                     // Check if setgid bit is set
@@ -463,7 +452,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
+                    yield getScalarBoolean
+                    ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
                 }
                 case "-k" -> {
                     // Approximate check for sticky bit (using others execute permission)
@@ -472,7 +462,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
+                    yield getScalarBoolean
+                    ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
                 }
                 case "-T", "-B" -> {
                     // Check if file is text (-T) or binary (-B)
@@ -481,7 +472,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield isTextOrBinary(path, operator.equals("-T"));
+                    yield isTextOrBinary (path, operator.equals("-T"))
                 }
                 case "-M", "-A", "-C" -> {
                     // Get file time difference for modification (-M), access (-A), or creation (-C) time
@@ -490,7 +481,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getFileTimeDifference(path, operator);
+                    yield getFileTimeDifference (path, operator)
                 }
                 case "-R" -> {
                     // Check if file is readable by the real user ID
@@ -499,7 +490,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isReadable(path));
+                    yield getScalarBoolean (Files.isReadable(path));
                 }
                 case "-W" -> {
                     // Check if file is writable by the real user ID
@@ -508,7 +499,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isWritable(path));
+                    yield getScalarBoolean (Files.isWritable(path));
                 }
                 case "-X" -> {
                     // Check if file is executable by the real user ID
@@ -517,7 +508,7 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(Files.isExecutable(path));
+                    yield getScalarBoolean (Files.isExecutable(path));
                 }
                 case "-O" -> {
                     // Check if file is owned by the current user
@@ -529,7 +520,7 @@ public class FileTestOperator {
                     UserPrincipal owner = Files.getOwner(path);
                     UserPrincipal currentUser = path.getFileSystem().getUserPrincipalLookupService()
                             .lookupPrincipalByName(System.getProperty("user.name"));
-                    yield getScalarBoolean(owner.equals(currentUser));
+                    yield getScalarBoolean (owner.equals(currentUser));
                 }
                 case "-t" -> {
                     // -t on a string filename is an error in Perl (expects a filehandle)

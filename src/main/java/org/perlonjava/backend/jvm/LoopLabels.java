@@ -27,7 +27,7 @@ public class LoopLabels {
      * The ASM Label for the 'last' statement (exits the loop)
      */
     public Label lastLabel;
-    
+
     /**
      * The ASM Label for the control flow handler (processes marked RuntimeList)
      * This handler checks the control flow type and label, then either handles
@@ -48,11 +48,11 @@ public class LoopLabels {
 
     /**
      * Whether unlabeled next/last/redo should target this loop/block.
-     *
+     * <p>
      * Perl semantics:
      * - Unlabeled next/last/redo target the nearest enclosing true loop.
      * - Labeled next/last/redo can target labeled blocks (e.g. next SKIP in SKIP: { ... }).
-     *
+     * <p>
      * We keep block loops on the stack so labeled control flow can find them,
      * but prevent them from being selected as the target for unlabeled control flow.
      */
@@ -61,25 +61,25 @@ public class LoopLabels {
     /**
      * Creates a new LoopLabels instance with all necessary label information.
      *
-     * @param labelName     The name of the loop label in source code
-     * @param nextLabel     The ASM Label for 'next' operations
-     * @param redoLabel     The ASM Label for 'redo' operations
-     * @param lastLabel     The ASM Label for 'last' operations
-     * @param context       The context type for this loop
+     * @param labelName The name of the loop label in source code
+     * @param nextLabel The ASM Label for 'next' operations
+     * @param redoLabel The ASM Label for 'redo' operations
+     * @param lastLabel The ASM Label for 'last' operations
+     * @param context   The context type for this loop
      */
     public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context) {
         this(labelName, nextLabel, redoLabel, lastLabel, context, true, true);
     }
-    
+
     /**
      * Creates a new LoopLabels instance with all necessary label information.
      *
-     * @param labelName     The name of the loop label in source code
-     * @param nextLabel     The ASM Label for 'next' operations
-     * @param redoLabel     The ASM Label for 'redo' operations
-     * @param lastLabel     The ASM Label for 'last' operations
-     * @param context       The context type for this loop
-     * @param isTrueLoop    Whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
+     * @param labelName  The name of the loop label in source code
+     * @param nextLabel  The ASM Label for 'next' operations
+     * @param redoLabel  The ASM Label for 'redo' operations
+     * @param lastLabel  The ASM Label for 'last' operations
+     * @param context    The context type for this loop
+     * @param isTrueLoop Whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
      */
     public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop) {
         this(labelName, nextLabel, redoLabel, lastLabel, context, isTrueLoop, true);

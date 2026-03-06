@@ -3,8 +3,8 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -58,13 +58,13 @@ public class ParseInfix {
                 boolean isDeclaredReference = leftOp.getBooleanAnnotation("isDeclaredReference");
 
                 if (isDeclaredReference &&
-                    ("my".equals(declOperator) || "our".equals(declOperator) ||
-                     "state".equals(declOperator) || "local".equals(declOperator))) {
+                        ("my".equals(declOperator) || "our".equals(declOperator) ||
+                                "state".equals(declOperator) || "local".equals(declOperator))) {
 
                     // Allow assignment operators and comma (special handling)
                     boolean isAllowedOperator =
-                        operator.equals("=") || operator.equals(",") ||
-                        operator.endsWith("="); // +=, -=, .=, etc.
+                            operator.equals("=") || operator.equals(",") ||
+                                    operator.endsWith("="); // +=, -=, .=, etc.
 
                     if (!isAllowedOperator) {
                         // Get operator name for error message
@@ -90,9 +90,9 @@ public class ParseInfix {
                         };
 
                         throw new PerlCompilerException(
-                            parser.tokenIndex,
-                            "Can't declare " + opName + " in " + declOperator,
-                            parser.ctx.errorUtil
+                                parser.tokenIndex,
+                                "Can't declare " + opName + " in " + declOperator,
+                                parser.ctx.errorUtil
                         );
                     }
                 }

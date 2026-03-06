@@ -1,22 +1,22 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.app.cli.CompilerOptions;
-import org.perlonjava.frontend.astnode.Node;
-import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.backend.jvm.EmitterContext;
-import org.perlonjava.backend.jvm.EmitterMethodCreator;
-import org.perlonjava.backend.jvm.JavaClassInfo;
-import org.perlonjava.frontend.lexer.Lexer;
-import org.perlonjava.frontend.lexer.LexerToken;
-import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.frontend.parser.Parser;
-import org.perlonjava.runtime.mro.InheritanceResolver;
-import org.perlonjava.runtime.operators.ModuleOperators;
-import org.perlonjava.frontend.semantic.ScopedSymbolTable;
-import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.lexer.Lexer;
+import org.perlonjava.frontend.lexer.LexerToken;
+import org.perlonjava.frontend.parser.Parser;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -27,10 +27,10 @@ import java.util.*;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
-import static org.perlonjava.runtime.runtimetypes.GlobalVariable.*;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
-import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlocks;
 
 /**
@@ -48,7 +48,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Flag to control whether eval STRING should use the interpreter backend.
      * Enabled by default. eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
      * This provides 46x faster compilation for workloads with many unique eval strings.
-     *
+     * <p>
      * Set environment variable JPERL_EVAL_NO_INTERPRETER=1 to disable.
      */
     public static final boolean EVAL_USE_INTERPRETER =
@@ -57,7 +57,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Flag to control whether eval compilation errors should be printed to stderr.
      * By default, eval failures are silent (errors only stored in $@).
-     *
+     * <p>
      * Set environment variable JPERL_EVAL_VERBOSE=1 to enable verbose error reporting.
      * This is useful for debugging eval compilation issues, especially when testing
      * the interpreter path.
@@ -67,110 +67,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static final boolean EVAL_TRACE =
             System.getenv("JPERL_EVAL_TRACE") != null;
-
-    private static void evalTrace(String msg) {
-        if (EVAL_TRACE) {
-            System.err.println("[eval-trace] " + msg);
-        }
-    }
-
-    /**
-     * Flag to enable disassembly of eval STRING bytecode.
-     * When set, prints the interpreter bytecode for each eval STRING compilation.
-     *
-     * Set environment variable JPERL_DISASSEMBLE=1 to enable, or use --disassemble CLI flag.
-     * The --disassemble flag sets this via setDisassemble().
-     */
-    public static boolean DISASSEMBLE =
-            System.getenv("JPERL_DISASSEMBLE") != null;
-
-    /** Called by CLI argument parser when --disassemble is set. */
-    public static void setDisassemble(boolean value) {
-        DISASSEMBLE = value;
-    }
-
-    public static boolean USE_INTERPRETER =
-            System.getenv("JPERL_INTERPRETER") != null;
-
-    public static void setUseInterpreter(boolean value) {
-        USE_INTERPRETER = value;
-    }
-
     /**
      * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
-     *
+     * <p>
      * PROBLEM: In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values:
-     *   my @imports = qw(a b);
-     *   eval q{ BEGIN { say @imports } };  # perl5 prints: a b
-     *
+     * my @imports = qw(a b);
+     * eval q{ BEGIN { say @imports } };  # perl5 prints: a b
+     * <p>
      * In PerlOnJava, BEGIN blocks execute during parsing (before the eval class is instantiated),
      * so they couldn't access runtime values - they would see empty variables.
-     *
+     * <p>
      * SOLUTION: When evalStringHelper() is called, the runtime values are stored in this ThreadLocal.
      * During parsing, when SpecialBlockParser sets up BEGIN blocks, it can access these runtime values
      * and use them to initialize the special globals that lexical variables become in BEGIN blocks.
-     *
+     * <p>
      * This ThreadLocal stores:
      * - Key: The evalTag identifying this eval compilation
      * - Value: EvalRuntimeContext containing:
-     *     - runtimeValues: Object[] of captured variable values
-     *     - capturedEnv: String[] of captured variable names (matching array indices)
-     *
+     * - runtimeValues: Object[] of captured variable values
+     * - capturedEnv: String[] of captured variable names (matching array indices)
+     * <p>
      * Thread-safety: Each thread's eval compilation uses its own ThreadLocal storage, so parallel
      * eval compilations don't interfere with each other.
      */
     private static final ThreadLocal<EvalRuntimeContext> evalRuntimeContext = new ThreadLocal<>();
-
-    /**
-     * Container for runtime context during eval STRING compilation.
-     * Holds both the runtime values and variable names so SpecialBlockParser can
-     * match variables to their values.
-     */
-    public static class EvalRuntimeContext {
-        public final Object[] runtimeValues;
-        public final String[] capturedEnv;
-        public final String evalTag;
-
-        public EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
-            this.runtimeValues = runtimeValues;
-            this.capturedEnv = capturedEnv;
-            this.evalTag = evalTag;
-        }
-
-        /**
-         * Get the runtime value for a variable by name.
-         *
-         * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
-         * but runtimeValues array skips the first skipVariables (currently 3).
-         * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
-         *
-         * @param varName The variable name (e.g., "@imports", "$scalar")
-         * @return The runtime value, or null if not found
-         */
-        public Object getRuntimeValue(String varName) {
-            int skipVariables = 3; // 'this', '@_', 'wantarray'
-            for (int i = skipVariables; i < capturedEnv.length; i++) {
-                if (varName.equals(capturedEnv[i])) {
-                    int runtimeIndex = i - skipVariables;
-                    if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
-                        return runtimeValues[runtimeIndex];
-                    }
-                }
-            }
-            return null;
-        }
-    }
-
-    /**
-     * Get the current eval runtime context for accessing variable runtime values during parsing.
-     * This is called by SpecialBlockParser when setting up BEGIN blocks.
-     *
-     * @return The current eval runtime context, or null if not in eval STRING compilation
-     */
-    public static EvalRuntimeContext getEvalRuntimeContext() {
-        return evalRuntimeContext.get();
-    }
-
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -187,23 +107,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return size() > METHOD_HANDLE_CACHE_SIZE;
         }
     };
+    /**
+     * Flag to enable disassembly of eval STRING bytecode.
+     * When set, prints the interpreter bytecode for each eval STRING compilation.
+     * <p>
+     * Set environment variable JPERL_DISASSEMBLE=1 to enable, or use --disassemble CLI flag.
+     * The --disassemble flag sets this via setDisassemble().
+     */
+    public static boolean DISASSEMBLE =
+            System.getenv("JPERL_DISASSEMBLE") != null;
+    public static boolean USE_INTERPRETER =
+            System.getenv("JPERL_INTERPRETER") != null;
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
     // Runtime eval counter for generating unique filenames when $^P is set
     private static int runtimeEvalCounter = 1;
-
-    /**
-     * Gets the next eval sequence number and generates a filename.
-     * Used by both baseline compiler and interpreter for consistent naming.
-     *
-     * @return Filename like "(eval 1)", "(eval 2)", etc.
-     */
-    public static synchronized String getNextEvalFilename() {
-        return "(eval " + runtimeEvalCounter++ + ")";
-    }
-
     // Method object representing the compiled subroutine
     public MethodHandle methodHandle;
     public boolean isStatic;
@@ -231,7 +151,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeList constantValue;
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
-
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
@@ -242,11 +161,47 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.prototype = prototype;
         this.attributes = attributes;
     }
-
     public RuntimeCode(MethodHandle methodObject, Object codeObject, String prototype) {
         this.methodHandle = methodObject;
         this.codeObject = codeObject;
         this.prototype = prototype;
+    }
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
+
+    /**
+     * Called by CLI argument parser when --disassemble is set.
+     */
+    public static void setDisassemble(boolean value) {
+        DISASSEMBLE = value;
+    }
+
+    public static void setUseInterpreter(boolean value) {
+        USE_INTERPRETER = value;
+    }
+
+    /**
+     * Get the current eval runtime context for accessing variable runtime values during parsing.
+     * This is called by SpecialBlockParser when setting up BEGIN blocks.
+     *
+     * @return The current eval runtime context, or null if not in eval STRING compilation
+     */
+    public static EvalRuntimeContext getEvalRuntimeContext() {
+        return evalRuntimeContext.get();
+    }
+
+    /**
+     * Gets the next eval sequence number and generates a filename.
+     * Used by both baseline compiler and interpreter for consistent naming.
+     *
+     * @return Filename like "(eval 1)", "(eval 2)", etc.
+     */
+    public static synchronized String getNextEvalFilename() {
+        return "(eval " + runtimeEvalCounter++ + ")";
     }
 
     // Add a method to clear caches when globals are reset
@@ -284,18 +239,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * After the Class is returned to the caller, an instance of the Class will be populated
      * with closure variables, and then makeCodeObject() will be called to transform the Class
      * instance into a Perl CODE object.
-     *
+     * <p>
      * IMPORTANT CHANGE: This method now accepts runtime values of captured variables.
-     *
+     * <p>
      * WHY THIS IS NEEDED:
      * In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values.
      * For example:
-     *     my @imports = qw(md5 md5_hex);
-     *     eval q{ use Digest::MD5 @imports };  # BEGIN block sees @imports = (md5 md5_hex)
-     *
+     * my @imports = qw(md5 md5_hex);
+     * eval q{ use Digest::MD5 @imports };  # BEGIN block sees @imports = (md5 md5_hex)
+     * <p>
      * Previously in PerlOnJava, BEGIN blocks would see empty variables because they execute
      * during parsing, before the eval class is instantiated with runtime values.
-     *
+     * <p>
      * NOW: We pass runtime values to this method and store them in ThreadLocal storage.
      * SpecialBlockParser can then access these values when setting up BEGIN blocks,
      * allowing lexical variables to be initialized with their runtime values.
@@ -331,279 +286,279 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // If so, treat it as Unicode source to preserve Unicode characters during parsing
             // EXCEPT for evalbytes, which must treat everything as bytes
             String evalString = code.toString();
-        boolean hasUnicode = false;
-        if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
-            for (int i = 0; i < evalString.length(); i++) {
-                if (evalString.charAt(i) > 127) {
-                    hasUnicode = true;
-                    break;
+            boolean hasUnicode = false;
+            if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
+                for (int i = 0; i < evalString.length(); i++) {
+                    if (evalString.charAt(i) > 127) {
+                        hasUnicode = true;
+                        break;
+                    }
                 }
             }
-        }
 
-        // Clone compiler options and set isUnicodeSource if needed
-        // This only affects string parsing, not symbol table or method resolution
-        CompilerOptions evalCompilerOptions = ctx.compilerOptions;
-        // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
-        // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
-        // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
-        boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
-        if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
-            evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
-            if (hasUnicode) {
-                evalCompilerOptions.isUnicodeSource = true;
-            }
-            if (ctx.isEvalbytes) {
-                evalCompilerOptions.isEvalbytes = true;
-            }
-            if (isByteStringSource) {
-                evalCompilerOptions.isByteStringSource = true;
-            }
-        }
-
-        // Check $^P to determine if we should use caching
-        // When debugging is enabled, we want each eval to get a unique filename
-        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
-        boolean isDebugging = debugFlags != 0;
-        
-        // Override the filename with a runtime-generated eval number when debugging
-        String actualFileName = evalCompilerOptions.fileName;
-        if (isDebugging) {
-            actualFileName = getNextEvalFilename();
-        }
-        
-        // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
-        // Skip caching when $^P is set, so each eval gets a unique filename
-        int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
-        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags;
-        Class<?> cachedClass = null;
-        if (!isDebugging) {
-            synchronized (evalCache) {
-                if (evalCache.containsKey(cacheKey)) {
-                    cachedClass = evalCache.get(cacheKey);
+            // Clone compiler options and set isUnicodeSource if needed
+            // This only affects string parsing, not symbol table or method resolution
+            CompilerOptions evalCompilerOptions = ctx.compilerOptions;
+            // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
+            // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
+            // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
+            boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+            if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
+                evalCompilerOptions = ctx.compilerOptions.clone();
+                if (hasUnicode) {
+                    evalCompilerOptions.isUnicodeSource = true;
+                }
+                if (ctx.isEvalbytes) {
+                    evalCompilerOptions.isEvalbytes = true;
+                }
+                if (isByteStringSource) {
+                    evalCompilerOptions.isByteStringSource = true;
                 }
             }
-            
-            if (cachedClass != null) {
-                return cachedClass;
+
+            // Check $^P to determine if we should use caching
+            // When debugging is enabled, we want each eval to get a unique filename
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            boolean isDebugging = debugFlags != 0;
+
+            // Override the filename with a runtime-generated eval number when debugging
+            String actualFileName = evalCompilerOptions.fileName;
+            if (isDebugging) {
+                actualFileName = getNextEvalFilename();
             }
-        }
 
-        // IMPORTANT: The eval call site (EmitEval) computes the constructor signature from
-        // ctx.symbolTable (captured at compile-time). We must use that exact symbol table for
-        // codegen, otherwise the generated <init>(...) descriptor may not match what the
-        // call site is looking up via reflection.
-        ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
+            // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
+            // Skip caching when $^P is set, so each eval gets a unique filename
+            int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
+            String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags;
+            Class<?> cachedClass = null;
+            if (!isDebugging) {
+                synchronized (evalCache) {
+                    if (evalCache.containsKey(cacheKey)) {
+                        cachedClass = evalCache.get(cacheKey);
+                    }
+                }
 
-        // %^H is the compile-time hints hash. eval STRING must not leak modifications to the
-        // caller scope, so snapshot and restore it across compilation.
-        RuntimeHash capturedHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-        Map<String, RuntimeScalar> savedHintHash = new HashMap<>(capturedHintHash.elements);
+                if (cachedClass != null) {
+                    return cachedClass;
+                }
+            }
 
-        // eval may include lexical pragmas (use strict/warnings/features). We need those flags
-        // during codegen of the eval body, but they must NOT leak back into the caller scope.
-        BitSet savedWarningFlags = (BitSet) capturedSymbolTable.warningFlagsStack.peek().clone();
-        int savedFeatureFlags = capturedSymbolTable.featureFlagsStack.peek();
-        int savedStrictOptions = capturedSymbolTable.strictOptionsStack.peek();
+            // IMPORTANT: The eval call site (EmitEval) computes the constructor signature from
+            // ctx.symbolTable (captured at compile-time). We must use that exact symbol table for
+            // codegen, otherwise the generated <init>(...) descriptor may not match what the
+            // call site is looking up via reflection.
+            ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
 
-        // Parse using a mutable clone so lexical declarations inside the eval do not
-        // change the captured environment / constructor signature.
-        // IMPORTANT: The parseSymbolTable starts with the captured flags so that
-        // the eval code is parsed with the correct feature/strict/warning context
-        ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            // %^H is the compile-time hints hash. eval STRING must not leak modifications to the
+            // caller scope, so snapshot and restore it across compilation.
+            RuntimeHash capturedHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+            Map<String, RuntimeScalar> savedHintHash = new HashMap<>(capturedHintHash.elements);
 
-        // CRITICAL: Pre-create aliases for captured variables BEFORE parsing
-        // This allows BEGIN blocks in the eval string to access outer lexical variables.
-        //
-        // When the eval string is parsed, variable references in BEGIN blocks will be
-        // resolved to these special package globals that we're aliasing now.
-        //
-        // Example: my @arr = qw(a b); eval q{ BEGIN { say @arr } };
-        // We create: globalArrays["BEGIN_PKG_x::@arr"] = (the runtime @arr object)
-        // Then when "say @arr" is parsed in the BEGIN, it resolves to BEGIN_PKG_x::@arr
-        // which is aliased to the runtime array with values (a, b).
-        List<String> evalAliasKeys = new ArrayList<>();
-        Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
-        for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
-            if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
-                if (!entry.decl().equals("our")) {
-                    // "my" or "state" variables get special BEGIN package globals
-                    Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
-                    if (runtimeValue != null) {
-                        // Get or create the special package ID.
-                        // IMPORTANT: Do NOT mutate the AST node (ast.id) — the AST is
-                        // shared with the JVM compiler and mutation would corrupt `my`
-                        // variable reinitialization in loops.
-                        OperatorNode ast = entry.ast();
-                        if (ast != null) {
-                            int beginId = evalBeginIds.computeIfAbsent(
-                                    ast,
-                                    k -> EmitterMethodCreator.classCounter++);
-                            String packageName = PersistentVariable.beginPackage(beginId);
-                            String varNameWithoutSigil = entry.name().substring(1);
-                            String fullName = packageName + "::" + varNameWithoutSigil;
+            // eval may include lexical pragmas (use strict/warnings/features). We need those flags
+            // during codegen of the eval body, but they must NOT leak back into the caller scope.
+            BitSet savedWarningFlags = (BitSet) capturedSymbolTable.warningFlagsStack.peek().clone();
+            int savedFeatureFlags = capturedSymbolTable.featureFlagsStack.peek();
+            int savedStrictOptions = capturedSymbolTable.strictOptionsStack.peek();
 
-                            if (runtimeValue instanceof RuntimeArray) {
-                                GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
-                            } else if (runtimeValue instanceof RuntimeHash) {
-                                GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
-                            } else if (runtimeValue instanceof RuntimeScalar) {
-                                GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+            // Parse using a mutable clone so lexical declarations inside the eval do not
+            // change the captured environment / constructor signature.
+            // IMPORTANT: The parseSymbolTable starts with the captured flags so that
+            // the eval code is parsed with the correct feature/strict/warning context
+            ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+
+            // CRITICAL: Pre-create aliases for captured variables BEFORE parsing
+            // This allows BEGIN blocks in the eval string to access outer lexical variables.
+            //
+            // When the eval string is parsed, variable references in BEGIN blocks will be
+            // resolved to these special package globals that we're aliasing now.
+            //
+            // Example: my @arr = qw(a b); eval q{ BEGIN { say @arr } };
+            // We create: globalArrays["BEGIN_PKG_x::@arr"] = (the runtime @arr object)
+            // Then when "say @arr" is parsed in the BEGIN, it resolves to BEGIN_PKG_x::@arr
+            // which is aliased to the runtime array with values (a, b).
+            List<String> evalAliasKeys = new ArrayList<>();
+            Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
+            for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
+                if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
+                    if (!entry.decl().equals("our")) {
+                        // "my" or "state" variables get special BEGIN package globals
+                        Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
+                        if (runtimeValue != null) {
+                            // Get or create the special package ID.
+                            // IMPORTANT: Do NOT mutate the AST node (ast.id) — the AST is
+                            // shared with the JVM compiler and mutation would corrupt `my`
+                            // variable reinitialization in loops.
+                            OperatorNode ast = entry.ast();
+                            if (ast != null) {
+                                int beginId = evalBeginIds.computeIfAbsent(
+                                        ast,
+                                        k -> EmitterMethodCreator.classCounter++);
+                                String packageName = PersistentVariable.beginPackage(beginId);
+                                String varNameWithoutSigil = entry.name().substring(1);
+                                String fullName = packageName + "::" + varNameWithoutSigil;
+
+                                if (runtimeValue instanceof RuntimeArray) {
+                                    GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                } else if (runtimeValue instanceof RuntimeHash) {
+                                    GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                } else if (runtimeValue instanceof RuntimeScalar) {
+                                    GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                }
+                                evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
                             }
-                            evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
                         }
                     }
                 }
             }
-        }
 
-        EmitterContext evalCtx = new EmitterContext(
-                new JavaClassInfo(),  // internal java class name
-                parseSymbolTable, // symbolTable
-                null, // method visitor
-                null, // class writer
-                ctx.contextType, // call context
-                true, // is boxed
-                ctx.errorUtil, // error message utility
-                evalCompilerOptions, // possibly modified for Unicode source
-                ctx.unitcheckBlocks);
-        // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
-        // evalCtx.logDebug("evalStringHelper Code: " + code);
+            EmitterContext evalCtx = new EmitterContext(
+                    new JavaClassInfo(),  // internal java class name
+                    parseSymbolTable, // symbolTable
+                    null, // method visitor
+                    null, // class writer
+                    ctx.contextType, // call context
+                    true, // is boxed
+                    ctx.errorUtil, // error message utility
+                    evalCompilerOptions, // possibly modified for Unicode source
+                    ctx.unitcheckBlocks);
+            // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
+            // evalCtx.logDebug("evalStringHelper Code: " + code);
 
-        // Process the string source code to create the LexerToken list
-        Lexer lexer = new Lexer(evalString);
-        List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
-        Node ast = null;
-        Class<?> generatedClass;
-        try {
-            // Create the AST
-            // Create an instance of ErrorMessageUtil with the file name and token list
-            evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
-            Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
-            ast = parser.parse(); // Generate the abstract syntax tree (AST)
+            // Process the string source code to create the LexerToken list
+            Lexer lexer = new Lexer(evalString);
+            List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
+            Node ast = null;
+            Class<?> generatedClass;
+            try {
+                // Create the AST
+                // Create an instance of ErrorMessageUtil with the file name and token list
+                evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
+                Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
+                ast = parser.parse(); // Generate the abstract syntax tree (AST)
 
-            // ast = ConstantFoldingVisitor.foldConstants(ast);
+                // ast = ConstantFoldingVisitor.foldConstants(ast);
 
-            // Create a new instance of ErrorMessageUtil, resetting the line counter
-            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
-            evalCtx.symbolTable = capturedSymbolTable;
-            evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
-            setCurrentScope(evalCtx.symbolTable);
-            
-            // Use the captured environment array from compile-time to ensure
-            // constructor signature matches what EmitEval generated bytecode for
-            if (ctx.capturedEnv != null) {
-                evalCtx.capturedEnv = ctx.capturedEnv;
-            }
-            
-            ast.setAnnotation("blockIsSubroutine", true);
-            generatedClass = EmitterMethodCreator.createClassWithMethod(
-                    evalCtx,
-                    ast,
-                    false  // use try-catch
-            );
-            runUnitcheckBlocks(ctx.unitcheckBlocks);
-        } catch (Throwable e) {
-            // Compilation error in eval-string
+                // Create a new instance of ErrorMessageUtil, resetting the line counter
+                evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+                ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
+                evalCtx.symbolTable = capturedSymbolTable;
+                evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
+                setCurrentScope(evalCtx.symbolTable);
 
-            // Set the global error variable "$@"
-            RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-            err.set(e.getMessage());
-
-            // If EVAL_VERBOSE is set, print the error to stderr for debugging
-            if (EVAL_VERBOSE) {
-                System.err.println("eval compilation error: " + e.getMessage());
-                if (e.getCause() != null) {
-                    System.err.println("Caused by: " + e.getCause().getMessage());
+                // Use the captured environment array from compile-time to ensure
+                // constructor signature matches what EmitEval generated bytecode for
+                if (ctx.capturedEnv != null) {
+                    evalCtx.capturedEnv = ctx.capturedEnv;
                 }
-            }
 
-            // Check if $SIG{__DIE__} handler is defined
-            RuntimeScalar sig = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
-            if (sig.getDefinedBoolean()) {
-                // Call the $SIG{__DIE__} handler (similar to what die() does)
-                RuntimeScalar sigHandler = new RuntimeScalar(sig);
+                ast.setAnnotation("blockIsSubroutine", true);
+                generatedClass = EmitterMethodCreator.createClassWithMethod(
+                        evalCtx,
+                        ast,
+                        false  // use try-catch
+                );
+                runUnitcheckBlocks(ctx.unitcheckBlocks);
+            } catch (Throwable e) {
+                // Compilation error in eval-string
 
-                // Undefine $SIG{__DIE__} before calling to avoid infinite recursion
-                int level = DynamicVariableManager.getLocalLevel();
-                DynamicVariableManager.pushLocalVariable(sig);
+                // Set the global error variable "$@"
+                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
+                err.set(e.getMessage());
 
-                try {
-                    RuntimeArray args = new RuntimeArray();
-                    RuntimeArray.push(args, new RuntimeScalar(err));
-                    apply(sigHandler, args, RuntimeContextType.SCALAR);
-                } catch (Throwable handlerException) {
-                    // If the handler dies, use its payload as the new error
-                    if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException) {
-                        PerlDieException pde = (PerlDieException) handlerException.getCause();
-                        RuntimeBase handlerPayload = pde.getPayload();
-                        if (handlerPayload != null) {
-                            err.set(handlerPayload.getFirst());
-                        }
-                    } else if (handlerException instanceof PerlDieException) {
-                        PerlDieException pde = (PerlDieException) handlerException;
-                        RuntimeBase handlerPayload = pde.getPayload();
-                        if (handlerPayload != null) {
-                            err.set(handlerPayload.getFirst());
-                        }
+                // If EVAL_VERBOSE is set, print the error to stderr for debugging
+                if (EVAL_VERBOSE) {
+                    System.err.println("eval compilation error: " + e.getMessage());
+                    if (e.getCause() != null) {
+                        System.err.println("Caused by: " + e.getCause().getMessage());
                     }
-                    // If handler throws other exceptions, ignore them (keep original error in $@)
-                } finally {
-                    // Restore $SIG{__DIE__}
-                    DynamicVariableManager.popToLocalLevel(level);
+                }
+
+                // Check if $SIG{__DIE__} handler is defined
+                RuntimeScalar sig = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
+                if (sig.getDefinedBoolean()) {
+                    // Call the $SIG{__DIE__} handler (similar to what die() does)
+                    RuntimeScalar sigHandler = new RuntimeScalar(sig);
+
+                    // Undefine $SIG{__DIE__} before calling to avoid infinite recursion
+                    int level = DynamicVariableManager.getLocalLevel();
+                    DynamicVariableManager.pushLocalVariable(sig);
+
+                    try {
+                        RuntimeArray args = new RuntimeArray();
+                        RuntimeArray.push(args, new RuntimeScalar(err));
+                        apply(sigHandler, args, RuntimeContextType.SCALAR);
+                    } catch (Throwable handlerException) {
+                        // If the handler dies, use its payload as the new error
+                        if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException) {
+                            PerlDieException pde = (PerlDieException) handlerException.getCause();
+                            RuntimeBase handlerPayload = pde.getPayload();
+                            if (handlerPayload != null) {
+                                err.set(handlerPayload.getFirst());
+                            }
+                        } else if (handlerException instanceof PerlDieException) {
+                            PerlDieException pde = (PerlDieException) handlerException;
+                            RuntimeBase handlerPayload = pde.getPayload();
+                            if (handlerPayload != null) {
+                                err.set(handlerPayload.getFirst());
+                            }
+                        }
+                        // If handler throws other exceptions, ignore them (keep original error in $@)
+                    } finally {
+                        // Restore $SIG{__DIE__}
+                        DynamicVariableManager.popToLocalLevel(level);
+                    }
+                }
+
+                // Return null to signal compilation failure (don't throw exception)
+                // This prevents the exception from escaping to outer eval blocks
+                return null;
+            } finally {
+                // Restore caller lexical flags (do not leak eval pragmas).
+                capturedSymbolTable.warningFlagsStack.pop();
+                capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
+
+                capturedSymbolTable.featureFlagsStack.pop();
+                capturedSymbolTable.featureFlagsStack.push(savedFeatureFlags);
+
+                capturedSymbolTable.strictOptionsStack.pop();
+                capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
+
+                // Restore %^H (compile-time hints hash) to the caller snapshot.
+                capturedHintHash.elements.clear();
+                capturedHintHash.elements.putAll(savedHintHash);
+
+                setCurrentScope(capturedSymbolTable);
+
+                // Clean up BEGIN aliases for captured variables after compilation.
+                // These aliases were only needed during parsing (for BEGIN blocks to access
+                // outer lexicals). Leaving them in GlobalVariable would cause corruption
+                // if a recursive call re-enters the same function and its `my` declaration
+                // calls retrieveBeginScalar, finding the stale alias instead of creating
+                // a fresh variable.
+                for (String key : evalAliasKeys) {
+                    String fullName = key.substring(1);
+                    switch (key.charAt(0)) {
+                        case '$' -> GlobalVariable.globalVariables.remove(fullName);
+                        case '@' -> GlobalVariable.globalArrays.remove(fullName);
+                        case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                    }
+                }
+
+                // Store source lines in symbol table if $^P flags are set
+                // Do this on both success and failure paths when flags require retention
+                // Use the original evalString and actualFileName; AST may be null on failure
+                storeSourceLines(evalString, actualFileName, ast, tokens);
+            }
+
+            // Cache the result (unless debugging is enabled)
+            if (!isDebugging) {
+                synchronized (evalCache) {
+                    evalCache.put(cacheKey, generatedClass);
                 }
             }
 
-            // Return null to signal compilation failure (don't throw exception)
-            // This prevents the exception from escaping to outer eval blocks
-            return null;
-        } finally {
-            // Restore caller lexical flags (do not leak eval pragmas).
-            capturedSymbolTable.warningFlagsStack.pop();
-            capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
-
-            capturedSymbolTable.featureFlagsStack.pop();
-            capturedSymbolTable.featureFlagsStack.push(savedFeatureFlags);
-
-            capturedSymbolTable.strictOptionsStack.pop();
-            capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
-
-            // Restore %^H (compile-time hints hash) to the caller snapshot.
-            capturedHintHash.elements.clear();
-            capturedHintHash.elements.putAll(savedHintHash);
-
-            setCurrentScope(capturedSymbolTable);
-
-            // Clean up BEGIN aliases for captured variables after compilation.
-            // These aliases were only needed during parsing (for BEGIN blocks to access
-            // outer lexicals). Leaving them in GlobalVariable would cause corruption
-            // if a recursive call re-enters the same function and its `my` declaration
-            // calls retrieveBeginScalar, finding the stale alias instead of creating
-            // a fresh variable.
-            for (String key : evalAliasKeys) {
-                String fullName = key.substring(1);
-                switch (key.charAt(0)) {
-                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
-                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
-                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
-                }
-            }
-
-            // Store source lines in symbol table if $^P flags are set
-            // Do this on both success and failure paths when flags require retention
-            // Use the original evalString and actualFileName; AST may be null on failure
-            storeSourceLines(evalString, actualFileName, ast, tokens);
-        }
-
-        // Cache the result (unless debugging is enabled)
-        if (!isDebugging) {
-            synchronized (evalCache) {
-                evalCache.put(cacheKey, generatedClass);
-            }
-        }
-
-        return generatedClass;
+            return generatedClass;
         } finally {
             // Clean up ThreadLocal to prevent memory leaks
             // IMPORTANT: Always clean up ThreadLocal in finally block to ensure it's removed
@@ -633,14 +588,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // 0x1000 (4096): Include source that did not compile
         boolean shouldSaveSource = (debugFlags & 0x02) != 0 || (debugFlags & 0x400) != 0;
         boolean saveWithoutSubs = (debugFlags & 0x800) != 0;
-        
+
         if (shouldSaveSource) {
             // Note: We can't reliably detect subroutine definitions from the AST because
             // subroutines are processed at parse-time and removed from the AST.
             // Use a simple heuristic: check if the eval string contains "sub " followed by
             // an identifier or block.
             boolean definesSubs = evalString.matches("(?s).*\\bsub\\s+(?:\\w+|\\{).*");
-            
+
             // Only save if either:
             // - The eval defines subroutines, OR
             // - The 0x800 flag is set (save evals without subs)
@@ -649,27 +604,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Store in the symbol table as @{"_<(eval N)"}
             String symbolKey = "_<" + filename;
-            
+
             // Split the eval string into lines (without including trailing empty strings)
             String[] lines = evalString.split("\n");
-            
+
             // Create the array with the format expected by the debugger:
             // [0] = undef, [1..n] = lines with \n, [n+1] = \n, [n+2] = ;
             String arrayKey = "main::" + symbolKey;
             RuntimeArray sourceArray = GlobalVariable.getGlobalArray(arrayKey);
             sourceArray.elements.clear();
-            
+
             // Index 0: undef
             sourceArray.elements.add(RuntimeScalarCache.scalarUndef);
-            
+
             // Indexes 1..n: each line with "\n" appended
             for (String line : lines) {
                 sourceArray.elements.add(new RuntimeScalar(line + "\n"));
             }
-            
+
             // Index n+1: "\n"
             sourceArray.elements.add(new RuntimeScalar("\n"));
-            
+
             // Index n+2: ";"
             sourceArray.elements.add(new RuntimeScalar(";"));
 
@@ -730,11 +685,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * This method parses the eval string and compiles it to InterpretedCode instead
      * of generating JVM bytecode, which is 46x faster for workloads with many unique eval strings.
      *
-     * @param code The RuntimeScalar containing the eval string
-     * @param evalTag The unique identifier for this eval site
+     * @param code          The RuntimeScalar containing the eval string
+     * @param evalTag       The unique identifier for this eval site
      * @param runtimeValues The captured variable values from the outer scope
-     * @param args The @_ arguments to pass to the eval
-     * @param callContext The calling context (SCALAR/LIST/VOID)
+     * @param args          The @_ arguments to pass to the eval
+     * @param callContext   The calling context (SCALAR/LIST/VOID)
      * @return The result of executing the eval as a RuntimeList
      * @throws Throwable if compilation or execution fails
      */
@@ -798,7 +753,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             CompilerOptions evalCompilerOptions = ctx.compilerOptions;
             boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
             if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
-                evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
+                evalCompilerOptions = ctx.compilerOptions.clone();
                 if (hasUnicode) {
                     evalCompilerOptions.isUnicodeSource = true;
                 }
@@ -1015,7 +970,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalTrace("evalStringWithInterpreter exec ok tag=" + evalTag + " ctx=" + callContext +
                         " resultClass=" + (result != null ? result.getClass().getSimpleName() : "null") +
                         " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
-                        " resultBool=" + (result != null && result.scalar() != null ? result.scalar().getBoolean() : false));
+                        " resultBool=" + (result != null && result.scalar() != null && result.scalar().getBoolean()));
 
                 // Clear $@ on successful execution
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
@@ -1069,7 +1024,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         } finally {
             evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
-                    " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
+                    " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
 
@@ -1339,7 +1294,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(frameInfo.get(0)));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
-                
+
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
                 String subName = null;
@@ -1349,7 +1304,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         subName = prevFrame.get(3);
                     }
                 }
-                
+
                 if (subName != null && !subName.isEmpty()) {
                     res.add(new RuntimeScalar(subName));  // subroutine
                 } else {
@@ -1395,7 +1350,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             return apply(sourceAutoload, a, callContext);
                         }
                     }
-                    
+
                     // Then check if AUTOLOAD exists in the current package
                     String autoloadString = code.packageName + "::AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
@@ -1483,9 +1438,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
-        // If the RuntimeScalar is undef (forward declaration never filled), 
+        // If the RuntimeScalar is undef (forward declaration never filled),
         // silently return undef so tests can continue running.
-        // This is a temporary workaround for the architectural limitation that eval 
+        // This is a temporary workaround for the architectural limitation that eval
         // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
             // Return undef in appropriate context
@@ -1495,7 +1450,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return new RuntimeList(new RuntimeScalar());
             }
         }
-        
+
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
 
@@ -1526,7 +1481,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (fullSubName.isEmpty() && code.packageName != null && code.subName != null) {
                 fullSubName = code.packageName + "::" + code.subName;
             }
-            
+
             if (!fullSubName.isEmpty()) {
                 // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                 // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
@@ -1541,7 +1496,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         return apply(sourceAutoload, a, callContext);
                     }
                 }
-                
+
                 // Then check if AUTOLOAD exists in the current package
                 String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
@@ -1573,9 +1528,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
 
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
-        // If the RuntimeScalar is undef (forward declaration never filled), 
+        // If the RuntimeScalar is undef (forward declaration never filled),
         // silently return undef so tests can continue running.
-        // This is a temporary workaround for the architectural limitation that eval 
+        // This is a temporary workaround for the architectural limitation that eval
         // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
             // Return undef in appropriate context
@@ -1585,7 +1540,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return new RuntimeList(new RuntimeScalar());
             }
         }
-        
+
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
 
@@ -1664,7 +1619,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // For all other cases, create a normal reference
         return base.createReference();
     }
-    
+
     // Return a reference to the subroutine with this name: \&$a
     public static RuntimeScalar createCodeReference(RuntimeScalar runtimeScalar, String packageName) {
         // Special case: if the scalar already contains a CODE reference (lexical sub hidden variable),
@@ -1678,7 +1633,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return runtimeScalar;
         }
-        
+
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
@@ -1688,7 +1643,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Mark this as a symbolic reference created by \&{string} pattern
             // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
             runtimeCode.isSymbolicReference = true;
-            
+
             // For constant subroutines, return a reference to the constant value
             if (runtimeCode.constantValue != null && !runtimeCode.constantValue.isEmpty()) {
                 RuntimeScalar constValue = runtimeCode.constantValue.getFirst();
@@ -1740,6 +1695,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Fallback to main package if caller info is not available
         return "main::";
+    }
+
+    /**
+     * Replace lazy {@link ScalarSpecialVariable} references ($1, $&amp;, etc.) in a return list
+     * with concrete {@link RuntimeScalar} copies.  Must be called BEFORE {@link RegexState#restore()}
+     * so that the values reflect the subroutine's regex state, not the caller's.
+     */
+    public static void materializeSpecialVarsInResult(RuntimeList result) {
+        List<RuntimeBase> elems = result.elements;
+        for (int i = 0; i < elems.size(); i++) {
+            RuntimeBase elem = elems.get(i);
+            if (elem instanceof ScalarSpecialVariable ssv) {
+                RuntimeScalar resolved = ssv.getValueAsScalar();
+                RuntimeScalar concrete = new RuntimeScalar();
+                concrete.type = resolved.type;
+                concrete.value = resolved.value;
+                elems.set(i, concrete);
+            }
+        }
     }
 
     public boolean defined() {
@@ -1870,25 +1844,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Replace lazy {@link ScalarSpecialVariable} references ($1, $&amp;, etc.) in a return list
-     * with concrete {@link RuntimeScalar} copies.  Must be called BEFORE {@link RegexState#restore()}
-     * so that the values reflect the subroutine's regex state, not the caller's.
-     */
-    public static void materializeSpecialVarsInResult(RuntimeList result) {
-        List<RuntimeBase> elems = result.elements;
-        for (int i = 0; i < elems.size(); i++) {
-            RuntimeBase elem = elems.get(i);
-            if (elem instanceof ScalarSpecialVariable ssv) {
-                RuntimeScalar resolved = ssv.getValueAsScalar();
-                RuntimeScalar concrete = new RuntimeScalar();
-                concrete.type = resolved.type;
-                concrete.value = resolved.value;
-                elems.set(i, concrete);
-            }
-        }
-    }
-
-    /**
      * Returns a string representation of the CODE reference.
      *
      * @return a string representing the CODE reference
@@ -2007,6 +1962,46 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public void dynamicRestoreState() {
         throw new PerlCompilerException("Can't modify anonymous subroutine");
+    }
+
+    /**
+     * Container for runtime context during eval STRING compilation.
+     * Holds both the runtime values and variable names so SpecialBlockParser can
+     * match variables to their values.
+     */
+    public static class EvalRuntimeContext {
+        public final Object[] runtimeValues;
+        public final String[] capturedEnv;
+        public final String evalTag;
+
+        public EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
+            this.runtimeValues = runtimeValues;
+            this.capturedEnv = capturedEnv;
+            this.evalTag = evalTag;
+        }
+
+        /**
+         * Get the runtime value for a variable by name.
+         * <p>
+         * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
+         * but runtimeValues array skips the first skipVariables (currently 3).
+         * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
+         *
+         * @param varName The variable name (e.g., "@imports", "$scalar")
+         * @return The runtime value, or null if not found
+         */
+        public Object getRuntimeValue(String varName) {
+            int skipVariables = 3; // 'this', '@_', 'wantarray'
+            for (int i = skipVariables; i < capturedEnv.length; i++) {
+                if (varName.equals(capturedEnv[i])) {
+                    int runtimeIndex = i - skipVariables;
+                    if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
+                        return runtimeValues[runtimeIndex];
+                    }
+                }
+            }
+            return null;
+        }
     }
 
 }

@@ -102,7 +102,7 @@ public class Dereference {
                  * This allows ${$aref}[0] to work even though ${$aref} alone would fail.
                  */
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}[] ");
-                
+
                 // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
                 sigilNode.operand.accept(scalarVisitor);
 
@@ -112,7 +112,7 @@ public class Dereference {
                     baseSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
                 }
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, baseSlot);
-                
+
                 // Now apply the subscript using arrayDerefGet method
                 ArrayLiteralNode right = (ArrayLiteralNode) node.right;
                 if (right.elements.size() == 1) {
@@ -130,7 +130,7 @@ public class Dereference {
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                             "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
-                    
+
                     // Handle context conversion
                     if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList",
@@ -143,7 +143,7 @@ public class Dereference {
                 if (pooledBase) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
-                
+
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
@@ -429,20 +429,20 @@ public class Dereference {
                  * This allows ${$href}{key} to work even though ${$href} alone would fail.
                  */
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}{} ");
-                
+
                 // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
                 sigilNode.operand.accept(scalarVisitor);
-                
+
                 // Now apply the subscript using hashDerefGet method
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
-                
+
                 Node nodeZero = nodeRight.elements.getFirst();
                 if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
                     // Convert IdentifierNode to StringNode:  {a} to {"a"}
                     nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
                     nodeZero = nodeRight.elements.getFirst();
                 }
-                
+
                 // Apply hash subscript
                 if (nodeRight.elements.size() == 1) {
                     // Single element
@@ -474,7 +474,7 @@ public class Dereference {
                                 "hashDerefGetNonStrict", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     }
                 }
-                
+
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
@@ -793,11 +793,11 @@ public class Dereference {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
-        
+
         boolean isSingleRange = right.elements.size() == 1 &&
-                              right.elements.getFirst() instanceof BinaryOperatorNode binOp &&
-                              "..".equals(binOp.operator);
-        
+                right.elements.getFirst() instanceof BinaryOperatorNode binOp &&
+                "..".equals(binOp.operator);
+
         if (right.elements.size() == 1 && !isSingleRange) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();

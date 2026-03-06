@@ -1,22 +1,22 @@
 package org.perlonjava.app.scriptengine;
 
 import org.perlonjava.app.cli.CompilerOptions;
-import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.backend.bytecode.BytecodeCompiler;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
-import org.perlonjava.backend.bytecode.BytecodeCompiler;
-import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.DataSection;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
-import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.perlmodule.FilterUtilCall;
-import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.perlmodule.FilterUtilCall;
+import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
@@ -318,9 +318,9 @@ public class PerlLanguageProvider {
             // Interpreter path - returns InterpretedCode (extends RuntimeCode)
             ctx.logDebug("Compiling to bytecode interpreter");
             BytecodeCompiler compiler = new BytecodeCompiler(
-                ctx.compilerOptions.fileName,
-                1,  // sourceLine (legacy parameter)
-                ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
+                    ctx.compilerOptions.fileName,
+                    1,  // sourceLine (legacy parameter)
+                    ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
             );
             InterpretedCode interpretedCode = compiler.compile(ast, ctx);
 
@@ -337,28 +337,28 @@ public class PerlLanguageProvider {
             ctx.logDebug("Compiling to JVM bytecode");
             try {
                 Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                    ctx,
-                    ast,
-                    false  // no try-catch
+                        ctx,
+                        ast,
+                        false  // no try-catch
                 );
                 Constructor<?> constructor = generatedClass.getConstructor();
                 Object instance = constructor.newInstance();
 
                 // Create MethodHandle for the apply() method
                 MethodHandle methodHandle = RuntimeCode.lookup.findVirtual(
-                    generatedClass,
-                    "apply",
-                    RuntimeCode.methodType
+                        generatedClass,
+                        "apply",
+                        RuntimeCode.methodType
                 );
 
                 // Wrap in CompiledCode for type safety and consistency
                 // Main scripts don't have prototypes, so pass null
                 CompiledCode compiled = new CompiledCode(
-                    methodHandle,
-                    instance,
-                    null,  // prototype (main scripts don't have one)
-                    generatedClass,
-                    ctx
+                        methodHandle,
+                        instance,
+                        null,  // prototype (main scripts don't have one)
+                        generatedClass,
+                        ctx
                 );
                 return compiled;
 
@@ -383,9 +383,9 @@ public class PerlLanguageProvider {
                         ctx.symbolTable.strictOptionsStack.push(0);
                     }
                     BytecodeCompiler compiler = new BytecodeCompiler(
-                        ctx.compilerOptions.fileName,
-                        1,
-                        ctx.errorUtil
+                            ctx.compilerOptions.fileName,
+                            1,
+                            ctx.errorUtil
                     );
                     InterpretedCode interpretedCode = compiler.compile(ast, ctx);
 
@@ -410,11 +410,11 @@ public class PerlLanguageProvider {
             String msg = t.getMessage();
             if (msg != null && (
                     msg.contains("Method too large") ||
-                    msg.contains("Too many arguments in method signature") ||
-                    msg.contains("ASM frame computation failed") ||
-                    msg.contains("Unexpected runtime error during bytecode generation") ||
-                    msg.contains("dstFrame") ||
-                    msg.contains("requires interpreter fallback"))) {
+                            msg.contains("Too many arguments in method signature") ||
+                            msg.contains("ASM frame computation failed") ||
+                            msg.contains("Unexpected runtime error during bytecode generation") ||
+                            msg.contains("dstFrame") ||
+                            msg.contains("requires interpreter fallback"))) {
                 return true;
             }
         }

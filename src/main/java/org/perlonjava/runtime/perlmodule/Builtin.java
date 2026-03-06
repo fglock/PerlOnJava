@@ -156,7 +156,7 @@ public class Builtin extends PerlModuleBase {
                         case CODE -> "CODE";
                         case GLOB, GLOBREFERENCE -> "GLOB";
                         default -> "SCALAR";
-                    };
+                    }
                 }
                 yield "REF";
             }

@@ -66,30 +66,12 @@ public class Lexer {
         this.position = 0;
     }
 
-    private int getCurrentCodePoint() {
-        if (position >= length) {
-            return -1;
-        }
-        char c1 = input.charAt(position);
-        if (Character.isHighSurrogate(c1) && position + 1 < length) {
-            char c2 = input.charAt(position + 1);
-            if (Character.isLowSurrogate(c2)) {
-                return Character.toCodePoint(c1, c2);
-            }
-        }
-        return c1;
-    }
-
     private static boolean isPerlIdentifierStart(int codePoint) {
         return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
     }
 
     private static boolean isPerlIdentifierPart(int codePoint) {
         return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_CONTINUE);
-    }
-
-    private void advanceCodePoint(int codePoint) {
-        position += Character.charCount(codePoint);
     }
 
     // Main method for testing the Lexer
@@ -120,6 +102,24 @@ public class Lexer {
      */
     private static boolean isAsciiWhitespace(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+    }
+
+    private int getCurrentCodePoint() {
+        if (position >= length) {
+            return -1;
+        }
+        char c1 = input.charAt(position);
+        if (Character.isHighSurrogate(c1) && position + 1 < length) {
+            char c2 = input.charAt(position + 1);
+            if (Character.isLowSurrogate(c2)) {
+                return Character.toCodePoint(c1, c2);
+            }
+        }
+        return c1;
+    }
+
+    private void advanceCodePoint(int codePoint) {
+        position += Character.charCount(codePoint);
     }
 
     // Method to tokenize the input string into a list of tokens

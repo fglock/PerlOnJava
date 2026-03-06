@@ -3,12 +3,12 @@ package org.perlonjava.backend.jvm;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.frontend.astnode.Node;
-import org.perlonjava.frontend.astnode.BinaryOperatorNode;
-import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.frontend.astnode.TernaryOperatorNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.TernaryOperatorNode;
 import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -232,9 +232,9 @@ public class EmitLogicalOperator {
      * Emits bytecode for the xor operator (low-precedence logical XOR).
      * XOR evaluates both operands (no short-circuit) and returns:
      * - left if left is true and right is false
-     * - right if left is false and right is true  
+     * - right if left is false and right is true
      * - false otherwise
-     *
+     * <p>
      * Note: If the right operand is a control flow statement like 'next',
      * it will jump away and the xor operation will never complete.
      *

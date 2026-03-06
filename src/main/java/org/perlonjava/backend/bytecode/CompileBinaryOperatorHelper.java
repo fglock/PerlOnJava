@@ -429,7 +429,7 @@ public class CompileBinaryOperatorHelper {
                 // this case handles scalar-context flip-flop.
                 int flipFlopId = org.perlonjava.runtime.operators.ScalarFlipFlopOperator.currentId++;
                 org.perlonjava.runtime.operators.ScalarFlipFlopOperator op =
-                    new org.perlonjava.runtime.operators.ScalarFlipFlopOperator(operator.equals("..."));
+                        new org.perlonjava.runtime.operators.ScalarFlipFlopOperator(operator.equals("..."));
                 org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops.putIfAbsent(flipFlopId, op);
                 bytecodeCompiler.emit(Opcodes.FLIP_FLOP);
                 bytecodeCompiler.emitReg(rd);

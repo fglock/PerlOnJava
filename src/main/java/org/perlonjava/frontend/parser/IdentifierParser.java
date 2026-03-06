@@ -412,7 +412,7 @@ public class IdentifierParser {
                             }
                         }
                     }
-                    
+
                     variableName.append(token.text);
 
                     // Check identifier length limit (Perl's limit is around 251 characters)
@@ -553,15 +553,15 @@ public class IdentifierParser {
                 parser.tokenIndex++;
                 token = parser.tokens.get(parser.tokenIndex);
                 nextToken = parser.tokens.get(parser.tokenIndex + 1);
-                
+
                 // Validate that what follows :: is a valid identifier start
                 // Allow EOF or closing tokens for package names that end with ::
-                if (token.type != LexerTokenType.IDENTIFIER && token.type != LexerTokenType.NUMBER && 
-                    !token.text.equals("'") && !token.text.equals("::") && !token.text.equals("->") &&
-                    token.type != LexerTokenType.EOF &&
-                    !(token.type == LexerTokenType.OPERATOR && (token.text.equals("}") || token.text.equals(";") || token.text.equals("=") || token.text.equals(")")))) {
+                if (token.type != LexerTokenType.IDENTIFIER && token.type != LexerTokenType.NUMBER &&
+                        !token.text.equals("'") && !token.text.equals("::") && !token.text.equals("->") &&
+                        token.type != LexerTokenType.EOF &&
+                        !(token.type == LexerTokenType.OPERATOR && (token.text.equals("}") || token.text.equals(";") || token.text.equals("=") || token.text.equals(")")))) {
                     // Bad name after ::
-                    parser.throwCleanError("Bad name after " + variableName.toString() + "::");
+                    parser.throwCleanError("Bad name after " + variableName + "::");
                 }
                 continue;
             }
@@ -587,7 +587,7 @@ public class IdentifierParser {
                         continue;
                     } else {
                         // Bad name after '
-                        parser.throwCleanError("Bad name after " + variableName.toString() + "'");
+                        parser.throwCleanError("Bad name after " + variableName + "'");
                     }
                 }
 

@@ -33,7 +33,8 @@ public class CoreOperatorResolver {
         return switch (operatorName) {
             case "__LINE__" -> {
                 handleEmptyParentheses(parser);
-                yield new NumberNode(Integer.toString(parser.ctx.errorUtil.getLineNumber(parser.tokenIndex)), parser.tokenIndex);
+                yield
+                new NumberNode(Integer.toString(parser.ctx.errorUtil.getLineNumber(parser.tokenIndex)), parser.tokenIndex);
             }
             case "__FILE__" -> {
                 handleEmptyParentheses(parser);

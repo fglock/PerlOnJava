@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * Handler for numeric formats (c, C, s, S, i, I, l, L, q, Q, j, J, f, F, d, D, n, N, v, V, w).
- * 
+ *
  * <p><b>Format Categories:</b></p>
  * <ul>
  *   <li><b>8-bit:</b> c (signed char), C (unsigned char)</li>
@@ -20,13 +20,13 @@ import java.util.List;
  *   <li><b>Float:</b> f, F (single precision), d, D (double precision)</li>
  *   <li><b>Special:</b> w (BER compressed integer - variable length)</li>
  * </ul>
- * 
+ *
  * <p><b>Endianness Handling:</b></p>
  * <ul>
  *   <li>Native formats (s, S, i, I, l, L, etc.) support &lt; and &gt; modifiers</li>
  *   <li>Fixed formats (n, N = big-endian, v, V = little-endian) ignore modifiers</li>
  * </ul>
- * 
+ *
  * <p><b>Overload Support:</b></p>
  * <p>For the 'w' format (BER compression), special handling is needed for blessed objects
  * like Math::BigInt that use operator overloading:
@@ -36,7 +36,7 @@ import java.util.List;
  *   <li><b>Critical:</b> Do NOT use {@code value.toString()} for blessed objects,
  *       as it returns the hash representation (e.g., "HASH(0x7f8b3c80)")</li>
  * </ul>
- * 
+ *
  * <p><b>BER Compression ('w' format):</b></p>
  * <p>The 'w' format uses BER (Basic Encoding Rules) compression for unsigned integers.
  * Each byte contains 7 bits of data, with the high bit indicating whether more bytes follow:
@@ -46,13 +46,13 @@ import java.util.List;
  *   <li>Larger values: Continue adding bytes with high bit set until final byte</li>
  * </ul>
  * Example: 5000000000 (0x12A05F200) is encoded as: 0x95 0xA0 0xAF 0xD0 0x00
- * 
+ *
  * @see Overload
  * @see RuntimeScalar#getNumber()
  */
 public class NumericPackHandler implements PackFormatHandler {
     private static final boolean TRACE_PACK = false;
-    
+
     private final char format;
 
     public NumericPackHandler(char format) {
@@ -231,7 +231,7 @@ public class NumericPackHandler implements PackFormatHandler {
                         System.err.println("  numericValue type: " + numericValue.type);
                         System.err.println("  doubleValue: " + doubleValue);
                         System.err.println("  stringValue: '" + stringValue + "'");
-                        System.err.println("  numericValue.toString(): '" + numericValue.toString() + "'");
+                        System.err.println("  numericValue.toString(): '" + numericValue + "'");
                         System.err.println("  isNaN: " + Double.isNaN(doubleValue));
                         System.err.println("  isInfinite: " + Double.isInfinite(doubleValue));
                         System.err.println("  matches \\d{10,}e0: " + stringValue.matches("\\d{10,}e0"));

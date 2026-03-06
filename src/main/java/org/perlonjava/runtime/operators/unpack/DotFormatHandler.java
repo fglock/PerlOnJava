@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Handler for the '.' format in unpack - returns the current offset in the string.
- * 
+ *
  * <p>The dot format returns the current position with different behaviors based on count:
  * <ul>
  *   <li>.0 - Returns 0 (position relative to current position = 0)</li>
@@ -17,18 +17,18 @@ import java.util.List;
  *   <li>.N - Returns position relative to Nth group level up</li>
  *   <li>.* - Returns absolute position (relative to start of string)</li>
  * </ul>
- * 
+ *
  * <p>Example: unpack("x3(X2.2)", $data)
  * - x3: position = 3
  * - (: start group at position 3 (group base = 3)
  * - X2: back up 2 (position = 1)
  * - .2: return position relative to 2nd group up (outer context)
- * 
+ *
  * @see UnpackState#getRelativePosition(int)
  */
 public class DotFormatHandler implements FormatHandler {
     private static final boolean TRACE_UNPACK = false;
-    
+
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> values, int count, boolean isStarCount) {
         // Get the current position (absolute and relative to current group)

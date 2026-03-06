@@ -4,7 +4,7 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
- import java.nio.charset.StandardCharsets;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Handles vector string formatting for sprintf operations.

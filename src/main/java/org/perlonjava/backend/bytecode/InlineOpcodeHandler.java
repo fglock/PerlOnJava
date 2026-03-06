@@ -5,10 +5,10 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 /**
  * Inline opcode handlers for arithmetic, shift, collection, and list operations.
- *
+ * <p>
  * Extracted from BytecodeInterpreter.execute() to reduce method size
  * and keep it under the 8KB JIT compilation limit.
- *
+ * <p>
  * Handles: arithmetic ops, shift ops, integer assign ops, array/hash operations,
  * and list operations (CREATE_LIST, JOIN, SELECT, RANGE, MAP, GREP, SORT, etc.)
  */
@@ -182,8 +182,8 @@ public class InlineOpcodeHandler {
         int immediate = bytecode[pc];
         pc += 1;
         registers[rd] = MathOperators.add(
-            (RuntimeScalar) registers[rs],
-            immediate
+                (RuntimeScalar) registers[rs],
+                immediate
         );
         return pc;
     }
@@ -199,8 +199,8 @@ public class InlineOpcodeHandler {
         RuntimeBase concatLeft = registers[rs1];
         RuntimeBase concatRight = registers[rs2];
         registers[rd] = StringOperators.stringConcat(
-            concatLeft instanceof RuntimeScalar ? (RuntimeScalar) concatLeft : concatLeft.scalar(),
-            concatRight instanceof RuntimeScalar ? (RuntimeScalar) concatRight : concatRight.scalar()
+                concatLeft instanceof RuntimeScalar ? (RuntimeScalar) concatLeft : concatLeft.scalar(),
+                concatRight instanceof RuntimeScalar ? (RuntimeScalar) concatRight : concatRight.scalar()
         );
         return pc;
     }
@@ -215,10 +215,10 @@ public class InlineOpcodeHandler {
         int rs2 = bytecode[pc++];
         RuntimeBase countVal = registers[rs2];
         RuntimeScalar count = (countVal instanceof RuntimeScalar)
-            ? (RuntimeScalar) countVal
-            : ((RuntimeList) countVal).scalar();
+                ? (RuntimeScalar) countVal
+                : countVal.scalar();
         int repeatCtx = (registers[rs1] instanceof RuntimeScalar)
-            ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
+                ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
         registers[rd] = Operator.repeat(registers[rs1], count, repeatCtx);
         return pc;
     }
@@ -398,12 +398,12 @@ public class InlineOpcodeHandler {
             int index = idx.getInt();
             if (index < 0) index = list.elements.size() + index;
             registers[rd] = (index >= 0 && index < list.elements.size())
-                ? list.elements.get(index)
-                : new RuntimeScalar();
+                    ? list.elements.get(index)
+                    : new RuntimeScalar();
         } else {
             throw new RuntimeException("ARRAY_GET: register " + arrayReg + " contains " +
-                (arrayBase == null ? "null" : arrayBase.getClass().getName()) +
-                " instead of RuntimeArray or RuntimeList");
+                    (arrayBase == null ? "null" : arrayBase.getClass().getName()) +
+                    " instead of RuntimeArray or RuntimeList");
         }
         return pc;
     }
@@ -743,8 +743,8 @@ public class InlineOpcodeHandler {
 
         RuntimeBase separatorBase = registers[separatorReg];
         RuntimeScalar separator = (separatorBase instanceof RuntimeScalar)
-            ? (RuntimeScalar) separatorBase
-            : separatorBase.scalar();
+                ? (RuntimeScalar) separatorBase
+                : separatorBase.scalar();
 
         RuntimeBase list = registers[listReg];
 
@@ -781,9 +781,9 @@ public class InlineOpcodeHandler {
         RuntimeBase endBase = registers[endReg];
 
         RuntimeScalar start = (startBase instanceof RuntimeScalar) ? (RuntimeScalar) startBase :
-                             (startBase == null) ? new RuntimeScalar() : startBase.scalar();
+                (startBase == null) ? new RuntimeScalar() : startBase.scalar();
         RuntimeScalar end = (endBase instanceof RuntimeScalar) ? (RuntimeScalar) endBase :
-                           (endBase == null) ? new RuntimeScalar() : endBase.scalar();
+                (endBase == null) ? new RuntimeScalar() : endBase.scalar();
 
         PerlRange range = PerlRange.createRange(start, end);
         registers[rd] = range;
@@ -984,7 +984,7 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         registers[rd] = (registers[rs] instanceof RuntimeControlFlowList) ?
-            RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
         return pc;
     }
 
@@ -1188,9 +1188,9 @@ public class InlineOpcodeHandler {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = ScalarFlipFlopOperator.evaluate(
-            flipFlopId,
-            ((RuntimeBase) registers[rs1]).scalar(),
-            ((RuntimeBase) registers[rs2]).scalar());
+                flipFlopId,
+                registers[rs1].scalar(),
+                registers[rs2].scalar());
         return pc;
     }
 
@@ -1214,7 +1214,7 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int fileReg = bytecode[pc++];
         int ctx = bytecode[pc++];
-        RuntimeScalar file = ((RuntimeBase) registers[fileReg]).scalar();
+        RuntimeScalar file = registers[fileReg].scalar();
         registers[rd] = ModuleOperators.doFile(file, ctx);
         return pc;
     }

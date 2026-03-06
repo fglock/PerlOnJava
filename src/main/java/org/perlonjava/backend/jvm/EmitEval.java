@@ -5,13 +5,13 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.EvalOperatorNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 /**
  * EmitEval handles the bytecode generation for Perl's eval operator.
@@ -59,6 +59,7 @@ public class EmitEval {
             System.err.println("[eval-trace] " + msg);
         }
     }
+
     /**
      * Handles the emission of bytecode for the Perl 'eval' operator.
      *
@@ -146,7 +147,7 @@ public class EmitEval {
         // Store the captured environment array in the context
         // This ensures runtime uses the exact same array structure as compile-time
         evalCtx.capturedEnv = newEnv;
-        
+
         // Mark if this is evalbytes - needed to prevent Unicode source detection
         evalCtx.isEvalbytes = node.operator.equals("evalbytes");
 
@@ -536,10 +537,10 @@ public class EmitEval {
      * This path is used by default (disable with JPERL_EVAL_NO_INTERPRETER=1).
      *
      * @param emitterVisitor The visitor that traverses the AST
-     * @param evalTag The unique identifier for this eval site
-     * @param newEnv The captured environment variable names
+     * @param evalTag        The unique identifier for this eval site
+     * @param newEnv         The captured environment variable names
      * @param newSymbolTable The symbol table with captured variables
-     * @param skipVariables Number of reserved variables to skip (this, @_, wantarray)
+     * @param skipVariables  Number of reserved variables to skip (this, @_, wantarray)
      */
     private static void emitEvalInterpreterPath(EmitterVisitor emitterVisitor, String evalTag,
                                                 String[] newEnv, ScopedSymbolTable newSymbolTable,
@@ -606,14 +607,14 @@ public class EmitEval {
      * This is the traditional path using JVM bytecode compilation.
      *
      * @param emitterVisitor The visitor that traverses the AST
-     * @param evalTag The unique identifier for this eval site
-     * @param newEnv The captured environment variable names
+     * @param evalTag        The unique identifier for this eval site
+     * @param newEnv         The captured environment variable names
      * @param newSymbolTable The symbol table with captured variables
-     * @param skipVariables Number of reserved variables to skip (this, @_, wantarray)
+     * @param skipVariables  Number of reserved variables to skip (this, @_, wantarray)
      */
     private static void emitEvalCompilerPath(EmitterVisitor emitterVisitor, String evalTag,
-                                            String[] newEnv, ScopedSymbolTable newSymbolTable,
-                                            int skipVariables) {
+                                             String[] newEnv, ScopedSymbolTable newSymbolTable,
+                                             int skipVariables) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Stack: [RuntimeScalar(String)]

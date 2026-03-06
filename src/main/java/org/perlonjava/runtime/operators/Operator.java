@@ -145,47 +145,47 @@ public class Operator {
                 int splitCount = 0;
 
                 try {
-                while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
-                    // Add the part before the match
+                    while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
+                        // Add the part before the match
 
-                    // System.out.println("matcher lastend " + lastEnd + " start " + matcher.start() + " end " + matcher.end() + " length " + inputStr.length());
-                    if (lastEnd == 0 && matcher.end() == 0) {
-                        // if (lastEnd == 0 && matchStr.isEmpty()) {
-                        // A zero-width match at the beginning of EXPR never produces an empty field
-                        // System.out.println("matcher skip first");
-                    } else if (matcher.start() == matcher.end() && matcher.start() == lastEnd) {
-                        // Skip consecutive zero-width matches at the same position
-                        // This handles patterns like / */ that can match zero spaces
-                        continue;
-                    } else {
-                        splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
-                    }
+                        // System.out.println("matcher lastend " + lastEnd + " start " + matcher.start() + " end " + matcher.end() + " length " + inputStr.length());
+                        if (lastEnd == 0 && matcher.end() == 0) {
+                            // if (lastEnd == 0 && matchStr.isEmpty()) {
+                            // A zero-width match at the beginning of EXPR never produces an empty field
+                            // System.out.println("matcher skip first");
+                        } else if (matcher.start() == matcher.end() && matcher.start() == lastEnd) {
+                            // Skip consecutive zero-width matches at the same position
+                            // This handles patterns like / */ that can match zero spaces
+                            continue;
+                        } else {
+                            splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
+                        }
 
-                    // Add captured groups if any (but skip code block captures)
-                    Pattern p = matcher.pattern();
-                    Map<String, Integer> namedGroups = p.namedGroups();
-                    for (int i = 1; i <= matcher.groupCount(); i++) {
-                        // Check if this is a code block capture (starts with "cb")
-                        boolean isCodeBlockCapture = false;
-                        if (namedGroups != null) {
-                            for (Map.Entry<String, Integer> entry : namedGroups.entrySet()) {
-                                if (entry.getValue() == i && entry.getKey().startsWith("cb")) {
-                                    isCodeBlockCapture = true;
-                                    break;
+                        // Add captured groups if any (but skip code block captures)
+                        Pattern p = matcher.pattern();
+                        Map<String, Integer> namedGroups = p.namedGroups();
+                        for (int i = 1; i <= matcher.groupCount(); i++) {
+                            // Check if this is a code block capture (starts with "cb")
+                            boolean isCodeBlockCapture = false;
+                            if (namedGroups != null) {
+                                for (Map.Entry<String, Integer> entry : namedGroups.entrySet()) {
+                                    if (entry.getValue() == i && entry.getKey().startsWith("cb")) {
+                                        isCodeBlockCapture = true;
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                        
-                        // Only add non-code-block captures to split results
-                        if (!isCodeBlockCapture) {
-                            String group = matcher.group(i);
-                            splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
-                        }
-                    }
 
-                    lastEnd = matcher.end();
-                    splitCount++;
-                }
+                            // Only add non-code-block captures to split results
+                            if (!isCodeBlockCapture) {
+                                String group = matcher.group(i);
+                                splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
+                            }
+                        }
+
+                        lastEnd = matcher.end();
+                        splitCount++;
+                    }
                 } catch (RegexTimeoutException e) {
                     WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
                 }
@@ -381,7 +381,7 @@ public class Operator {
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield splice(runtimeArray, list); // Recursive call after vivification
+                yield splice (runtimeArray, list)// Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
@@ -534,7 +534,7 @@ public class Operator {
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (value instanceof RuntimeScalar && !((RuntimeScalar) value).getDefinedBoolean()) {
+        if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
                     RuntimeScalarCache.scalarEmptyString);
         }

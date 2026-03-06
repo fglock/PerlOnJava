@@ -155,14 +155,14 @@ public class ByteCodeSourceMapper {
         }
 
         LineInfo lineInfo = entry.getValue();
-        
+
         // Retrieve subroutine name
         String subroutineName = subroutineNamePool.get(lineInfo.subroutineNameId());
         // If subroutine name is empty string (main code), convert to null
         if (subroutineName != null && subroutineName.isEmpty()) {
             subroutineName = null;
         }
-        
+
         // Create a unique location key using tokenIndex instead of line number
         // This prevents false duplicates when multiple statements are on the same line
         var locationKey = new SourceLocation(
@@ -189,19 +189,6 @@ public class ByteCodeSourceMapper {
     }
 
     /**
-     * Holds debug information for a specific source file including
-     * mappings between token indices and line information.
-     */
-    private static class SourceFileInfo {
-        final int fileId;
-        final TreeMap<Integer, LineInfo> tokenToLineInfo = new TreeMap<>();
-
-        SourceFileInfo(int fileId) {
-            this.fileId = fileId;
-        }
-    }
-
-    /**
      * Associates a line number with its package context and subroutine name.
      */
     private record LineInfo(int lineNumber, int packageNameId, int subroutineNameId) {
@@ -212,5 +199,18 @@ public class ByteCodeSourceMapper {
      * package name, line number, and subroutine name.
      */
     public record SourceLocation(String sourceFileName, String packageName, int lineNumber, String subroutineName) {
+    }
+
+    /**
+     * Holds debug information for a specific source file including
+     * mappings between token indices and line information.
+     */
+    private static class SourceFileInfo {
+        final int fileId;
+        final TreeMap<Integer, LineInfo> tokenToLineInfo = new TreeMap<>();
+
+        SourceFileInfo(int fileId) {
+            this.fileId = fileId;
+        }
     }
 }

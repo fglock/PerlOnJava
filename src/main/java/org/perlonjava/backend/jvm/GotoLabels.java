@@ -20,8 +20,8 @@ public class GotoLabels {
     /**
      * Creates a new GotoLabels instance.
      *
-     * @param labelName     The name of the label in source code
-     * @param gotoLabel     The ASM Label object for bytecode generation
+     * @param labelName The name of the label in source code
+     * @param gotoLabel The ASM Label object for bytecode generation
      */
     public GotoLabels(String labelName, Label gotoLabel) {
         this.labelName = labelName;

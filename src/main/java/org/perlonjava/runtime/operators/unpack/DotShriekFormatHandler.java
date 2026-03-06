@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Handler for the '.!' format in unpack - returns the current byte offset in the string.
- * 
+ *
  * <p>The dot-shriek format returns the current BYTE position with different behaviors based on count:
  * <ul>
  *   <li>.!0 - Returns 0 (position relative to current position = 0)</li>
@@ -17,9 +17,9 @@ import java.util.List;
  *   <li>.!N - Returns byte position relative to Nth group level up</li>
  *   <li>.!* - Returns absolute byte position (relative to start of string)</li>
  * </ul>
- * 
+ *
  * <p>Similar to DotFormatHandler but always works in byte domain, not character domain.
- * 
+ *
  * @see DotFormatHandler
  * @see UnpackState#getRelativeBytePosition(int)
  */

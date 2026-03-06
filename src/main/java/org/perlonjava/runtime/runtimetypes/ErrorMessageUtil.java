@@ -2,7 +2,6 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
-import org.perlonjava.frontend.parser.TokenUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,9 +17,6 @@ public class ErrorMessageUtil {
     private String fileName;
     private int tokenIndex;
     private int lastLineNumber;
-
-    public record SourceLocation(String fileName, int lineNumber) {
-    }
 
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
@@ -180,6 +176,9 @@ public class ErrorMessageUtil {
         }
 
         return sb.toString();
+    }
+
+    public record SourceLocation(String fileName, int lineNumber) {
     }
 
     public String getFileName() {

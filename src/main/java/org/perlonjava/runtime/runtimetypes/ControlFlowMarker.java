@@ -5,30 +5,42 @@ package org.perlonjava.runtime.runtimetypes;
  * This is attached to RuntimeList objects to indicate they represent a control flow action.
  */
 public class ControlFlowMarker {
-    /** The type of control flow (LAST, NEXT, REDO, GOTO, TAILCALL) */
+    /**
+     * The type of control flow (LAST, NEXT, REDO, GOTO, TAILCALL)
+     */
     public final ControlFlowType type;
-    
-    /** The label for LAST/NEXT/REDO/GOTO (null for unlabeled control flow) */
+
+    /**
+     * The label for LAST/NEXT/REDO/GOTO (null for unlabeled control flow)
+     */
     public final String label;
-    
-    /** The code reference for TAILCALL (goto &NAME) */
+
+    /**
+     * The code reference for TAILCALL (goto &NAME)
+     */
     public final RuntimeScalar codeRef;
-    
-    /** The arguments for TAILCALL (goto &NAME) */
+
+    /**
+     * The arguments for TAILCALL (goto &NAME)
+     */
     public final RuntimeArray args;
-    
-    /** Source file name where the control flow originated (for error messages) */
+
+    /**
+     * Source file name where the control flow originated (for error messages)
+     */
     public final String fileName;
-    
-    /** Line number where the control flow originated (for error messages) */
+
+    /**
+     * Line number where the control flow originated (for error messages)
+     */
     public final int lineNumber;
-    
+
     /**
      * Constructor for control flow (last/next/redo/goto).
-     * 
-     * @param type The control flow type
-     * @param label The label to jump to (null for unlabeled)
-     * @param fileName Source file name (for error messages)
+     *
+     * @param type       The control flow type
+     * @param label      The label to jump to (null for unlabeled)
+     * @param fileName   Source file name (for error messages)
      * @param lineNumber Line number (for error messages)
      */
     public ControlFlowMarker(ControlFlowType type, String label, String fileName, int lineNumber) {
@@ -39,13 +51,13 @@ public class ControlFlowMarker {
         this.codeRef = null;
         this.args = null;
     }
-    
+
     /**
      * Constructor for tail call (goto &NAME).
-     * 
-     * @param codeRef The code reference to call
-     * @param args The arguments to pass
-     * @param fileName Source file name (for error messages)
+     *
+     * @param codeRef    The code reference to call
+     * @param args       The arguments to pass
+     * @param fileName   Source file name (for error messages)
      * @param lineNumber Line number (for error messages)
      */
     public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber) {
@@ -56,27 +68,27 @@ public class ControlFlowMarker {
         this.codeRef = codeRef;
         this.args = args;
     }
-    
+
     /**
      * Debug method to print control flow information.
      */
     public void debugPrint(String context) {
-        System.err.println("[DEBUG] " + context + ": type=" + type + 
-                          ", label=" + label + 
-                          ", codeRef=" + (codeRef != null ? codeRef : "null") +
-                          ", args=" + (args != null ? args.size() : "null") +
-                          " @ " + fileName + ":" + lineNumber);
+        System.err.println("[DEBUG] " + context + ": type=" + type +
+                ", label=" + label +
+                ", codeRef=" + (codeRef != null ? codeRef : "null") +
+                ", args=" + (args != null ? args.size() : "null") +
+                " @ " + fileName + ":" + lineNumber);
     }
-    
+
     /**
      * Throws an appropriate PerlCompilerException for this control flow that couldn't be handled.
      * Includes source file and line number in the error message.
-     * 
+     *
      * @throws PerlCompilerException Always throws with contextual error message
      */
     public String buildErrorMessage() {
         String location = " at " + fileName + " line " + lineNumber;
-        
+
         if (type == ControlFlowType.TAILCALL) {
             // Tail call should have been handled by trampoline at returnLabel
             return "Tail call escaped to top level (internal error)" + location;

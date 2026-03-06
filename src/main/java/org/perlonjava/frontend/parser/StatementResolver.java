@@ -5,14 +5,13 @@ import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.TokenUtils.consume;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
@@ -96,9 +95,9 @@ public class StatementResolver {
                 case "sub" -> {
                     parser.tokenIndex++;
                     LexerToken nextToken = peek(parser);
-                    if (nextToken.type == LexerTokenType.IDENTIFIER || 
-                        nextToken.text.equals("'") || 
-                        nextToken.text.equals("::")) {
+                    if (nextToken.type == LexerTokenType.IDENTIFIER ||
+                            nextToken.text.equals("'") ||
+                            nextToken.text.equals("::")) {
                         yield SubroutineParser.parseSubroutineDefinition(parser, true, "our");
                     }
                     // Otherwise backtrack
@@ -208,12 +207,12 @@ public class StatementResolver {
                                 // our sub works like our var - it creates a package sub AND a lexical alias
                                 // The lexical alias stores the fully qualified name so it always resolves
                                 // to the correct package sub regardless of the current package
-                                
+
                                 // Parse as normal package sub
                                 parser.tokenIndex--; // back up to just after "sub"
-                                
+
                                 Node packageSub = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
-                                
+
                                 // Store the fully qualified name in the symbol table
                                 // This allows calls to resolve to the correct package sub even after package switch
                                 String fullSubName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
@@ -223,7 +222,7 @@ public class StatementResolver {
                                 marker.setAnnotation("isOurSub", true);
                                 marker.setAnnotation("fullSubName", fullSubName);  // Store the full qualified name!
                                 parser.ctx.symbolTable.addVariable("&" + subName, "our", marker);
-                                
+
                                 // Return the package sub
                                 yield packageSub;
                             } else {
@@ -234,12 +233,12 @@ public class StatementResolver {
                                 // Create the declaration: my/state $hiddenVarName
                                 // First create the inner operand (the $hiddenVarName part)
                                 OperatorNode innerVarNode = new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
-                                
+
                                 // For state variables, assign a unique ID for persistent tracking
                                 if (declaration.equals("state")) {
                                     innerVarNode.id = EmitterMethodCreator.classCounter++;
                                 }
-                                
+
                                 // Now create the outer declaration node (state/my $hiddenVarName)
                                 OperatorNode varDecl = new OperatorNode(declaration, innerVarNode, parser.tokenIndex);
 
@@ -250,21 +249,21 @@ public class StatementResolver {
                                 // IMPORTANT: Manually add the hidden variable to the symbol table
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
                                 // So we need to register both the sub name (&p) and the hidden variable ($p__lexsub_N)
-                                
+
                                 // IMPORTANT: Add the hidden variable NOW (before parsing body)
                                 // But delay adding &subName until AFTER parsing the body to make the sub "invisible inside itself"
-                                
+
                                 // For my/state subs: If there's already a forward declaration, we need to handle it
                                 SymbolTable.SymbolEntry existingEntry = parser.ctx.symbolTable.getSymbolEntry("&" + subName);
                                 boolean hadForwardDecl = existingEntry != null;
-                                
+
                                 // Add the hidden variable immediately (needed for state variable tracking)
                                 if (hadForwardDecl) {
                                     parser.ctx.symbolTable.replaceVariable("$" + hiddenVarName, declaration, innerVarNode);
                                 } else {
                                     parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, innerVarNode);
                                 }
-                                
+
                                 // DO NOT add &subName yet - it will be added after parsing the body
 
                                 // Check if this is a forward declaration or a full definition
@@ -272,7 +271,7 @@ public class StatementResolver {
                                 boolean hasBody = false;
                                 String prototype = null;
                                 List<String> attributes = new ArrayList<>();
-                                
+
                                 // Parse attributes first (e.g., :prototype())
                                 while (peek(parser).text.equals(":")) {
                                     String attrProto = SubroutineParser.consumeAttributes(parser, attributes);
@@ -280,7 +279,7 @@ public class StatementResolver {
                                         prototype = attrProto;
                                     }
                                 }
-                                
+
                                 // Then check for prototype/signature
                                 // When signatures are enabled, we need to look ahead:
                                 // - (...) { ... } means signature + body
@@ -292,7 +291,7 @@ public class StatementResolver {
                                         StringParser.parseRawString(parser, "q"); // consume the parens
                                         boolean hasBodyAfterParens = peek(parser).text.equals("{");
                                         parser.tokenIndex = savedIndex; // restore position
-                                        
+
                                         if (!hasBodyAfterParens) {
                                             // Forward declaration: (...) ; - parse as prototype
                                             prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
@@ -303,12 +302,12 @@ public class StatementResolver {
                                         prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
                                     }
                                 }
-                                
+
                                 // Now check if there's a body
                                 // When signatures are enabled, (...) followed by { also indicates a body
                                 String peekText = peek(parser).text;
-                                hasBody = peekText.equals("{") || 
-                                         (peekText.equals("(") && parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures"));
+                                hasBody = peekText.equals("{") ||
+                                        (peekText.equals("(") && parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures"));
 
                                 if (hasBody) {
                                     // Full definition: my sub name {...} or my sub name (...) {...}
@@ -333,7 +332,7 @@ public class StatementResolver {
                                     // Use a fully qualified name to ensure it resolves correctly regardless of package context
                                     String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
                                     String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
-                                    
+
                                     OperatorNode varRef = new OperatorNode("$", new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), parser.tokenIndex);
                                     // For state variables, copy the ID so runtime can track the state
                                     if (declaration.equals("state")) {
@@ -344,7 +343,7 @@ public class StatementResolver {
                                     // Check if we're inside a subroutine
                                     String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
                                     boolean insideSubroutine = currentSub != null && !currentSub.isEmpty();
-                                    
+
                                     if (declaration.equals("state") || !insideSubroutine) {
                                         // For state sub: Execute assignment immediately during parsing (like a BEGIN block)
                                         // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
@@ -354,7 +353,7 @@ public class StatementResolver {
                                         // use statements (like use overload) can access the sub reference
                                         BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
                                         SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
-                                        
+
                                         // Return empty list since the assignment already executed
                                         yield new ListNode(parser.tokenIndex);
                                     } else {
@@ -371,16 +370,16 @@ public class StatementResolver {
                                     } else {
                                         parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
                                     }
-                                    
+
                                     if (prototype != null) {
                                         // Store prototype in varDecl annotation
                                         varDecl.setAnnotation("prototype", prototype);
-                                        
+
                                         // Create a stub RuntimeCode with the prototype set
                                         // This is needed so that prototype(\&sub) works for forward declarations
                                         String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
                                         String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
-                                        
+
                                         // Create a subroutine stub with the prototype that returns undef
                                         // The body needs at least a return statement to avoid bytecode issues
                                         List<Node> stubBody = new ArrayList<>();
@@ -393,17 +392,17 @@ public class StatementResolver {
                                                 false,  // useTryCatch
                                                 parser.tokenIndex
                                         );
-                                        
+
                                         // Create assignment: $hiddenVarName = sub { }
-                                        OperatorNode varRef = new OperatorNode("$", 
-                                                new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), 
+                                        OperatorNode varRef = new OperatorNode("$",
+                                                new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex),
                                                 parser.tokenIndex);
                                         BinaryOperatorNode stubAssignment = new BinaryOperatorNode("=", varRef, stubSub, parser.tokenIndex);
-                                        
+
                                         // Execute the stub assignment in a BEGIN block
                                         BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(stubAssignment)), parser.tokenIndex);
                                         SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
-                                        
+
                                         // Return empty list since stub was created
                                         yield new ListNode(parser.tokenIndex);
                                     }
@@ -439,10 +438,10 @@ public class StatementResolver {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
                                 boolean wasInMethod = parser.isInMethod;
                                 parser.isInMethod = true; // Set method context for lexical method
-                                
+
                                 // Enter scope for the lexical method's body
                                 int scopeIndex = parser.ctx.symbolTable.enterScope();
-                                
+
                                 // Add temp $self to THIS scope (the method's inner scope)
                                 // so field access works during parsing
                                 // This will be matched by the actual `my $self = shift;` injected during transformation
@@ -450,7 +449,7 @@ public class StatementResolver {
                                         new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex),
                                         parser.tokenIndex);
                                 parser.ctx.symbolTable.addVariable("$self", "my", tempSelf);
-                                
+
                                 // Parse the block contents (without creating another scope)
                                 List<Node> elements = new ArrayList<>();
                                 while (!peek(parser).text.equals("}")) {
@@ -460,10 +459,10 @@ public class StatementResolver {
                                     }
                                 }
                                 block = new BlockNode(elements, parser.tokenIndex);
-                                
+
                                 // Exit the method's scope (this removes temp $self)
                                 parser.ctx.symbolTable.exitScope(scopeIndex);
-                                
+
                                 parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
                             } else if (peek(parser).text.equals(";")) {
@@ -554,13 +553,13 @@ public class StatementResolver {
                     LexerToken next = TokenUtils.peek(parser);
                     boolean isStatementTerminator =
                             next.type == LexerTokenType.EOF ||
-                            next.text.equals(";") ||
-                            next.text.equals("}");
+                                    next.text.equals(";") ||
+                                    next.text.equals("}");
                     if (!isStatementTerminator) {
                         throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                     }
-                    yield dieWarnNode(parser, "die", new ListNode(List.of(
-                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex), parser.tokenIndex);
+                    yield dieWarnNode (parser, "die", new ListNode(List.of(
+                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex), parser.tokenIndex)
                 }
 
                 case "{" -> {
@@ -576,8 +575,8 @@ public class StatementResolver {
                             String fileName = parser.ctx.errorUtil.getFileName();
                             int lineNum = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
                             String errorMsg = "Missing right curly or square bracket at " + fileName + " line " + lineNum + ", at end of line\n" +
-                                "syntax error at " + fileName + " line " + lineNum + ", at EOF\n" +
-                                "Execution of " + fileName + " aborted due to compilation errors.\n";
+                                    "syntax error at " + fileName + " line " + lineNum + ", at EOF\n" +
+                                    "Execution of " + fileName + " aborted due to compilation errors.\n";
                             throw new PerlCompilerException(errorMsg);
                         }
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
@@ -781,20 +780,20 @@ public class StatementResolver {
                             }
                             searchIndex--;
                         }
-                        
+
                         // Also check if this looks like an assignment by looking at the next token
                         boolean looksLikeAssignment = false;
                         if (parser.tokenIndex < parser.tokens.size()) {
                             LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
                             // Assignment would be followed by a variable, number, string, or expression
-                            if (nextToken.type == LexerTokenType.IDENTIFIER && 
-                                (nextToken.text.startsWith("$") || nextToken.text.startsWith("@") || nextToken.text.startsWith("%"))) {
+                            if (nextToken.type == LexerTokenType.IDENTIFIER &&
+                                    (nextToken.text.startsWith("$") || nextToken.text.startsWith("@") || nextToken.text.startsWith("%"))) {
                                 looksLikeAssignment = true;
                             } else if (nextToken.type == LexerTokenType.NUMBER || nextToken.type == LexerTokenType.STRING) {
                                 looksLikeAssignment = true;
                             }
                         }
-                        
+
                         if (!isQStringDelimiter && looksLikeAssignment) {
                             // This looks like an assignment
                             parser.ctx.logDebug("isHashLiteral found = (block indicator)");

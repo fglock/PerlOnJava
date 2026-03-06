@@ -51,17 +51,57 @@ import java.util.Stack;
  * @see PackWriter
  */
 public class Pack {
+    public static final Map<Character, PackFormatHandler> handlers = new HashMap<>();
     /**
      * Enable trace output for pack operations.
      * Set to true to debug pack template processing.
      */
     private static final boolean TRACE_PACK = false;
-
     private static final ThreadLocal<Stack<Integer>> groupBaseStack = ThreadLocal.withInitial(() -> {
         Stack<Integer> stack = new Stack<>();
         stack.push(0);
         return stack;
     });
+
+    static {
+        // Initialize format handlers
+        handlers.put('b', new BitStringPackHandler('b'));
+        handlers.put('B', new BitStringPackHandler('B'));
+        handlers.put('h', new HexStringPackHandler('h'));
+        handlers.put('H', new HexStringPackHandler('H'));
+        handlers.put('u', new UuencodePackHandler());
+        handlers.put('p', new PointerPackHandler('p'));
+        handlers.put('P', new PointerPackHandler('P'));
+        // W format is handled specially like U format (see switch statement below)
+        // handlers.put('W', new WideCharacterPackHandler());
+        handlers.put('x', new ControlPackHandler('x'));
+        handlers.put('X', new ControlPackHandler('X'));
+        handlers.put('@', new ControlPackHandler('@'));
+        handlers.put('.', new ControlPackHandler('.'));
+
+        // Numeric format handlers
+        handlers.put('c', new NumericPackHandler('c'));
+        handlers.put('C', new NumericPackHandler('C'));
+        handlers.put('s', new NumericPackHandler('s'));
+        handlers.put('S', new NumericPackHandler('S'));
+        handlers.put('i', new NumericPackHandler('i'));
+        handlers.put('I', new NumericPackHandler('I'));
+        handlers.put('l', new NumericPackHandler('l'));
+        handlers.put('L', new NumericPackHandler('L'));
+        handlers.put('q', new NumericPackHandler('q'));
+        handlers.put('Q', new NumericPackHandler('Q'));
+        handlers.put('j', new NumericPackHandler('j'));
+        handlers.put('J', new NumericPackHandler('J'));
+        handlers.put('f', new NumericPackHandler('f'));
+        handlers.put('F', new NumericPackHandler('F'));
+        handlers.put('d', new NumericPackHandler('d'));
+        handlers.put('D', new NumericPackHandler('D'));
+        handlers.put('n', new NumericPackHandler('n'));
+        handlers.put('N', new NumericPackHandler('N'));
+        handlers.put('v', new NumericPackHandler('v'));
+        handlers.put('V', new NumericPackHandler('V'));
+        handlers.put('w', new NumericPackHandler('w'));
+    }
 
     public static void pushGroupBase(int base) {
         groupBaseStack.get().push(base);
@@ -110,48 +150,6 @@ public class Pack {
                 stack.set(i, newSize);
             }
         }
-    }
-
-    public static final Map<Character, PackFormatHandler> handlers = new HashMap<>();
-
-    static {
-        // Initialize format handlers
-        handlers.put('b', new BitStringPackHandler('b'));
-        handlers.put('B', new BitStringPackHandler('B'));
-        handlers.put('h', new HexStringPackHandler('h'));
-        handlers.put('H', new HexStringPackHandler('H'));
-        handlers.put('u', new UuencodePackHandler());
-        handlers.put('p', new PointerPackHandler('p'));
-        handlers.put('P', new PointerPackHandler('P'));
-        // W format is handled specially like U format (see switch statement below)
-        // handlers.put('W', new WideCharacterPackHandler());
-        handlers.put('x', new ControlPackHandler('x'));
-        handlers.put('X', new ControlPackHandler('X'));
-        handlers.put('@', new ControlPackHandler('@'));
-        handlers.put('.', new ControlPackHandler('.'));
-
-        // Numeric format handlers
-        handlers.put('c', new NumericPackHandler('c'));
-        handlers.put('C', new NumericPackHandler('C'));
-        handlers.put('s', new NumericPackHandler('s'));
-        handlers.put('S', new NumericPackHandler('S'));
-        handlers.put('i', new NumericPackHandler('i'));
-        handlers.put('I', new NumericPackHandler('I'));
-        handlers.put('l', new NumericPackHandler('l'));
-        handlers.put('L', new NumericPackHandler('L'));
-        handlers.put('q', new NumericPackHandler('q'));
-        handlers.put('Q', new NumericPackHandler('Q'));
-        handlers.put('j', new NumericPackHandler('j'));
-        handlers.put('J', new NumericPackHandler('J'));
-        handlers.put('f', new NumericPackHandler('f'));
-        handlers.put('F', new NumericPackHandler('F'));
-        handlers.put('d', new NumericPackHandler('d'));
-        handlers.put('D', new NumericPackHandler('D'));
-        handlers.put('n', new NumericPackHandler('n'));
-        handlers.put('N', new NumericPackHandler('N'));
-        handlers.put('v', new NumericPackHandler('v'));
-        handlers.put('V', new NumericPackHandler('V'));
-        handlers.put('w', new NumericPackHandler('w'));
     }
 
     /**

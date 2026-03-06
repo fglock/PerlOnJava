@@ -266,7 +266,7 @@ public class CompileBinaryOperator {
                     // Convert class name to string if needed: Class->method()
                     if (invocantNode instanceof IdentifierNode) {
                         String className = ((IdentifierNode) invocantNode).name;
-                        invocantNode = new StringNode(className, ((IdentifierNode) invocantNode).getIndex());
+                        invocantNode = new StringNode(className, invocantNode.getIndex());
                     }
 
                     // Convert method name to string if needed
@@ -279,7 +279,7 @@ public class CompileBinaryOperator {
                     }
                     if (methodNode instanceof IdentifierNode) {
                         String methodName = ((IdentifierNode) methodNode).name;
-                        methodNode = new StringNode(methodName, ((IdentifierNode) methodNode).getIndex());
+                        methodNode = new StringNode(methodName, methodNode.getIndex());
                     }
 
                     // Compile invocant in scalar context
@@ -807,11 +807,11 @@ public class CompileBinaryOperator {
             String o = op.operator;
             if (o.equals("@") || o.equals("%")) return true;
             if (o.equals("unpack") || o.equals("split") || o.equals("sort") ||
-                o.equals("reverse") || o.equals("grep") || o.equals("map") ||
-                o.equals("keys") || o.equals("values") || o.equals("each")) return true;
+                    o.equals("reverse") || o.equals("grep") || o.equals("map") ||
+                    o.equals("keys") || o.equals("values") || o.equals("each")) return true;
         }
         if (node instanceof BinaryOperatorNode bin) {
-            if (bin.operator.equals("(") || bin.operator.equals("()")) return true;
+            return bin.operator.equals("(") || bin.operator.equals("()");
         }
         return false;
     }

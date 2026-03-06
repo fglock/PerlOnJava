@@ -1,7 +1,7 @@
 package org.perlonjava.backend.jvm;
 
-import org.perlonjava.frontend.astnode.LabelNode;
 import org.objectweb.asm.Label;
+import org.perlonjava.frontend.astnode.LabelNode;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 /**

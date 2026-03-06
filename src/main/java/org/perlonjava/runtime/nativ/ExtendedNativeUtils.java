@@ -1,9 +1,8 @@
 package org.perlonjava.runtime.nativ;
 
+import jnr.posix.Passwd;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.*;
-
-import jnr.posix.Passwd;
 
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
@@ -242,7 +241,10 @@ public class ExtendedNativeUtils extends NativeUtils {
 
     public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
         if (!IS_WINDOWS) {
-            try { PosixLibrary.INSTANCE.setpwent(); } catch (Exception e) { }
+            try {
+                PosixLibrary.INSTANCE.setpwent();
+            } catch (Exception e) {
+            }
         }
         userIterator.remove();
         userInfoCache.clear();
@@ -257,7 +259,10 @@ public class ExtendedNativeUtils extends NativeUtils {
 
     public static RuntimeScalar endpwent(int ctx, RuntimeBase... args) {
         if (!IS_WINDOWS) {
-            try { PosixLibrary.INSTANCE.endpwent(); } catch (Exception e) { }
+            try {
+                PosixLibrary.INSTANCE.endpwent();
+            } catch (Exception e) {
+            }
         }
         userIterator.remove();
         return new RuntimeScalar(1);

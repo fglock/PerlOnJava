@@ -24,7 +24,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
                          boolean isDotAll, boolean isExtended, boolean preservesMatch) {
 
-    public static RegexFlags fromModifiers(String modifiers, String patternString) {
+    public static RegexFlags fromModifiers (String modifiers, String patternString){
         return new RegexFlags(
                 modifiers.contains("g"),
                 modifiers.contains("c"),
@@ -42,7 +42,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         );
     }
 
-    public static void validateModifiers(String modifiers) {
+    public static void validateModifiers (String modifiers){
         // Valid modifiers based on what's actually handled in fromModifiers
         String validModifiers = "gcr?noimsxpadeul"; // Add 'xx' handling separately, 'l' for locale
 
@@ -61,7 +61,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         }
     }
 
-    public int toPatternFlags() {
+    public int toPatternFlags () {
         int flags = 0;
         if (isCaseInsensitive) {
             // For proper Unicode case-insensitive matching, we need both flags:
@@ -82,7 +82,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         return flags;
     }
 
-    public RegexFlags with(String positiveFlags, String negativeFlags) {
+    public RegexFlags with (String positiveFlags, String negativeFlags){
         boolean newFlagN = this.isNonCapturing;
         boolean newIsCaseInsensitive = this.isCaseInsensitive;
         boolean newIsMultiLine = this.isMultiLine;
@@ -122,7 +122,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         );
     }
 
-    public String toFlagString() {
+    public String toFlagString () {
         StringBuilder flagString = new StringBuilder();
 
         if (isGlobalMatch) flagString.append('g');

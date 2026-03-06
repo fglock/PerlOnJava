@@ -21,18 +21,18 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public static final int TIED_HASH = 2;
     // Static stack to store saved "local" states of RuntimeHash instances
     private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
+    private static final RuntimeArray EMPTY_KEYS = new RuntimeArray();
+
+    static {
+        EMPTY_KEYS.scalarContextSize = 0;
+    }
+
     // Internal type of array - PLAIN_HASH, AUTOVIVIFY_HASH, or TIED_HASH
     public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
-
-    private static final RuntimeArray EMPTY_KEYS = new RuntimeArray();
-
-    static {
-        EMPTY_KEYS.scalarContextSize = 0;
-    }
 
     /**
      * Constructor for RuntimeHash.
@@ -42,7 +42,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         type = PLAIN_HASH;
         elements = new StableHashMap<>();
     }
-    
+
     /**
      * Creates a hash with the elements of a list.
      *
@@ -67,7 +67,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             checkIterator.next();
             elementCount++;
         }
-        
+
         // Warn about odd elements (Perl does not warn about references in hash assignment)
         if (elementCount % 2 != 0) {
             return createHashInternal(value, "Odd number of elements in hash assignment");
@@ -79,14 +79,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     /**
      * Internal method to create a hash with the elements of a list.
      *
-     * @param value The RuntimeBase containing the elements to populate the hash.
+     * @param value             The RuntimeBase containing the elements to populate the hash.
      * @param oddWarningMessage The warning message to emit if there's an odd number of elements.
      * @return A new RuntimeHash populated with the elements from the list.
      */
     private static RuntimeHash createHashInternal(RuntimeBase value, String oddWarningMessage) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
-        
+
         // Count elements to check for odd number
         int elementCount = 0;
         Iterator<RuntimeScalar> countIterator = value.iterator();
@@ -94,14 +94,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             countIterator.next();
             elementCount++;
         }
-        
+
         // Warn if odd number of elements
         if (elementCount % 2 != 0) {
             WarnDie.warn(
-                new RuntimeScalar(oddWarningMessage),
-                RuntimeScalarCache.scalarEmptyString);
+                    new RuntimeScalar(oddWarningMessage),
+                    RuntimeScalarCache.scalarEmptyString);
         }
-        
+
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             String key = iterator.next().toString();
@@ -209,13 +209,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // Warn about odd elements (Perl does not warn about references in hash assignment)
                 if (originalSize % 2 != 0) {
                     WarnDie.warn(
-                        new RuntimeScalar("Odd number of elements in hash assignment"),
-                        RuntimeScalarCache.scalarEmptyString);
+                            new RuntimeScalar("Odd number of elements in hash assignment"),
+                            RuntimeScalarCache.scalarEmptyString);
                 }
 
                 // Clear existing elements but keep the same Map instance to preserve capacity
                 this.elements.clear();
-                
+
                 // Populate the hash from the provided list
                 // This reuses the existing StableHashMap and its capacity
                 Iterator<RuntimeScalar> iter = value.iterator();
@@ -383,7 +383,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield delete(key);
+                yield delete (key);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, key);
             default -> throw new IllegalStateException("Unknown array type: " + type);
@@ -401,7 +401,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield delete(key);
+                yield delete (key);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, new RuntimeScalar(key));
             default -> throw new IllegalStateException("Unknown array type: " + type);

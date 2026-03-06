@@ -10,10 +10,9 @@ import java.util.*;
  * for method resolution and linearized class hierarchies to improve performance.
  */
 public class InheritanceResolver {
-    private static final boolean TRACE_METHOD_RESOLUTION = false;
-    
     // Cache for linearized class hierarchies
     static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
+    private static final boolean TRACE_METHOD_RESOLUTION = false;
     // Per-package MRO settings
     private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
     // Method resolution cache
@@ -241,7 +240,7 @@ public class InheritanceResolver {
     /**
      * Searches for a method in the class hierarchy starting from a specific index.
      * Uses method caching to improve performance for both found and not-found methods.
-     * 
+     *
      * <p><b>Method Resolution Process:</b>
      * <ol>
      *   <li>Check method cache for previously resolved lookups</li>
@@ -251,7 +250,7 @@ public class InheritanceResolver {
      *   <li>Check if method exists in global symbol table</li>
      *   <li>Fall back to AUTOLOAD if method not found (except for overload markers)</li>
      * </ol>
-     * 
+     *
      * <p><b>Overload Methods:</b>
      * Overload marker methods like {@code ((} and {@code ()} are exempt from AUTOLOAD
      * because they should be explicitly defined by the overload pragma.
@@ -270,12 +269,12 @@ public class InheritanceResolver {
             System.err.println("  startFromIndex: " + startFromIndex);
             System.err.flush();
         }
-        
+
         if (cacheKey == null) {
             // Normalize the method name for consistent caching
             cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         }
-        
+
         if (TRACE_METHOD_RESOLUTION) {
             System.err.println("  cacheKey: '" + cacheKey + "'");
             System.err.flush();
@@ -297,7 +296,7 @@ public class InheritanceResolver {
 
         // Get the linearized inheritance hierarchy using the appropriate MRO
         List<String> linearizedClasses = linearizeHierarchy(perlClassName);
-        
+
         if (TRACE_METHOD_RESOLUTION) {
             System.err.println("  Linearized classes: " + linearizedClasses);
             System.err.flush();

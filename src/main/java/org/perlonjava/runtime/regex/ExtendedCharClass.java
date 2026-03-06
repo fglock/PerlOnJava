@@ -5,14 +5,14 @@ import java.util.List;
 
 /**
  * ExtendedCharClass handles Perl's Extended Bracketed Character Classes (?[...])
- * 
+ * <p>
  * Extended character classes allow set operations on character classes:
  * - Union: (?[ [a] + [b] ]) or (?[ [a] | [b] ])
  * - Intersection: (?[ [a-z] & [aeiou] ])
  * - Subtraction: (?[ [a-z] - [aeiou] ])
  * - Symmetric difference: (?[ [a-z] ^ [aeiou] ])
  * - Complement: (?[ ! [a-z] ])
- * 
+ * <p>
  * Features:
  * - Automatic /xx mode (whitespace ignored)
  * - Comments with # and (?#...)
@@ -21,7 +21,7 @@ import java.util.List;
  * - POSIX classes ([:word:], etc.)
  * - Escape sequences (\t, \cX, etc.)
  * - Regex interpolation (qr// patterns)
- * 
+ * <p>
  * The implementation tokenizes the content, parses it into an expression tree,
  * and transforms it into Java's character class syntax using intersection (&&)
  * and negation (^) operators.
@@ -91,12 +91,12 @@ public class ExtendedCharClass {
 
     /**
      * Find the end of the extended character class, handling nested brackets.
-     * 
+     * <p>
      * This method tracks bracket depth to handle nested character classes like [a[b]c].
      * It also handles escape sequences, especially \c which consumes two characters.
-     * 
+     * <p>
      * The extended character class ends when we find ]) at depth 0.
-     * 
+     *
      * @param s     The regex string
      * @param start Position after the opening (?[
      * @return Position of the closing ], or -1 if not found
@@ -266,7 +266,7 @@ public class ExtendedCharClass {
             if (i >= content.length()) break;
 
             char c = content.charAt(i);
-            
+
             // Handle comments (# to end of line)
             if (c == '#') {
                 // Skip to end of line
@@ -309,30 +309,30 @@ public class ExtendedCharClass {
                         // When a qr// pattern containing (?[...]) is interpolated, it becomes:
                         //   (?^:(?[ ... ])) or (?^i:(?[ ... ])) etc.
                         // We need to extract just the inner (?[ ... ]) part
-                        
+
                         // Find the : after the flags (e.g., (?^: or (?^i:)
                         int colonPos = i + 2;
                         while (colonPos < content.length() && content.charAt(colonPos) != ':' && content.charAt(colonPos) != ')') {
                             colonPos++;
                         }
-                        
+
                         // Check if this is followed by (?[ or another (?FLAGS:
                         if (colonPos < content.length() && content.charAt(colonPos) == ':' &&
-                            colonPos + 1 < content.length() && content.charAt(colonPos + 1) == '(') {
-                            
+                                colonPos + 1 < content.length() && content.charAt(colonPos + 1) == '(') {
+
                             int searchPos = colonPos + 1;
                             // Skip nested (?FLAGS: groups to find the actual (?[
                             while (searchPos < content.length() && content.charAt(searchPos) == '(' &&
-                                   searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?') {
+                                    searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?') {
                                 // Find the : after these flags
                                 int nextColon = searchPos + 2;
-                                while (nextColon < content.length() && content.charAt(nextColon) != ':' && 
-                                       content.charAt(nextColon) != ')') {
+                                while (nextColon < content.length() && content.charAt(nextColon) != ':' &&
+                                        content.charAt(nextColon) != ')') {
                                     nextColon++;
                                 }
                                 if (nextColon < content.length() && content.charAt(nextColon) == ':') {
                                     if (nextColon + 3 < content.length() && content.charAt(nextColon + 1) == '(' &&
-                                        content.charAt(nextColon + 2) == '?' && content.charAt(nextColon + 3) == '[') {
+                                            content.charAt(nextColon + 2) == '?' && content.charAt(nextColon + 3) == '[') {
                                         // Found (?[!
                                         searchPos = nextColon + 1;
                                         break;
@@ -343,11 +343,11 @@ public class ExtendedCharClass {
                                     break;
                                 }
                             }
-                            
+
                             // Check if we found (?[
                             if (searchPos < content.length() && content.charAt(searchPos) == '(' &&
-                                searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?' &&
-                                content.charAt(searchPos + 2) == '[') {
+                                    searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?' &&
+                                    content.charAt(searchPos + 2) == '[') {
                                 // Found (?FLAGS:...(?[ ... ])) - this is an interpolated extended char class
                                 int innerStart = searchPos; // Position of inner '(?['
                                 int innerEnd = findMatchingParen(content, innerStart);
@@ -601,13 +601,13 @@ public class ExtendedCharClass {
 
     /**
      * Process a character class element from extended syntax.
-     * 
+     * <p>
      * This handles:
      * - Nested extended character classes (?[...]) from interpolation
      * - POSIX classes ([:word:], [:digit:], etc.)
      * - Regular character classes ([a-z], [abc], etc.)
      * - Escape sequences (\d, \w, \s, etc.)
-     * 
+     *
      * @param charClass The character class string to process
      * @return Java-compatible character class syntax
      */
@@ -619,7 +619,7 @@ public class ExtendedCharClass {
             String nestedContent = charClass.substring(3, charClass.length() - 2);
             return transformExtendedClass(nestedContent, charClass, 0);
         }
-        
+
         // Handle POSIX classes
         if (charClass.startsWith("::") && charClass.endsWith("::")) {
             // Transform ::word:: to [:word:]
@@ -823,7 +823,7 @@ public class ExtendedCharClass {
 
     /**
      * Binary operation node (union, intersection, subtraction, symmetric difference)
-     * 
+     * <p>
      * Operators:
      * - + or | : Union (A or B)
      * - & : Intersection (A and B)
@@ -877,7 +877,7 @@ public class ExtendedCharClass {
 
     /**
      * Unary operation node (complement)
-     * 
+     * <p>
      * The ! operator complements a character class.
      * Important: Double negation is handled specially:
      * - ! [^A] becomes [A] (NOT NOT A = A)
@@ -899,7 +899,7 @@ public class ExtendedCharClass {
             if (operator.equals("!")) {
                 // Complement: [^A]
                 operandEval = unwrapBrackets(operandEval);
-                
+
                 // Check if already negated (starts with ^)
                 // This handles double negation: ! [^A] = [A]
                 if (operandEval.startsWith("^")) {

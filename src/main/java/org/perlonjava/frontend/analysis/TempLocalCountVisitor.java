@@ -5,7 +5,7 @@ import org.perlonjava.frontend.astnode.*;
 /**
  * Visitor that counts the maximum number of temporary local variables
  * that will be needed during bytecode emission.
- * 
+ * <p>
  * This is used to pre-initialize the correct number of slots to avoid
  * VerifyError when slots are in TOP state.
  */
@@ -105,13 +105,16 @@ public class TempLocalCountVisitor implements Visitor {
 
     // Default implementations for other node types
     @Override
-    public void visit(IdentifierNode node) {}
+    public void visit(IdentifierNode node) {
+    }
 
     @Override
-    public void visit(NumberNode node) {}
+    public void visit(NumberNode node) {
+    }
 
     @Override
-    public void visit(StringNode node) {}
+    public void visit(StringNode node) {
+    }
 
     @Override
     public void visit(HashLiteralNode node) {
@@ -158,8 +161,10 @@ public class TempLocalCountVisitor implements Visitor {
     }
 
     @Override
-    public void visit(CompilerFlagNode node) {}
+    public void visit(CompilerFlagNode node) {
+    }
 
     @Override
-    public void visit(FormatNode node) {}
+    public void visit(FormatNode node) {
+    }
 }

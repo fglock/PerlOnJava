@@ -6,8 +6,8 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
- import java.util.ArrayList;
- import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * The EmitRegex class is responsible for handling regex-related operations
@@ -129,7 +129,7 @@ public class EmitRegex {
     static void handleSystemCommand(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         Node commandNode;
-        
+
         // Handle two cases:
         // 1. readpipe() with no args -> operand is OperatorNode for $_
         // 2. readpipe($expr) or `cmd` -> operand is ListNode with command
@@ -140,7 +140,7 @@ public class EmitRegex {
             // readpipe() with no arguments uses $_
             commandNode = node.operand;
         }
-        
+
         commandNode.accept(scalarVisitor);
         emitterVisitor.pushCallContext();
         // Create an OperatorNode for systemCommand

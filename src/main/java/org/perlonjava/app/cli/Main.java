@@ -1,9 +1,9 @@
 package org.perlonjava.app.cli;
 
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
 import java.util.Locale;
 

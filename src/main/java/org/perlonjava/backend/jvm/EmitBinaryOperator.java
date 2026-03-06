@@ -2,11 +2,11 @@ package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.IdentifierNode;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.StringNode;
-import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;

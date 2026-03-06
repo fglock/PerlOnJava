@@ -5,16 +5,11 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.runtime.runtimetypes.RuntimeDescriptorConstants;
-import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.runtimetypes.*;
 
 /**
  * The EmitOperator class is responsible for handling various operators
@@ -895,7 +890,7 @@ public class EmitOperator {
         // stat/lstat have special scalar context behavior:
         // - Empty list (failure) -> "" (empty string)
         // - Non-empty list (success) -> 1 (true)
-        
+
         if (node.operand instanceof IdentifierNode identNode &&
                 identNode.name.equals("_")) {
             // stat _ or lstat _ - still use the old methods since they don't take args
@@ -927,7 +922,7 @@ public class EmitOperator {
                     operator,
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
                     false);
-            
+
             // Cast to the appropriate type for the bytecode verifier
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 // In scalar context, stat returns RuntimeScalar
@@ -937,7 +932,7 @@ public class EmitOperator {
                 emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeList");
             }
             // In RUNTIME or VOID context, leave as RuntimeBase (no cast needed)
-            
+
             // Handle void context
             if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 handleVoidContext(emitterVisitor);
@@ -1267,7 +1262,7 @@ public class EmitOperator {
                 // Function calls and scalar expressions should use SCALAR context
                 // Arrays, hashes, and lists should use LIST context
                 int contextType = RuntimeContextType.LIST;
-                
+
                 if (node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("(")) {
                     // Function call - use SCALAR context to get single return value
                     contextType = RuntimeContextType.SCALAR;
@@ -1275,9 +1270,9 @@ public class EmitOperator {
                     // Scalar variable - use SCALAR context
                     contextType = RuntimeContextType.SCALAR;
                 }
-                
+
                 node.operand.accept(emitterVisitor.with(contextType));
-                
+
                 // Always create a proper reference - don't special case CODE references
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeBase",

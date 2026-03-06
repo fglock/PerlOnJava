@@ -179,7 +179,7 @@ public class PackParser {
                             throw new PerlCompilerException("Malformed integer in []");
                         }
                     }
-                    
+
                     // Template-based count - calculate the size of the template
                     result.count = calculateTemplateSize(countStr);
                 }
@@ -311,12 +311,12 @@ public class PackParser {
      * <p>This method works by actually packing dummy data with the template and measuring
      * the resulting byte length. This approach handles all format types correctly, including
      * variable-length formats like bit strings and hex strings.</p>
-     * 
+     *
      * <p><b>Implementation Note - Byte Length Calculation:</b></p>
      * <p>The method measures the result using ISO-8859-1 byte encoding, which treats each
      * character code (0-255) as a single byte. For packed data that contains only characters
      * 0-255, this gives the correct byte count.</p>
-     * 
+     *
      * <p><b>UTF-8 Handling for W/U Formats:</b></p>
      * <p>For templates containing W or U formats with high Unicode characters (> 255),
      * this method correctly handles UTF-8 byte length calculation:
@@ -328,11 +328,11 @@ public class PackParser {
      *   <li><b>Result:</b> x[W] correctly skips 3 bytes for high Unicode characters,
      *       matching Perl's behavior</li>
      * </ul>
-     * 
+     *
      * <p>This ensures that constructs like `unpack("x[W] N4", pack("W N4", 0x1FFC, ...))`
      * work correctly - the x[W] skips the exact UTF-8 byte length of the W character,
      * allowing subsequent N4 to read from the correct byte position.</p>
-     * 
+     *
      * <p><b>See also:</b> tests 5072-5154 for W format with binary format interaction</p>
      *
      * @param template the pack template string
@@ -362,10 +362,10 @@ public class PackParser {
 
             // Pack the data and measure the result
             RuntimeScalar result = Pack.pack(args);
-            
+
             // Measure the ACTUAL byte length, handling UTF-8 correctly
             String resultString = result.toString();
-            
+
             // Check if the result contains high Unicode characters (> 255)
             boolean hasHighUnicode = false;
             for (int j = 0; j < resultString.length(); j++) {
@@ -374,14 +374,14 @@ public class PackParser {
                     break;
                 }
             }
-            
+
             // CRITICAL: For x[template] in unpack, we need to know how many units to skip
             // For UTF-8 strings (hasHighUnicode), formats work in CHARACTER domain
             // For binary strings, formats work in BYTE domain
             // So we return CHARACTER LENGTH for both cases - the unpack handler
             // will skip characters in char mode, bytes in byte mode
             int byteLength = resultString.length();
-            
+
             if (TRACE_PACK) {
                 System.err.println("TRACE calculatePackedSize:");
                 System.err.println("  template: '" + template + "'");
@@ -390,7 +390,7 @@ public class PackParser {
                 System.err.println("  byte length: " + byteLength);
                 System.err.flush();
             }
-            
+
             return byteLength;
 
         } catch (Exception e) {
@@ -403,14 +403,14 @@ public class PackParser {
     /**
      * Adds dummy values to args list for packing the given template.
      * Different format types need different dummy values to pack correctly.
-     * 
+     *
      * <p><b>Dummy Value Strategy:</b></p>
      * <ul>
      *   <li><b>Numeric formats (c, C, s, i, etc.):</b> Use 0 as dummy value</li>
      *   <li><b>String formats (a, A, Z, b, B, h, H):</b> Use appropriate string values</li>
      *   <li><b>Unicode formats (U, W):</b> Use 0 as dummy value</li>
      * </ul>
-     * 
+     *
      * <p><b>Note on W/U Format Handling:</b></p>
      * <p>Previous versions used a high Unicode character (0x1FFC = 8188) as a dummy value
      * for W/U formats to ensure correct UTF-8 byte length calculation. However, this
@@ -421,7 +421,7 @@ public class PackParser {
      *       don't produce accurate UTF-8 byte counts anyway</li>
      *   <li>Using 0 as dummy value is simpler and matches other numeric formats</li>
      * </ul>
-     * 
+     *
      * <p>See {@link #calculatePackedSize(String)} for details on the known limitation
      * with W/U format byte length calculation.</p>
      *
@@ -457,17 +457,17 @@ public class PackParser {
                     else if (template.charAt(j) == ')') depth--;
                     j++;
                 }
-                
+
                 if (depth > 0) {
                     // Unmatched parenthesis - skip it
                     i++;
                     continue;
                 }
-                
+
                 // Extract group content (between parentheses)
                 String groupContent = template.substring(i + 1, j - 1);
                 i = j; // Move past closing paren
-                
+
                 // Parse repeat count after the group
                 // Both (B)8 and (B)[8] mean repeat the group 8 times
                 int groupRepeat = 1;
@@ -502,14 +502,14 @@ public class PackParser {
                         }
                     }
                 }
-                
+
                 // Recursively add dummy values for the group content, repeated groupRepeat times
                 for (int r = 0; r < groupRepeat; r++) {
                     addDummyValuesForTemplate(groupContent, args);
                 }
                 continue;
             }
-            
+
             // Skip closing parenthesis (should be handled in group processing above)
             if (format == ')') {
                 i++;
@@ -562,7 +562,7 @@ public class PackParser {
             // Special case for P format: count is minimum string length, not repeat count
             // P always consumes exactly 1 value regardless of count
             int valuesToAdd = (format == 'P') ? 1 : count;
-            
+
             for (int j = 0; j < valuesToAdd; j++) {
                 switch (format) {
                     case 'a', 'A', 'Z' -> {

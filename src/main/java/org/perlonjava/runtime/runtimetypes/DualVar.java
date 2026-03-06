@@ -7,7 +7,7 @@ package org.perlonjava.runtime.runtimetypes;
 public record DualVar(RuntimeScalar numericValue, RuntimeScalar stringValue) {
 
     @Override
-    public String toString() {
+    public String toString () {
         return stringValue.toString();
     }
 }

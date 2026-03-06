@@ -1,9 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.backend.jvm.CustomClassLoader;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
-import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.backend.jvm.CustomClassLoader;
 import org.perlonjava.frontend.parser.ParserTables;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -47,7 +47,7 @@ public class GlobalVariable {
     // Global class loader for all generated classes - not final so we can replace it
     public static CustomClassLoader globalClassLoader =
             new CustomClassLoader(GlobalVariable.class.getClassLoader());
-    
+
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
@@ -322,11 +322,11 @@ public class GlobalVariable {
     public static RuntimeScalar definedGlobalCodeRefAsScalar(String key) {
         // For defined(&{string}) patterns, check actual subroutine existence to match standard Perl
         // Standard Perl: defined(&{existing}) = true, defined(&{nonexistent}) = false
-        
+
         // Check if it's a built-in operator
         // Built-ins are ONLY accessible via CORE:: prefix
         int lastColonIndex = key.lastIndexOf("::");
-        
+
         if (lastColonIndex > 0) {
             String packageName = key.substring(0, lastColonIndex);
             String operatorName = key.substring(lastColonIndex + 2);
@@ -335,7 +335,7 @@ public class GlobalVariable {
                 return scalarTrue;
             }
         }
-        
+
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             return runtimeCode.defined() ? scalarTrue : scalarFalse;
@@ -350,7 +350,7 @@ public class GlobalVariable {
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
         // Use proper package name resolution like createCodeReference
         String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
-        
+
         // Built-ins are ONLY accessible via CORE:: prefix, not from main:: or other packages
         // So just delegate to the main method which checks for CORE:: prefix
         return definedGlobalCodeRefAsScalar(name);

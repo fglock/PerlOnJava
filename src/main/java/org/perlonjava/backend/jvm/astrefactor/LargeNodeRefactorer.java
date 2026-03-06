@@ -1,9 +1,9 @@
 package org.perlonjava.backend.jvm.astrefactor;
 
+import org.perlonjava.frontend.analysis.BytecodeSizeEstimator;
 import org.perlonjava.frontend.astnode.LabelNode;
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
-import org.perlonjava.frontend.analysis.BytecodeSizeEstimator;
 
 import java.util.ArrayList;
 import java.util.List;

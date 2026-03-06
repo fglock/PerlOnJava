@@ -9,14 +9,14 @@ import java.util.TreeMap;
 
 /**
  * Interpreted bytecode that extends RuntimeCode.
- *
+ * <p>
  * This class represents Perl code that is interpreted rather than compiled to JVM bytecode.
  * It is COMPLETELY INDISTINGUISHABLE from compiled RuntimeCode to the rest of the system:
  * - Can be stored in global variables ($::func)
  * - Can be passed as code references
  * - Can capture variables (closures work both directions)
  * - Can be used in method dispatch, overload, @ISA, etc.
- *
+ * <p>
  * The ONLY difference is the execution engine:
  * - Compiled RuntimeCode uses MethodHandle to invoke JVM bytecode
  * - InterpretedCode overrides apply() to dispatch to BytecodeInterpreter
@@ -47,55 +47,55 @@ public class InterpretedCode extends RuntimeCode {
     /**
      * Constructor for InterpretedCode.
      *
-     * @param bytecode      The bytecode instructions
-     * @param constants     Constant pool (RuntimeBase objects)
-     * @param stringPool    String constants (variable names, etc.)
-     * @param maxRegisters  Number of registers needed for execution
-     * @param capturedVars  Captured variables for closure support (may be null)
-     * @param sourceName    Source file name for debugging
-     * @param sourceLine    Source line number for debugging
-     * @param pcToTokenIndex Map from bytecode PC to AST tokenIndex for error reporting
+     * @param bytecode         The bytecode instructions
+     * @param constants        Constant pool (RuntimeBase objects)
+     * @param stringPool       String constants (variable names, etc.)
+     * @param maxRegisters     Number of registers needed for execution
+     * @param capturedVars     Captured variables for closure support (may be null)
+     * @param sourceName       Source file name for debugging
+     * @param sourceLine       Source line number for debugging
+     * @param pcToTokenIndex   Map from bytecode PC to AST tokenIndex for error reporting
      * @param variableRegistry Variable name → register index mapping (for eval STRING)
-     * @param errorUtil     Error message utility for line number lookup
-     * @param strictOptions Strict flags at compile time (for eval STRING inheritance)
-     * @param featureFlags  Feature flags at compile time (for eval STRING inheritance)
-     * @param warningFlags  Warning flags at compile time (for eval STRING inheritance)
+     * @param errorUtil        Error message utility for line number lookup
+     * @param strictOptions    Strict flags at compile time (for eval STRING inheritance)
+     * @param featureFlags     Feature flags at compile time (for eval STRING inheritance)
+     * @param warningFlags     Warning flags at compile time (for eval STRING inheritance)
      */
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          TreeMap<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil,
-                          int strictOptions, int featureFlags, BitSet warningFlags) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           TreeMap<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry,
+                           ErrorMessageUtil errorUtil,
+                           int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, "main", null, null);
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, "main", null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          TreeMap<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil,
-                          int strictOptions, int featureFlags, BitSet warningFlags,
-                          String compilePackage) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           TreeMap<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry,
+                           ErrorMessageUtil errorUtil,
+                           int strictOptions, int featureFlags, BitSet warningFlags,
+                           String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, compilePackage, null, null);
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, compilePackage, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          TreeMap<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil,
-                          int strictOptions, int featureFlags, BitSet warningFlags,
-                          String compilePackage,
-                          List<Map<String, Integer>> evalSiteRegistries,
-                          List<int[]> evalSitePragmaFlags) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           TreeMap<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry,
+                           ErrorMessageUtil errorUtil,
+                           int strictOptions, int featureFlags, BitSet warningFlags,
+                           String compilePackage,
+                           List<Map<String, Integer>> evalSiteRegistries,
+                           List<int[]> evalSitePragmaFlags) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -120,25 +120,33 @@ public class InterpretedCode extends RuntimeCode {
 
     // Legacy constructor for backward compatibility
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          java.util.Map<Integer, Integer> pcToTokenIndex) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           java.util.Map<Integer, Integer> pcToTokenIndex) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine,
-             pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
-             null, null, 0, 0, new BitSet());
+                sourceName, sourceLine,
+                pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>) pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
+                null, null, 0, 0, new BitSet());
     }
 
     // Legacy constructor with variableRegistry but no errorUtil
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          java.util.Map<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           java.util.Map<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine,
-             pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
-             variableRegistry, null, 0, 0, new BitSet());
+                sourceName, sourceLine,
+                pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>) pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
+                variableRegistry, null, 0, 0, new BitSet());
+    }
+
+    /**
+     * Read a 32-bit integer from bytecode (stored as 1 int slot).
+     * With int[] storage a full int fits in a single slot.
+     */
+    private static int readInt(int[] bytecode, int pc) {
+        return bytecode[pc];
     }
 
     /**
@@ -182,22 +190,22 @@ public class InterpretedCode extends RuntimeCode {
      */
     public InterpretedCode withCapturedVars(RuntimeBase[] capturedVars) {
         InterpretedCode copy = new InterpretedCode(
-            this.bytecode,
-            this.constants,
-            this.stringPool,
-            this.maxRegisters,
-            capturedVars,
-            this.sourceName,
-            this.sourceLine,
-            this.pcToTokenIndex,
-            this.variableRegistry,
-            this.errorUtil,
-            this.strictOptions,
-            this.featureFlags,
-            this.warningFlags,
-            this.compilePackage,
-            this.evalSiteRegistries,
-            this.evalSitePragmaFlags
+                this.bytecode,
+                this.constants,
+                this.stringPool,
+                this.maxRegisters,
+                capturedVars,
+                this.sourceName,
+                this.sourceLine,
+                this.pcToTokenIndex,
+                this.variableRegistry,
+                this.errorUtil,
+                this.strictOptions,
+                this.featureFlags,
+                this.warningFlags,
+                this.compilePackage,
+                this.evalSiteRegistries,
+                this.evalSitePragmaFlags
         );
         copy.prototype = this.prototype;
         copy.attributes = this.attributes;
@@ -238,12 +246,12 @@ public class InterpretedCode extends RuntimeCode {
     @Override
     public String toString() {
         return "InterpretedCode{" +
-               "sourceName='" + sourceName + '\'' +
-               ", sourceLine=" + sourceLine +
-               ", bytecode.length=" + bytecode.length +
-               ", maxRegisters=" + maxRegisters +
-               ", hasCapturedVars=" + (capturedVars != null && capturedVars.length > 0) +
-               '}';
+                "sourceName='" + sourceName + '\'' +
+                ", sourceLine=" + sourceLine +
+                ", bytecode.length=" + bytecode.length +
+                ", maxRegisters=" + maxRegisters +
+                ", hasCapturedVars=" + (capturedVars != null && capturedVars.length > 0) +
+                '}';
     }
 
     /**
@@ -319,7 +327,7 @@ public class InterpretedCode extends RuntimeCode {
                             // Special handling for PerlRange to avoid expanding large ranges
                             PerlRange range = (PerlRange) obj;
                             sb.append("PerlRange{").append(range.getStart().toString()).append("..")
-                              .append(range.getEnd().toString()).append("}");
+                                    .append(range.getEnd().toString()).append("}");
                         } else {
                             // For other objects, show class name and limit string length
                             String objStr = obj.toString();
@@ -344,15 +352,15 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int strIdx = bytecode[pc++];
                     sb.append(opcode == Opcodes.LOAD_BYTE_STRING ? "LOAD_BYTE_STRING r" : "LOAD_STRING r")
-                      .append(rd).append(" = \"");
+                            .append(rd).append(" = \"");
                     if (stringPool != null && strIdx < stringPool.length) {
                         String str = stringPool[strIdx];
                         // Escape special characters for readability
                         str = str.replace("\\", "\\\\")
-                                 .replace("\n", "\\n")
-                                 .replace("\r", "\\r")
-                                 .replace("\t", "\\t")
-                                 .replace("\"", "\\\"");
+                                .replace("\n", "\\n")
+                                .replace("\r", "\\r")
+                                .replace("\t", "\\t")
+                                .replace("\"", "\\\"");
                         sb.append(str);
                     }
                     sb.append("\"\n");
@@ -372,7 +380,7 @@ public class InterpretedCode extends RuntimeCode {
                     int globPattern = bytecode[pc++];
                     int globCtx = bytecode[pc++];
                     sb.append("GLOB_OP r").append(globRd).append(" = glob(id=").append(globId)
-                      .append(", r").append(globPattern).append(", ctx=").append(globCtx).append(")\n");
+                            .append(", r").append(globPattern).append(", ctx=").append(globCtx).append(")\n");
                     break;
                 }
                 case Opcodes.LOAD_UNDEF:
@@ -1107,7 +1115,7 @@ public class InterpretedCode extends RuntimeCode {
                     int argsReg = bytecode[pc++];
                     int ctx = bytecode[pc++];
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
-                      .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
+                            .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
                 case Opcodes.CALL_METHOD:
                     rd = bytecode[pc++];
@@ -1117,16 +1125,16 @@ public class InterpretedCode extends RuntimeCode {
                     argsReg = bytecode[pc++];
                     ctx = bytecode[pc++];
                     sb.append("CALL_METHOD r").append(rd).append(" = r").append(invocantReg)
-                      .append("->r").append(methodReg)
-                      .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
-                      .append(", ctx=").append(ctx).append(")\n");
+                            .append("->r").append(methodReg)
+                            .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
+                            .append(", ctx=").append(ctx).append(")\n");
                     break;
                 case Opcodes.JOIN:
                     rd = bytecode[pc++];
                     int separatorReg = bytecode[pc++];
                     int listReg = bytecode[pc++];
                     sb.append("JOIN r").append(rd).append(" = join(r").append(separatorReg)
-                      .append(", r").append(listReg).append(")\n");
+                            .append(", r").append(listReg).append(")\n");
                     break;
                 case Opcodes.SELECT:
                     rd = bytecode[pc++];
@@ -1155,7 +1163,7 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];  // closure register
                     int mapCtx = bytecode[pc++];  // context
                     sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
-                      .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
+                            .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
                     break;
                 case Opcodes.GREP:
                     rd = bytecode[pc++];
@@ -1163,7 +1171,7 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];  // closure register
                     int grepCtx = bytecode[pc++];  // context
                     sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
-                      .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
+                            .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
                     break;
                 case Opcodes.SORT:
                     rd = bytecode[pc++];
@@ -1172,7 +1180,7 @@ public class InterpretedCode extends RuntimeCode {
                     int pkgIdx = readInt(bytecode, pc);
                     pc += 1;
                     sb.append("SORT r").append(rd).append(" = sort(r").append(rs1)
-                      .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
+                            .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
                     break;
                 case Opcodes.NEW_ARRAY:
                     rd = bytecode[pc++];
@@ -1240,14 +1248,14 @@ public class InterpretedCode extends RuntimeCode {
                     int refReg = bytecode[pc++];
                     int packageReg = bytecode[pc++];
                     sb.append("BLESS r").append(rd).append(" = bless(r").append(refReg)
-                      .append(", r").append(packageReg).append(")\n");
+                            .append(", r").append(packageReg).append(")\n");
                     break;
                 case Opcodes.ISA:
                     rd = bytecode[pc++];
                     int objReg = bytecode[pc++];
                     int pkgReg = bytecode[pc++];
                     sb.append("ISA r").append(rd).append(" = isa(r").append(objReg)
-                      .append(", r").append(pkgReg).append(")\n");
+                            .append(", r").append(pkgReg).append(")\n");
                     break;
                 case Opcodes.PROTOTYPE:
                     rd = bytecode[pc++];
@@ -1255,16 +1263,16 @@ public class InterpretedCode extends RuntimeCode {
                     int packageIdx = readInt(bytecode, pc);
                     pc += 1;  // readInt reads 2 shorts
                     String packageName = (stringPool != null && packageIdx < stringPool.length) ?
-                        stringPool[packageIdx] : "<unknown>";
+                            stringPool[packageIdx] : "<unknown>";
                     sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
-                      .append(", \"").append(packageName).append("\")\n");
+                            .append(", \"").append(packageName).append("\")\n");
                     break;
                 case Opcodes.QUOTE_REGEX:
                     rd = bytecode[pc++];
                     int patternReg = bytecode[pc++];
                     int flagsReg = bytecode[pc++];
                     sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
-                      .append("}r").append(flagsReg).append("\n");
+                            .append("}r").append(flagsReg).append("\n");
                     break;
                 case Opcodes.ITERATOR_CREATE:
                     rd = bytecode[pc++];
@@ -1287,8 +1295,8 @@ public class InterpretedCode extends RuntimeCode {
                     int bodyTarget = readInt(bytecode, pc);  // Absolute body address
                     pc += 1;
                     sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
-                      .append(" = r").append(iterReg).append(".next() and goto ")
-                      .append(bodyTarget).append("\n");
+                            .append(" = r").append(iterReg).append(".next() and goto ")
+                            .append(bodyTarget).append("\n");
                     break;
                 }
                 case Opcodes.SUBTRACT_ASSIGN:
@@ -1418,7 +1426,7 @@ public class InterpretedCode extends RuntimeCode {
                     int evalCtx = bytecode[pc++];
                     int evalSite = bytecode[pc++];
                     sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs)
-                      .append(", ctx=").append(evalCtx).append(", site=").append(evalSite).append(")\n");
+                            .append(", ctx=").append(evalCtx).append(", site=").append(evalSite).append(")\n");
                     break;
                 case Opcodes.SELECT_OP:
                     rd = bytecode[pc++];
@@ -1494,7 +1502,7 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     int beginId = bytecode[pc++];
                     sb.append("RETRIEVE_BEGIN_SCALAR r").append(rd).append(" = BEGIN_").append(beginId)
-                      .append("::").append(stringPool[nameIdx]).append("\n");
+                            .append("::").append(stringPool[nameIdx]).append("\n");
                     break;
                 case Opcodes.SPLIT:
                     rd = bytecode[pc++];
@@ -1502,7 +1510,7 @@ public class InterpretedCode extends RuntimeCode {
                     int splitArgsReg = bytecode[pc++];
                     int splitCtx = bytecode[pc++];
                     sb.append("SPLIT r").append(rd).append(" = split(r").append(splitPatternReg)
-                      .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
+                            .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
                     break;
                 case Opcodes.LOCAL_SCALAR:
                     rd = bytecode[pc++];
@@ -1524,7 +1532,7 @@ public class InterpretedCode extends RuntimeCode {
                     int levelReg = bytecode[pc++];
                     nameIdx = bytecode[pc++];
                     sb.append("LOCAL_SCALAR_SAVE_LEVEL r").append(rd).append(", level=r").append(levelReg)
-                      .append(" = local $").append(stringPool[nameIdx]).append("\n");
+                            .append(" = local $").append(stringPool[nameIdx]).append("\n");
                     break;
                 }
                 case Opcodes.POP_LOCAL_LEVEL:
@@ -1535,9 +1543,10 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int fgIterReg = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    int fgBody = readInt(bytecode, pc); pc += 1;
+                    int fgBody = readInt(bytecode, pc);
+                    pc += 1;
                     sb.append("FOREACH_GLOBAL_NEXT_OR_EXIT r").append(rd).append(" = r").append(fgIterReg)
-                      .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
+                            .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
                     break;
                 }
                 // Misc list operators: OPCODE rd argsReg ctx
@@ -1586,8 +1595,8 @@ public class InterpretedCode extends RuntimeCode {
                         default -> "misc_op_" + opcode;
                     };
                     sb.append(miscName).append(" r").append(rd)
-                      .append(" = ").append(miscName).append("(r").append(miscArgsReg)
-                      .append(", ctx=").append(miscCtx).append(")\n");
+                            .append(" = ").append(miscName).append("(r").append(miscArgsReg)
+                            .append(", ctx=").append(miscCtx).append(")\n");
                     break;
                 }
 
@@ -1701,7 +1710,7 @@ public class InterpretedCode extends RuntimeCode {
                     rs1 = bytecode[pc++];
                     rs2 = bytecode[pc++];
                     sb.append("SUBSTR r").append(rd).append(" = substr(r").append(rs1)
-                      .append(", r").append(rs2).append(")\n");
+                            .append(", r").append(rs2).append(")\n");
                     break;
                 }
                 case Opcodes.LENGTH: {
@@ -1762,7 +1771,7 @@ public class InterpretedCode extends RuntimeCode {
                     int builtinArgsReg = bytecode[pc++];
                     int builtinCtx = bytecode[pc++];
                     sb.append("CALL_BUILTIN r").append(rd).append(" = builtin(").append(builtinId)
-                      .append(", r").append(builtinArgsReg).append(", ctx=").append(builtinCtx).append(")\n");
+                            .append(", r").append(builtinArgsReg).append(", ctx=").append(builtinCtx).append(")\n");
                     break;
                 }
 
@@ -1845,7 +1854,7 @@ public class InterpretedCode extends RuntimeCode {
                     int asArrayReg = bytecode[pc++];
                     int asIndicesReg = bytecode[pc++];
                     sb.append("ARRAY_SLICE r").append(rd).append(" = r").append(asArrayReg)
-                      .append("[r").append(asIndicesReg).append("]\n");
+                            .append("[r").append(asIndicesReg).append("]\n");
                     break;
                 }
                 case Opcodes.ARRAY_SLICE_SET: {
@@ -1854,7 +1863,7 @@ public class InterpretedCode extends RuntimeCode {
                     int assIndicesReg = bytecode[pc++];
                     int assValuesReg = bytecode[pc++];
                     sb.append("ARRAY_SLICE_SET r").append(assArrayReg)
-                      .append("[r").append(assIndicesReg).append("] = r").append(assValuesReg).append("\n");
+                            .append("[r").append(assIndicesReg).append("] = r").append(assValuesReg).append("\n");
                     break;
                 }
                 case Opcodes.HASH_SLICE: {
@@ -1863,7 +1872,7 @@ public class InterpretedCode extends RuntimeCode {
                     int hsHashReg = bytecode[pc++];
                     int hsKeysReg = bytecode[pc++];
                     sb.append("HASH_SLICE r").append(rd).append(" = r").append(hsHashReg)
-                      .append("{r").append(hsKeysReg).append("}\n");
+                            .append("{r").append(hsKeysReg).append("}\n");
                     break;
                 }
                 case Opcodes.HASH_SLICE_SET: {
@@ -1872,7 +1881,7 @@ public class InterpretedCode extends RuntimeCode {
                     int hssKeysReg = bytecode[pc++];
                     int hssValuesReg = bytecode[pc++];
                     sb.append("HASH_SLICE_SET r").append(hssHashReg)
-                      .append("{r").append(hssKeysReg).append("} = r").append(hssValuesReg).append("\n");
+                            .append("{r").append(hssKeysReg).append("} = r").append(hssValuesReg).append("\n");
                     break;
                 }
                 case Opcodes.HASH_SLICE_DELETE: {
@@ -1881,7 +1890,7 @@ public class InterpretedCode extends RuntimeCode {
                     int hsdHashReg = bytecode[pc++];
                     int hsdKeysReg = bytecode[pc++];
                     sb.append("HASH_SLICE_DELETE r").append(rd).append(" = delete r").append(hsdHashReg)
-                      .append("{r").append(hsdKeysReg).append("}\n");
+                            .append("{r").append(hsdKeysReg).append("}\n");
                     break;
                 }
                 case Opcodes.LIST_SLICE_FROM: {
@@ -1890,7 +1899,7 @@ public class InterpretedCode extends RuntimeCode {
                     int lsfListReg = bytecode[pc++];
                     int lsfStartIdx = bytecode[pc++];
                     sb.append("LIST_SLICE_FROM r").append(rd).append(" = r").append(lsfListReg)
-                      .append("[").append(lsfStartIdx).append("..]\n");
+                            .append("[").append(lsfStartIdx).append("..]\n");
                     break;
                 }
                 case Opcodes.SPLICE: {
@@ -1900,7 +1909,7 @@ public class InterpretedCode extends RuntimeCode {
                     int splArgsReg = bytecode[pc++];
                     int splCtx = bytecode[pc++];
                     sb.append("SPLICE r").append(rd).append(" = splice(r").append(splArrayReg)
-                      .append(", r").append(splArgsReg).append(", ctx=").append(splCtx).append(")\n");
+                            .append(", r").append(splArgsReg).append(", ctx=").append(splCtx).append(")\n");
                     break;
                 }
                 case Opcodes.REVERSE: {
@@ -1909,7 +1918,7 @@ public class InterpretedCode extends RuntimeCode {
                     int revArgsReg = bytecode[pc++];
                     int revCtx = bytecode[pc++];
                     sb.append("REVERSE r").append(rd).append(" = reverse(r").append(revArgsReg)
-                      .append(", ctx=").append(revCtx).append(")\n");
+                            .append(", ctx=").append(revCtx).append(")\n");
                     break;
                 }
                 case Opcodes.LENGTH_OP: {
@@ -1944,7 +1953,7 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     int rbaBeginId = bytecode[pc++];
                     sb.append("RETRIEVE_BEGIN_ARRAY r").append(rd).append(" = BEGIN_").append(rbaBeginId)
-                      .append("::").append(stringPool[nameIdx]).append("\n");
+                            .append("::").append(stringPool[nameIdx]).append("\n");
                     break;
                 }
                 case Opcodes.RETRIEVE_BEGIN_HASH: {
@@ -1953,7 +1962,7 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     int rbhBeginId = bytecode[pc++];
                     sb.append("RETRIEVE_BEGIN_HASH r").append(rd).append(" = BEGIN_").append(rbhBeginId)
-                      .append("::").append(stringPool[nameIdx]).append("\n");
+                            .append("::").append(stringPool[nameIdx]).append("\n");
                     break;
                 }
 
@@ -1985,8 +1994,8 @@ public class InterpretedCode extends RuntimeCode {
                         default -> "sys_op_" + opcode;
                     };
                     sb.append(sysName).append(" r").append(rd)
-                      .append(" = ").append(sysName).append("(r").append(sysArgsReg)
-                      .append(", ctx=").append(sysCtx).append(")\n");
+                            .append(" = ").append(sysName).append("(r").append(sysArgsReg)
+                            .append(", ctx=").append(sysCtx).append(")\n");
                     break;
                 }
                 case Opcodes.FORK: {
@@ -2021,7 +2030,7 @@ public class InterpretedCode extends RuntimeCode {
                     int sgNsemsReg = bytecode[pc++];
                     int sgFlagsReg = bytecode[pc++];
                     sb.append("SEMGET r").append(rd).append(" = semget(r").append(sgKeyReg)
-                      .append(", r").append(sgNsemsReg).append(", r").append(sgFlagsReg).append(")\n");
+                            .append(", r").append(sgNsemsReg).append(", r").append(sgFlagsReg).append(")\n");
                     break;
                 }
                 case Opcodes.SEMOP: {
@@ -2030,7 +2039,7 @@ public class InterpretedCode extends RuntimeCode {
                     int soSemidReg = bytecode[pc++];
                     int soOpstringReg = bytecode[pc++];
                     sb.append("SEMOP r").append(rd).append(" = semop(r").append(soSemidReg)
-                      .append(", r").append(soOpstringReg).append(")\n");
+                            .append(", r").append(soOpstringReg).append(")\n");
                     break;
                 }
                 case Opcodes.MSGGET: {
@@ -2039,7 +2048,7 @@ public class InterpretedCode extends RuntimeCode {
                     int mgKeyReg = bytecode[pc++];
                     int mgFlagsReg = bytecode[pc++];
                     sb.append("MSGGET r").append(rd).append(" = msgget(r").append(mgKeyReg)
-                      .append(", r").append(mgFlagsReg).append(")\n");
+                            .append(", r").append(mgFlagsReg).append(")\n");
                     break;
                 }
                 case Opcodes.MSGSND: {
@@ -2049,7 +2058,7 @@ public class InterpretedCode extends RuntimeCode {
                     int msMsgReg = bytecode[pc++];
                     int msFlagsReg = bytecode[pc++];
                     sb.append("MSGSND r").append(rd).append(" = msgsnd(r").append(msIdReg)
-                      .append(", r").append(msMsgReg).append(", r").append(msFlagsReg).append(")\n");
+                            .append(", r").append(msMsgReg).append(", r").append(msFlagsReg).append(")\n");
                     break;
                 }
                 case Opcodes.MSGRCV: {
@@ -2060,8 +2069,8 @@ public class InterpretedCode extends RuntimeCode {
                     int mrTypeReg = bytecode[pc++];
                     int mrFlagsReg = bytecode[pc++];
                     sb.append("MSGRCV r").append(rd).append(" = msgrcv(r").append(mrIdReg)
-                      .append(", r").append(mrSizeReg).append(", r").append(mrTypeReg)
-                      .append(", r").append(mrFlagsReg).append(")\n");
+                            .append(", r").append(mrSizeReg).append(", r").append(mrTypeReg)
+                            .append(", r").append(mrFlagsReg).append(")\n");
                     break;
                 }
                 case Opcodes.SHMGET: {
@@ -2071,7 +2080,7 @@ public class InterpretedCode extends RuntimeCode {
                     int shgSizeReg = bytecode[pc++];
                     int shgFlagsReg = bytecode[pc++];
                     sb.append("SHMGET r").append(rd).append(" = shmget(r").append(shgKeyReg)
-                      .append(", r").append(shgSizeReg).append(", r").append(shgFlagsReg).append(")\n");
+                            .append(", r").append(shgSizeReg).append(", r").append(shgFlagsReg).append(")\n");
                     break;
                 }
                 case Opcodes.SHMREAD: {
@@ -2081,7 +2090,7 @@ public class InterpretedCode extends RuntimeCode {
                     int shrPosReg = bytecode[pc++];
                     int shrSizeReg = bytecode[pc++];
                     sb.append("SHMREAD r").append(rd).append(" = shmread(r").append(shrIdReg)
-                      .append(", r").append(shrPosReg).append(", r").append(shrSizeReg).append(")\n");
+                            .append(", r").append(shrPosReg).append(", r").append(shrSizeReg).append(")\n");
                     break;
                 }
                 case Opcodes.SHMWRITE: {
@@ -2090,7 +2099,7 @@ public class InterpretedCode extends RuntimeCode {
                     int shwPosReg = bytecode[pc++];
                     int shwStringReg = bytecode[pc++];
                     sb.append("SHMWRITE shmwrite(r").append(shwIdReg)
-                      .append(", r").append(shwPosReg).append(", r").append(shwStringReg).append(")\n");
+                            .append(", r").append(shwPosReg).append(", r").append(shwStringReg).append(")\n");
                     break;
                 }
 
@@ -2128,8 +2137,8 @@ public class InterpretedCode extends RuntimeCode {
                     int trTargetReg = bytecode[pc++];
                     int trCtx = bytecode[pc++];
                     sb.append("TR_TRANSLITERATE r").append(rd).append(" = tr(r").append(trSearchReg)
-                      .append(", r").append(trReplaceReg).append(", r").append(trModifiersReg)
-                      .append(", r").append(trTargetReg).append(", ctx=").append(trCtx).append(")\n");
+                            .append(", r").append(trReplaceReg).append(", r").append(trModifiersReg)
+                            .append(", r").append(trTargetReg).append(", ctx=").append(trCtx).append(")\n");
                     break;
                 }
                 case Opcodes.STORE_SYMBOLIC_SCALAR: {
@@ -2152,7 +2161,7 @@ public class InterpretedCode extends RuntimeCode {
                     int tieArgsReg = bytecode[pc++];
                     int tieCtx = bytecode[pc++];
                     sb.append("TIE r").append(rd).append(" = tie(r").append(tieArgsReg)
-                      .append(", ctx=").append(tieCtx).append(")\n");
+                            .append(", ctx=").append(tieCtx).append(")\n");
                     break;
                 }
                 case Opcodes.UNTIE: {
@@ -2161,7 +2170,7 @@ public class InterpretedCode extends RuntimeCode {
                     int untieArgsReg = bytecode[pc++];
                     int untieCtx = bytecode[pc++];
                     sb.append("UNTIE r").append(rd).append(" = untie(r").append(untieArgsReg)
-                      .append(", ctx=").append(untieCtx).append(")\n");
+                            .append(", ctx=").append(untieCtx).append(")\n");
                     break;
                 }
                 case Opcodes.TIED: {
@@ -2170,7 +2179,7 @@ public class InterpretedCode extends RuntimeCode {
                     int tiedArgsReg = bytecode[pc++];
                     int tiedCtx = bytecode[pc++];
                     sb.append("TIED r").append(rd).append(" = tied(r").append(tiedArgsReg)
-                      .append(", ctx=").append(tiedCtx).append(")\n");
+                            .append(", ctx=").append(tiedCtx).append(")\n");
                     break;
                 }
                 case Opcodes.QX: {
@@ -2179,7 +2188,7 @@ public class InterpretedCode extends RuntimeCode {
                     int qxArgsReg = bytecode[pc++];
                     int qxCtx = bytecode[pc++];
                     sb.append("QX r").append(rd).append(" = qx(r").append(qxArgsReg)
-                      .append(", ctx=").append(qxCtx).append(")\n");
+                            .append(", ctx=").append(qxCtx).append(")\n");
                     break;
                 }
 
@@ -2237,8 +2246,8 @@ public class InterpretedCode extends RuntimeCode {
                         default -> "io_op_" + opcode;
                     };
                     sb.append(ioName).append(" r").append(rd)
-                      .append(" = ").append(ioName).append("(r").append(ioArgsReg)
-                      .append(", ctx=").append(ioCtx).append(")\n");
+                            .append(" = ").append(ioName).append("(r").append(ioArgsReg)
+                            .append(", ctx=").append(ioCtx).append(")\n");
                     break;
                 }
 
@@ -2252,7 +2261,7 @@ public class InterpretedCode extends RuntimeCode {
                     int lgdNameReg = bytecode[pc++];
                     int lgdPkgIdx = bytecode[pc++];
                     sb.append("LOAD_GLOB_DYNAMIC r").append(rd).append(" = *{r").append(lgdNameReg)
-                      .append("} pkg=").append(stringPool[lgdPkgIdx]).append("\n");
+                            .append("} pkg=").append(stringPool[lgdPkgIdx]).append("\n");
                     break;
                 }
                 case Opcodes.SET_ARRAY_LAST_INDEX: {
@@ -2296,14 +2305,6 @@ public class InterpretedCode extends RuntimeCode {
             }
         }
         return sb.toString();
-    }
-
-    /**
-     * Read a 32-bit integer from bytecode (stored as 1 int slot).
-     * With int[] storage a full int fits in a single slot.
-     */
-    private static int readInt(int[] bytecode, int pc) {
-        return bytecode[pc];
     }
 
     /**
@@ -2358,7 +2359,7 @@ public class InterpretedCode extends RuntimeCode {
                 throw new IllegalStateException("Bytecode is required");
             }
             return new InterpretedCode(bytecode, constants, stringPool, maxRegisters,
-                                      capturedVars, sourceName, sourceLine, null, null);
+                    capturedVars, sourceName, sourceLine, null, null);
         }
     }
 }

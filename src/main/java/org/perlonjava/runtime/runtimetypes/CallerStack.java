@@ -80,7 +80,7 @@ public class CallerStack {
         }
 
         @Override
-        public String toString() {
+        public String toString () {
             return String.format("(%s, %s, %d)", packageName, filename, line);
         }
     }

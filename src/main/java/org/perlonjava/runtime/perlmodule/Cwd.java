@@ -93,7 +93,7 @@ public class Cwd extends PerlModuleBase {
             String baseDir = System.getProperty("user.dir");
             // Determine the path to resolve
             String path = args.size() > 0 ? args.get(0).toString() : baseDir;
-            
+
             // Resolve the path: if already absolute, use it directly; otherwise resolve relative to baseDir
             java.nio.file.Path pathObj = Paths.get(path);
             if (!pathObj.isAbsolute()) {

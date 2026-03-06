@@ -543,7 +543,8 @@ public class CompileAssignment {
                                     bytecodeCompiler.emitReg(valueReg);
                                     bytecodeCompiler.lastResultReg = localReg;
                                 }
-                                default -> bytecodeCompiler.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                                default ->
+                                        bytecodeCompiler.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
                             }
                             return;
                         }
@@ -1641,7 +1642,6 @@ public class CompileAssignment {
                 bytecodeCompiler.emitReg(rhsReg);
                 bytecodeCompiler.lastResultReg = rhsReg;
                 bytecodeCompiler.currentCallContext = savedContext;
-                return;
             } else if (node.left instanceof ListNode) {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS
@@ -1765,7 +1765,6 @@ public class CompileAssignment {
                 }
 
                 bytecodeCompiler.currentCallContext = savedContext;
-                return;
             } else {
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }

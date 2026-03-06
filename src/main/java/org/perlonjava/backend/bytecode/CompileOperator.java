@@ -1,12 +1,8 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
-import org.perlonjava.runtime.runtimetypes.ClassRegistry;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -113,7 +109,6 @@ public class CompileOperator {
             } else {
                 bytecodeCompiler.throwCompilerException("scalar operator requires an operand");
             }
-            return;
         } else if (op.equals("package") || op.equals("class")) {
             // Package/Class declaration: package Foo; or class Foo;
             // This updates the current package context for subsequent variable declarations
@@ -921,10 +916,10 @@ public class CompileOperator {
                 // Snapshot visible variables and pragma flags for this eval site
                 int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
                 bytecodeCompiler.evalSiteRegistries.add(
-                    bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
+                        bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
                 bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
-                    bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
-                    bytecodeCompiler.symbolTable.featureFlagsStack.peek()
+                        bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
+                        bytecodeCompiler.symbolTable.featureFlagsStack.peek()
                 });
 
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
@@ -2630,23 +2625,23 @@ public class CompileOperator {
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
-                   op.equals("rename") || op.equals("link") || op.equals("readlink") ||
-                   op.equals("umask") || op.equals("system") || op.equals("pack") ||
-                   op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
-                   op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") ||
-                   op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
-                   op.equals("close") ||
-                   op.equals("binmode") || op.equals("seek") ||
-                   op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
-                   op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
-                   op.equals("connect") || op.equals("listen") || op.equals("write") ||
-                   op.equals("formline") || op.equals("printf") || op.equals("accept") ||
-                   op.equals("sysseek") || op.equals("truncate") || op.equals("read") ||
-                   op.equals("chown") || op.equals("waitpid") ||
-                   op.equals("setsockopt") || op.equals("getsockopt") ||
-                   op.equals("getpgrp") || op.equals("setpgrp") ||
-                   op.equals("getpriority") || op.equals("setpriority") ||
-                   op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
+                op.equals("rename") || op.equals("link") || op.equals("readlink") ||
+                op.equals("umask") || op.equals("system") || op.equals("pack") ||
+                op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
+                op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") ||
+                op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
+                op.equals("close") ||
+                op.equals("binmode") || op.equals("seek") ||
+                op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
+                op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
+                op.equals("connect") || op.equals("listen") || op.equals("write") ||
+                op.equals("formline") || op.equals("printf") || op.equals("accept") ||
+                op.equals("sysseek") || op.equals("truncate") || op.equals("read") ||
+                op.equals("chown") || op.equals("waitpid") ||
+                op.equals("setsockopt") || op.equals("getsockopt") ||
+                op.equals("getpgrp") || op.equals("setpgrp") ||
+                op.equals("getpriority") || op.equals("setpriority") ||
+                op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList

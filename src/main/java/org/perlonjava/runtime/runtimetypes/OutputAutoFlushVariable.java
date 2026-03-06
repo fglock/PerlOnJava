@@ -7,14 +7,14 @@ import java.util.Stack;
  */
 public class OutputAutoFlushVariable extends RuntimeScalar {
 
-    private record State(RuntimeIO handle, boolean autoFlush) {
-    }
-
     private static final Stack<State> stateStack = new Stack<>();
 
     private static RuntimeIO currentHandle() {
         RuntimeIO handle = RuntimeIO.selectedHandle;
         return handle != null ? handle : RuntimeIO.stdout;
+    }
+
+    private record State(RuntimeIO handle, boolean autoFlush) {
     }
 
     @Override
