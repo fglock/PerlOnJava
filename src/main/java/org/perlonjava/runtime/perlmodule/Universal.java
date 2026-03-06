@@ -22,6 +22,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class Universal extends PerlModuleBase {
 
+    /**
+     * Constructor for Universal.
+     * Initializes the module with the name "UNIVERSAL".
+     */
+    public Universal() {
+        super("UNIVERSAL");
+    }
+
     private static String tryDecodeUtf8Octets(String maybeOctets) {
         if (maybeOctets == null || maybeOctets.isEmpty()) {
             return null;
@@ -59,14 +67,6 @@ public class Universal extends PerlModuleBase {
             out.append((char) (b & 0xFF));
         }
         return out.toString();
-    }
-
-    /**
-     * Constructor for Universal.
-     * Initializes the module with the name "UNIVERSAL".
-     */
-    public Universal() {
-        super("UNIVERSAL");
     }
 
     /**

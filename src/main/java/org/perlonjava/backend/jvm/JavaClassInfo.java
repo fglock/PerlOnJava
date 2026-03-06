@@ -30,22 +30,22 @@ public class JavaClassInfo {
     /**
      * Local variable slot used to spill the value returned by `return`, `goto` markers,
      * and other non-local control-flow paths before jumping to {@link #returnLabel}.
-     *
+     * <p>
      * The {@link #returnLabel} join point must be stack-neutral: no incoming edge may
      * rely on operand stack contents.
      */
     public int returnValueSlot;
-    
+
     /**
      * Local variable slot for tail call trampoline - stores codeRef.
      */
     public int tailCallCodeRefSlot;
-    
+
     /**
      * Local variable slot for tail call trampoline - stores args.
      */
     public int tailCallArgsSlot;
-    
+
     /**
      * Local variable slot for temporarily storing marked RuntimeControlFlowList during call-site checks.
      */
@@ -55,24 +55,11 @@ public class JavaClassInfo {
 
     public int[] spillSlots;
     public int spillTop;
-
-    public static final class SpillRef {
-        public final int slot;
-        public final boolean pooled;
-
-        public SpillRef(int slot, boolean pooled) {
-            this.slot = slot;
-            this.pooled = pooled;
-        }
-    }
-
     /**
      * A stack of loop labels for managing nested loops.
      */
     public Deque<LoopLabels> loopLabelStack;
-
     public Deque<GotoLabels> gotoLabelStack;
-
     /**
      * Map of loop state signature to block-level dispatcher label.
      * Allows multiple call sites with the same visible loops to share one dispatcher.
@@ -152,12 +139,12 @@ public class JavaClassInfo {
     /**
      * Pushes a new set of loop labels with isTrueLoop flag.
      *
-     * @param labelName     the name of the loop label
-     * @param nextLabel     the label for the next iteration
-     * @param redoLabel     the label for redoing the current iteration
-     * @param lastLabel     the label for exiting the loop
-     * @param context       the context type
-     * @param isTrueLoop    whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
+     * @param labelName  the name of the loop label
+     * @param nextLabel  the label for the next iteration
+     * @param redoLabel  the label for redoing the current iteration
+     * @param lastLabel  the label for exiting the loop
+     * @param context    the context type
+     * @param isTrueLoop whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
      */
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop) {
         loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, context, isTrueLoop));
@@ -166,7 +153,7 @@ public class JavaClassInfo {
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
         loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, context, isTrueLoop, isUnlabeledControlFlowTarget));
     }
-    
+
     /**
      * Pushes a LoopLabels object onto the loop label stack.
      * This is useful when you've already constructed a LoopLabels object with a control flow handler.
@@ -185,7 +172,7 @@ public class JavaClassInfo {
     public LoopLabels popLoopLabels() {
         return loopLabelStack.pop();
     }
-    
+
     /**
      * Gets the innermost (current) loop labels.
      * Returns null if not currently inside a loop.
@@ -299,5 +286,8 @@ public class JavaClassInfo {
                 "    loopLabelStack=" + loopLabelStack + "\n" +
                 "    gotoLabelStack=" + gotoLabelStack + "\n" +
                 "}";
+    }
+
+    public record SpillRef(int slot, boolean pooled) {
     }
 }

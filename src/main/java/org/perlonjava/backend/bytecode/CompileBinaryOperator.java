@@ -52,8 +52,7 @@ public class CompileBinaryOperator {
             // Use LIST context only for array/hash args so they expand;
             // scalar expressions keep current context to avoid wrapping in RuntimeList
             int argsListReg = bytecodeCompiler.allocateRegister();
-            if (node.right instanceof ListNode) {
-                ListNode argsList = (ListNode) node.right;
+            if (node.right instanceof ListNode argsList) {
                 int savedContext = bytecodeCompiler.currentCallContext;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (Node arg : argsList.elements) {
@@ -135,7 +134,7 @@ public class CompileBinaryOperator {
         if (node.operator.equals("->")) {
             bytecodeCompiler.currentTokenIndex = node.getIndex();  // Track token for error reporting
 
-            if (node.right instanceof HashLiteralNode) {
+            if (node.right instanceof HashLiteralNode keyNode) {
                 // Hashref dereference: $ref->{key}
                 // left: scalar containing hash reference
                 // right: HashLiteralNode containing key
@@ -151,7 +150,6 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitReg(scalarRefReg);
 
                 // Get the key
-                HashLiteralNode keyNode = (HashLiteralNode) node.right;
                 if (keyNode.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("Hash dereference requires key");
                 }
@@ -182,7 +180,7 @@ public class CompileBinaryOperator {
 
                 bytecodeCompiler.lastResultReg = rd;
                 return;
-            } else if (node.right instanceof ArrayLiteralNode) {
+            } else if (node.right instanceof ArrayLiteralNode indexNode) {
                 // Arrayref dereference: $ref->[index]
                 // left: scalar containing array reference
                 // right: ArrayLiteralNode containing index
@@ -198,7 +196,6 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitReg(scalarRefReg);
 
                 // Get the index
-                ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
                 if (indexNode.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("Array dereference requires index");
                 }
@@ -255,8 +252,7 @@ public class CompileBinaryOperator {
             }
             // Method call: ->method() or ->$method()
             // right is BinaryOperatorNode with operator "("
-            else if (node.right instanceof BinaryOperatorNode) {
-                BinaryOperatorNode rightCall = (BinaryOperatorNode) node.right;
+            else if (node.right instanceof BinaryOperatorNode rightCall) {
                 if (rightCall.operator.equals("(")) {
                     // object.call(method, arguments, context)
                     Node invocantNode = node.left;
@@ -266,12 +262,11 @@ public class CompileBinaryOperator {
                     // Convert class name to string if needed: Class->method()
                     if (invocantNode instanceof IdentifierNode) {
                         String className = ((IdentifierNode) invocantNode).name;
-                        invocantNode = new StringNode(className, ((IdentifierNode) invocantNode).getIndex());
+                        invocantNode = new StringNode(className, invocantNode.getIndex());
                     }
 
                     // Convert method name to string if needed
-                    if (methodNode instanceof OperatorNode) {
-                        OperatorNode methodOp = (OperatorNode) methodNode;
+                    if (methodNode instanceof OperatorNode methodOp) {
                         // &method is introduced by parser if method is predeclared
                         if (methodOp.operator.equals("&")) {
                             methodNode = methodOp.operand;
@@ -279,7 +274,7 @@ public class CompileBinaryOperator {
                     }
                     if (methodNode instanceof IdentifierNode) {
                         String methodName = ((IdentifierNode) methodNode).name;
-                        methodNode = new StringNode(methodName, ((IdentifierNode) methodNode).getIndex());
+                        methodNode = new StringNode(methodName, methodNode.getIndex());
                     }
 
                     // Compile invocant in scalar context
@@ -330,8 +325,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.currentTokenIndex = node.getIndex();
 
             // Check if this is an array slice: @array[indices]
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
+            if (node.left instanceof OperatorNode leftOp) {
                 if (leftOp.operator.equals("@")) {
                     // This is an array slice - handle it specially
                     bytecodeCompiler.handleArraySlice(node, leftOp);
@@ -363,8 +357,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.currentTokenIndex = node.getIndex();
 
             // Check if this is a hash slice: @hash{keys} or @$hashref{keys}
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
+            if (node.left instanceof OperatorNode leftOp) {
                 if (leftOp.operator.equals("@")) {
                     // This is a hash slice - handle it specially
                     bytecodeCompiler.handleHashSlice(node, leftOp);
@@ -604,17 +597,14 @@ public class CompileBinaryOperator {
         // The right side is: OperatorNode(replaceRegex, ListNode[pattern, replacement, flags])
         // We need to add $string to the operand list and compile the operator
         if ((node.operator.equals("=~") || node.operator.equals("!~"))
-                && node.right instanceof OperatorNode) {
-            OperatorNode rightOp = (OperatorNode) node.right;
-            if (rightOp.operand instanceof ListNode
+                && node.right instanceof OperatorNode rightOp) {
+            if (rightOp.operand instanceof ListNode originalList
                     && !rightOp.operator.equals("quoteRegex")) {
                 // Check if it's a regex operator (replaceRegex, matchRegex, tr, transliterate)
                 if (rightOp.operator.equals("replaceRegex")
                         || rightOp.operator.equals("matchRegex")
                         || rightOp.operator.equals("tr")
                         || rightOp.operator.equals("transliterate")) {
-
-                    ListNode originalList = (ListNode) rightOp.operand;
 
                     // For !~, check for s///r and y///r which don't make sense (mirrors JVM handleNotBindRegex)
                     if (node.operator.equals("!~")) {
@@ -807,11 +797,11 @@ public class CompileBinaryOperator {
             String o = op.operator;
             if (o.equals("@") || o.equals("%")) return true;
             if (o.equals("unpack") || o.equals("split") || o.equals("sort") ||
-                o.equals("reverse") || o.equals("grep") || o.equals("map") ||
-                o.equals("keys") || o.equals("values") || o.equals("each")) return true;
+                    o.equals("reverse") || o.equals("grep") || o.equals("map") ||
+                    o.equals("keys") || o.equals("values") || o.equals("each")) return true;
         }
         if (node instanceof BinaryOperatorNode bin) {
-            if (bin.operator.equals("(") || bin.operator.equals("()")) return true;
+            return bin.operator.equals("(") || bin.operator.equals("()");
         }
         return false;
     }

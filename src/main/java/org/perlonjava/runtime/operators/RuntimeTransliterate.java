@@ -53,7 +53,7 @@ public class RuntimeTransliterate {
         // For complement mode, we need to track replacement index
         Map<Integer, Integer> complementMap = new HashMap<>();
         int replacementIndex = 0;
-        
+
         for (int i = 0; i < input.length(); i++) {
             int codePoint = input.codePointAt(i);
 
@@ -398,7 +398,7 @@ public class RuntimeTransliterate {
                         int closePos = input.indexOf('}', pos + 3);
                         if (closePos > pos + 3) {
                             String content = input.substring(pos + 3, closePos).trim();
-                            
+
                             // Check for empty character name
                             if (content.isEmpty()) {
                                 throw new RuntimeException("Unknown charname ''");

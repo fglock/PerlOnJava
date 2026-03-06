@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.frontend.parser.ParserTables;
+import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
@@ -66,18 +66,18 @@ public class Exporter extends PerlModuleBase {
         if (args.size() < 2) {
             throw new PerlCompilerException("Not enough arguments for export");
         }
-        
+
         RuntimeScalar packageScalar = args.get(0);  // Source package
         RuntimeScalar targetPackage = args.get(1);  // Target package (caller)
         String caller = targetPackage.toString();
         String packageName = packageScalar.toString();
-        
+
         // Get symbols to export (everything after the first two args)
         RuntimeArray symbolsToExport = new RuntimeArray();
         for (int i = 2; i < args.size(); i++) {
             symbolsToExport.elements.add(args.get(i));
         }
-        
+
         // If no symbols specified, export @EXPORT
         if (symbolsToExport.isEmpty()) {
             RuntimeArray export = GlobalVariable.getGlobalArray(packageName + "::EXPORT");
@@ -85,20 +85,20 @@ public class Exporter extends PerlModuleBase {
                 symbolsToExport = export;
             }
         }
-        
+
         // Import the symbols into the target package
         for (RuntimeBase symbolObj : symbolsToExport.elements) {
             String symbolString = symbolObj.toString();
-            
+
             // Check if symbol is exported
             RuntimeArray export = GlobalVariable.getGlobalArray(packageName + "::EXPORT");
             RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageName + "::EXPORT_OK");
-            
+
             boolean isExported = export.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
             boolean isExportOk = exportOk.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
-            
+
             if (!isExported && !isExportOk && !symbolString.matches("^[$@%*]")) {
                 // try with/without "&"
                 String finalSymbolString;
@@ -112,7 +112,7 @@ public class Exporter extends PerlModuleBase {
                 isExportOk = exportOk.elements.stream()
                         .anyMatch(e -> e.toString().equals(finalSymbolString));
             }
-            
+
             if (isExported || isExportOk) {
                 if (symbolString.startsWith("&")) {
                     importFunction(packageName, caller, symbolString.substring(1));
@@ -131,7 +131,7 @@ public class Exporter extends PerlModuleBase {
                 throw new PerlCompilerException("\"" + symbolString + "\" is not exported by the " + packageName + " module\nCan't continue after import errors");
             }
         }
-        
+
         return new RuntimeList();
     }
 
@@ -180,7 +180,7 @@ public class Exporter extends PerlModuleBase {
 
             if (symbolString.startsWith(":")) {
                 String tagName = symbolString.substring(1);
-                
+
                 // Handle special :DEFAULT tag - it means "use @EXPORT"
                 if ("DEFAULT".equals(tagName)) {
                     if (export != null && !export.elements.isEmpty()) {
@@ -283,7 +283,7 @@ public class Exporter extends PerlModuleBase {
         if (exportSymbol.type == RuntimeScalarType.CODE) {
             String fullName = caller + "::" + functionName;
             RuntimeScalar importedRef = GlobalVariable.getGlobalCodeRef(fullName);
-            
+
             if (exportSymbol.value instanceof RuntimeCode exportedCode) {
                 if (exportedCode.defined()) {
                     // Fully defined sub: import by aliasing the CODE ref.
@@ -302,7 +302,7 @@ public class Exporter extends PerlModuleBase {
                     }
                 }
             }
-            
+
             // If this function name is an overridable operator (like 'time'), mark it in isSubs
             // so the parser knows to treat it as a subroutine call instead of the builtin
             if (ParserTables.OVERRIDABLE_OP.contains(functionName)) {

@@ -70,7 +70,7 @@ public class SignatureParser {
     /**
      * Parses a Perl subroutine signature and generates the corresponding AST.
      *
-     * @param parser The parser instance
+     * @param parser         The parser instance
      * @param subroutineName The name of the subroutine for error messages
      * @return A ListNode containing the generated AST nodes
      * @throws PerlCompilerException if the signature syntax is invalid
@@ -83,9 +83,9 @@ public class SignatureParser {
      * Parses a Perl method signature and generates the corresponding AST.
      * Methods have an implicit $self parameter that affects argument counts in error messages.
      *
-     * @param parser The parser instance
+     * @param parser     The parser instance
      * @param methodName The name of the method for error messages
-     * @param isMethod True if this is a method (has implicit $self)
+     * @param isMethod   True if this is a method (has implicit $self)
      * @return A ListNode containing the generated AST nodes
      * @throws PerlCompilerException if the signature syntax is invalid
      */
@@ -185,7 +185,7 @@ public class SignatureParser {
 
         // Create parameter variable or undef placeholder
         Node paramVariable = createParameterVariable(sigil, paramName);
-        
+
         if (isNamed) {
             // Named parameters are handled separately, not part of @_ unpacking
             namedParameterNodes.add(paramVariable);
@@ -278,7 +278,7 @@ public class SignatureParser {
 
         // Named parameters are always optional and extracted from a hash in @_
         // Generate: my %h = @_; $named = (delete $h{named}) // default_value;
-        
+
         Node defaultValue = null;
         String defaultOp = "//="; // default to defined-or operator for named params
 
@@ -291,7 +291,7 @@ public class SignatureParser {
         // Generate the extraction code for named parameter
         // This returns a ListNode with the hash declaration and extraction statements
         Node extractionCode = generateNamedParameterExtraction(paramVariable, paramName, defaultValue, defaultOp);
-        
+
         // Add the extraction statements to astNodes
         if (extractionCode instanceof ListNode) {
             astNodes.addAll(((ListNode) extractionCode).elements);
@@ -346,13 +346,13 @@ public class SignatureParser {
 
     /**
      * Generates AST for extracting a named parameter from @_.
-     * 
+     *
      * <p>Named parameters are passed as key-value pairs in @_. This method generates:
      * <pre>{@code
      * my %__named_args__ = @_;  # Only once for all named params
      * my $paramName = (delete $__named_args__{paramName}) // defaultValue;
      * }</pre>
-     * 
+     *
      * <p>The generated AST structure:
      * <ol>
      *   <li>Hash declaration: {@code my %__named_args__ = @_} (first param only)</li>
@@ -362,20 +362,20 @@ public class SignatureParser {
      * </ol>
      *
      * @param paramVariable The variable node to assign the extracted value to
-     * @param paramName The name of the parameter (for hash key lookup)
-     * @param defaultValue The default value expression, or null if no default
-     * @param defaultOp The default operator ("=", "//=", or "||=")
+     * @param paramName     The name of the parameter (for hash key lookup)
+     * @param defaultValue  The default value expression, or null if no default
+     * @param defaultOp     The default operator ("=", "//=", or "||=")
      * @return A ListNode containing the hash declaration and extraction statements
      */
     private Node generateNamedParameterExtraction(Node paramVariable, String paramName, Node defaultValue, String defaultOp) {
         List<Node> statements = new ArrayList<>();
-        
+
         // Create the hash only once for all named parameters
         if (namedArgsHashName == null) {
             namedArgsHashName = "__named_args__";
             IdentifierNode hashIdent = new IdentifierNode(namedArgsHashName, parser.tokenIndex);
             Node hashVar = new OperatorNode("%", hashIdent, parser.tokenIndex);
-            
+
             // Create: my %__named_args__ = @_
             Node hashDecl = new BinaryOperatorNode(
                     "=",
@@ -384,7 +384,7 @@ public class SignatureParser {
                     parser.tokenIndex);
             statements.add(hashDecl);
         }
-        
+
         // Create: $__named_args__{named}
         // Note: use $ sigil for single element access, not %
         IdentifierNode hashIdent = new IdentifierNode(namedArgsHashName, parser.tokenIndex);
@@ -398,11 +398,11 @@ public class SignatureParser {
                 new OperatorNode("$", hashIdent, parser.tokenIndex),
                 hashKey,
                 parser.tokenIndex);
-        
+
         // Create: delete $__named_args__{named}
         // The delete operator expects its operand to be a ListNode
         Node deleteExpr = new OperatorNode("delete", new ListNode(List.of(hashAccess), parser.tokenIndex), parser.tokenIndex);
-        
+
         Node extractionValue;
         if (defaultValue != null) {
             // (delete $h{named}) // defaultValue
@@ -413,7 +413,7 @@ public class SignatureParser {
             } else if (defaultOp.equals("//=")) {
                 defaultOp = "//";
             }
-            
+
             extractionValue = new BinaryOperatorNode(
                     defaultOp,
                     deleteExpr,
@@ -422,12 +422,12 @@ public class SignatureParser {
         } else {
             extractionValue = deleteExpr;
         }
-        
+
         // Add the extraction assignment with 'my' declaration
         // my $named = (delete $h{named}) // default
         Node myParam = new OperatorNode("my", paramVariable, parser.tokenIndex);
         statements.add(new BinaryOperatorNode("=", myParam, extractionValue, parser.tokenIndex));
-        
+
         // Return a list node containing the hash declaration (if first time) and the extraction
         return new ListNode(statements, parser.tokenIndex);
     }
@@ -470,7 +470,7 @@ public class SignatureParser {
         } else {
             // Without named parameters: check both min and max
             // We need to check separately for too few vs too many to generate appropriate error messages
-            
+
             // First check: minParams <= @_  (too few arguments check)
             Node tooFewCheck = new BinaryOperatorNode(
                     "||",
@@ -483,7 +483,7 @@ public class SignatureParser {
                     dieWarnNode(parser, "die", new ListNode(List.of(
                             generateTooFewArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
-            
+
             // Second check: @_ <= maxParams (too many arguments check)
             Node tooManyCheck = new BinaryOperatorNode(
                     "||",
@@ -496,7 +496,7 @@ public class SignatureParser {
                     dieWarnNode(parser, "die", new ListNode(List.of(
                             generateTooManyArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
-            
+
             // Return both checks in sequence
             return new ListNode(List.of(tooFewCheck, tooManyCheck), parser.tokenIndex);
         }
@@ -508,7 +508,7 @@ public class SignatureParser {
             String fullName = NameNormalizer.normalizeVariableName(subroutineName, parser.ctx.symbolTable.getCurrentPackage());
             // For methods, add 1 to account for implicit $self parameter (both in got and expected)
             int adjustedMin = isMethod ? minParams + 1 : minParams;
-            
+
             Node argCount;
             if (isMethod) {
                 // For methods: scalar(@_) + 1 (to account for $self that was already shifted)
@@ -519,7 +519,7 @@ public class SignatureParser {
             } else {
                 argCount = new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex);
             }
-            
+
             return new BinaryOperatorNode(".",
                     new BinaryOperatorNode(".",
                             new BinaryOperatorNode(".",
@@ -544,7 +544,7 @@ public class SignatureParser {
             String fullName = NameNormalizer.normalizeVariableName(subroutineName, parser.ctx.symbolTable.getCurrentPackage());
             // For methods, add 1 to account for implicit $self parameter (both in got and expected)
             int adjustedMax = isMethod ? maxParams + 1 : maxParams;
-            
+
             Node argCount;
             if (isMethod) {
                 // For methods: scalar(@_) + 1 (to account for $self that was already shifted)
@@ -555,7 +555,7 @@ public class SignatureParser {
             } else {
                 argCount = new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex);
             }
-            
+
             return new BinaryOperatorNode(".",
                     new BinaryOperatorNode(".",
                             new BinaryOperatorNode(".",

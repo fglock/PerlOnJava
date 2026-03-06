@@ -81,7 +81,7 @@ public class ListOperators {
         // If comparator is a string (subroutine name), resolve it to a code reference
         RuntimeScalar comparator = perlComparatorClosure;
         if (comparator.type == RuntimeScalarType.STRING ||
-            comparator.type == RuntimeScalarType.BYTE_STRING) {
+                comparator.type == RuntimeScalarType.BYTE_STRING) {
             String subName = comparator.toString();
             if (!subName.contains("::")) {
                 subName = packageName + "::" + subName;

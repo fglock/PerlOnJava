@@ -1,9 +1,9 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.operators.WarnDie;
 
 import java.lang.reflect.Method;
 

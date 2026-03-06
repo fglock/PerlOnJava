@@ -14,6 +14,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
+    private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
@@ -169,10 +170,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Create ALIASES by making both names point to the same objects in the global maps
         // This is the key difference from the old implementation which created references
-        
+
         // Alias the CODE slot: both names point to the same code reference
         RuntimeScalar sourceCode = GlobalVariable.getGlobalCodeRef(globName);
-        GlobalVariable.globalCodeRefs.put(this.globName, (RuntimeScalar) sourceCode);
+        GlobalVariable.globalCodeRefs.put(this.globName, sourceCode);
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
 
@@ -541,15 +542,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return this;
     }
 
-    private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
-
-    private record GlobSlotSnapshot(
-            String globName,
-            RuntimeScalar scalar,
-            RuntimeArray array,
-            RuntimeHash hash,
-            RuntimeScalar code) {}
-
     @Override
     public void dynamicSaveState() {
         RuntimeScalar savedScalar = GlobalVariable.getGlobalVariable(this.globName);
@@ -586,5 +578,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();
+    }
+
+    private record GlobSlotSnapshot(
+            String globName,
+            RuntimeScalar scalar,
+            RuntimeArray array,
+            RuntimeHash hash,
+            RuntimeScalar code) {
     }
 }

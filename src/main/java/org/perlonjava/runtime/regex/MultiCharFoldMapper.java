@@ -10,15 +10,15 @@ import java.util.regex.Pattern;
  * single-character case folding, not multi-character folds like ß→ss.
  */
 public class MultiCharFoldMapper {
-    
+
     // Map of characters that fold to multiple characters
     // Format: character → fold string
     private static final Map<Integer, String> MULTI_CHAR_FOLDS = new HashMap<>();
-    
+
     // Reverse map: fold string → List of characters that fold to it
     // Format: fold string → character
     private static final Map<String, Integer> REVERSE_FOLDS = new HashMap<>();
-    
+
     static {
         // Latin
         MULTI_CHAR_FOLDS.put(0x00DF, "ss");    // ß → ss
@@ -32,14 +32,14 @@ public class MultiCharFoldMapper {
         MULTI_CHAR_FOLDS.put(0x1E9A, "a\u02BE"); // ẚ → aʾ
         MULTI_CHAR_FOLDS.put(0x1E9B, "\u017Fs"); // ẛ → ẛ
         MULTI_CHAR_FOLDS.put(0x1F50, "\u03C5\u0313"); // ὐ → ὐ
-        
+
         // Greek
         MULTI_CHAR_FOLDS.put(0x0390, "\u03B9\u0308\u0301"); // ΐ → ΐ
         MULTI_CHAR_FOLDS.put(0x03B0, "\u03C5\u0308\u0301"); // ΰ → ΰ
-        
+
         // Armenian
         MULTI_CHAR_FOLDS.put(0x0587, "\u0565\u0582"); // և → եւ
-        
+
         // Latin ligatures
         MULTI_CHAR_FOLDS.put(0xFB00, "ff");    // ﬀ → ff
         MULTI_CHAR_FOLDS.put(0xFB01, "fi");    // ﬁ → fi
@@ -48,45 +48,45 @@ public class MultiCharFoldMapper {
         MULTI_CHAR_FOLDS.put(0xFB04, "ffl");   // ﬄ → ffl
         MULTI_CHAR_FOLDS.put(0xFB05, "\u017Ft"); // ﬅ → ſt
         MULTI_CHAR_FOLDS.put(0xFB06, "st");    // ﬆ → st
-        
+
         // Armenian ligatures
         MULTI_CHAR_FOLDS.put(0xFB13, "\u0574\u0576"); // ﬓ → մն
         MULTI_CHAR_FOLDS.put(0xFB14, "\u0574\u0565"); // ﬔ → մե
         MULTI_CHAR_FOLDS.put(0xFB15, "\u0574\u056B"); // ﬕ → մի
         MULTI_CHAR_FOLDS.put(0xFB16, "\u057E\u0576"); // ﬖ → վն
         MULTI_CHAR_FOLDS.put(0xFB17, "\u0574\u056D"); // ﬗ → մխ
-        
+
         // Build reverse map (lowercase versions only for simpler matching)
         for (Map.Entry<Integer, String> entry : MULTI_CHAR_FOLDS.entrySet()) {
             String fold = entry.getValue().toLowerCase();
             REVERSE_FOLDS.put(fold, entry.getKey());
         }
     }
-    
+
     /**
      * Check if a character has a multi-character case fold.
-     * 
+     *
      * @param codePoint The Unicode code point to check
      * @return true if this character folds to multiple characters
      */
     public static boolean hasMultiCharFold(int codePoint) {
         return MULTI_CHAR_FOLDS.containsKey(codePoint);
     }
-    
+
     /**
      * Get the multi-character fold for a character.
-     * 
+     *
      * @param codePoint The Unicode code point
      * @return The folded string, or null if no multi-char fold exists
      */
     public static String getMultiCharFold(int codePoint) {
         return MULTI_CHAR_FOLDS.get(codePoint);
     }
-    
+
     /**
      * Expand a character with a multi-char fold into a regex alternation.
      * For example: ß → (?:ß|ss|SS|Ss|sS)
-     * 
+     *
      * @param codePoint The Unicode code point
      * @return A regex pattern that matches all case variants, or null if no multi-char fold
      */
@@ -95,16 +95,16 @@ public class MultiCharFoldMapper {
         if (fold == null) {
             return null;
         }
-        
+
         // Build all case variations
         StringBuilder sb = new StringBuilder("(?:");
         String original = new String(Character.toChars(codePoint));
         sb.append(Pattern.quote(original));
         sb.append("|");
-        
+
         // Add the basic fold
         sb.append(Pattern.quote(fold));
-        
+
         // Add case variations of the fold (if it's ASCII)
         if (fold.chars().allMatch(c -> c >= 'a' && c <= 'z')) {
             // Generate all case combinations for lowercase ASCII
@@ -121,26 +121,26 @@ public class MultiCharFoldMapper {
                 }
             }
         }
-        
+
         sb.append(")");
         return sb.toString();
     }
-    
+
     /**
      * Check if a string has a reverse fold (i.e., a character that folds to this string).
      * For example: "ss" has a reverse fold to ß
-     * 
+     *
      * @param str The string to check (will be lowercased)
      * @return true if a character folds to this string
      */
     public static boolean hasReverseFold(String str) {
         return REVERSE_FOLDS.containsKey(str.toLowerCase());
     }
-    
+
     /**
      * Get the character that folds to this string.
      * For example: "ss" → ß
-     * 
+     *
      * @param str The string to look up (will be lowercased)
      * @return The character code point, or null if no reverse fold exists
      */

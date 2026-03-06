@@ -12,12 +12,6 @@ import java.util.Set;
  * retrieval of previously normalized names and blessed IDs.
  */
 public class NameNormalizer {
-    /**
-     * Composite key for name cache to avoid string concatenation overhead.
-     * Using a record provides efficient hashCode/equals with no allocation.
-     */
-    private record CacheKey(String packageName, String variable) {}
-
     // Cache to store previously normalized variables for faster lookup
     // Using composite key avoids ~12ns string concatenation per lookup
     private static final Map<CacheKey, String> nameCache = new HashMap<>();
@@ -75,7 +69,7 @@ public class NameNormalizer {
         // normalizeVariableName (not getBlessId)
         try {
             RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
-                "((", className, null, 0);
+                    "((", className, null, 0);
             return method != null;
         } catch (Exception e) {
             // If we can't check (e.g., during early initialization), assume no overload
@@ -187,5 +181,12 @@ public class NameNormalizer {
 
         // Replace '::' with '/' and append '.pm'
         return moduleName.replace("::", "/") + ".pm";
+    }
+
+    /**
+     * Composite key for name cache to avoid string concatenation overhead.
+     * Using a record provides efficient hashCode/equals with no allocation.
+     */
+    private record CacheKey(String packageName, String variable) {
     }
 }

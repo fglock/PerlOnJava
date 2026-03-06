@@ -23,14 +23,14 @@ public class UnicodeUCD extends PerlModuleBase {
     public static void initialize() {
         UnicodeUCD unicodeUCD = new UnicodeUCD();
         unicodeUCD.initializeExporter();
-        
+
         // Define exports - main function is prop_invmap
-        unicodeUCD.defineExport("EXPORT_OK", 
-            "prop_invmap", "prop_invlist", "prop_aliases", "prop_values",
-            "charinfo", "charblock", "charscript", "charprop",
-            "num", "charnames", "all_casefolds"
+        unicodeUCD.defineExport("EXPORT_OK",
+                "prop_invmap", "prop_invlist", "prop_aliases", "prop_values",
+                "charinfo", "charblock", "charscript", "charprop",
+                "num", "charnames", "all_casefolds"
         );
-        
+
         try {
             unicodeUCD.registerMethod("prop_invmap", null);
             unicodeUCD.registerMethod("prop_invlist", null);
@@ -50,32 +50,29 @@ public class UnicodeUCD extends PerlModuleBase {
      */
     public static RuntimeList prop_invmap(RuntimeArray args, int ctx) {
         String propertyName = args.getFirst().toString();
-        
+
         // Normalize property name (remove spaces, hyphens, underscores, case-insensitive)
         String normalizedProp = normalizePropertyName(propertyName);
-        
+
         try {
             // Handle case mapping properties
             // Note: These use SIMPLE case mappings (single code point), not FULL mappings
-            if (normalizedProp.equals("lowercasemapping") || 
-                normalizedProp.equals("lc")) {
+            if (normalizedProp.equals("lowercasemapping") ||
+                    normalizedProp.equals("lc")) {
                 return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_LOWERCASE_MAPPING);
-            }
-            else if (normalizedProp.equals("uppercasemapping") || 
-                     normalizedProp.equals("uc")) {
+            } else if (normalizedProp.equals("uppercasemapping") ||
+                    normalizedProp.equals("uc")) {
                 return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_UPPERCASE_MAPPING);
-            }
-            else if (normalizedProp.equals("titlecasemapping") || 
-                     normalizedProp.equals("tc")) {
+            } else if (normalizedProp.equals("titlecasemapping") ||
+                    normalizedProp.equals("tc")) {
                 return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_TITLECASE_MAPPING);
-            }
-            else if (normalizedProp.equals("casefolding") || 
-                     normalizedProp.equals("cf")) {
+            } else if (normalizedProp.equals("casefolding") ||
+                    normalizedProp.equals("cf")) {
                 return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_CASE_FOLDING);
             }
             // Handle general category
-            else if (normalizedProp.equals("generalcategory") || 
-                     normalizedProp.equals("gc")) {
+            else if (normalizedProp.equals("generalcategory") ||
+                    normalizedProp.equals("gc")) {
                 return buildGeneralCategoryInvmap();
             }
             // Add more properties as needed
@@ -85,12 +82,12 @@ public class UnicodeUCD extends PerlModuleBase {
                 RuntimeArray invmap = new RuntimeArray();
                 RuntimeScalar format = new RuntimeScalar("s");
                 RuntimeScalar defaultVal = new RuntimeScalar(0);
-                
+
                 return new RuntimeList(
-                    invlist.createReference(),
-                    invmap.createReference(),
-                    format,
-                    defaultVal
+                        invlist.createReference(),
+                        invmap.createReference(),
+                        format,
+                        defaultVal
                 );
             }
         } catch (Exception e) {
@@ -103,7 +100,7 @@ public class UnicodeUCD extends PerlModuleBase {
     /**
      * Build inversion map for case mapping properties using ICU4J.
      * Returns FULL case mappings (can be multiple code points).
-     * 
+     * <p>
      * Format "al" (adjustable list): invmap contains either:
      * - A scalar with the target code point (for simple 1-to-1 mappings)
      * - An array reference with multiple code points (for complex mappings)
@@ -112,12 +109,12 @@ public class UnicodeUCD extends PerlModuleBase {
     private static RuntimeList buildSimpleCaseMappingInvmap(int property) {
         RuntimeArray invlist = new RuntimeArray();
         RuntimeArray invmap = new RuntimeArray();
-        
+
         // Track the last mapping to detect range boundaries
         String lastMappingKey = null;
         int rangeStart = -1;
         Object rangeStartMapping = null;
-        
+
         // Determine which case mapping function to use
         FullCaseMapper mapper;
         switch (property) {
@@ -139,21 +136,21 @@ public class UnicodeUCD extends PerlModuleBase {
             default:
                 mapper = (cp) -> String.valueOf(Character.toChars(cp));
         }
-        
+
         // Scan all Unicode code points (BMP + supplementary)
         for (int cp = 0; cp <= 0x10FFFF; cp++) {
             // Skip surrogates
             if (cp >= 0xD800 && cp <= 0xDFFF) {
                 continue;
             }
-            
+
             String result = mapper.map(cp);
             int[] codePoints = result.codePoints().toArray();
-            
+
             // Determine the mapping representation
             Object mapping;
             String mappingKey;
-            
+
             if (codePoints.length == 1 && codePoints[0] == cp) {
                 // No change - use default
                 mapping = 0;
@@ -172,7 +169,7 @@ public class UnicodeUCD extends PerlModuleBase {
                 mapping = arr.createReference();
                 mappingKey = "complex:" + cp; // Each complex mapping gets its own range
             }
-            
+
             // Start new range if mapping pattern changes
             if (!mappingKey.equals(lastMappingKey)) {
                 if (rangeStart >= 0) {
@@ -188,7 +185,7 @@ public class UnicodeUCD extends PerlModuleBase {
                 lastMappingKey = mappingKey;
             }
         }
-        
+
         // Add final range
         if (rangeStart >= 0) {
             invlist.push(new RuntimeScalar(rangeStart));
@@ -198,29 +195,21 @@ public class UnicodeUCD extends PerlModuleBase {
                 invmap.push((RuntimeScalar) rangeStartMapping);
             }
         }
-        
+
         // Add sentinel
         invlist.push(new RuntimeScalar(0x110000));
-        
+
         // Format "al" means adjustable list - each element in range gets +1
         RuntimeScalar format = new RuntimeScalar("al");
         RuntimeScalar defaultVal = new RuntimeScalar(0);
-        
+
         // Return array references, not wrapped in scalars
         return new RuntimeList(
-            invlist.createReference(),
-            invmap.createReference(),
-            format,
-            defaultVal
+                invlist.createReference(),
+                invmap.createReference(),
+                format,
+                defaultVal
         );
-    }
-    
-    /**
-     * Functional interface for full case mapping (can return multiple code points).
-     */
-    @FunctionalInterface
-    private interface FullCaseMapper {
-        String map(int codePoint);
     }
 
     /**
@@ -229,19 +218,19 @@ public class UnicodeUCD extends PerlModuleBase {
     private static RuntimeList buildGeneralCategoryInvmap() {
         RuntimeArray invlist = new RuntimeArray();
         RuntimeArray invmap = new RuntimeArray();
-        
+
         int lastCategory = -1;
         int rangeStart = 0;
-        
+
         // Scan all Unicode code points
         for (int cp = 0; cp <= 0x10FFFF; cp++) {
             // Skip surrogates
             if (cp >= 0xD800 && cp <= 0xDFFF) {
                 continue;
             }
-            
+
             int category = UCharacter.getType(cp);
-            
+
             // Start new range if category changes
             if (cp == 0 || category != lastCategory) {
                 if (cp > 0) {
@@ -252,24 +241,24 @@ public class UnicodeUCD extends PerlModuleBase {
                 lastCategory = category;
             }
         }
-        
+
         // Add final range
         invlist.push(new RuntimeScalar(rangeStart));
         invmap.push(new RuntimeScalar(getCategoryName(lastCategory)));
-        
+
         // Add sentinel
         invlist.push(new RuntimeScalar(0x110000));
-        
+
         // Format "s" means string values
         RuntimeScalar format = new RuntimeScalar("s");
         RuntimeScalar defaultVal = new RuntimeScalar("Cn"); // Unassigned
-        
+
         // Return array references, not wrapped in scalars
         return new RuntimeList(
-            invlist.createReference(),
-            invmap.createReference(),
-            format,
-            defaultVal
+                invlist.createReference(),
+                invmap.createReference(),
+                format,
+                defaultVal
         );
     }
 
@@ -316,8 +305,8 @@ public class UnicodeUCD extends PerlModuleBase {
      */
     private static String normalizePropertyName(String name) {
         return name.toLowerCase()
-                   .replaceAll("[\\s_-]", "")
-                   .replace(":", "");
+                .replaceAll("[\\s_-]", "")
+                .replace(":", "");
     }
 
     /**
@@ -331,7 +320,7 @@ public class UnicodeUCD extends PerlModuleBase {
 
     /**
      * Returns all case folding mappings as a hash reference.
-     * 
+     * <p>
      * Returns a hash where keys are decimal code points and values are hash refs with:
      * - code: hex string of the code point (e.g., "0041")
      * - status: "C" (common), "F" (full), "S" (simple), "T" (turkic)
@@ -341,39 +330,39 @@ public class UnicodeUCD extends PerlModuleBase {
      * - turkic: hex string of turkic-specific fold (empty if none)
      *
      * @param args Unused
-     * @param ctx Context
+     * @param ctx  Context
      * @return RuntimeList containing hash reference
      */
     public static RuntimeList all_casefolds(RuntimeArray args, int ctx) {
         RuntimeHash result = new RuntimeHash();
-        
+
         // Scan all Unicode code points
         for (int cp = 0; cp <= 0x10FFFF; cp++) {
             // Skip surrogates
             if (cp >= 0xD800 && cp <= 0xDFFF) {
                 continue;
             }
-            
+
             // Get case folding for this code point
             String folded = UCharacter.foldCase(String.valueOf(Character.toChars(cp)), true);
             int[] foldedCodePoints = folded.codePoints().toArray();
-            
+
             // Skip if it folds to itself (no case folding)
             if (foldedCodePoints.length == 1 && foldedCodePoints[0] == cp) {
                 continue;
             }
-            
+
             // Create entry for this code point
             RuntimeHash entry = new RuntimeHash();
-            
+
             // code: hex string of original code point
             entry.put("code", new RuntimeScalar(String.format("%04X", cp)));
-            
+
             // Determine status and create fold strings
             String fullFold = formatCodePoints(foldedCodePoints);
             String simpleFold = "";
             String status;
-            
+
             if (foldedCodePoints.length == 1) {
                 // Simple case folding (1-to-1 mapping)
                 simpleFold = fullFold;
@@ -383,23 +372,23 @@ public class UnicodeUCD extends PerlModuleBase {
                 simpleFold = ""; // No simple fold for multi-char results
                 status = "F"; // Full
             }
-            
+
             entry.put("status", new RuntimeScalar(status));
             entry.put("simple", new RuntimeScalar(simpleFold));
             entry.put("full", new RuntimeScalar(fullFold));
             entry.put("mapping", new RuntimeScalar(fullFold));
-            
+
             // Turkic-specific folding (for Turkish/Azeri)
             // ICU4J doesn't expose turkic-specific folding directly, so we leave it empty
             entry.put("turkic", new RuntimeScalar(""));
-            
+
             // Add to result hash with decimal code point as key
             result.put(String.valueOf(cp), entry.createReference());
         }
-        
+
         return new RuntimeList(result.createReference());
     }
-    
+
     /**
      * Format an array of code points as space-separated hex strings.
      */
@@ -410,5 +399,13 @@ public class UnicodeUCD extends PerlModuleBase {
             sb.append(String.format("%04X", codePoints[i]));
         }
         return sb.toString();
+    }
+
+    /**
+     * Functional interface for full case mapping (can return multiple code points).
+     */
+    @FunctionalInterface
+    private interface FullCaseMapper {
+        String map(int codePoint);
     }
 }

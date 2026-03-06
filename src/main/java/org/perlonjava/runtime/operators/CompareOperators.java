@@ -464,7 +464,7 @@ public class CompareOperators {
     public static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Simplified smartmatch: try string equality first, then numeric
         // This handles the basic case in the state.t test
-        
+
         // Check if both are defined
         if (!arg1.getDefinedBoolean() && !arg2.getDefinedBoolean()) {
             return scalarTrue;  // undef ~~ undef is true
@@ -472,16 +472,16 @@ public class CompareOperators {
         if (!arg1.getDefinedBoolean() || !arg2.getDefinedBoolean()) {
             return scalarFalse;  // one is undef, one is not
         }
-        
+
         // Try string comparison
         if (arg1.toString().equals(arg2.toString())) {
             return scalarTrue;
         }
-        
+
         // Try numeric comparison if both look like numbers
         try {
             if (arg1.type == RuntimeScalarType.INTEGER || arg1.type == RuntimeScalarType.DOUBLE ||
-                arg2.type == RuntimeScalarType.INTEGER || arg2.type == RuntimeScalarType.DOUBLE) {
+                    arg2.type == RuntimeScalarType.INTEGER || arg2.type == RuntimeScalarType.DOUBLE) {
                 RuntimeScalar num1 = arg1.getNumber();
                 RuntimeScalar num2 = arg2.getNumber();
                 if (num1.type == RuntimeScalarType.DOUBLE || num2.type == RuntimeScalarType.DOUBLE) {
@@ -493,7 +493,7 @@ public class CompareOperators {
         } catch (Exception e) {
             // Not numeric, fall through
         }
-        
+
         return scalarFalse;
     }
 }

@@ -50,10 +50,10 @@ public class PerlIO extends PerlModuleBase {
         if (fh instanceof TieHandle) {
             throw new PerlCompilerException("can't get_layers on tied handle");
         }
-        
+
         // Parse optional arguments (output => 1, details => 1, etc.)
         // For now, we ignore these options and just return layer names
-        
+
         RuntimeArray layers = new RuntimeArray();
         if (fh.ioHandle instanceof LayeredIOHandle layeredIOHandle) {
             for (IOLayer layer : layeredIOHandle.activeLayers) {

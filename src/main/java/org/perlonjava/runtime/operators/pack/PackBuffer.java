@@ -214,7 +214,7 @@ public class PackBuffer {
     public void truncateToCharacter(int charPos) {
         if (charPos < 0) charPos = 0;
         if (charPos >= values.size()) return;
-        
+
         while (values.size() > charPos) {
             values.remove(values.size() - 1);
             isCharacter.remove(isCharacter.size() - 1);

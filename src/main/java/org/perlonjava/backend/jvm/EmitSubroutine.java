@@ -5,11 +5,11 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.frontend.semantic.ScopedSymbolTable;
-import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -67,7 +67,7 @@ public class EmitSubroutine {
     // This works correctly but is less efficient for deeply nested loops crossing subroutines.
     // Performance impact is minimal since most control flow is local (uses plain JVM GOTO).
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = true;
-    
+
     // Set to true to enable debug output for control flow checks
     private static final boolean DEBUG_CONTROL_FLOW = false;
 
@@ -87,7 +87,7 @@ public class EmitSubroutine {
         // Retrieve closure variable list
         // Alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-        
+
         // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
         // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
         // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
@@ -108,18 +108,18 @@ public class EmitSubroutine {
                 return false;
             });
         }
-        
+
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
-        
+
         // Add only the filtered visible variables (excluding 'our sub' entries)
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
             newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
         }
-        
+
         // Copy package, subroutine, and flags from the current context
         newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(), ctx.symbolTable.currentPackageIsClass());
         newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
@@ -250,7 +250,7 @@ public class EmitSubroutine {
         }
 
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
-        
+
         // Dereference the scalar to get the CODE reference if needed
         // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)
         // We need to look up the CODE slot from the glob if the scalar contains a string.
@@ -258,26 +258,26 @@ public class EmitSubroutine {
         boolean isScalarVariable = false;
         boolean isLexicalSub = false;
         OperatorNode scalarOpNode = null;
-        
+
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("$")) {
             // This is &$var() or $var->() syntax
             isScalarVariable = true;
             scalarOpNode = operatorNode;
         } else if (node.left instanceof BlockNode blockNode &&
-                   blockNode.elements.size() == 1 &&
-                   blockNode.elements.get(0) instanceof OperatorNode opNode &&
-                   opNode.operator.equals("$")) {
+                blockNode.elements.size() == 1 &&
+                blockNode.elements.get(0) instanceof OperatorNode opNode &&
+                opNode.operator.equals("$")) {
             // This is &{$var} syntax
             isScalarVariable = true;
             scalarOpNode = opNode;
         }
-        
+
         if (isScalarVariable && scalarOpNode != null) {
             // Check if the variable is a lexical subroutine (already a CODE reference)
             // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
             String hiddenVarName = (String) scalarOpNode.getAnnotation("hiddenVarName");
             isLexicalSub = (hiddenVarName != null);
-            
+
             // Only call codeDerefNonStrict when strict refs is disabled AND not a lexical sub
             // This allows symbolic references like: my $x = "main::test"; &$x()
             if (!isLexicalSub && !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
@@ -286,7 +286,7 @@ public class EmitSubroutine {
                 emitterVisitor.pushCurrentPackage();
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "codeDerefNonStrict", 
+                        "codeDerefNonStrict",
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
@@ -479,25 +479,25 @@ public class EmitSubroutine {
         // Now we have a RuntimeScalar representing the current subroutine (__SUB__)
         EmitOperator.handleVoidContext(emitterVisitor);
     }
-    
+
     /**
      * Emits bytecode to check if a RuntimeList returned from a subroutine call
      * is marked with control flow information (last/next/redo/goto/tail call).
      * If marked, cleans the stack and jumps to returnLabel.
-     * 
+     * <p>
      * Pattern:
-     *   DUP                          // Duplicate result for test
-     *   INVOKEVIRTUAL isNonLocalGoto // Check if marked
-     *   IFNE handleControlFlow       // Jump if marked
-     *   POP                          // Discard duplicate
-     *   // Continue with result on stack
-     *   
-     *   handleControlFlow:
-     *     ASTORE temp                // Save marked result
-     *     emitPopInstructions(0)     // Clean stack
-     *     ALOAD temp                 // Load marked result
-     *     GOTO returnLabel           // Jump to return point
-     * 
+     * DUP                          // Duplicate result for test
+     * INVOKEVIRTUAL isNonLocalGoto // Check if marked
+     * IFNE handleControlFlow       // Jump if marked
+     * POP                          // Discard duplicate
+     * // Continue with result on stack
+     * <p>
+     * handleControlFlow:
+     * ASTORE temp                // Save marked result
+     * emitPopInstructions(0)     // Clean stack
+     * ALOAD temp                 // Load marked result
+     * GOTO returnLabel           // Jump to return point
+     *
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
@@ -508,27 +508,27 @@ public class EmitSubroutine {
         // Instead of complex branching with TABLESWITCH or multiple IFs,
         // call a single helper method that does all the checking and returns
         // either the original result or a marked RuntimeControlFlowList
-        
+
         // Stack: [RuntimeList result]
-        
+
         // Check the registry for any pending control flow
         // Get the innermost loop labels (if we're inside a loop)
         LoopLabels innermostLoop = ctx.javaClassInfo.getInnermostLoopLabels();
-        
+
         if (innermostLoop != null) {
             // We're inside a loop - check if non-local control flow was registered
             // Call helper: RuntimeControlFlowRegistry.checkAndWrapIfNeeded(result, labelName)
             // Returns: either the original result or a marked RuntimeControlFlowList
-            
+
             // Stack: [RuntimeList result]
-            
+
             // Push the label name (or null if no label)
             if (innermostLoop.labelName != null) {
                 ctx.mv.visitLdcInsn(innermostLoop.labelName);
             } else {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             }
-            
+
             // Call: RuntimeList result = RuntimeControlFlowRegistry.checkAndWrapIfNeeded(result, labelName)
             // This method checks the registry and returns either:
             // - The original result if no action (action == 0)
@@ -539,7 +539,7 @@ public class EmitSubroutine {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
             // Stack: [RuntimeList result_or_marked]
-            
+
             // No branching needed! The helper method handles everything.
             // The result is either the original or a marked list.
             // The loop level will check if it's marked and handle it.
@@ -551,13 +551,13 @@ public class EmitSubroutine {
      * Emits the block-level dispatcher code that handles control flow for all call sites
      * with the same visible loop state.
      *
-     * @param mv MethodVisitor to emit bytecode
-     * @param emitterVisitor The emitter visitor context
+     * @param mv              MethodVisitor to emit bytecode
+     * @param emitterVisitor  The emitter visitor context
      * @param blockDispatcher The label for this block dispatcher
-     * @param baseSpills Array of spill references that need to be cleaned up
+     * @param baseSpills      Array of spill references that need to be cleaned up
      */
     private static void emitBlockDispatcher(MethodVisitor mv, EmitterVisitor emitterVisitor,
-                                           Label blockDispatcher, JavaClassInfo.SpillRef[] baseSpills) {
+                                            Label blockDispatcher, JavaClassInfo.SpillRef[] baseSpills) {
         Label propagateToCaller = new Label();
         Label checkLoopLabels = new Label();
 

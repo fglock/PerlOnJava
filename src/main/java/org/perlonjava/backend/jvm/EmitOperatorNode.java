@@ -1,7 +1,7 @@
 package org.perlonjava.backend.jvm;
 
-import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 

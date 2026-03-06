@@ -84,8 +84,8 @@ public class FormatModifierValidator {
             if (seen.contains(modifierChar)) {
                 // Duplicate modifier - issue warning
                 WarnDie.warn(
-                    new RuntimeScalar("Duplicate modifier '" + modifierChar + "' after '" + formatChar + "' in " + context),
-                    RuntimeScalarCache.scalarEmptyString);
+                        new RuntimeScalar("Duplicate modifier '" + modifierChar + "' after '" + formatChar + "' in " + context),
+                        RuntimeScalarCache.scalarEmptyString);
             }
             seen.add(modifierChar);
         }
@@ -173,19 +173,19 @@ public class FormatModifierValidator {
     }
 
     /**
-         * Validation rule for a format character
-         */
-        public record ValidationRule(Set<Modifier> allowedModifiers, Set<Modifier> disallowedModifiers) {
-            public ValidationRule(Set<Modifier> allowedModifiers, Set<Modifier> disallowedModifiers) {
-                this.allowedModifiers = allowedModifiers != null ? allowedModifiers : Collections.emptySet();
-                this.disallowedModifiers = disallowedModifiers != null ? disallowedModifiers : Collections.emptySet();
-            }
-
-            public boolean isModifierAllowed(Modifier modifier) {
-                if (!disallowedModifiers.isEmpty()) {
-                    return !disallowedModifiers.contains(modifier);
-                }
-                return allowedModifiers.isEmpty() || allowedModifiers.contains(modifier);
-            }
+     * Validation rule for a format character
+     */
+    public record ValidationRule(Set<Modifier> allowedModifiers, Set<Modifier> disallowedModifiers) {
+        public ValidationRule(Set<Modifier> allowedModifiers, Set<Modifier> disallowedModifiers) {
+            this.allowedModifiers = allowedModifiers != null ? allowedModifiers : Collections.emptySet();
+            this.disallowedModifiers = disallowedModifiers != null ? disallowedModifiers : Collections.emptySet();
         }
+
+        public boolean isModifierAllowed(Modifier modifier) {
+            if (!disallowedModifiers.isEmpty()) {
+                return !disallowedModifiers.contains(modifier);
+            }
+            return allowedModifiers.isEmpty() || allowedModifiers.contains(modifier);
+        }
+    }
 }

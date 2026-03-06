@@ -150,7 +150,7 @@ public class ClassTransformer {
         // Generate constructor and accessors but DEFER their registration
         // These are synthetic methods and should NOT capture class-level lexicals
         // They will be registered AFTER scope exit in StatementParser
-        
+
         // Generate constructor if not present
         if (existingConstructor == null) {
             SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
@@ -186,8 +186,8 @@ public class ClassTransformer {
             if (stmt instanceof BinaryOperatorNode binOp && "=".equals(binOp.operator)) {
                 // This is an assignment - keep it (includes lexical methods)
                 block.elements.add(stmt);
-            } else if (stmt instanceof OperatorNode opNode && 
-                      ("my".equals(opNode.operator) || "state".equals(opNode.operator) || "our".equals(opNode.operator))) {
+            } else if (stmt instanceof OperatorNode opNode &&
+                    ("my".equals(opNode.operator) || "state".equals(opNode.operator) || "our".equals(opNode.operator))) {
                 // This is a bare lexical declaration (my $count;) - skip it
                 // It's already in the symbol table, and adding it to the AST would cause
                 // the constructor to try capturing it as a closure variable

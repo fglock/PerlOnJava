@@ -48,7 +48,7 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put(encodeSpecialVar("N"), new RuntimeScalarReadOnly());
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
-        GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int)(System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
+        GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int) (System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
 
         // Initialize $^X - the name used to execute the current copy of Perl
         // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher

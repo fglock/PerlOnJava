@@ -1,9 +1,9 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.runtime.mro.InheritanceResolver;
-import org.perlonjava.runtime.mro.InheritanceResolver.MROAlgorithm;
 import org.perlonjava.runtime.mro.C3;
 import org.perlonjava.runtime.mro.DFS;
+import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.mro.InheritanceResolver.MROAlgorithm;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;

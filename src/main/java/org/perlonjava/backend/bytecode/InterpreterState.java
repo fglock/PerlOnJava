@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -15,12 +16,6 @@ import java.util.List;
  * Only tracks the call stack for stack trace generation, not PC updates.
  */
 public class InterpreterState {
-    private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
-
-    private static final ThreadLocal<Deque<Integer>> pcStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
-
     /**
      * Thread-local RuntimeScalar holding the runtime current package name.
      *
@@ -50,22 +45,10 @@ public class InterpreterState {
      */
     public static final ThreadLocal<RuntimeScalar> currentPackage =
             ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
-
-    /**
-     * Represents a single interpreter call frame.
-     * Contains minimal information needed for stack trace formatting.
-     */
-    public static class InterpreterFrame {
-        public final InterpretedCode code;
-        public final String packageName;
-        public final String subroutineName;
-
-        public InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
-            this.code = code;
-            this.packageName = packageName;
-            this.subroutineName = subroutineName;
-        }
-    }
+    private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<Deque<Integer>> pcStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
      * Push a new interpreter frame onto the stack.
@@ -127,6 +110,13 @@ public class InterpreterState {
 
     public static List<Integer> getPcStack() {
         return new ArrayList<>(pcStack.get());
+    }
+
+    /**
+         * Represents a single interpreter call frame.
+         * Contains minimal information needed for stack trace formatting.
+         */
+        public record InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
     }
 
 }

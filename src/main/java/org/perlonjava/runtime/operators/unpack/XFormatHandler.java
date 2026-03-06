@@ -11,6 +11,7 @@ import java.util.List;
  */
 public class XFormatHandler implements FormatHandler {
     private static final boolean TRACE_X = false;
+
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         // x format should skip bytes but not add any values to the result

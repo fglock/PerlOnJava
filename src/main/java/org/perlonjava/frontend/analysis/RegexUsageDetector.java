@@ -20,10 +20,14 @@ import java.util.List;
  */
 public class RegexUsageDetector {
 
-    /** Unary operators that perform regex matching/substitution. */
+    /**
+     * Unary operators that perform regex matching/substitution.
+     */
     private static final java.util.Set<String> REGEX_OPERATORS =
             java.util.Set.of("matchRegex", "replaceRegex");
-    /** Binary operators that perform regex matching (=~, !~) or use regex internally (split). */
+    /**
+     * Binary operators that perform regex matching (=~, !~) or use regex internally (split).
+     */
     private static final java.util.Set<String> REGEX_BINARY_OPERATORS =
             java.util.Set.of("=~", "!~", "split");
 

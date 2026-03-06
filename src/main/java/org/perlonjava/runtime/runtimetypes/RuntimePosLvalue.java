@@ -68,6 +68,43 @@ public class RuntimePosLvalue {
         }
     }
 
+    /**
+     * Check if the last match at this position was zero-length with the given pattern.
+     * This is used to prevent infinite loops in global regex matches.
+     */
+    public static boolean hadZeroLengthMatchAt(RuntimeScalar perlVariable, int position, String patternKey) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry == null) {
+            return false;
+        }
+        return cachedEntry.lastMatchWasZeroLength &&
+                cachedEntry.lastMatchPosition == position &&
+                patternKey.equals(cachedEntry.lastMatchPattern);
+    }
+
+    /**
+     * Record that a zero-length match occurred at the given position with the given pattern.
+     */
+    public static void recordZeroLengthMatch(RuntimeScalar perlVariable, int position, String patternKey) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry != null) {
+            cachedEntry.lastMatchWasZeroLength = true;
+            cachedEntry.lastMatchPosition = position;
+            cachedEntry.lastMatchPattern = patternKey;
+        }
+    }
+
+    /**
+     * Clear the zero-length match tracking (called after successful non-zero-length match).
+     */
+    public static void recordNonZeroLengthMatch(RuntimeScalar perlVariable) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry != null) {
+            cachedEntry.lastMatchWasZeroLength = false;
+            cachedEntry.lastMatchPattern = null;
+        }
+    }
+
     private static class PosLvalueScalar extends RuntimeScalar {
         private final RuntimeScalar target;
 
@@ -110,43 +147,6 @@ public class RuntimePosLvalue {
         public RuntimeScalar set(Object value) {
             RuntimePosLvalue.clearZeroLengthMatchTracking(target);
             return super.set(value);
-        }
-    }
-
-    /**
-     * Check if the last match at this position was zero-length with the given pattern.
-     * This is used to prevent infinite loops in global regex matches.
-     */
-    public static boolean hadZeroLengthMatchAt(RuntimeScalar perlVariable, int position, String patternKey) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
-        if (cachedEntry == null) {
-            return false;
-        }
-        return cachedEntry.lastMatchWasZeroLength &&
-                cachedEntry.lastMatchPosition == position &&
-                patternKey.equals(cachedEntry.lastMatchPattern);
-    }
-
-    /**
-     * Record that a zero-length match occurred at the given position with the given pattern.
-     */
-    public static void recordZeroLengthMatch(RuntimeScalar perlVariable, int position, String patternKey) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
-        if (cachedEntry != null) {
-            cachedEntry.lastMatchWasZeroLength = true;
-            cachedEntry.lastMatchPosition = position;
-            cachedEntry.lastMatchPattern = patternKey;
-        }
-    }
-
-    /**
-     * Clear the zero-length match tracking (called after successful non-zero-length match).
-     */
-    public static void recordNonZeroLengthMatch(RuntimeScalar perlVariable) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
-        if (cachedEntry != null) {
-            cachedEntry.lastMatchWasZeroLength = false;
-            cachedEntry.lastMatchPattern = null;
         }
     }
 

@@ -6,7 +6,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 /**
  * File test opcode handlers.
- *
+ * <p>
  * Extracted from BytecodeInterpreter.execute() to reduce method size.
  * Handles all file test operations (opcodes 190-216).
  */
@@ -16,10 +16,10 @@ public class OpcodeHandlerFileTest {
      * Execute file test operation based on opcode.
      * Format: FILETEST_* rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
-     * @param opcode The file test opcode (190-216)
+     * @param opcode    The file test opcode (190-216)
      * @return Updated program counter
      */
     public static int executeFileTest(int[] bytecode, int pc, RuntimeBase[] registers, int opcode) {

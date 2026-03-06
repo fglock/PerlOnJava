@@ -36,17 +36,17 @@ public class UnicodeResolver {
                 // Control characters
                 case "NEL" -> 0x0085;  // NEXT LINE (NEL)
                 case "BOM" -> 0xFEFF;  // BYTE ORDER MARK
-                
+
                 // Spaces (Perl allows both hyphenated and non-hyphenated forms)
                 case "NBSP", "NO-BREAK SPACE" -> 0x00A0;
                 case "ZWSP", "ZERO WIDTH SPACE" -> 0x200B;
                 case "ZWNJ", "ZERO WIDTH NON-JOINER" -> 0x200C;
                 case "ZWJ", "ZERO WIDTH JOINER" -> 0x200D;
-                
+
                 // Try ICU4J's official Unicode name lookup
                 default -> UCharacter.getCharFromName(name);
             };
-            
+
             if (codePoint == -1) {
                 // Check if this is a named sequence (multi-character sequence)
                 // Named sequences are not supported in some contexts like tr///
@@ -91,7 +91,7 @@ public class UnicodeResolver {
      * - Lines starting with - or ! remove a property
      * - Lines starting with & intersect with a property
      *
-     * @param definition The property definition string
+     * @param definition   The property definition string
      * @param recursionSet Set to track recursive property calls
      * @param propertyName The name of the property being parsed (for error messages)
      * @return A character class pattern
@@ -100,16 +100,16 @@ public class UnicodeResolver {
         UnicodeSet resultSet = new UnicodeSet();
         boolean hasIntersection = false;
         UnicodeSet intersectionSet = null;
-        
+
         String[] lines = definition.split("\\n");
         for (String line : lines) {
             line = line.trim();
-            
+
             // Skip empty lines and comments
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
-            
+
             // Handle property references
             if (line.startsWith("+")) {
                 // Add another property
@@ -158,16 +158,16 @@ public class UnicodeResolver {
                     // Range
                     String startHex = parts[0].trim();
                     String endHex = parts[1].trim();
-                    
+
                     // Check if they're valid hex strings
                     if (!startHex.matches("[0-9A-Fa-f]+") || !endHex.matches("[0-9A-Fa-f]+")) {
                         throw new IllegalArgumentException("Can't find Unicode property definition \"" + line.trim() + "\" in expansion of " + propertyName);
                     }
-                    
+
                     try {
                         long start = Long.parseLong(startHex, 16);
                         long end = Long.parseLong(endHex, 16);
-                        
+
                         if (start > 0x10FFFF) {
                             throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
                         }
@@ -177,7 +177,7 @@ public class UnicodeResolver {
                         if (start > end) {
                             throw new IllegalArgumentException("Illegal range in \"" + line.trim() + "\" in expansion of " + propertyName);
                         }
-                        
+
                         resultSet.add((int) start, (int) end);
                     } catch (NumberFormatException e) {
                         throw new IllegalArgumentException("Can't find Unicode property definition \"" + line.trim() + "\" in expansion of " + propertyName);
@@ -185,20 +185,20 @@ public class UnicodeResolver {
                 }
             }
         }
-        
+
         // Apply intersection if any
         if (hasIntersection) {
             resultSet.retainAll(intersectionSet);
         }
-        
+
         return resultSet.toPattern(false);
     }
-    
+
     /**
      * Resolves a property reference (like utf8::InHiragana or main::IsMyProp).
      *
-     * @param propRef The property reference
-     * @param recursionSet Set to track recursive property calls
+     * @param propRef        The property reference
+     * @param recursionSet   Set to track recursive property calls
      * @param parentProperty The parent property name (for error messages)
      * @return A character class pattern
      */
@@ -219,7 +219,7 @@ public class UnicodeResolver {
             chain.append(propRef);
             throw new IllegalArgumentException("Infinite recursion in user-defined property \"" + propRef + "\" in expansion of " + chain);
         }
-        
+
         // Remove utf8:: prefix if present
         if (propRef.startsWith("utf8::")) {
             String stdProp = propRef.substring(6);
@@ -231,15 +231,15 @@ public class UnicodeResolver {
                 propRef = "main::" + stdProp;
             }
         }
-        
+
         // Try as user-defined property
         return translateUnicodeProperty(propRef, false, recursionSet);
     }
-    
+
     /**
      * Tries to look up a user-defined property by calling a Perl subroutine.
      *
-     * @param property The property name (e.g., "IsMyUpper" or "main::IsMyUpper")
+     * @param property     The property name (e.g., "IsMyUpper" or "main::IsMyUpper")
      * @param recursionSet Set to track recursive property calls
      * @return The property definition string, or null if not found
      */
@@ -247,34 +247,34 @@ public class UnicodeResolver {
         // Add to recursion set
         Set<String> newRecursionSet = new HashSet<>(recursionSet);
         newRecursionSet.add(property);
-        
+
         // Build the full subroutine name
         String subName = property;
         if (!subName.contains("::")) {
             // Try in main package
             subName = "main::" + subName;
         }
-        
+
         // Look up the subroutine
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
         if (codeRef == null || !codeRef.getDefinedBoolean()) {
             return null;
         }
-        
+
         try {
             // Call the subroutine with an empty argument list
             RuntimeArray args = new RuntimeArray();
             RuntimeList result = RuntimeCode.apply(codeRef, args, RuntimeContextType.SCALAR);
-            
+
             if (result.elements.isEmpty()) {
                 return "";
             }
-            
+
             String definition = result.elements.getFirst().toString();
-            
+
             // Parse and return the property definition
             return parseUserDefinedProperty(definition, newRecursionSet, subName);
-            
+
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
             String msg = e.getMessage();
@@ -294,7 +294,7 @@ public class UnicodeResolver {
     public static String translateUnicodeProperty(String property, boolean negated) {
         return translateUnicodeProperty(property, negated, new HashSet<>());
     }
-    
+
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
         try {
             // Check for user-defined properties (Is... or In...)
@@ -305,7 +305,7 @@ public class UnicodeResolver {
                 }
                 // Property not found - fall through to throw error below
             }
-            
+
             // Special cases - Perl XPosix properties not natively supported in Java
             switch (property) {
                 case "lb=cr":
@@ -388,7 +388,7 @@ public class UnicodeResolver {
                     break;
                 }
             }
-            
+
             // Map Perl block aliases to Unicode block names
             if (property.equalsIgnoreCase("ASCII")) {
                 property = "Basic_Latin";

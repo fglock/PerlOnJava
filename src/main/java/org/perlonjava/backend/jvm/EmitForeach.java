@@ -5,7 +5,6 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
-
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -35,7 +34,7 @@ public class EmitForeach {
     // Marked returns propagate through normal return paths all the way to the top level.
     // Local control flow (within the same loop) still uses fast JVM GOTO instructions.
     private static final boolean ENABLE_LOOP_HANDLERS = false;
-    
+
     // Set to true to enable debug output for loop control flow
     private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
 
@@ -277,17 +276,17 @@ public class EmitForeach {
         // This handles cases like: for (split(//, $_)) where the outer context
         // may have already localized $_, making it undef when we evaluate the list.
         boolean isStatementModifier = !node.useNewScope;
-        boolean isGlobalUnderscore = node.needsArrayOfAlias || 
-                                     (loopVariableIsGlobal && globalVarName != null && 
-                                      (globalVarName.equals("main::_") || globalVarName.endsWith("::_")));
-        boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null && 
-                                         (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
-        
+        boolean isGlobalUnderscore = node.needsArrayOfAlias ||
+                (loopVariableIsGlobal && globalVarName != null &&
+                        (globalVarName.equals("main::_") || globalVarName.endsWith("::_")));
+        boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
+                (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
+
         int savedLoopVarIndex = -1;
         boolean needSaveRestoreLexicalLoopVar = !isDeclaredInFor && !isReferenceAliasing
                 && !loopVariableIsGlobal && variableNode instanceof OperatorNode;
         if (needSaveRestoreLexicalLoopVar) {
-            String varName = extractSimpleVariableName((OperatorNode) variableNode);
+            String varName = extractSimpleVariableName(variableNode);
             if (varName != null) {
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                 if (varIndex >= 0) {
@@ -326,7 +325,7 @@ public class EmitForeach {
                     false);
             mv.visitInsn(Opcodes.POP);
         }
-        
+
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv, true);
 
         int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
@@ -335,7 +334,7 @@ public class EmitForeach {
         if (node.preEvaluatedArrayIndex >= 0) {
             // Use the pre-evaluated array that was stored before local $_ was emitted
             mv.visitVarInsn(Opcodes.ALOAD, node.preEvaluatedArrayIndex);
-            
+
             // For statement modifiers, localize $_ ourselves
             if (needLocalizeUnderscore) {
                 mv.visitLdcInsn(globalVarName);
@@ -346,7 +345,7 @@ public class EmitForeach {
                         false);
                 mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
             }
-            
+
             // Get iterator from the pre-evaluated array
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
@@ -694,14 +693,14 @@ public class EmitForeach {
         if (ENABLE_LOOP_HANDLERS) {
             // Get parent loop labels (if any)
             LoopLabels parentLoopLabels = emitterVisitor.ctx.javaClassInfo.getParentLoopLabels();
-            
+
             // Get goto labels from current scope (TODO: implement getGotoLabels in EmitterContext)
             java.util.Map<String, org.objectweb.asm.Label> gotoLabels = null;  // For now
-            
+
             // Check if this is the outermost loop in the main program
-            boolean isMainProgramOutermostLoop = emitterVisitor.ctx.compilerOptions.isMainProgram 
+            boolean isMainProgramOutermostLoop = emitterVisitor.ctx.compilerOptions.isMainProgram
                     && parentLoopLabels == null;
-            
+
             // Emit the handler
             emitControlFlowHandler(
                     mv,
@@ -711,7 +710,7 @@ public class EmitForeach {
                     gotoLabels,
                     isMainProgramOutermostLoop);
         }
-        
+
         // Restore dynamic variable stack for our localization
         if ((needLocalizeUnderscore || needLocalizeGlobalLoopVar) && dynamicIndex != -1) {
             mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
@@ -721,7 +720,7 @@ public class EmitForeach {
                     "(I)V",
                     false);
         }
-        
+
         Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
@@ -747,12 +746,12 @@ public class EmitForeach {
     /**
      * Emits control flow handler for a foreach loop.
      * Handles marked RuntimeList objects (last/next/redo/goto) that propagate from nested calls.
-     * 
-     * @param mv The MethodVisitor to emit bytecode to
-     * @param loopLabels The loop labels (controlFlowHandler, next, redo, last)
-     * @param parentLoopLabels The parent loop's labels (null if this is the outermost loop)
-     * @param returnLabel The subroutine's return label
-     * @param gotoLabels Map of goto label names to ASM Labels in current scope
+     *
+     * @param mv                         The MethodVisitor to emit bytecode to
+     * @param loopLabels                 The loop labels (controlFlowHandler, next, redo, last)
+     * @param parentLoopLabels           The parent loop's labels (null if this is the outermost loop)
+     * @param returnLabel                The subroutine's return label
+     * @param gotoLabels                 Map of goto label names to ASM Labels in current scope
      * @param isMainProgramOutermostLoop True if this is the outermost loop in main program (should throw error instead of returning)
      */
     private static void emitControlFlowHandler(
@@ -762,23 +761,23 @@ public class EmitForeach {
             org.objectweb.asm.Label returnLabel,
             java.util.Map<String, org.objectweb.asm.Label> gotoLabels,
             boolean isMainProgramOutermostLoop) {
-        
+
         if (!ENABLE_LOOP_HANDLERS) {
             return;  // Feature not enabled yet
         }
-        
+
         if (DEBUG_LOOP_CONTROL_FLOW) {
             System.out.println("[DEBUG] Emitting control flow handler for loop: " + loopLabels.labelName);
         }
-        
+
         // Handler label
         mv.visitLabel(loopLabels.controlFlowHandler);
-        
+
         // Stack: [RuntimeControlFlowList] - guaranteed clean by call site or parent handler
-        
+
         // Cast to RuntimeControlFlowList (we know it's marked)
         mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-        
+
         // Get control flow type (enum)
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
@@ -786,21 +785,21 @@ public class EmitForeach {
                 "getControlFlowType",
                 "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
                 false);
-        
+
         // Convert enum to ordinal for switch
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/ControlFlowType",
                 "ordinal",
                 "()I",
                 false);
-        
+
         // Tableswitch on control flow type
         Label handleLast = new Label();
         Label handleNext = new Label();
         Label handleRedo = new Label();
         Label handleGoto = new Label();
         Label propagateToParent = new Label();
-        
+
         mv.visitTableSwitchInsn(
                 0,  // min (LAST.ordinal())
                 3,  // max (GOTO.ordinal())
@@ -810,22 +809,22 @@ public class EmitForeach {
                 handleRedo,   // 2: REDO
                 handleGoto    // 3: GOTO
         );
-        
+
         // Handle LAST
         mv.visitLabel(handleLast);
         emitLabelCheck(mv, loopLabels.labelName, loopLabels.lastLabel, propagateToParent);
         // emitLabelCheck never returns (either matches and jumps to target, or jumps to noMatch)
-        
+
         // Handle NEXT
         mv.visitLabel(handleNext);
         emitLabelCheck(mv, loopLabels.labelName, loopLabels.nextLabel, propagateToParent);
         // emitLabelCheck never returns
-        
+
         // Handle REDO
         mv.visitLabel(handleRedo);
         emitLabelCheck(mv, loopLabels.labelName, loopLabels.redoLabel, propagateToParent);
         // emitLabelCheck never returns
-        
+
         // Handle GOTO
         mv.visitLabel(handleGoto);
         if (gotoLabels != null && !gotoLabels.isEmpty()) {
@@ -845,16 +844,16 @@ public class EmitForeach {
                         false);
                 Label notThisGoto = new Label();
                 mv.visitJumpInsn(Opcodes.IFEQ, notThisGoto);
-                
+
                 // Match! Pop marked RuntimeList and jump to goto label
                 mv.visitInsn(Opcodes.POP);
                 mv.visitJumpInsn(Opcodes.GOTO, entry.getValue());
-                
+
                 mv.visitLabel(notThisGoto);
             }
         }
         // Fall through to propagateToParent if no goto label matched
-        
+
         // Propagate to parent handler or return
         mv.visitLabel(propagateToParent);
         if (parentLoopLabels != null && parentLoopLabels.controlFlowHandler != null) {
@@ -863,23 +862,23 @@ public class EmitForeach {
         } else if (isMainProgramOutermostLoop) {
             // Outermost loop in main program - throw error immediately
             // Stack: [RuntimeControlFlowList]
-            
+
             // Cast to RuntimeControlFlowList
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-            
+
             // Get the marker field
             mv.visitFieldInsn(Opcodes.GETFIELD,
                     "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                     "marker",
                     "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-            
+
             // Call marker.throwError() - this method never returns
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/ControlFlowMarker",
                     "throwError",
                     "()V",
                     false);
-            
+
             // Should never reach here (method throws), but add RETURN for verifier
             mv.visitInsn(Opcodes.ACONST_NULL);
             mv.visitInsn(Opcodes.ARETURN);
@@ -888,28 +887,28 @@ public class EmitForeach {
             mv.visitJumpInsn(Opcodes.GOTO, returnLabel);
         }
     }
-    
+
     /**
      * Emits bytecode to check if a label matches the current loop, and jump if it does.
      * If the label is null (unlabeled) or matches, POPs the marked RuntimeList and jumps to target.
      * Otherwise, falls through to next handler.
-     * 
-     * @param mv The MethodVisitor
+     *
+     * @param mv            The MethodVisitor
      * @param loopLabelName The name of the current loop (null if unlabeled)
-     * @param targetLabel The ASM Label to jump to if this label matches
-     * @param noMatch The label to jump to if the label doesn't match
+     * @param targetLabel   The ASM Label to jump to if this label matches
+     * @param noMatch       The label to jump to if the label doesn't match
      */
     private static void emitLabelCheck(
             MethodVisitor mv,
             String loopLabelName,
             Label targetLabel,
             Label noMatch) {
-        
+
         // SIMPLIFIED PATTERN to avoid ASM frame computation issues:
         // Use a helper method that returns boolean instead of complex branching
-        
+
         // Stack: [RuntimeControlFlowList]
-        
+
         // Call helper method: RuntimeControlFlowList.matchesLabel(String loopLabel)
         // This returns true if the control flow label matches the loop label
         mv.visitInsn(Opcodes.DUP);  // Duplicate for use after check
@@ -923,16 +922,16 @@ public class EmitForeach {
                 "matchesLabel",
                 "(Ljava/lang/String;)Z",
                 false);
-        
+
         // Stack: [RuntimeControlFlowList] [boolean]
-        
+
         // If match, pop and jump to target
         mv.visitJumpInsn(Opcodes.IFEQ, noMatch);
-        
+
         // Match! Pop RuntimeControlFlowList and jump to target
         mv.visitInsn(Opcodes.POP);
         mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
-        
+
         // No match label is handled by caller (falls through)
     }
 
@@ -1004,29 +1003,29 @@ public class EmitForeach {
             }
         }
     }
-    
+
     /**
      * Emit bytecode to check RuntimeControlFlowRegistry and handle any registered control flow.
      * This is called after loop body execution to catch non-local control flow markers.
-     * 
-     * @param mv The MethodVisitor
+     *
+     * @param mv         The MethodVisitor
      * @param loopLabels The current loop's labels
-     * @param redoLabel The redo target
-     * @param nextLabel The next/continue target  
-     * @param lastLabel The last/exit target
+     * @param redoLabel  The redo target
+     * @param nextLabel  The next/continue target
+     * @param lastLabel  The last/exit target
      */
-    private static void emitRegistryCheck(MethodVisitor mv, LoopLabels loopLabels, 
-                                         Label redoLabel, Label nextLabel, Label lastLabel) {
+    private static void emitRegistryCheck(MethodVisitor mv, LoopLabels loopLabels,
+                                          Label redoLabel, Label nextLabel, Label lastLabel) {
         // ULTRA-SIMPLE pattern to avoid ASM issues:
         // Call a single helper method that does ALL the checking and returns an action code
-        
+
         String labelName = loopLabels.labelName;
         if (labelName != null) {
             mv.visitLdcInsn(labelName);
         } else {
             mv.visitInsn(Opcodes.ACONST_NULL);
         }
-        
+
         // Call: int action = RuntimeControlFlowRegistry.checkLoopAndGetAction(String labelName)
         // Returns: 0=none, 1=last, 2=next, 3=redo
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -1034,7 +1033,7 @@ public class EmitForeach {
                 "checkLoopAndGetAction",
                 "(Ljava/lang/String;)I",
                 false);
-        
+
         // Use TABLESWITCH for clean bytecode.
         // IMPORTANT: action 0 means "no marker" and must *not* jump.
         Label noAction = new Label();

@@ -2,12 +2,8 @@ package org.perlonjava.runtime.perlmodule;
 
 import com.ibm.icu.text.CharsetDetector;
 import com.ibm.icu.text.CharsetMatch;
-import org.perlonjava.runtime.runtimetypes.RuntimeArray;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarReadOnly;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;

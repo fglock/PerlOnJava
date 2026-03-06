@@ -42,9 +42,6 @@ public class RegexPreprocessor {
     // WIP:
     // named capture (?<one> ... ) replace underscore in name
 
-    static int captureGroupCount;
-    static boolean deferredUnicodePropertyEncountered;
-    static boolean inlinePFlagEncountered;
     private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_FOLDS = Map.of(
             0x00B5, 0x03BC,
             0x212A, 0x006B,
@@ -55,6 +52,9 @@ public class RegexPreprocessor {
             0x006B, 0x212A,
             0x00E5, 0x212B
     );
+    static int captureGroupCount;
+    static boolean deferredUnicodePropertyEncountered;
+    static boolean inlinePFlagEncountered;
 
     static void markDeferredUnicodePropertyEncountered() {
         deferredUnicodePropertyEncountered = true;
@@ -91,12 +91,12 @@ public class RegexPreprocessor {
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
         s = normalizeQuantifiers(s);
-        
+
         // Expand multi-character case folds when case-insensitive flag is set
         if (regexFlags.isCaseInsensitive()) {
             s = expandMultiCharFolds(s);
         }
-        
+
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
@@ -107,38 +107,38 @@ public class RegexPreprocessor {
      * Escape unescaped braces that don't form valid quantifiers.
      * Perl allows invalid quantifier braces and treats them as literals.
      * Java Pattern.compile() rejects them, so we must escape them.
-     *
+     * <p>
      * Valid quantifiers: {n}, {n,}, {n,m} where n and m are non-negative integers
      * Invalid quantifiers: {(.*?)}, {abc}, {}, {,5}, etc.
-     *
+     * <p>
      * IMPORTANT: This is a high-risk preprocessing step that modifies brace characters.
      * Known edge cases that must be handled correctly:
-     *
+     * <p>
      * 1. ESCAPE SEQUENCES WITH BRACES (must NOT be escaped):
-     *    - \N{name} - Named Unicode character (e.g., \N{LATIN SMALL LETTER A})
-     *    - \x{...} - Hexadecimal character code (e.g., \x{1F600})
-     *    - \o{...} - Octal character code (e.g., \o{777})
-     *    - \p{...} - Unicode property (e.g., \p{Letter})
-     *    - \P{...} - Negated Unicode property (e.g., \P{Number})
-     *    - \g{...} - Named or relative backreference (e.g., \g{name}, \g{-1})
-     *    Currently handled: N, x, o, p, P, g
-     *
+     * - \N{name} - Named Unicode character (e.g., \N{LATIN SMALL LETTER A})
+     * - \x{...} - Hexadecimal character code (e.g., \x{1F600})
+     * - \o{...} - Octal character code (e.g., \o{777})
+     * - \p{...} - Unicode property (e.g., \p{Letter})
+     * - \P{...} - Negated Unicode property (e.g., \P{Number})
+     * - \g{...} - Named or relative backreference (e.g., \g{name}, \g{-1})
+     * Currently handled: N, x, o, p, P, g
+     * <p>
      * 2. CHARACTER CLASSES (braces inside [...] are always literal):
-     *    - [a{3}] means "match 'a', '{', '3', or '}'" not "match 'aaa'"
-     *    - Nested classes like [a-z[0-9]{3}] must track nesting depth
-     *
+     * - [a{3}] means "match 'a', '{', '3', or '}'" not "match 'aaa'"
+     * - Nested classes like [a-z[0-9]{3}] must track nesting depth
+     * <p>
      * 3. VALID QUANTIFIERS (must NOT be escaped):
-     *    - {n} - exactly n times (e.g., a{3})
-     *    - {n,} - n or more times (e.g., a{2,})
-     *    - {n,m} - between n and m times (e.g., a{2,5})
-     *
+     * - {n} - exactly n times (e.g., a{3})
+     * - {n,} - n or more times (e.g., a{2,})
+     * - {n,m} - between n and m times (e.g., a{2,5})
+     * <p>
      * 4. ALREADY ESCAPED BRACES (must NOT be double-escaped):
-     *    - \{ and \} should remain as-is
-     *    - Track backslash escaping carefully to avoid double-escaping
-     *
+     * - \{ and \} should remain as-is
+     * - Track backslash escaping carefully to avoid double-escaping
+     * <p>
      * 5. POSSESSIVE AND LAZY QUANTIFIERS:
-     *    - {n}+ (possessive) and {n}? (lazy) should work with valid quantifiers
-     *
+     * - {n}+ (possessive) and {n}? (lazy) should work with valid quantifiers
+     * <p>
      * POTENTIAL ISSUES NOT YET HANDLED:
      * - Extended bracketed character classes: (?[...]) may contain braces
      * - Conditional patterns: (?(condition){yes}{no}) uses braces for branches
@@ -146,7 +146,7 @@ public class RegexPreprocessor {
      * - Code blocks: (?{...}) and (??{...}) use braces but are handled elsewhere
      * - Named capture definitions: (?<name{suffix}>...) - are braces allowed in names?
      * - Unicode named sequences: \N{...} may contain nested braces in some contexts
-     *
+     * <p>
      * If new regex features are added that use braces, this function MUST be updated.
      * Test changes thoroughly with unit/regex/unescaped_braces.t and regex test suite.
      */
@@ -164,7 +164,7 @@ public class RegexPreprocessor {
 
                 // Check if this is an escape sequence that uses braces: \N{...}, \x{...}, \o{...}, \p{...}, \P{...}, \g{...}
                 if ((c == 'N' || c == 'x' || c == 'o' || c == 'p' || c == 'P' || c == 'g') &&
-                    i + 1 < pattern.length() && pattern.charAt(i + 1) == '{') {
+                        i + 1 < pattern.length() && pattern.charAt(i + 1) == '{') {
                     // Skip the entire escape sequence with braces
                     result.append('{');
                     i++; // Move past '{'
@@ -273,11 +273,7 @@ public class RegexPreprocessor {
         if (content.matches("\\d+,")) {
             return true; // {n,}
         }
-        if (content.matches("\\d+,\\d+")) {
-            return true; // {n,m}
-        }
-
-        return false;
+        return content.matches("\\d+,\\d+"); // {n,m}
     }
 
     /**
@@ -322,10 +318,10 @@ public class RegexPreprocessor {
         int len = pattern.length();
         boolean inCharClass = false;
         boolean escaped = false;
-        
+
         while (i < len) {
             char ch = pattern.charAt(i);
-            
+
             // Track if we're inside a character class [...]
             if (!escaped) {
                 if (ch == '[') {
@@ -334,7 +330,7 @@ public class RegexPreprocessor {
                     inCharClass = false;
                 }
             }
-            
+
             // Handle escape sequences
             if (ch == '\\' && !escaped) {
                 escaped = true;
@@ -342,7 +338,7 @@ public class RegexPreprocessor {
                 i++;
                 continue;
             }
-            
+
             // If this is an escaped character or we're in a char class, don't expand
             if (escaped || inCharClass) {
                 if (!escaped && inCharClass) {
@@ -360,7 +356,7 @@ public class RegexPreprocessor {
                 i++;
                 continue;
             }
-            
+
             // Check if this character has a multi-char fold
             int codePoint = pattern.codePointAt(i);
             if (MultiCharFoldMapper.hasMultiCharFold(codePoint)) {
@@ -388,7 +384,7 @@ public class RegexPreprocessor {
                         }
                     }
                 }
-                
+
                 if (!foundReverseFold) {
                     String specialExpansion = expandSpecialSingleCharFold(codePoint);
                     if (specialExpansion != null) {
@@ -399,10 +395,10 @@ public class RegexPreprocessor {
                     i += Character.charCount(codePoint);
                 }
             }
-            
+
             escaped = false;
         }
-        
+
         return result.toString();
     }
 
@@ -498,7 +494,7 @@ public class RegexPreprocessor {
         }
         sb.appendCodePoint(codePoint);
     }
-    
+
     /**
      * Remove underscores from \x{...} and \o{...} escape sequences.
      * Perl allows underscores in numeric literals for readability, but Java doesn't.

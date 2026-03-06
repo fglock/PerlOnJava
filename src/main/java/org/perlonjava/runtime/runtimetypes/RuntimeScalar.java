@@ -1,8 +1,8 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
-import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.math.BigInteger;
@@ -309,7 +309,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for getInt()
     public int getInt() {
-        if (type == INTEGER ) {
+        if (type == INTEGER) {
             return (int) this.value;
         }
         return getIntLarge();
@@ -524,7 +524,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for getDouble()
     public double getDouble() {
-        if (type == INTEGER ) {
+        if (type == INTEGER) {
             return (int) this.value;
         }
         return getDoubleLarge();
@@ -752,7 +752,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     @Override
     // Inlineable fast path for toString()
-    public String  toString() {
+    public String toString() {
         if (type == STRING || type == BYTE_STRING) {
             return (String) this.value;
         }
@@ -776,7 +776,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case CODE -> Overload.stringify(this).toString();
             default -> {
                 if (type == REGEX) yield value.toString();
-                yield  Overload.stringify(this).toString();
+                yield Overload.stringify(this).toString();
             }
         };
     }
@@ -1453,7 +1453,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean(); // 10
             case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean(); // 11
             // Reference types (with REFERENCE_BIT) fall through to default
-            default -> type == CODE ? ((RuntimeCode) value).defined() : true;
+            default -> type != CODE || ((RuntimeCode) value).defined();
         };
     }
 
@@ -1554,8 +1554,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Slow path for $v++
     private RuntimeScalar postAutoIncrementLarge() {
         // For undef, the old value should be 0, not undef
-        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ? 
-            new RuntimeScalar(0) : new RuntimeScalar(this);
+        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ?
+                new RuntimeScalar(0) : new RuntimeScalar(this);
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {

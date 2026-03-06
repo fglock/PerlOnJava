@@ -65,8 +65,8 @@ public class StringParser {
             LexerToken currentToken = tokens.get(tokPos);
             if (currentToken.type == LexerTokenType.EOF) {
                 String errorMsg = endDelim == '/'
-                    ? "Search pattern not terminated"
-                    : "Can't find string terminator " + endDelim + " anywhere before EOF";
+                        ? "Search pattern not terminated"
+                        : "Can't find string terminator " + endDelim + " anywhere before EOF";
                 throw new PerlCompilerException(tokPos, errorMsg, ctx.errorUtil);
             }
 

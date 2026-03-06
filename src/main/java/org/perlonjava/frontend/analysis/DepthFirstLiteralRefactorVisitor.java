@@ -72,14 +72,14 @@ public class DepthFirstLiteralRefactorVisitor implements Visitor {
             if (DEBUG) {
                 System.err.println("DEBUG: Refactoring ListNode with " + node.elements.size() + " elements");
                 System.err.println("DEBUG: First few elements: " +
-                    node.elements.stream().limit(3).map(Node::toString).collect(java.util.stream.Collectors.joining(", ")));
+                        node.elements.stream().limit(3).map(Node::toString).collect(java.util.stream.Collectors.joining(", ")));
             }
             List<Node> original = node.elements;
             node.elements = LargeNodeRefactorer.forceRefactorElements(node.elements, node.getIndex());
             if (DEBUG) {
                 System.err.println("DEBUG: After refactoring: " + node.elements.size() + " elements");
                 System.err.println("DEBUG: Refactored structure: " + node.elements.stream().limit(2)
-                    .map(n -> n.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(", ")));
+                        .map(n -> n.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(", ")));
             }
         }
     }

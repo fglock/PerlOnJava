@@ -172,7 +172,7 @@ public class UnpackGroupProcessor {
 
             // Push group baseline for this repetition
             state.pushGroupBase();
-            
+
             try {
                 // Call unpack recursively with the group template
                 RuntimeList groupResult = unpackFunction.unpack(effectiveContent, state, startsWithU, modeStack);
@@ -576,7 +576,7 @@ public class UnpackGroupProcessor {
                     positionHistory.remove(0);
                 }
             }
-            
+
             // Pop the group baseline after processing this repetition
             state.popGroupBase();
         }

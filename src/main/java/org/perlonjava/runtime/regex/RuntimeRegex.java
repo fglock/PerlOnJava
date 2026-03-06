@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.regex;
 
-import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
@@ -60,12 +60,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
-    // Indicates if \G assertion is used (set from regexFlags during compilation)
-    private boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
     String patternString;
+    boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
+    // Indicates if \G assertion is used (set from regexFlags during compilation)
+    private boolean useGAssertion = false;
     // Flags for regex behavior
     private RegexFlags regexFlags;
     // Replacement string for substitutions
@@ -73,7 +74,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
-    boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     private boolean deferredUserDefinedUnicodeProperties = false;
 
     public RuntimeRegex() {
@@ -413,7 +413,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("matchRegexDirect: pattern=" + regex.pattern.pattern() +
-                               " input=" + string.toString() + " ctx=" + ctx);
+                    " input=" + string.toString() + " ctx=" + ctx);
         }
 
         if (regex.regexFlags.isMatchExactlyOnce() && regex.matched) {
@@ -438,7 +438,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
         boolean isPosDefined = posScalar.getDefinedBoolean();
         int startPos = isPosDefined ? posScalar.getInt() : 0;
-        
+
         // Only use pos() for /g matches - non-/g matches always start from 0
         if (!regex.regexFlags.isGlobalMatch()) {
             isPosDefined = false;
@@ -477,88 +477,88 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // state and break tests that rely on @-/@+.
 
         try {
-        while (matcher.find()) {
-            // If \G is used, ensure the match starts at the expected position
-            if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
-                break;
-            }
-
-            found = true;
-            int captureCount = matcher.groupCount();
-
-            // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
-            globalMatcher = matcher;
-            globalMatchString = inputStr;
-            if (captureCount > 0) {
-                lastCaptureGroups = new String[captureCount];
-                for (int i = 0; i < captureCount; i++) {
-                    lastCaptureGroups[i] = matcher.group(i + 1);
+            while (matcher.find()) {
+                // If \G is used, ensure the match starts at the expected position
+                if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
+                    break;
                 }
-            } else {
-                lastCaptureGroups = null;
-            }
-            lastMatchedString = matcher.group(0);
-            lastMatchStart = matcher.start();
-            lastMatchEnd = matcher.end();
 
-            if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
-                // Global match and no captures, in list context return the matched string
-                String matchedStr = matcher.group(0);
-                matchedGroups.add(new RuntimeScalar(matchedStr));
-            } else {
-                // save captures in return list if needed
-                if (ctx == RuntimeContextType.LIST) {
-                    for (int i = 1; i <= captureCount; i++) {
-                        String matchedStr = matcher.group(i);
-                        if (matchedStr != null) {
-                            matchedGroups.add(new RuntimeScalar(matchedStr));
+                found = true;
+                int captureCount = matcher.groupCount();
+
+                // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
+                globalMatcher = matcher;
+                globalMatchString = inputStr;
+                if (captureCount > 0) {
+                    lastCaptureGroups = new String[captureCount];
+                    for (int i = 0; i < captureCount; i++) {
+                        lastCaptureGroups[i] = matcher.group(i + 1);
+                    }
+                } else {
+                    lastCaptureGroups = null;
+                }
+                lastMatchedString = matcher.group(0);
+                lastMatchStart = matcher.start();
+                lastMatchEnd = matcher.end();
+
+                if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
+                    // Global match and no captures, in list context return the matched string
+                    String matchedStr = matcher.group(0);
+                    matchedGroups.add(new RuntimeScalar(matchedStr));
+                } else {
+                    // save captures in return list if needed
+                    if (ctx == RuntimeContextType.LIST) {
+                        for (int i = 1; i <= captureCount; i++) {
+                            String matchedStr = matcher.group(i);
+                            if (matchedStr != null) {
+                                matchedGroups.add(new RuntimeScalar(matchedStr));
+                            }
                         }
                     }
                 }
-            }
 
-            if (regex.regexFlags.isGlobalMatch()) {
-                // Update the position for the next match
-                int matchStart = matcher.start();
-                int matchEnd = matcher.end();
-                
-                // Detect zero-length match that would cause infinite loop
-                if (matchEnd == matchStart && matchStart == previousMatchEnd) {
-                    // Consecutive zero-length match at same position - advance by 1 or stop
-                    if (matchEnd >= inputStr.length()) {
-                        // At end of string, stop matching
-                        break;
+                if (regex.regexFlags.isGlobalMatch()) {
+                    // Update the position for the next match
+                    int matchStart = matcher.start();
+                    int matchEnd = matcher.end();
+
+                    // Detect zero-length match that would cause infinite loop
+                    if (matchEnd == matchStart && matchStart == previousMatchEnd) {
+                        // Consecutive zero-length match at same position - advance by 1 or stop
+                        if (matchEnd >= inputStr.length()) {
+                            // At end of string, stop matching
+                            break;
+                        }
+                        // In middle of string, advance by 1 to avoid infinite loop
+                        matchEnd = matchStart + 1;
                     }
-                    // In middle of string, advance by 1 to avoid infinite loop
-                    matchEnd = matchStart + 1;
-                }
-                
-                previousMatchEnd = matchEnd;
-                
-                if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
-                    // Set pos to the end of the current match to prepare for the next search
-                    posScalar.set(matchEnd);
-                    // Record zero-length match for cross-call tracking
-                    if (matchEnd == matchStart) {
-                        RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
+
+                    previousMatchEnd = matchEnd;
+
+                    if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
+                        // Set pos to the end of the current match to prepare for the next search
+                        posScalar.set(matchEnd);
+                        // Record zero-length match for cross-call tracking
+                        if (matchEnd == matchStart) {
+                            RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
+                        } else {
+                            RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                        }
+                        break; // Break out of the loop after the first match in SCALAR context
                     } else {
-                        RuntimePosLvalue.recordNonZeroLengthMatch(string);
-                    }
-                    break; // Break out of the loop after the first match in SCALAR context
-                } else {
-                    startPos = matchEnd;
-                    posScalar.set(startPos);
-                    // Update matcher region if we advanced past a zero-length match
-                    if (startPos > matchStart) {
-                        matcher.region(startPos, inputStr.length());
+                        startPos = matchEnd;
+                        posScalar.set(startPos);
+                        // Update matcher region if we advanced past a zero-length match
+                        if (startPos > matchStart) {
+                            matcher.region(startPos, inputStr.length());
+                        }
                     }
                 }
-            }
 
-            if (!regex.regexFlags.isGlobalMatch()) {
-                break;
+                if (!regex.regexFlags.isGlobalMatch()) {
+                    break;
+                }
             }
-        }
         } catch (RegexTimeoutException e) {
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = false;
@@ -632,9 +632,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * Regex matching with timeout wrapper to handle catastrophic backtracking.
      * Runs the regex in a separate thread with a timeout.
      *
-     * @param quotedRegex The regex pattern object
-     * @param string      The string to match against
-     * @param ctx         The context (LIST, SCALAR, VOID)
+     * @param quotedRegex    The regex pattern object
+     * @param string         The string to match against
+     * @param ctx            The context (LIST, SCALAR, VOID)
      * @param timeoutSeconds Maximum seconds to allow for matching
      * @return Match result, or throws exception if timeout
      */
@@ -754,55 +754,55 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Perform the substitution
         try {
-        while (matcher.find()) {
-            found++;
+            while (matcher.find()) {
+                found++;
 
-            // Initialize $1, $2, @+, @- only when we have a match
-            globalMatcher = matcher;
-            globalMatchString = inputStr;
-            if (matcher.groupCount() > 0) {
-                lastCaptureGroups = new String[matcher.groupCount()];
-                for (int i = 0; i < matcher.groupCount(); i++) {
-                    lastCaptureGroups[i] = matcher.group(i + 1);
+                // Initialize $1, $2, @+, @- only when we have a match
+                globalMatcher = matcher;
+                globalMatchString = inputStr;
+                if (matcher.groupCount() > 0) {
+                    lastCaptureGroups = new String[matcher.groupCount()];
+                    for (int i = 0; i < matcher.groupCount(); i++) {
+                        lastCaptureGroups[i] = matcher.group(i + 1);
+                    }
+                } else {
+                    lastCaptureGroups = null;
                 }
-            } else {
-                lastCaptureGroups = null;
+                lastMatchedString = matcher.group(0);
+                lastMatchStart = matcher.start();
+                lastMatchEnd = matcher.end();
+
+                String replacementStr;
+                if (replacementIsCode) {
+                    // Evaluate the replacement as code
+                    RuntimeList result = RuntimeCode.apply(replacement, new RuntimeArray(), RuntimeContextType.SCALAR);
+                    replacementStr = result.toString();
+                } else {
+                    // Replace the match with the replacement string
+                    replacementStr = replacement.toString();
+                }
+
+                if (replacementStr != null) {
+                    // In Java regex replacement strings:
+                    //
+                    // - $1, $2, etc. refer to capture groups from the pattern
+                    // - $0 refers to the entire match
+                    // - \ is used for escaping
+                    //
+                    // When you pass $x as the replacement string, Java interprets it as trying to reference capture group "x", which doesn't exist (capture groups are numbered, not named with letters in basic Java regex).
+
+                    // replacementStr = replacementStr.replaceAll("\\\\", "\\\\\\\\");
+
+                    // Append the text before the match and the replacement to the result buffer
+                    // matcher.appendReplacement(resultBuffer, replacementStr);
+                    matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
+                }
+
+                // If not a global match, break after the first replacement
+                if (!regex.regexFlags.isGlobalMatch()) {
+                    break;
+                }
             }
-            lastMatchedString = matcher.group(0);
-            lastMatchStart = matcher.start();
-            lastMatchEnd = matcher.end();
-
-            String replacementStr;
-            if (replacementIsCode) {
-                // Evaluate the replacement as code
-                RuntimeList result = RuntimeCode.apply(replacement, new RuntimeArray(), RuntimeContextType.SCALAR);
-                replacementStr = result.toString();
-            } else {
-                // Replace the match with the replacement string
-                replacementStr = replacement.toString();
-            }
-
-            if (replacementStr != null) {
-                // In Java regex replacement strings:
-                //
-                // - $1, $2, etc. refer to capture groups from the pattern
-                // - $0 refers to the entire match
-                // - \ is used for escaping
-                //
-                // When you pass $x as the replacement string, Java interprets it as trying to reference capture group "x", which doesn't exist (capture groups are numbered, not named with letters in basic Java regex).
-
-                // replacementStr = replacementStr.replaceAll("\\\\", "\\\\\\\\");
-
-                // Append the text before the match and the replacement to the result buffer
-                // matcher.appendReplacement(resultBuffer, replacementStr);
-                matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
-            }
-
-            // If not a global match, break after the first replacement
-            if (!regex.regexFlags.isGlobalMatch()) {
-                break;
-            }
-        }
         } catch (RegexTimeoutException e) {
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = 0;

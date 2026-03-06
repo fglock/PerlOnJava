@@ -2,7 +2,10 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Analyzes which lexical variables in the main script are captured by named subroutines.
@@ -37,7 +40,7 @@ public class VariableCaptureAnalyzer {
     /**
      * Analyzes which variables in the main script are captured by named subroutines.
      *
-     * @param mainScript The AST of the main script (typically a BlockNode)
+     * @param mainScript     The AST of the main script (typically a BlockNode)
      * @param outerScopeVars Set of variable names declared in the outer (main) scope
      * @return Set of variable names that need persistent storage
      */
@@ -68,8 +71,7 @@ public class VariableCaptureAnalyzer {
     private static List<SubroutineNode> findNamedSubroutines(Node node) {
         List<SubroutineNode> subs = new ArrayList<>();
 
-        if (node instanceof SubroutineNode) {
-            SubroutineNode sub = (SubroutineNode) node;
+        if (node instanceof SubroutineNode sub) {
             // Only include named subroutines (not anonymous closures)
             if (sub.name != null && !sub.name.isEmpty()) {
                 subs.add(sub);
@@ -81,27 +83,22 @@ public class VariableCaptureAnalyzer {
             for (Node child : ((BlockNode) node).elements) {
                 subs.addAll(findNamedSubroutines(child));
             }
-        } else if (node instanceof OperatorNode) {
-            OperatorNode op = (OperatorNode) node;
+        } else if (node instanceof OperatorNode op) {
             if (op.operand != null) {
                 subs.addAll(findNamedSubroutines(op.operand));
             }
-        } else if (node instanceof For1Node) {
-            For1Node forNode = (For1Node) node;
+        } else if (node instanceof For1Node forNode) {
             if (forNode.body != null) {
                 subs.addAll(findNamedSubroutines(forNode.body));
             }
-        } else if (node instanceof For3Node) {
-            For3Node forNode = (For3Node) node;
+        } else if (node instanceof For3Node forNode) {
             if (forNode.body != null) {
                 subs.addAll(findNamedSubroutines(forNode.body));
             }
-        } else if (node instanceof BinaryOperatorNode) {
-            BinaryOperatorNode bin = (BinaryOperatorNode) node;
+        } else if (node instanceof BinaryOperatorNode bin) {
             if (bin.left != null) subs.addAll(findNamedSubroutines(bin.left));
             if (bin.right != null) subs.addAll(findNamedSubroutines(bin.right));
-        } else if (node instanceof TernaryOperatorNode) {
-            TernaryOperatorNode tern = (TernaryOperatorNode) node;
+        } else if (node instanceof TernaryOperatorNode tern) {
             if (tern.condition != null) subs.addAll(findNamedSubroutines(tern.condition));
             if (tern.trueExpr != null) subs.addAll(findNamedSubroutines(tern.trueExpr));
             if (tern.falseExpr != null) subs.addAll(findNamedSubroutines(tern.falseExpr));
@@ -122,8 +119,7 @@ public class VariableCaptureAnalyzer {
         }
 
         // Check if this node is a variable reference
-        if (node instanceof IdentifierNode) {
-            IdentifierNode id = (IdentifierNode) node;
+        if (node instanceof IdentifierNode id) {
             String name = id.name;
             // Only include lexical variables (not package variables with ::)
             if (!name.contains("::")) {
@@ -136,40 +132,33 @@ public class VariableCaptureAnalyzer {
             for (Node child : ((BlockNode) node).elements) {
                 vars.addAll(findVariableReferences(child));
             }
-        } else if (node instanceof OperatorNode) {
-            OperatorNode op = (OperatorNode) node;
+        } else if (node instanceof OperatorNode op) {
             if (op.operand != null) {
                 vars.addAll(findVariableReferences(op.operand));
             }
-        } else if (node instanceof SubroutineNode) {
+        } else if (node instanceof SubroutineNode sub) {
             // Don't recurse into nested subroutines - they have their own scope
             // We only care about variables in the immediate subroutine
-            SubroutineNode sub = (SubroutineNode) node;
             if (sub.block != null) {
                 vars.addAll(findVariableReferences(sub.block));
             }
-        } else if (node instanceof For1Node) {
-            For1Node forNode = (For1Node) node;
+        } else if (node instanceof For1Node forNode) {
             if (forNode.variable != null) vars.addAll(findVariableReferences(forNode.variable));
             if (forNode.list != null) vars.addAll(findVariableReferences(forNode.list));
             if (forNode.body != null) vars.addAll(findVariableReferences(forNode.body));
-        } else if (node instanceof For3Node) {
-            For3Node forNode = (For3Node) node;
+        } else if (node instanceof For3Node forNode) {
             if (forNode.initialization != null) vars.addAll(findVariableReferences(forNode.initialization));
             if (forNode.condition != null) vars.addAll(findVariableReferences(forNode.condition));
             if (forNode.increment != null) vars.addAll(findVariableReferences(forNode.increment));
             if (forNode.body != null) vars.addAll(findVariableReferences(forNode.body));
-        } else if (node instanceof BinaryOperatorNode) {
-            BinaryOperatorNode bin = (BinaryOperatorNode) node;
+        } else if (node instanceof BinaryOperatorNode bin) {
             if (bin.left != null) vars.addAll(findVariableReferences(bin.left));
             if (bin.right != null) vars.addAll(findVariableReferences(bin.right));
-        } else if (node instanceof TernaryOperatorNode) {
-            TernaryOperatorNode tern = (TernaryOperatorNode) node;
+        } else if (node instanceof TernaryOperatorNode tern) {
             if (tern.condition != null) vars.addAll(findVariableReferences(tern.condition));
             if (tern.trueExpr != null) vars.addAll(findVariableReferences(tern.trueExpr));
             if (tern.falseExpr != null) vars.addAll(findVariableReferences(tern.falseExpr));
-        } else if (node instanceof ListNode) {
-            ListNode list = (ListNode) node;
+        } else if (node instanceof ListNode list) {
             for (Node element : list.elements) {
                 if (element != null) {
                     vars.addAll(findVariableReferences(element));

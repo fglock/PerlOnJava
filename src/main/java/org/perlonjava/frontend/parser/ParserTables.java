@@ -22,13 +22,6 @@ public class ParserTables {
     );
     // Map of CORE operators to prototype strings
     public static final Map<String, String> CORE_PROTOTYPES = new HashMap<>();
-    // Set of operators that are right associative.
-    static final Set<String> RIGHT_ASSOC_OP = Set.of(
-            "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
-            ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "^^=", "**", "?"
-    );
-    // Map to store operator precedence values.
-    static final Map<String, Integer> precedenceMap = new HashMap<>();
     // The list below was obtained by running this in the perl git:
     // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
     public static final Set<String> OVERRIDABLE_OP = Set.of(
@@ -46,6 +39,13 @@ public class ParserTables {
             "uc",
             "warn"
     );
+    // Set of operators that are right associative.
+    static final Set<String> RIGHT_ASSOC_OP = Set.of(
+            "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
+            ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "^^=", "**", "?"
+    );
+    // Map to store operator precedence values.
+    static final Map<String, Integer> precedenceMap = new HashMap<>();
 
     // Static block to initialize the CORE prototypes.
     static {

@@ -13,16 +13,13 @@ import java.util.Map;
  * It also provides deep toString() formatting using PrintVisitor
  */
 public abstract class AbstractNode implements Node {
-    public int tokenIndex;
-
-    // Lazy initialization - only created when first annotation is set
-    public Map<String, Object> annotations;
-
-    private int internalAnnotationFlags;
     private static final int FLAG_BLOCK_ALREADY_REFACTORED = 1;
     private static final int FLAG_QUEUED_FOR_REFACTOR = 2;
     private static final int FLAG_CHUNK_ALREADY_REFACTORED = 4;
-
+    public int tokenIndex;
+    // Lazy initialization - only created when first annotation is set
+    public Map<String, Object> annotations;
+    private int internalAnnotationFlags;
     private int cachedBytecodeSize = Integer.MIN_VALUE;
     private byte cachedHasAnyControlFlow = -1;
 

@@ -19,19 +19,6 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  */
 public class ParseBlock {
     /**
-     * Result of parseBlock when scope exit is delayed.
-     */
-    public static class BlockWithScope {
-        public final BlockNode block;
-        public final int scopeIndex;
-        
-        public BlockWithScope(BlockNode block, int scopeIndex) {
-            this.block = block;
-            this.scopeIndex = scopeIndex;
-        }
-    }
-    
-    /**
      * Parses a block of code and generates an Abstract Syntax Tree (AST) representation.
      * A block consists of zero or more statements and may include labeled statements.
      * <p>
@@ -47,16 +34,16 @@ public class ParseBlock {
     public static BlockNode parseBlock(Parser parser) {
         return parseBlock(parser, true).block;
     }
-    
+
     /**
      * Parses a block with optional delayed scope exit.
-     * 
+     *
      * <p>When exitScope=false, the caller is responsible for calling
      * exitScope(scopeIndex) later. This is needed for class blocks where
      * methods must be registered while the scope is still active to capture
      * class-level lexical variables.
      *
-     * @param parser The parser instance
+     * @param parser    The parser instance
      * @param exitScope Whether to exit the scope before returning
      * @return BlockWithScope containing the block and scope index
      * @see StatementParser#parseOptionalPackageBlock for usage with class blocks
@@ -108,7 +95,7 @@ public class ParseBlock {
 
             // Parse the actual statement, passing any label found
             Node statement = StatementResolver.parseStatement(parser, label);
-            
+
             // parseStatement should never return null, but if it does, it's a parser bug
             // that should be fixed at the source. For now, add defensive check.
             if (statement != null) {
@@ -159,5 +146,11 @@ public class ParseBlock {
         }
         parser.tokenIndex = currentIndexLabel;
         return null;
+    }
+
+    /**
+         * Result of parseBlock when scope exit is delayed.
+         */
+        public record BlockWithScope(BlockNode block, int scopeIndex) {
     }
 }

@@ -3,12 +3,8 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
-import org.perlonjava.runtime.runtimetypes.PerlParserException;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
@@ -120,7 +116,7 @@ public class ParsePrimary {
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
         }
-        
+
         // IMPORTANT: Check for lexical subs AFTER CORE::, but before checking for quote-like operators!
         // This allows "my sub y" to shadow the "y///" transliteration operator
         // But doesn't interfere with CORE:: prefix handling
@@ -136,7 +132,7 @@ public class ParsePrimary {
         }
 
         // Check for quote-like operators that should always be parsed as operators
-        
+
         if (isIsQuoteLikeOperator(operator)) {
             operatorEnabled = true;
         } else if (!nextTokenText.equals("::")) {
@@ -244,7 +240,7 @@ public class ParsePrimary {
                 return new StringNode(token.text, parser.tokenIndex);
             }
         }
-        
+
         Node operand = null;
         switch (token.text) {
             case "(":
@@ -386,18 +382,18 @@ public class ParsePrimary {
                             // Check what comes after to decide how to handle
                             // Skip whitespace to find the next meaningful token
                             int afterIndex = parser.tokenIndex + 1;
-                            while (afterIndex < parser.tokens.size() && 
-                                   parser.tokens.get(afterIndex).type == LexerTokenType.WHITESPACE) {
+                            while (afterIndex < parser.tokens.size() &&
+                                    parser.tokens.get(afterIndex).type == LexerTokenType.WHITESPACE) {
                                 afterIndex++;
                             }
                             if (afterIndex < parser.tokens.size()) {
                                 LexerToken afterNext = parser.tokens.get(afterIndex);
                                 // If there's something after the identifier that looks like an operand,
                                 // it's probably an attempt to use a filetest operator, so give an error
-                                if (afterNext.type == LexerTokenType.NUMBER || 
-                                    afterNext.type == LexerTokenType.STRING ||
-                                    afterNext.type == LexerTokenType.IDENTIFIER ||
-                                    afterNext.text.equals("$") || afterNext.text.equals("@")) {
+                                if (afterNext.type == LexerTokenType.NUMBER ||
+                                        afterNext.type == LexerTokenType.STRING ||
+                                        afterNext.type == LexerTokenType.IDENTIFIER ||
+                                        afterNext.text.equals("$") || afterNext.text.equals("@")) {
                                     parser.throwError("syntax error - Invalid filetest operator near \"" + testOp + " 1\"");
                                 }
                             }

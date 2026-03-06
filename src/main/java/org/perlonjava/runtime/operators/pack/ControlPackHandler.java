@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Handler for control formats 'x', 'X', '@', '.'.
- * 
+ *
  * <p><b>Format Descriptions:</b></p>
  * <ul>
  *   <li><b>x:</b> Insert null bytes (forward padding/skip)
@@ -39,7 +39,7 @@ import java.util.List;
  *       </ul>
  *   </li>
  * </ul>
- * 
+ *
  * <p><b>Critical Distinction - '.' Format:</b></p>
  * <ul>
  *   <li><b>. (no count or count &gt; 0):</b> Absolute positioning - move to position N
@@ -55,14 +55,14 @@ import java.util.List;
  *       </ul>
  *   </li>
  * </ul>
- * 
+ *
  * <p><b>Error Handling:</b></p>
  * <ul>
  *   <li>'X' with count &gt; current size: throws "'X' outside of string in pack"</li>
  *   <li>'.' with negative absolute position: throws "'.' outside of string in pack"</li>
  *   <li>'.0' with negative offset that goes before start: throws error</li>
  * </ul>
- * 
+ *
  * @see Pack
  */
 public class ControlPackHandler implements PackFormatHandler {

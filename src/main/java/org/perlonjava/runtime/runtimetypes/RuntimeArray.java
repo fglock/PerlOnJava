@@ -214,10 +214,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
 
         List<RuntimeScalar> targetElements = array.elements;
-        
+
         // If pushing array onto itself, make a copy to avoid ConcurrentModificationException
-        List<RuntimeScalar> sourceElements = (this == array) ? 
-            new ArrayList<>(this.elements) : this.elements;
+        List<RuntimeScalar> sourceElements = (this == array) ?
+                new ArrayList<>(this.elements) : this.elements;
 
         for (RuntimeScalar arrElem : sourceElements) {
             if (arrElem == null) {
@@ -508,7 +508,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     this.elements.clear();
                     list.addToArray(this);
                 }
-                
+
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
                 RuntimeArray result = new RuntimeArray();
@@ -592,7 +592,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.scalarContextSize != null) {
             return new RuntimeList(this);
         }
-        
+
         // Otherwise, copy all elements to ensure independence from the original array
         // This is important for returning local arrays from functions
         RuntimeList result = new RuntimeList();
@@ -702,7 +702,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * Sets a slice of the array.
      *
      * @param indices A RuntimeList containing the indices to set.
-     * @param values A RuntimeList containing the values to set at those indices.
+     * @param values  A RuntimeList containing the values to set at those indices.
      */
     public void setSlice(RuntimeList indices, RuntimeList values) {
         if (this.type == AUTOVIVIFY_ARRAY) {
@@ -729,7 +729,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray keys() {
         // Reset the each iterator when keys() is called
         this.eachIteratorIndex = null;
-        
+
         int count = this.countElements();
         if (count == 0) {
             RuntimeArray empty = new RuntimeArray();
@@ -928,7 +928,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         StringBuilder sb = new StringBuilder();
         for (RuntimeBase element : elements) {
             if (element != null) {
-                sb.append(element.toString());
+                sb.append(element);
             }
         }
         return sb.toString();

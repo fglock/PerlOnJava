@@ -1,8 +1,8 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
-import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -15,13 +15,13 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.runtime.operators.VersionHelper.normalizeVersion;
 import static org.perlonjava.frontend.parser.NumberParser.parseNumber;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.atUnderscoreArgs;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.StringParser.parseVstring;
+import static org.perlonjava.runtime.operators.VersionHelper.normalizeVersion;
 import static org.perlonjava.runtime.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
 import static org.perlonjava.runtime.perlmodule.Warnings.useWarnings;
@@ -335,7 +335,7 @@ public class StatementParser {
 
     /**
      * Parses a when statement (part of given/when feature from Perl 5.10).
-     * 
+     * <p>
      * when(COND) { BLOCK }  becomes:  if ($_ ~~ COND) { BLOCK }
      *
      * @param parser The Parser instance
@@ -375,7 +375,7 @@ public class StatementParser {
 
     /**
      * Parses a default statement (part of given/when feature from Perl 5.10).
-     * 
+     * <p>
      * default { BLOCK }  just returns the BLOCK (it's like an else clause)
      *
      * @param parser The Parser instance
@@ -394,13 +394,13 @@ public class StatementParser {
 
     /**
      * Parses a given-when statement (deprecated feature from Perl 5.10).
-     * 
+     * <p>
      * Transforms:
-     *   given(EXPR) { when(COND1) { BLOCK1 } when(COND2) { BLOCK2 } default { BLOCK3 } }
-     * 
+     * given(EXPR) { when(COND1) { BLOCK1 } when(COND2) { BLOCK2 } default { BLOCK3 } }
+     * <p>
      * Into AST equivalent of:
-     *   do { $_ = EXPR; when/default statements }
-     * 
+     * do { $_ = EXPR; when/default statements }
+     * <p>
      * Where when/default are parsed as regular statements that check $_.
      * This is a pure AST transformation - no special emitter code needed.
      *
@@ -424,23 +424,23 @@ public class StatementParser {
         // Parse the entire block content as a normal block
         // This handles regular statements as well as when/default
         BlockNode blockContent = ParseBlock.parseBlock(parser);
-        
+
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         parser.ctx.symbolTable.exitScope(scopeIndex);
 
         // Create the complete block: { $_ = EXPR; blockContent }
         List<Node> statements = new ArrayList<>();
-        
+
         // $_ = condition  (use proper $_ structure)
-        Node dollarUnderscore = new OperatorNode("$", 
-                new IdentifierNode("_", index), 
+        Node dollarUnderscore = new OperatorNode("$",
+                new IdentifierNode("_", index),
                 index);
         statements.add(new BinaryOperatorNode("=",
                 dollarUnderscore,
                 condition,
                 index));
-        
+
         // Add all the statements from the block
         statements.addAll(blockContent.elements);
 
@@ -694,7 +694,7 @@ public class StatementParser {
 
             // Register deferred methods (constructor and any accessors)
             // Same logic as in parseOptionalPackageBlock
-            
+
             // Register user-defined methods (none for unit class)
             @SuppressWarnings("unchecked")
             List<SubroutineNode> deferredMethods = (List<SubroutineNode>) emptyBlock.getAnnotation("deferredMethods");
@@ -704,14 +704,14 @@ public class StatementParser {
                             method.attributes, (BlockNode) method.block, false, null);
                 }
             }
-            
+
             // Register generated methods (constructor and accessors)
             SubroutineNode deferredConstructor = (SubroutineNode) emptyBlock.getAnnotation("deferredConstructor");
             if (deferredConstructor != null) {
                 SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
                         deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true, null);
             }
-            
+
             @SuppressWarnings("unchecked")
             List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) emptyBlock.getAnnotation("deferredAccessors");
             if (deferredAccessors != null) {
@@ -844,13 +844,13 @@ public class StatementParser {
             //              so methods can capture class-level lexical variables
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
-            
+
             boolean isClass = packageNode.getBooleanAnnotation("isClass");
-            
+
             // Save the current package and class state to restore later
             String previousPackage = parser.ctx.symbolTable.getCurrentPackage();
             boolean previousPackageIsClass = parser.ctx.symbolTable.currentPackageIsClass();
-            
+
             parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
 
             // Set flag if we're entering a class block
@@ -861,14 +861,14 @@ public class StatementParser {
 
             BlockNode block;
             int blockScopeIndex;
-            
+
             try {
                 if (isClass) {
                     // For classes, delay scope exit until after ClassTransformer runs
                     // This allows methods to capture class-level lexical variables
                     ParseBlock.BlockWithScope result = ParseBlock.parseBlock(parser, false);
-                    block = result.block;
-                    blockScopeIndex = result.scopeIndex;
+                    block = result.block();
+                    blockScopeIndex = result.scopeIndex();
                 } else {
                     // For packages, exit scope normally
                     block = ParseBlock.parseBlock(parser);
@@ -892,7 +892,7 @@ public class StatementParser {
             // For packages: subroutines were already registered during parseBlock
             if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
-                
+
                 // Register user-defined methods BEFORE exiting scope
                 // This allows them to capture class-level lexicals
                 @SuppressWarnings("unchecked")
@@ -903,17 +903,17 @@ public class StatementParser {
                                 method.attributes, (BlockNode) method.block, false, null);
                     }
                 }
-                
+
                 // NOW exit the block scope AFTER user-defined methods are registered
                 parser.ctx.symbolTable.exitScope(blockScopeIndex);
-                
+
                 // Register generated methods WITH filtering (skip lexical sub/method hidden variables)
                 SubroutineNode deferredConstructor = (SubroutineNode) block.getAnnotation("deferredConstructor");
                 if (deferredConstructor != null) {
                     SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
                             deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true, null);
                 }
-                
+
                 @SuppressWarnings("unchecked")
                 List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) block.getAnnotation("deferredAccessors");
                 if (deferredAccessors != null) {
@@ -922,14 +922,14 @@ public class StatementParser {
                                 accessor.attributes, (BlockNode) accessor.block, true, null);
                     }
                 }
-                
+
                 // Restore the package context after class transformation
                 parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
             } else {
                 // For regular packages, just restore context (scope already exited)
                 parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
             }
-            
+
             // Exit the outer scope (from line 644)
             parser.ctx.symbolTable.exitScope(scopeIndex);
 

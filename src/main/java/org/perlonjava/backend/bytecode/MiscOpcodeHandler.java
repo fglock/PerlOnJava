@@ -2,16 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
-import org.perlonjava.runtime.operators.ChownOperator;
-import org.perlonjava.runtime.operators.Operator;
-import org.perlonjava.runtime.operators.Directory;
-import org.perlonjava.runtime.operators.WaitpidOperator;
-import org.perlonjava.runtime.operators.Unpack;
-import org.perlonjava.runtime.runtimetypes.RuntimeBase;
-import org.perlonjava.runtime.runtimetypes.RuntimeCode;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.*;
 
 /**
  * Handler for miscellaneous opcodes that call runtime operator methods.
@@ -89,13 +80,14 @@ public class MiscOpcodeHandler {
             case Opcodes.GETPRIORITY -> Operator.getpriority(ctx, argsArray);
             case Opcodes.SETPRIORITY -> new RuntimeScalar(0); // stub - no native impl yet
             case Opcodes.OPENDIR -> Directory.opendir(args);
-            case Opcodes.READDIR -> Directory.readdir(args.elements.isEmpty() ? null : (RuntimeScalar) args.elements.get(0), ctx);
+            case Opcodes.READDIR ->
+                    Directory.readdir(args.elements.isEmpty() ? null : (RuntimeScalar) args.elements.get(0), ctx);
             case Opcodes.SEEKDIR -> Directory.seekdir(args);
             default -> throw new IllegalStateException("Unknown opcode in MiscOpcodeHandler: " + opcode);
         };
 
         if (ctx == RuntimeContextType.SCALAR && result instanceof RuntimeList) {
-            result = ((RuntimeList) result).scalar();
+            result = result.scalar();
         }
         registers[rd] = result;
         return pc;

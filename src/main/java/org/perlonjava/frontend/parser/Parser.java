@@ -1,20 +1,20 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.FormatNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
-import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.frontend.parser.TokenUtils.peek;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
+import static org.perlonjava.frontend.parser.TokenUtils.peek;
 
 /**
  * The Parser class is responsible for parsing a list of tokens into an abstract syntax tree (AST).
@@ -26,6 +26,10 @@ public class Parser {
     public final EmitterContext ctx;
     // List of tokens to be parsed.
     public final List<LexerToken> tokens;
+    // List to store format nodes encountered during parsing.
+    private final List<FormatNode> formatNodes = new ArrayList<>();
+    // List to store completed format nodes after template parsing.
+    private final List<FormatNode> completedFormatNodes = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
     // Flags to indicate special parsing states.
@@ -41,10 +45,6 @@ public class Parser {
     public List<Node> classAdjustBlocks = new ArrayList<>();
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
-    // List to store format nodes encountered during parsing.
-    private final List<FormatNode> formatNodes = new ArrayList<>();
-    // List to store completed format nodes after template parsing.
-    private final List<FormatNode> completedFormatNodes = new ArrayList<>();
 
     /**
      * Constructs a Parser with the given context and tokens.
@@ -158,12 +158,12 @@ public class Parser {
 
             // Get the precedence of the current token.
             int tokenPrecedence = getPrecedence(token.text);
-            
+
             // Special case: if this is an IDENTIFIER that's a quote-like operator with high precedence,
             // it's not actually an infix operator - stop parsing here
-            if (token.type == LexerTokenType.IDENTIFIER && 
-                tokenPrecedence == 24 && 
-                ParsePrimary.isIsQuoteLikeOperator(token.text)) {
+            if (token.type == LexerTokenType.IDENTIFIER &&
+                    tokenPrecedence == 24 &&
+                    ParsePrimary.isIsQuoteLikeOperator(token.text)) {
                 // This is a quote-like operator that should be parsed as a new expression, not as infix
                 break;
             }

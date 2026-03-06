@@ -1,7 +1,7 @@
 package org.perlonjava.frontend.astnode;
 
-import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.backend.jvm.astrefactor.LargeNodeRefactorer;
+import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.parser.Parser;
 
 import java.util.ArrayList;

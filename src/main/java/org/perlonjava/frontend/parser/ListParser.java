@@ -101,7 +101,7 @@ public class ListParser {
                     // Start with regex as left operand, then parse any infix operators
                     Node left = regex;
                     int precedence = parser.getPrecedence(",");
-                    
+
                     // Check for infix operators after the regex (like . for concatenation)
                     while (true) {
                         token = TokenUtils.peek(parser);
@@ -119,7 +119,7 @@ public class ListParser {
                             left = ParseInfix.parseInfixOperation(parser, left, tokenPrecedence);
                         }
                     }
-                    
+
                     expr.elements.add(left);
                     token = TokenUtils.peek(parser);
                     if (token.type != LexerTokenType.EOF && !isListTerminator(parser, token)) {
@@ -221,7 +221,7 @@ public class ListParser {
         if (!ParserTables.LIST_TERMINATORS.contains(token.text)) {
             return false;
         }
-        
+
         // Special case: and/or/xor/when before => should be treated as barewords, not terminators
         if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor") || token.text.equals("when")) {
             // Look ahead to see if => follows
@@ -229,11 +229,9 @@ public class ListParser {
             TokenUtils.consume(parser); // consume and/or/xor/when
             LexerToken nextToken = TokenUtils.peek(parser);
             parser.tokenIndex = saveIndex; // restore
-            if (nextToken.text.equals("=>")) {
-                return false; // Not a terminator, it's a hash key
-            }
+            return !nextToken.text.equals("=>"); // Not a terminator, it's a hash key
         }
-        
+
         return true;
     }
 
@@ -273,8 +271,8 @@ public class ListParser {
                 String fileName = parser.ctx.errorUtil.getFileName();
                 int lineNum = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
                 String errorMsg = "Missing right curly or square bracket at " + fileName + " line " + lineNum + ", at end of line\n" +
-                    "syntax error at " + fileName + " line " + lineNum + ", at EOF\n" +
-                    "Execution of " + fileName + " aborted due to compilation errors.\n";
+                        "syntax error at " + fileName + " line " + lineNum + ", at EOF\n" +
+                        "Execution of " + fileName + " aborted due to compilation errors.\n";
                 throw new PerlCompilerException(errorMsg);
             }
 
@@ -311,16 +309,12 @@ public class ListParser {
         if (ParserTables.LIST_TERMINATORS.contains(token.text)) {
             // Special case: check if and/or/xor/when followed by =>
             if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor") || token.text.equals("when")) {
-                if (nextToken.text.equals("=>")) {
-                    isTerminator = false; // Not a terminator, it's a hash key
-                } else {
-                    isTerminator = true;
-                }
+                isTerminator = !nextToken.text.equals("=>"); // Not a terminator, it's a hash key
             } else {
                 isTerminator = true;
             }
         }
-        
+
         if (token.type == LexerTokenType.EOF || isTerminator || token.text.equals("->")) {
             isEmptyList = true;
         } else if (token.text.equals("-")) {

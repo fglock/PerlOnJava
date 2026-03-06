@@ -19,14 +19,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
-    private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {
-    }
-
     private static final Stack<InputLineState> inputLineStateStack = new Stack<>();
-
     // The type of special variable, represented by an enum.
     final Id variableId;
-
     // The position of the capture group, used only for CAPTURE type variables.
     final int position;
 
@@ -159,7 +154,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                             packageName = "main";
                             name = globName;
                         }
-                        
+
                         // Get the stash and access the glob
                         RuntimeHash stash = HashSpecialVariable.getStash(packageName);
                         RuntimeScalar glob = stash.get(name);
@@ -354,5 +349,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
         LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
+    }
+
+    private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {
     }
 }

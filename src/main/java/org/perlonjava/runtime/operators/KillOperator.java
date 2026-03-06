@@ -68,10 +68,21 @@ public class KillOperator {
 
     private static String getSignalName(int signal) {
         return switch (signal) {
-            case 1 -> "HUP"; case 2 -> "INT"; case 3 -> "QUIT"; case 4 -> "ILL";
-            case 5 -> "TRAP"; case 6 -> "ABRT"; case 7 -> "BUS"; case 8 -> "FPE";
-            case 9 -> "KILL"; case 10 -> "USR1"; case 11 -> "SEGV"; case 12 -> "USR2";
-            case 13 -> "PIPE"; case 14 -> "ALRM"; case 15 -> "TERM";
+            case 1 -> "HUP";
+            case 2 -> "INT";
+            case 3 -> "QUIT";
+            case 4 -> "ILL";
+            case 5 -> "TRAP";
+            case 6 -> "ABRT";
+            case 7 -> "BUS";
+            case 8 -> "FPE";
+            case 9 -> "KILL";
+            case 10 -> "USR1";
+            case 11 -> "SEGV";
+            case 12 -> "USR2";
+            case 13 -> "PIPE";
+            case 14 -> "ALRM";
+            case 15 -> "TERM";
             default -> null;
         };
     }
@@ -112,7 +123,8 @@ public class KillOperator {
                 case 15:
                     var p = ProcessHandle.of(pid);
                     if (p.isPresent()) {
-                        if (signal == 9) p.get().destroyForcibly(); else p.get().destroy();
+                        if (signal == 9) p.get().destroyForcibly();
+                        else p.get().destroy();
                         return true;
                     }
                     setErrno(3);

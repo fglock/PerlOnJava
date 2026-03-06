@@ -1,25 +1,25 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
-import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
-import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
-import java.util.ArrayList;
 
 
 /**
  * Handler for eval STRING operations in the interpreter.
- *
+ * <p>
  * Implements dynamic code evaluation with proper variable capture and error handling:
  * - Parses Perl string to AST
  * - Compiles AST to interpreter bytecode
@@ -39,7 +39,7 @@ public class EvalStringHandler {
 
     /**
      * Evaluate a Perl string dynamically.
-     *
+     * <p>
      * This implements eval STRING semantics:
      * - Parse and compile the string
      * - Execute in the current scope context
@@ -47,30 +47,30 @@ public class EvalStringHandler {
      * - Return result or undef on error
      * - Set $@ on error
      *
-     * @param perlCode      The Perl code string to evaluate
-     * @param currentCode   The current InterpretedCode (for context)
-     * @param registers     Current register array (for variable access)
-     * @param sourceName    Source name for error messages
-     * @param sourceLine    Source line for error messages
-     * @param callContext   The calling context (VOID/SCALAR/LIST) for wantarray inside eval
+     * @param perlCode    The Perl code string to evaluate
+     * @param currentCode The current InterpretedCode (for context)
+     * @param registers   Current register array (for variable access)
+     * @param sourceName  Source name for error messages
+     * @param sourceLine  Source line for error messages
+     * @param callContext The calling context (VOID/SCALAR/LIST) for wantarray inside eval
      * @return RuntimeScalar result of evaluation (undef on error)
      */
     public static RuntimeScalar evalString(String perlCode,
-                                          InterpretedCode currentCode,
-                                          RuntimeBase[] registers,
-                                          String sourceName,
-                                          int sourceLine,
-                                          int callContext) {
+                                           InterpretedCode currentCode,
+                                           RuntimeBase[] registers,
+                                           String sourceName,
+                                           int sourceLine,
+                                           int callContext) {
         return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext, null).scalar();
     }
 
     public static RuntimeScalar evalString(String perlCode,
-                                          InterpretedCode currentCode,
-                                          RuntimeBase[] registers,
-                                          String sourceName,
-                                          int sourceLine,
-                                          int callContext,
-                                          Map<String, Integer> siteRegistry) {
+                                           InterpretedCode currentCode,
+                                           RuntimeBase[] registers,
+                                           String sourceName,
+                                           int sourceLine,
+                                           int callContext,
+                                           Map<String, Integer> siteRegistry) {
         return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine, callContext, siteRegistry).scalar();
     }
 
@@ -201,9 +201,8 @@ public class EvalStringHandler {
                         // Only capture actual Perl variables: Scalar, Array, Hash, Code
                         if (value == null) {
                             // Null is fine - capture it
-                        } else if (value instanceof RuntimeScalar) {
+                        } else if (value instanceof RuntimeScalar scalar) {
                             // Check if the scalar contains an Iterator (used by for loops)
-                            RuntimeScalar scalar = (RuntimeScalar) value;
                             if (scalar.value instanceof java.util.Iterator) {
                                 // Skip - this is a for loop iterator, not a user variable
                                 continue;
@@ -283,8 +282,8 @@ public class EvalStringHandler {
             }
             evalTrace("EvalStringHandler exec ok ctx=" + callContext +
                     " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
-                    " resultBool=" + (result != null && result.scalar() != null ? result.scalar().getBoolean() : false) +
-                    " $@=" + GlobalVariable.getGlobalVariable("main::@").toString());
+                    " resultBool=" + (result != null && result.scalar() != null && result.scalar().getBoolean()) +
+                    " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             return result;
         } catch (Exception e) {
             evalTrace("EvalStringHandler exec exception ctx=" + callContext + " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
@@ -295,19 +294,19 @@ public class EvalStringHandler {
 
     /**
      * Evaluate a Perl string with explicit variable capture.
-     *
+     * <p>
      * This version allows passing specific captured variables for the eval context.
      *
-     * @param perlCode      The Perl code string to evaluate
-     * @param capturedVars  Variables to capture from outer scope
-     * @param sourceName    Source name for error messages
-     * @param sourceLine    Source line for error messages
+     * @param perlCode     The Perl code string to evaluate
+     * @param capturedVars Variables to capture from outer scope
+     * @param sourceName   Source name for error messages
+     * @param sourceLine   Source line for error messages
      * @return RuntimeScalar result of evaluation (undef on error)
      */
     public static RuntimeScalar evalString(String perlCode,
-                                          RuntimeBase[] capturedVars,
-                                          String sourceName,
-                                          int sourceLine) {
+                                           RuntimeBase[] capturedVars,
+                                           String sourceName,
+                                           int sourceLine) {
         try {
             // Clear $@ at start
             GlobalVariable.getGlobalVariable("main::@").set("");
@@ -321,14 +320,14 @@ public class EvalStringHandler {
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
-                new JavaClassInfo(),
-                symbolTable,
-                null, null,
-                RuntimeContextType.SCALAR,
-                false,
-                errorUtil,
-                opts,
-                null
+                    new JavaClassInfo(),
+                    symbolTable,
+                    null, null,
+                    RuntimeContextType.SCALAR,
+                    false,
+                    errorUtil,
+                    opts,
+                    null
             );
 
             Parser parser = new Parser(ctx, tokens);
@@ -338,8 +337,8 @@ public class EvalStringHandler {
             // IMPORTANT: Do NOT call compiler.setCompilePackage() here — same reason as the
             // first evalString overload above: it corrupts die/warn location baking.
             BytecodeCompiler compiler = new BytecodeCompiler(
-                sourceName + " (eval)",
-                sourceLine
+                    sourceName + " (eval)",
+                    sourceLine
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
             if (RuntimeCode.DISASSEMBLE) {
@@ -379,7 +378,7 @@ public class EvalStringHandler {
 
     /**
      * Detect which variables from outer scope are referenced in eval string.
-     *
+     * <p>
      * This is used for proper variable capture (similar to closure analysis).
      * TODO: Implement proper lexical variable detection from AST
      *

@@ -1,12 +1,8 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
-import org.perlonjava.runtime.runtimetypes.ClassRegistry;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -113,7 +109,6 @@ public class CompileOperator {
             } else {
                 bytecodeCompiler.throwCompilerException("scalar operator requires an operand");
             }
-            return;
         } else if (op.equals("package") || op.equals("class")) {
             // Package/Class declaration: package Foo; or class Foo;
             // This updates the current package context for subsequent variable declarations
@@ -254,8 +249,7 @@ public class CompileOperator {
             }
 
             // Compile the operand
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
+            if (node.operand instanceof ListNode list) {
                 if (list.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("ref requires an argument");
                 }
@@ -283,8 +277,7 @@ public class CompileOperator {
             }
 
             // Compile the operand (code reference or function name)
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
+            if (node.operand instanceof ListNode list) {
                 if (list.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("prototype requires an argument");
                 }
@@ -581,8 +574,7 @@ public class CompileOperator {
             }
         } else if (op.equals("index") || op.equals("rindex")) {
             // index(str, substr, pos?) or rindex(str, substr, pos?)
-            if (node.operand instanceof ListNode) {
-                ListNode args = (ListNode) node.operand;
+            if (node.operand instanceof ListNode args) {
 
                 int savedContext = bytecodeCompiler.currentCallContext;
                 bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
@@ -921,10 +913,10 @@ public class CompileOperator {
                 // Snapshot visible variables and pragma flags for this eval site
                 int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
                 bytecodeCompiler.evalSiteRegistries.add(
-                    bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
+                        bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
                 bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
-                    bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
-                    bytecodeCompiler.symbolTable.featureFlagsStack.peek()
+                        bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
+                        bytecodeCompiler.symbolTable.featureFlagsStack.peek()
                 });
 
                 bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
@@ -1290,13 +1282,11 @@ public class CompileOperator {
             Node arg = list.elements.get(0);
 
             // Handle hash access: $hash{key}
-            if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("{")) {
-                BinaryOperatorNode hashAccess = (BinaryOperatorNode) arg;
+            if (arg instanceof BinaryOperatorNode hashAccess && ((BinaryOperatorNode) arg).operator.equals("{")) {
 
                 // Get hash register (need to handle $hash{key} -> %hash)
                 int hashReg;
-                if (hashAccess.left instanceof OperatorNode) {
-                    OperatorNode leftOp = (OperatorNode) hashAccess.left;
+                if (hashAccess.left instanceof OperatorNode leftOp) {
                     if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                         // Simple: exists $hash{key} -> get %hash
                         String varName = ((IdentifierNode) leftOp.operand).name;
@@ -1359,8 +1349,7 @@ public class CompileOperator {
 
                 // Compile key (right side contains HashLiteralNode)
                 int keyReg;
-                if (hashAccess.right instanceof HashLiteralNode) {
-                    HashLiteralNode keyNode = (HashLiteralNode) hashAccess.right;
+                if (hashAccess.right instanceof HashLiteralNode keyNode) {
                     if (!keyNode.elements.isEmpty()) {
                         Node keyElement = keyNode.elements.get(0);
                         if (keyElement instanceof IdentifierNode) {
@@ -1393,8 +1382,7 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(keyReg);
 
                 bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("[")) {
-                BinaryOperatorNode arrayAccess = (BinaryOperatorNode) arg;
+            } else if (arg instanceof BinaryOperatorNode arrayAccess && ((BinaryOperatorNode) arg).operator.equals("[")) {
                 int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
                 int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
 
@@ -1431,12 +1419,10 @@ public class CompileOperator {
             Node arg = list.elements.get(0);
 
             // Handle hash access: $hash{key} or hash slice delete: delete @hash{keys}
-            if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("{")) {
-                BinaryOperatorNode hashAccess = (BinaryOperatorNode) arg;
+            if (arg instanceof BinaryOperatorNode hashAccess && ((BinaryOperatorNode) arg).operator.equals("{")) {
 
                 // Check if it's a hash slice delete: delete @hash{keys}
-                if (hashAccess.left instanceof OperatorNode) {
-                    OperatorNode leftOp = (OperatorNode) hashAccess.left;
+                if (hashAccess.left instanceof OperatorNode leftOp) {
                     if (leftOp.operator.equals("@")) {
                         // Hash slice delete: delete @hash{'key1', 'key2'}
                         // Use SLOW_OP for slice delete
@@ -1465,11 +1451,10 @@ public class CompileOperator {
                         }
 
                         // Get keys from HashLiteralNode
-                        if (!(hashAccess.right instanceof HashLiteralNode)) {
+                        if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
                             bytecodeCompiler.throwCompilerException("Hash slice delete requires HashLiteralNode");
                             return;
                         }
-                        HashLiteralNode keysNode = (HashLiteralNode) hashAccess.right;
 
                         // Compile all keys
                         List<Integer> keyRegs = new ArrayList<>();
@@ -1512,8 +1497,7 @@ public class CompileOperator {
                 // Single key delete: delete $hash{key}
                 // Get hash register (need to handle $hash{key} -> %hash)
                 int hashReg;
-                if (hashAccess.left instanceof OperatorNode) {
-                    OperatorNode leftOp = (OperatorNode) hashAccess.left;
+                if (hashAccess.left instanceof OperatorNode leftOp) {
                     if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                         // Simple: delete $hash{key} -> get %hash
                         String varName = ((IdentifierNode) leftOp.operand).name;
@@ -1576,8 +1560,7 @@ public class CompileOperator {
 
                 // Compile key (right side contains HashLiteralNode)
                 int keyReg;
-                if (hashAccess.right instanceof HashLiteralNode) {
-                    HashLiteralNode keyNode = (HashLiteralNode) hashAccess.right;
+                if (hashAccess.right instanceof HashLiteralNode keyNode) {
                     if (!keyNode.elements.isEmpty()) {
                         Node keyElement = keyNode.elements.get(0);
                         if (keyElement instanceof IdentifierNode) {
@@ -1610,9 +1593,8 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(keyReg);
 
                 bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("->")) {
+            } else if (arg instanceof BinaryOperatorNode arrowAccess && ((BinaryOperatorNode) arg).operator.equals("->")) {
                 // Arrow dereference: delete $ref->{key}
-                BinaryOperatorNode arrowAccess = (BinaryOperatorNode) arg;
                 // Compile the reference expression
                 arrowAccess.left.accept(bytecodeCompiler);
                 int scalarReg = bytecodeCompiler.lastResultReg;
@@ -1657,8 +1639,7 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(keyReg);
 
                 bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("[")) {
-                BinaryOperatorNode arrayAccess = (BinaryOperatorNode) arg;
+            } else if (arg instanceof BinaryOperatorNode arrayAccess && ((BinaryOperatorNode) arg).operator.equals("[")) {
                 int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
                 int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
 
@@ -1734,8 +1715,7 @@ public class CompileOperator {
                 }
             } else {
                 Node actualOperand = node.operand;
-                if (actualOperand instanceof ListNode) {
-                    ListNode list = (ListNode) actualOperand;
+                if (actualOperand instanceof ListNode list) {
                     actualOperand = list.elements.get(0);
                 }
                 actualOperand.accept(bytecodeCompiler);
@@ -1793,8 +1773,7 @@ public class CompileOperator {
             int arrayReg = -1;
 
             // Handle different operand types
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode operandOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode operandOp) {
 
                 if (operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode) {
                     // $#@array or $#array (both work)
@@ -1881,8 +1860,7 @@ public class CompileOperator {
             }
 
             // Compile the operand
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
+            if (node.operand instanceof ListNode list) {
                 if (list.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("length requires an argument");
                 }
@@ -2180,8 +2158,7 @@ public class CompileOperator {
 
                 bytecodeCompiler.lastResultReg = rd;
             } else {
-                if (node.operand instanceof ListNode) {
-                    ListNode list = (ListNode) node.operand;
+                if (node.operand instanceof ListNode list) {
                     if (!list.elements.isEmpty()) {
                         list.elements.get(0).accept(bytecodeCompiler);
                     }
@@ -2216,8 +2193,7 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("sprintf")) {
             // sprintf($format, @args) - SprintfOperator.sprintf
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
+            if (node.operand instanceof ListNode list) {
                 if (list.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("sprintf requires a format argument");
                 }
@@ -2589,8 +2565,7 @@ public class CompileOperator {
         } else if (op.equals("atan2")) {
             // atan2($y, $x) - returns arctangent of y/x
             // Format: ATAN2 rd rs1 rs2
-            if (node.operand instanceof ListNode) {
-                ListNode list = (ListNode) node.operand;
+            if (node.operand instanceof ListNode list) {
                 if (list.elements.size() >= 2) {
                     list.elements.get(0).accept(bytecodeCompiler);
                     int rs1 = bytecodeCompiler.lastResultReg;
@@ -2630,23 +2605,23 @@ public class CompileOperator {
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
-                   op.equals("rename") || op.equals("link") || op.equals("readlink") ||
-                   op.equals("umask") || op.equals("system") || op.equals("pack") ||
-                   op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
-                   op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") ||
-                   op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
-                   op.equals("close") ||
-                   op.equals("binmode") || op.equals("seek") ||
-                   op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
-                   op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
-                   op.equals("connect") || op.equals("listen") || op.equals("write") ||
-                   op.equals("formline") || op.equals("printf") || op.equals("accept") ||
-                   op.equals("sysseek") || op.equals("truncate") || op.equals("read") ||
-                   op.equals("chown") || op.equals("waitpid") ||
-                   op.equals("setsockopt") || op.equals("getsockopt") ||
-                   op.equals("getpgrp") || op.equals("setpgrp") ||
-                   op.equals("getpriority") || op.equals("setpriority") ||
-                   op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
+                op.equals("rename") || op.equals("link") || op.equals("readlink") ||
+                op.equals("umask") || op.equals("system") || op.equals("pack") ||
+                op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
+                op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") ||
+                op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
+                op.equals("close") ||
+                op.equals("binmode") || op.equals("seek") ||
+                op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
+                op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
+                op.equals("connect") || op.equals("listen") || op.equals("write") ||
+                op.equals("formline") || op.equals("printf") || op.equals("accept") ||
+                op.equals("sysseek") || op.equals("truncate") || op.equals("read") ||
+                op.equals("chown") || op.equals("waitpid") ||
+                op.equals("setsockopt") || op.equals("getsockopt") ||
+                op.equals("getpgrp") || op.equals("setpgrp") ||
+                op.equals("getpriority") || op.equals("setpriority") ||
+                op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
             // Generic handler for operators that take arguments and call runtime methods
             // Format: OPCODE rd argsReg ctx
             // argsReg must be a RuntimeList

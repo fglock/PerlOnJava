@@ -9,14 +9,14 @@ import java.util.TreeMap;
 
 /**
  * Interpreted bytecode that extends RuntimeCode.
- *
+ * <p>
  * This class represents Perl code that is interpreted rather than compiled to JVM bytecode.
  * It is COMPLETELY INDISTINGUISHABLE from compiled RuntimeCode to the rest of the system:
  * - Can be stored in global variables ($::func)
  * - Can be passed as code references
  * - Can capture variables (closures work both directions)
  * - Can be used in method dispatch, overload, @ISA, etc.
- *
+ * <p>
  * The ONLY difference is the execution engine:
  * - Compiled RuntimeCode uses MethodHandle to invoke JVM bytecode
  * - InterpretedCode overrides apply() to dispatch to BytecodeInterpreter
@@ -47,55 +47,55 @@ public class InterpretedCode extends RuntimeCode {
     /**
      * Constructor for InterpretedCode.
      *
-     * @param bytecode      The bytecode instructions
-     * @param constants     Constant pool (RuntimeBase objects)
-     * @param stringPool    String constants (variable names, etc.)
-     * @param maxRegisters  Number of registers needed for execution
-     * @param capturedVars  Captured variables for closure support (may be null)
-     * @param sourceName    Source file name for debugging
-     * @param sourceLine    Source line number for debugging
-     * @param pcToTokenIndex Map from bytecode PC to AST tokenIndex for error reporting
+     * @param bytecode         The bytecode instructions
+     * @param constants        Constant pool (RuntimeBase objects)
+     * @param stringPool       String constants (variable names, etc.)
+     * @param maxRegisters     Number of registers needed for execution
+     * @param capturedVars     Captured variables for closure support (may be null)
+     * @param sourceName       Source file name for debugging
+     * @param sourceLine       Source line number for debugging
+     * @param pcToTokenIndex   Map from bytecode PC to AST tokenIndex for error reporting
      * @param variableRegistry Variable name → register index mapping (for eval STRING)
-     * @param errorUtil     Error message utility for line number lookup
-     * @param strictOptions Strict flags at compile time (for eval STRING inheritance)
-     * @param featureFlags  Feature flags at compile time (for eval STRING inheritance)
-     * @param warningFlags  Warning flags at compile time (for eval STRING inheritance)
+     * @param errorUtil        Error message utility for line number lookup
+     * @param strictOptions    Strict flags at compile time (for eval STRING inheritance)
+     * @param featureFlags     Feature flags at compile time (for eval STRING inheritance)
+     * @param warningFlags     Warning flags at compile time (for eval STRING inheritance)
      */
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          TreeMap<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil,
-                          int strictOptions, int featureFlags, BitSet warningFlags) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           TreeMap<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry,
+                           ErrorMessageUtil errorUtil,
+                           int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, "main", null, null);
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, "main", null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          TreeMap<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil,
-                          int strictOptions, int featureFlags, BitSet warningFlags,
-                          String compilePackage) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           TreeMap<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry,
+                           ErrorMessageUtil errorUtil,
+                           int strictOptions, int featureFlags, BitSet warningFlags,
+                           String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-             strictOptions, featureFlags, warningFlags, compilePackage, null, null);
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, compilePackage, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          TreeMap<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil,
-                          int strictOptions, int featureFlags, BitSet warningFlags,
-                          String compilePackage,
-                          List<Map<String, Integer>> evalSiteRegistries,
-                          List<int[]> evalSitePragmaFlags) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           TreeMap<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry,
+                           ErrorMessageUtil errorUtil,
+                           int strictOptions, int featureFlags, BitSet warningFlags,
+                           String compilePackage,
+                           List<Map<String, Integer>> evalSiteRegistries,
+                           List<int[]> evalSitePragmaFlags) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -120,25 +120,33 @@ public class InterpretedCode extends RuntimeCode {
 
     // Legacy constructor for backward compatibility
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          java.util.Map<Integer, Integer> pcToTokenIndex) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           java.util.Map<Integer, Integer> pcToTokenIndex) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine,
-             pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
-             null, null, 0, 0, new BitSet());
+                sourceName, sourceLine,
+                pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>) pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
+                null, null, 0, 0, new BitSet());
     }
 
     // Legacy constructor with variableRegistry but no errorUtil
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
-                          int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine,
-                          java.util.Map<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry) {
+                           int maxRegisters, RuntimeBase[] capturedVars,
+                           String sourceName, int sourceLine,
+                           java.util.Map<Integer, Integer> pcToTokenIndex,
+                           Map<String, Integer> variableRegistry) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine,
-             pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
-             variableRegistry, null, 0, 0, new BitSet());
+                sourceName, sourceLine,
+                pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>) pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
+                variableRegistry, null, 0, 0, new BitSet());
+    }
+
+    /**
+     * Read a 32-bit integer from bytecode (stored as 1 int slot).
+     * With int[] storage a full int fits in a single slot.
+     */
+    private static int readInt(int[] bytecode, int pc) {
+        return bytecode[pc];
     }
 
     /**
@@ -182,22 +190,22 @@ public class InterpretedCode extends RuntimeCode {
      */
     public InterpretedCode withCapturedVars(RuntimeBase[] capturedVars) {
         InterpretedCode copy = new InterpretedCode(
-            this.bytecode,
-            this.constants,
-            this.stringPool,
-            this.maxRegisters,
-            capturedVars,
-            this.sourceName,
-            this.sourceLine,
-            this.pcToTokenIndex,
-            this.variableRegistry,
-            this.errorUtil,
-            this.strictOptions,
-            this.featureFlags,
-            this.warningFlags,
-            this.compilePackage,
-            this.evalSiteRegistries,
-            this.evalSitePragmaFlags
+                this.bytecode,
+                this.constants,
+                this.stringPool,
+                this.maxRegisters,
+                capturedVars,
+                this.sourceName,
+                this.sourceLine,
+                this.pcToTokenIndex,
+                this.variableRegistry,
+                this.errorUtil,
+                this.strictOptions,
+                this.featureFlags,
+                this.warningFlags,
+                this.compilePackage,
+                this.evalSiteRegistries,
+                this.evalSitePragmaFlags
         );
         copy.prototype = this.prototype;
         copy.attributes = this.attributes;
@@ -238,12 +246,12 @@ public class InterpretedCode extends RuntimeCode {
     @Override
     public String toString() {
         return "InterpretedCode{" +
-               "sourceName='" + sourceName + '\'' +
-               ", sourceLine=" + sourceLine +
-               ", bytecode.length=" + bytecode.length +
-               ", maxRegisters=" + maxRegisters +
-               ", hasCapturedVars=" + (capturedVars != null && capturedVars.length > 0) +
-               '}';
+                "sourceName='" + sourceName + '\'' +
+                ", sourceLine=" + sourceLine +
+                ", bytecode.length=" + bytecode.length +
+                ", maxRegisters=" + maxRegisters +
+                ", hasCapturedVars=" + (capturedVars != null && capturedVars.length > 0) +
+                '}';
     }
 
     /**
@@ -312,14 +320,12 @@ public class InterpretedCode extends RuntimeCode {
                     if (constants != null && constIdx < constants.length) {
                         Object obj = constants[constIdx];
                         sb.append(" (");
-                        if (obj instanceof RuntimeScalar) {
-                            RuntimeScalar scalar = (RuntimeScalar) obj;
+                        if (obj instanceof RuntimeScalar scalar) {
                             sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=").append(scalar.value.getClass().getSimpleName()).append("}");
-                        } else if (obj instanceof PerlRange) {
+                        } else if (obj instanceof PerlRange range) {
                             // Special handling for PerlRange to avoid expanding large ranges
-                            PerlRange range = (PerlRange) obj;
                             sb.append("PerlRange{").append(range.getStart().toString()).append("..")
-                              .append(range.getEnd().toString()).append("}");
+                                    .append(range.getEnd().toString()).append("}");
                         } else {
                             // For other objects, show class name and limit string length
                             String objStr = obj.toString();
@@ -344,15 +350,15 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int strIdx = bytecode[pc++];
                     sb.append(opcode == Opcodes.LOAD_BYTE_STRING ? "LOAD_BYTE_STRING r" : "LOAD_STRING r")
-                      .append(rd).append(" = \"");
+                            .append(rd).append(" = \"");
                     if (stringPool != null && strIdx < stringPool.length) {
                         String str = stringPool[strIdx];
                         // Escape special characters for readability
                         str = str.replace("\\", "\\\\")
-                                 .replace("\n", "\\n")
-                                 .replace("\r", "\\r")
-                                 .replace("\t", "\\t")
-                                 .replace("\"", "\\\"");
+                                .replace("\n", "\\n")
+                                .replace("\r", "\\r")
+                                .replace("\t", "\\t")
+                                .replace("\"", "\\\"");
                         sb.append(str);
                     }
                     sb.append("\"\n");
@@ -372,7 +378,7 @@ public class InterpretedCode extends RuntimeCode {
                     int globPattern = bytecode[pc++];
                     int globCtx = bytecode[pc++];
                     sb.append("GLOB_OP r").append(globRd).append(" = glob(id=").append(globId)
-                      .append(", r").append(globPattern).append(", ctx=").append(globCtx).append(")\n");
+                            .append(", r").append(globPattern).append(", ctx=").append(globCtx).append(")\n");
                     break;
                 }
                 case Opcodes.LOAD_UNDEF:
@@ -1107,7 +1113,7 @@ public class InterpretedCode extends RuntimeCode {
                     int argsReg = bytecode[pc++];
                     int ctx = bytecode[pc++];
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
-                      .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
+                            .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
                 case Opcodes.CALL_METHOD:
                     rd = bytecode[pc++];
@@ -1117,16 +1123,16 @@ public class InterpretedCode extends RuntimeCode {
                     argsReg = bytecode[pc++];
                     ctx = bytecode[pc++];
                     sb.append("CALL_METHOD r").append(rd).append(" = r").append(invocantReg)
-                      .append("->r").append(methodReg)
-                      .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
-                      .append(", ctx=").append(ctx).append(")\n");
+                            .append("->r").append(methodReg)
+                            .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
+                            .append(", ctx=").append(ctx).append(")\n");
                     break;
                 case Opcodes.JOIN:
                     rd = bytecode[pc++];
                     int separatorReg = bytecode[pc++];
                     int listReg = bytecode[pc++];
                     sb.append("JOIN r").append(rd).append(" = join(r").append(separatorReg)
-                      .append(", r").append(listReg).append(")\n");
+                            .append(", r").append(listReg).append(")\n");
                     break;
                 case Opcodes.SELECT:
                     rd = bytecode[pc++];
@@ -1155,7 +1161,7 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];  // closure register
                     int mapCtx = bytecode[pc++];  // context
                     sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
-                      .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
+                            .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
                     break;
                 case Opcodes.GREP:
                     rd = bytecode[pc++];
@@ -1163,7 +1169,7 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];  // closure register
                     int grepCtx = bytecode[pc++];  // context
                     sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
-                      .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
+                            .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
                     break;
                 case Opcodes.SORT:
                     rd = bytecode[pc++];
@@ -1172,7 +1178,7 @@ public class InterpretedCode extends RuntimeCode {
                     int pkgIdx = readInt(bytecode, pc);
                     pc += 1;
                     sb.append("SORT r").append(rd).append(" = sort(r").append(rs1)
-                      .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
+                            .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
                     break;
                 case Opcodes.NEW_ARRAY:
                     rd = bytecode[pc++];
@@ -1240,14 +1246,14 @@ public class InterpretedCode extends RuntimeCode {
                     int refReg = bytecode[pc++];
                     int packageReg = bytecode[pc++];
                     sb.append("BLESS r").append(rd).append(" = bless(r").append(refReg)
-                      .append(", r").append(packageReg).append(")\n");
+                            .append(", r").append(packageReg).append(")\n");
                     break;
                 case Opcodes.ISA:
                     rd = bytecode[pc++];
                     int objReg = bytecode[pc++];
                     int pkgReg = bytecode[pc++];
                     sb.append("ISA r").append(rd).append(" = isa(r").append(objReg)
-                      .append(", r").append(pkgReg).append(")\n");
+                            .append(", r").append(pkgReg).append(")\n");
                     break;
                 case Opcodes.PROTOTYPE:
                     rd = bytecode[pc++];
@@ -1255,16 +1261,16 @@ public class InterpretedCode extends RuntimeCode {
                     int packageIdx = readInt(bytecode, pc);
                     pc += 1;  // readInt reads 2 shorts
                     String packageName = (stringPool != null && packageIdx < stringPool.length) ?
-                        stringPool[packageIdx] : "<unknown>";
+                            stringPool[packageIdx] : "<unknown>";
                     sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
-                      .append(", \"").append(packageName).append("\")\n");
+                            .append(", \"").append(packageName).append("\")\n");
                     break;
                 case Opcodes.QUOTE_REGEX:
                     rd = bytecode[pc++];
                     int patternReg = bytecode[pc++];
                     int flagsReg = bytecode[pc++];
                     sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
-                      .append("}r").append(flagsReg).append("\n");
+                            .append("}r").append(flagsReg).append("\n");
                     break;
                 case Opcodes.ITERATOR_CREATE:
                     rd = bytecode[pc++];
@@ -1287,8 +1293,8 @@ public class InterpretedCode extends RuntimeCode {
                     int bodyTarget = readInt(bytecode, pc);  // Absolute body address
                     pc += 1;
                     sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
-                      .append(" = r").append(iterReg).append(".next() and goto ")
-                      .append(bodyTarget).append("\n");
+                            .append(" = r").append(iterReg).append(".next() and goto ")
+                            .append(bodyTarget).append("\n");
                     break;
                 }
                 case Opcodes.SUBTRACT_ASSIGN:
@@ -1418,7 +1424,7 @@ public class InterpretedCode extends RuntimeCode {
                     int evalCtx = bytecode[pc++];
                     int evalSite = bytecode[pc++];
                     sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs)
-                      .append(", ctx=").append(evalCtx).append(", site=").append(evalSite).append(")\n");
+                            .append(", ctx=").append(evalCtx).append(", site=").append(evalSite).append(")\n");
                     break;
                 case Opcodes.SELECT_OP:
                     rd = bytecode[pc++];
@@ -1494,7 +1500,7 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     int beginId = bytecode[pc++];
                     sb.append("RETRIEVE_BEGIN_SCALAR r").append(rd).append(" = BEGIN_").append(beginId)
-                      .append("::").append(stringPool[nameIdx]).append("\n");
+                            .append("::").append(stringPool[nameIdx]).append("\n");
                     break;
                 case Opcodes.SPLIT:
                     rd = bytecode[pc++];
@@ -1502,7 +1508,7 @@ public class InterpretedCode extends RuntimeCode {
                     int splitArgsReg = bytecode[pc++];
                     int splitCtx = bytecode[pc++];
                     sb.append("SPLIT r").append(rd).append(" = split(r").append(splitPatternReg)
-                      .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
+                            .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
                     break;
                 case Opcodes.LOCAL_SCALAR:
                     rd = bytecode[pc++];
@@ -1524,7 +1530,7 @@ public class InterpretedCode extends RuntimeCode {
                     int levelReg = bytecode[pc++];
                     nameIdx = bytecode[pc++];
                     sb.append("LOCAL_SCALAR_SAVE_LEVEL r").append(rd).append(", level=r").append(levelReg)
-                      .append(" = local $").append(stringPool[nameIdx]).append("\n");
+                            .append(" = local $").append(stringPool[nameIdx]).append("\n");
                     break;
                 }
                 case Opcodes.POP_LOCAL_LEVEL:
@@ -1535,9 +1541,10 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     int fgIterReg = bytecode[pc++];
                     nameIdx = bytecode[pc++];
-                    int fgBody = readInt(bytecode, pc); pc += 1;
+                    int fgBody = readInt(bytecode, pc);
+                    pc += 1;
                     sb.append("FOREACH_GLOBAL_NEXT_OR_EXIT r").append(rd).append(" = r").append(fgIterReg)
-                      .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
+                            .append(".next(), alias $").append(stringPool[nameIdx]).append(" and goto ").append(fgBody).append("\n");
                     break;
                 }
                 // Misc list operators: OPCODE rd argsReg ctx
@@ -1586,8 +1593,8 @@ public class InterpretedCode extends RuntimeCode {
                         default -> "misc_op_" + opcode;
                     };
                     sb.append(miscName).append(" r").append(rd)
-                      .append(" = ").append(miscName).append("(r").append(miscArgsReg)
-                      .append(", ctx=").append(miscCtx).append(")\n");
+                            .append(" = ").append(miscName).append("(r").append(miscArgsReg)
+                            .append(", ctx=").append(miscCtx).append(")\n");
                     break;
                 }
 
@@ -1689,20 +1696,613 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.POP_LABELED_BLOCK:
                     sb.append("POP_LABELED_BLOCK\n");
                     break;
+
+                // =================================================================
+                // CORE OPS (29-67) - String, comparison, logical, control flow
+                // =================================================================
+
+                case Opcodes.SUBSTR: {
+                    // Substring: rd = substr(rs1, rs2, rs3)
+                    // Format: SUBSTR rd strReg offsetReg lengthReg
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("SUBSTR r").append(rd).append(" = substr(r").append(rs1)
+                            .append(", r").append(rs2).append(")\n");
+                    break;
+                }
+                case Opcodes.LENGTH: {
+                    // String length: rd = length(rs)
+                    // Format: LENGTH rd rs
+                    rd = bytecode[pc++];
+                    int lenRs = bytecode[pc++];
+                    sb.append("LENGTH r").append(rd).append(" = length(r").append(lenRs).append(")\n");
+                    break;
+                }
+                case Opcodes.COMPARE_NUM:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("COMPARE_NUM r").append(rd).append(" = r").append(rs1).append(" <=> r").append(rs2).append("\n");
+                    break;
+                case Opcodes.COMPARE_STR:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("COMPARE_STR r").append(rd).append(" = r").append(rs1).append(" cmp r").append(rs2).append("\n");
+                    break;
+                case Opcodes.EQ_NUM:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("EQ_NUM r").append(rd).append(" = r").append(rs1).append(" == r").append(rs2).append("\n");
+                    break;
+                case Opcodes.EQ_STR:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("EQ_STR r").append(rd).append(" = r").append(rs1).append(" eq r").append(rs2).append("\n");
+                    break;
+                case Opcodes.NE_STR:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("NE_STR r").append(rd).append(" = r").append(rs1).append(" ne r").append(rs2).append("\n");
+                    break;
+                case Opcodes.AND:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("AND r").append(rd).append(" = r").append(rs1).append(" && r").append(rs2).append("\n");
+                    break;
+                case Opcodes.OR:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("OR r").append(rd).append(" = r").append(rs1).append(" || r").append(rs2).append("\n");
+                    break;
+                case Opcodes.CALL_BUILTIN: {
+                    // Call builtin: rd = builtin(args, ctx)
+                    // Format: CALL_BUILTIN rd builtinId argsReg ctx
+                    rd = bytecode[pc++];
+                    int builtinId = bytecode[pc++];
+                    int builtinArgsReg = bytecode[pc++];
+                    int builtinCtx = bytecode[pc++];
+                    sb.append("CALL_BUILTIN r").append(rd).append(" = builtin(").append(builtinId)
+                            .append(", r").append(builtinArgsReg).append(", ctx=").append(builtinCtx).append(")\n");
+                    break;
+                }
+
+                // Control flow creation: rd = RuntimeControlFlowList(type, label)
+                // Format: CREATE_xxx rd labelIdx
+                case Opcodes.CREATE_LAST: {
+                    rd = bytecode[pc++];
+                    int cfLabelIdx = bytecode[pc++];
+                    sb.append("CREATE_LAST r").append(rd).append(" label=");
+                    if (cfLabelIdx == 255) {
+                        sb.append("<none>");
+                    } else if (stringPool != null && cfLabelIdx < stringPool.length) {
+                        sb.append("\"").append(stringPool[cfLabelIdx]).append("\"");
+                    } else {
+                        sb.append(cfLabelIdx);
+                    }
+                    sb.append("\n");
+                    break;
+                }
+                case Opcodes.CREATE_NEXT: {
+                    rd = bytecode[pc++];
+                    int cfLabelIdx = bytecode[pc++];
+                    sb.append("CREATE_NEXT r").append(rd).append(" label=");
+                    if (cfLabelIdx == 255) {
+                        sb.append("<none>");
+                    } else if (stringPool != null && cfLabelIdx < stringPool.length) {
+                        sb.append("\"").append(stringPool[cfLabelIdx]).append("\"");
+                    } else {
+                        sb.append(cfLabelIdx);
+                    }
+                    sb.append("\n");
+                    break;
+                }
+                case Opcodes.CREATE_REDO: {
+                    rd = bytecode[pc++];
+                    int cfLabelIdx = bytecode[pc++];
+                    sb.append("CREATE_REDO r").append(rd).append(" label=");
+                    if (cfLabelIdx == 255) {
+                        sb.append("<none>");
+                    } else if (stringPool != null && cfLabelIdx < stringPool.length) {
+                        sb.append("\"").append(stringPool[cfLabelIdx]).append("\"");
+                    } else {
+                        sb.append(cfLabelIdx);
+                    }
+                    sb.append("\n");
+                    break;
+                }
+                case Opcodes.CREATE_GOTO: {
+                    rd = bytecode[pc++];
+                    int cfLabelIdx = bytecode[pc++];
+                    sb.append("CREATE_GOTO r").append(rd).append(" label=");
+                    if (cfLabelIdx == 255) {
+                        sb.append("<none>");
+                    } else if (stringPool != null && cfLabelIdx < stringPool.length) {
+                        sb.append("\"").append(stringPool[cfLabelIdx]).append("\"");
+                    } else {
+                        sb.append(cfLabelIdx);
+                    }
+                    sb.append("\n");
+                    break;
+                }
+                case Opcodes.IS_CONTROL_FLOW:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("IS_CONTROL_FLOW r").append(rd).append(" = (r").append(rs1).append(" instanceof ControlFlow)\n");
+                    break;
+                case Opcodes.GET_CONTROL_FLOW_TYPE:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("GET_CONTROL_FLOW_TYPE r").append(rd).append(" = r").append(rs1).append(".getControlFlowType()\n");
+                    break;
+
+                // =================================================================
+                // SLICE/COLLECTION OPS (116-127)
+                // =================================================================
+
+                case Opcodes.ARRAY_SLICE: {
+                    // Format: ARRAY_SLICE rd arrayReg indicesReg
+                    rd = bytecode[pc++];
+                    int asArrayReg = bytecode[pc++];
+                    int asIndicesReg = bytecode[pc++];
+                    sb.append("ARRAY_SLICE r").append(rd).append(" = r").append(asArrayReg)
+                            .append("[r").append(asIndicesReg).append("]\n");
+                    break;
+                }
+                case Opcodes.ARRAY_SLICE_SET: {
+                    // Format: ARRAY_SLICE_SET arrayReg indicesReg valuesReg
+                    int assArrayReg = bytecode[pc++];
+                    int assIndicesReg = bytecode[pc++];
+                    int assValuesReg = bytecode[pc++];
+                    sb.append("ARRAY_SLICE_SET r").append(assArrayReg)
+                            .append("[r").append(assIndicesReg).append("] = r").append(assValuesReg).append("\n");
+                    break;
+                }
+                case Opcodes.HASH_SLICE: {
+                    // Format: HASH_SLICE rd hashReg keysListReg
+                    rd = bytecode[pc++];
+                    int hsHashReg = bytecode[pc++];
+                    int hsKeysReg = bytecode[pc++];
+                    sb.append("HASH_SLICE r").append(rd).append(" = r").append(hsHashReg)
+                            .append("{r").append(hsKeysReg).append("}\n");
+                    break;
+                }
+                case Opcodes.HASH_SLICE_SET: {
+                    // Format: HASH_SLICE_SET hashReg keysListReg valuesListReg
+                    int hssHashReg = bytecode[pc++];
+                    int hssKeysReg = bytecode[pc++];
+                    int hssValuesReg = bytecode[pc++];
+                    sb.append("HASH_SLICE_SET r").append(hssHashReg)
+                            .append("{r").append(hssKeysReg).append("} = r").append(hssValuesReg).append("\n");
+                    break;
+                }
+                case Opcodes.HASH_SLICE_DELETE: {
+                    // Format: HASH_SLICE_DELETE rd hashReg keysListReg
+                    rd = bytecode[pc++];
+                    int hsdHashReg = bytecode[pc++];
+                    int hsdKeysReg = bytecode[pc++];
+                    sb.append("HASH_SLICE_DELETE r").append(rd).append(" = delete r").append(hsdHashReg)
+                            .append("{r").append(hsdKeysReg).append("}\n");
+                    break;
+                }
+                case Opcodes.LIST_SLICE_FROM: {
+                    // Format: LIST_SLICE_FROM rd listReg startIndex
+                    rd = bytecode[pc++];
+                    int lsfListReg = bytecode[pc++];
+                    int lsfStartIdx = bytecode[pc++];
+                    sb.append("LIST_SLICE_FROM r").append(rd).append(" = r").append(lsfListReg)
+                            .append("[").append(lsfStartIdx).append("..]\n");
+                    break;
+                }
+                case Opcodes.SPLICE: {
+                    // Format: SPLICE rd arrayReg argsReg context
+                    rd = bytecode[pc++];
+                    int splArrayReg = bytecode[pc++];
+                    int splArgsReg = bytecode[pc++];
+                    int splCtx = bytecode[pc++];
+                    sb.append("SPLICE r").append(rd).append(" = splice(r").append(splArrayReg)
+                            .append(", r").append(splArgsReg).append(", ctx=").append(splCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.REVERSE: {
+                    // Format: REVERSE rd argsReg ctx
+                    rd = bytecode[pc++];
+                    int revArgsReg = bytecode[pc++];
+                    int revCtx = bytecode[pc++];
+                    sb.append("REVERSE r").append(rd).append(" = reverse(r").append(revArgsReg)
+                            .append(", ctx=").append(revCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.LENGTH_OP: {
+                    // Format: LENGTH_OP rd stringReg
+                    rd = bytecode[pc++];
+                    int lopRs = bytecode[pc++];
+                    sb.append("LENGTH_OP r").append(rd).append(" = length(r").append(lopRs).append(")\n");
+                    break;
+                }
+                case Opcodes.EXISTS: {
+                    // Format: EXISTS rd operandReg
+                    rd = bytecode[pc++];
+                    int exOperandReg = bytecode[pc++];
+                    sb.append("EXISTS r").append(rd).append(" = exists(r").append(exOperandReg).append(")\n");
+                    break;
+                }
+                case Opcodes.DELETE: {
+                    // Format: DELETE rd operandReg
+                    rd = bytecode[pc++];
+                    int delOperandReg = bytecode[pc++];
+                    sb.append("DELETE r").append(rd).append(" = delete(r").append(delOperandReg).append(")\n");
+                    break;
+                }
+
+                // =================================================================
+                // BEGIN RETRIEVAL (129-130)
+                // =================================================================
+
+                case Opcodes.RETRIEVE_BEGIN_ARRAY: {
+                    // Format: RETRIEVE_BEGIN_ARRAY rd nameIdx beginId
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    int rbaBeginId = bytecode[pc++];
+                    sb.append("RETRIEVE_BEGIN_ARRAY r").append(rd).append(" = BEGIN_").append(rbaBeginId)
+                            .append("::").append(stringPool[nameIdx]).append("\n");
+                    break;
+                }
+                case Opcodes.RETRIEVE_BEGIN_HASH: {
+                    // Format: RETRIEVE_BEGIN_HASH rd nameIdx beginId
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    int rbhBeginId = bytecode[pc++];
+                    sb.append("RETRIEVE_BEGIN_HASH r").append(rd).append(" = BEGIN_").append(rbhBeginId)
+                            .append("::").append(stringPool[nameIdx]).append("\n");
+                    break;
+                }
+
+                // =================================================================
+                // SYSTEM/IPC OPS (132-150)
+                // =================================================================
+
+                // Most system/IPC ops use MiscOpcodeHandler pattern: rd argsReg ctx → 3 operands
+                case Opcodes.CHOWN:
+                case Opcodes.WAITPID:
+                case Opcodes.GETPGRP:
+                case Opcodes.SETPGRP:
+                case Opcodes.GETPRIORITY:
+                case Opcodes.SETPRIORITY:
+                case Opcodes.GETSOCKOPT:
+                case Opcodes.SETSOCKOPT: {
+                    rd = bytecode[pc++];
+                    int sysArgsReg = bytecode[pc++];
+                    int sysCtx = bytecode[pc++];
+                    String sysName = switch (opcode) {
+                        case Opcodes.CHOWN -> "chown";
+                        case Opcodes.WAITPID -> "waitpid";
+                        case Opcodes.GETPGRP -> "getpgrp";
+                        case Opcodes.SETPGRP -> "setpgrp";
+                        case Opcodes.GETPRIORITY -> "getpriority";
+                        case Opcodes.SETPRIORITY -> "setpriority";
+                        case Opcodes.GETSOCKOPT -> "getsockopt";
+                        case Opcodes.SETSOCKOPT -> "setsockopt";
+                        default -> "sys_op_" + opcode;
+                    };
+                    sb.append(sysName).append(" r").append(rd)
+                            .append(" = ").append(sysName).append("(r").append(sysArgsReg)
+                            .append(", ctx=").append(sysCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.FORK: {
+                    // Format: FORK rd
+                    rd = bytecode[pc++];
+                    sb.append("FORK r").append(rd).append(" = fork()\n");
+                    break;
+                }
+                case Opcodes.GETPPID: {
+                    // Format: GETPPID rd
+                    rd = bytecode[pc++];
+                    sb.append("GETPPID r").append(rd).append(" = getppid()\n");
+                    break;
+                }
+                case Opcodes.SYSCALL: {
+                    // Format: SYSCALL rd numberReg argCount [argRegs...]
+                    rd = bytecode[pc++];
+                    int sysNumReg = bytecode[pc++];
+                    int sysArgCount = bytecode[pc++];
+                    sb.append("SYSCALL r").append(rd).append(" = syscall(r").append(sysNumReg).append(", [");
+                    for (int i = 0; i < sysArgCount; i++) {
+                        if (i > 0) sb.append(", ");
+                        sb.append("r").append(bytecode[pc++]);
+                    }
+                    sb.append("])\n");
+                    break;
+                }
+                case Opcodes.SEMGET: {
+                    // Format: SEMGET rd keyReg nsemsReg flagsReg
+                    rd = bytecode[pc++];
+                    int sgKeyReg = bytecode[pc++];
+                    int sgNsemsReg = bytecode[pc++];
+                    int sgFlagsReg = bytecode[pc++];
+                    sb.append("SEMGET r").append(rd).append(" = semget(r").append(sgKeyReg)
+                            .append(", r").append(sgNsemsReg).append(", r").append(sgFlagsReg).append(")\n");
+                    break;
+                }
+                case Opcodes.SEMOP: {
+                    // Format: SEMOP rd semidReg opstringReg
+                    rd = bytecode[pc++];
+                    int soSemidReg = bytecode[pc++];
+                    int soOpstringReg = bytecode[pc++];
+                    sb.append("SEMOP r").append(rd).append(" = semop(r").append(soSemidReg)
+                            .append(", r").append(soOpstringReg).append(")\n");
+                    break;
+                }
+                case Opcodes.MSGGET: {
+                    // Format: MSGGET rd keyReg flagsReg
+                    rd = bytecode[pc++];
+                    int mgKeyReg = bytecode[pc++];
+                    int mgFlagsReg = bytecode[pc++];
+                    sb.append("MSGGET r").append(rd).append(" = msgget(r").append(mgKeyReg)
+                            .append(", r").append(mgFlagsReg).append(")\n");
+                    break;
+                }
+                case Opcodes.MSGSND: {
+                    // Format: MSGSND rd idReg msgReg flagsReg
+                    rd = bytecode[pc++];
+                    int msIdReg = bytecode[pc++];
+                    int msMsgReg = bytecode[pc++];
+                    int msFlagsReg = bytecode[pc++];
+                    sb.append("MSGSND r").append(rd).append(" = msgsnd(r").append(msIdReg)
+                            .append(", r").append(msMsgReg).append(", r").append(msFlagsReg).append(")\n");
+                    break;
+                }
+                case Opcodes.MSGRCV: {
+                    // Format: MSGRCV rd idReg sizeReg typeReg flagsReg
+                    rd = bytecode[pc++];
+                    int mrIdReg = bytecode[pc++];
+                    int mrSizeReg = bytecode[pc++];
+                    int mrTypeReg = bytecode[pc++];
+                    int mrFlagsReg = bytecode[pc++];
+                    sb.append("MSGRCV r").append(rd).append(" = msgrcv(r").append(mrIdReg)
+                            .append(", r").append(mrSizeReg).append(", r").append(mrTypeReg)
+                            .append(", r").append(mrFlagsReg).append(")\n");
+                    break;
+                }
+                case Opcodes.SHMGET: {
+                    // Format: SHMGET rd keyReg sizeReg flagsReg
+                    rd = bytecode[pc++];
+                    int shgKeyReg = bytecode[pc++];
+                    int shgSizeReg = bytecode[pc++];
+                    int shgFlagsReg = bytecode[pc++];
+                    sb.append("SHMGET r").append(rd).append(" = shmget(r").append(shgKeyReg)
+                            .append(", r").append(shgSizeReg).append(", r").append(shgFlagsReg).append(")\n");
+                    break;
+                }
+                case Opcodes.SHMREAD: {
+                    // Format: SHMREAD rd idReg posReg sizeReg
+                    rd = bytecode[pc++];
+                    int shrIdReg = bytecode[pc++];
+                    int shrPosReg = bytecode[pc++];
+                    int shrSizeReg = bytecode[pc++];
+                    sb.append("SHMREAD r").append(rd).append(" = shmread(r").append(shrIdReg)
+                            .append(", r").append(shrPosReg).append(", r").append(shrSizeReg).append(")\n");
+                    break;
+                }
+                case Opcodes.SHMWRITE: {
+                    // Format: SHMWRITE idReg posReg stringReg
+                    int shwIdReg = bytecode[pc++];
+                    int shwPosReg = bytecode[pc++];
+                    int shwStringReg = bytecode[pc++];
+                    sb.append("SHMWRITE shmwrite(r").append(shwIdReg)
+                            .append(", r").append(shwPosReg).append(", r").append(shwStringReg).append(")\n");
+                    break;
+                }
+
+                // =================================================================
+                // OPERATOR PROMOTIONS (156-157, 310)
+                // =================================================================
+
+                case Opcodes.OP_ABS:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("OP_ABS r").append(rd).append(" = abs(r").append(rs1).append(")\n");
+                    break;
+                case Opcodes.OP_INT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("OP_INT r").append(rd).append(" = int(r").append(rs1).append(")\n");
+                    break;
+                case Opcodes.OP_POW:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("OP_POW r").append(rd).append(" = r").append(rs1).append(" ** r").append(rs2).append("\n");
+                    break;
+
+                // =================================================================
+                // MISC OPERATORS
+                // =================================================================
+
+                case Opcodes.TR_TRANSLITERATE: {
+                    // Format: TR_TRANSLITERATE rd searchReg replaceReg modifiersReg targetReg context
+                    rd = bytecode[pc++];
+                    int trSearchReg = bytecode[pc++];
+                    int trReplaceReg = bytecode[pc++];
+                    int trModifiersReg = bytecode[pc++];
+                    int trTargetReg = bytecode[pc++];
+                    int trCtx = bytecode[pc++];
+                    sb.append("TR_TRANSLITERATE r").append(rd).append(" = tr(r").append(trSearchReg)
+                            .append(", r").append(trReplaceReg).append(", r").append(trModifiersReg)
+                            .append(", r").append(trTargetReg).append(", ctx=").append(trCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.STORE_SYMBOLIC_SCALAR: {
+                    // Format: STORE_SYMBOLIC_SCALAR nameReg valueReg
+                    int ssNameReg = bytecode[pc++];
+                    int ssValueReg = bytecode[pc++];
+                    sb.append("STORE_SYMBOLIC_SCALAR ${r").append(ssNameReg).append("} = r").append(ssValueReg).append("\n");
+                    break;
+                }
+                case Opcodes.LOAD_SYMBOLIC_SCALAR: {
+                    // Format: LOAD_SYMBOLIC_SCALAR rd nameReg
+                    rd = bytecode[pc++];
+                    int lsNameReg = bytecode[pc++];
+                    sb.append("LOAD_SYMBOLIC_SCALAR r").append(rd).append(" = ${r").append(lsNameReg).append("}\n");
+                    break;
+                }
+                case Opcodes.TIE: {
+                    // Format: TIE rd argsReg ctx
+                    rd = bytecode[pc++];
+                    int tieArgsReg = bytecode[pc++];
+                    int tieCtx = bytecode[pc++];
+                    sb.append("TIE r").append(rd).append(" = tie(r").append(tieArgsReg)
+                            .append(", ctx=").append(tieCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.UNTIE: {
+                    // Format: UNTIE rd argsReg ctx
+                    rd = bytecode[pc++];
+                    int untieArgsReg = bytecode[pc++];
+                    int untieCtx = bytecode[pc++];
+                    sb.append("UNTIE r").append(rd).append(" = untie(r").append(untieArgsReg)
+                            .append(", ctx=").append(untieCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.TIED: {
+                    // Format: TIED rd argsReg ctx
+                    rd = bytecode[pc++];
+                    int tiedArgsReg = bytecode[pc++];
+                    int tiedCtx = bytecode[pc++];
+                    sb.append("TIED r").append(rd).append(" = tied(r").append(tiedArgsReg)
+                            .append(", ctx=").append(tiedCtx).append(")\n");
+                    break;
+                }
+                case Opcodes.QX: {
+                    // Format: QX rd argsReg ctx (MiscOpcodeHandler pattern)
+                    rd = bytecode[pc++];
+                    int qxArgsReg = bytecode[pc++];
+                    int qxCtx = bytecode[pc++];
+                    sb.append("QX r").append(rd).append(" = qx(r").append(qxArgsReg)
+                            .append(", ctx=").append(qxCtx).append(")\n");
+                    break;
+                }
+
+                // =================================================================
+                // I/O OPERATIONS (309-330)
+                // =================================================================
+
+                case Opcodes.CLOSE:
+                case Opcodes.BINMODE:
+                case Opcodes.SEEK:
+                case Opcodes.EOF_OP:
+                case Opcodes.SYSREAD:
+                case Opcodes.SYSWRITE:
+                case Opcodes.SYSOPEN:
+                case Opcodes.SOCKET:
+                case Opcodes.BIND:
+                case Opcodes.CONNECT:
+                case Opcodes.LISTEN:
+                case Opcodes.WRITE:
+                case Opcodes.FORMLINE:
+                case Opcodes.PRINTF:
+                case Opcodes.ACCEPT:
+                case Opcodes.SYSSEEK:
+                case Opcodes.TRUNCATE:
+                case Opcodes.READ:
+                case Opcodes.OPENDIR:
+                case Opcodes.READDIR:
+                case Opcodes.SEEKDIR: {
+                    // All use MiscOpcodeHandler pattern: rd argsReg ctx
+                    rd = bytecode[pc++];
+                    int ioArgsReg = bytecode[pc++];
+                    int ioCtx = bytecode[pc++];
+                    String ioName = switch (opcode) {
+                        case Opcodes.CLOSE -> "close";
+                        case Opcodes.BINMODE -> "binmode";
+                        case Opcodes.SEEK -> "seek";
+                        case Opcodes.EOF_OP -> "eof";
+                        case Opcodes.SYSREAD -> "sysread";
+                        case Opcodes.SYSWRITE -> "syswrite";
+                        case Opcodes.SYSOPEN -> "sysopen";
+                        case Opcodes.SOCKET -> "socket";
+                        case Opcodes.BIND -> "bind";
+                        case Opcodes.CONNECT -> "connect";
+                        case Opcodes.LISTEN -> "listen";
+                        case Opcodes.WRITE -> "write";
+                        case Opcodes.FORMLINE -> "formline";
+                        case Opcodes.PRINTF -> "printf";
+                        case Opcodes.ACCEPT -> "accept";
+                        case Opcodes.SYSSEEK -> "sysseek";
+                        case Opcodes.TRUNCATE -> "truncate";
+                        case Opcodes.READ -> "read";
+                        case Opcodes.OPENDIR -> "opendir";
+                        case Opcodes.READDIR -> "readdir";
+                        case Opcodes.SEEKDIR -> "seekdir";
+                        default -> "io_op_" + opcode;
+                    };
+                    sb.append(ioName).append(" r").append(rd)
+                            .append(" = ").append(ioName).append("(r").append(ioArgsReg)
+                            .append(", ctx=").append(ioCtx).append(")\n");
+                    break;
+                }
+
+                // =================================================================
+                // OTHER MISSING OPS
+                // =================================================================
+
+                case Opcodes.LOAD_GLOB_DYNAMIC: {
+                    // Format: LOAD_GLOB_DYNAMIC rd nameReg pkgIdx
+                    rd = bytecode[pc++];
+                    int lgdNameReg = bytecode[pc++];
+                    int lgdPkgIdx = bytecode[pc++];
+                    sb.append("LOAD_GLOB_DYNAMIC r").append(rd).append(" = *{r").append(lgdNameReg)
+                            .append("} pkg=").append(stringPool[lgdPkgIdx]).append("\n");
+                    break;
+                }
+                case Opcodes.SET_ARRAY_LAST_INDEX: {
+                    // Format: SET_ARRAY_LAST_INDEX arrayReg valueReg
+                    int saliArrayReg = bytecode[pc++];
+                    int saliValueReg = bytecode[pc++];
+                    sb.append("SET_ARRAY_LAST_INDEX $#r").append(saliArrayReg).append(" = r").append(saliValueReg).append("\n");
+                    break;
+                }
+                case Opcodes.XOR_LOGICAL:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("XOR_LOGICAL r").append(rd).append(" = r").append(rs1).append(" xor r").append(rs2).append("\n");
+                    break;
+                case Opcodes.DEFINED_OR_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    sb.append("DEFINED_OR_ASSIGN r").append(rd).append(" //= r").append(rs1).append("\n");
+                    break;
+                case Opcodes.UNDEFINE_SCALAR:
+                    rd = bytecode[pc++];
+                    sb.append("UNDEFINE_SCALAR r").append(rd).append("\n");
+                    break;
+                case Opcodes.SAVE_REGEX_STATE: {
+                    // Format: SAVE_REGEX_STATE dummy
+                    int srsDummy = bytecode[pc++];
+                    sb.append("SAVE_REGEX_STATE r").append(srsDummy).append("\n");
+                    break;
+                }
+                case Opcodes.RESTORE_REGEX_STATE: {
+                    // Format: RESTORE_REGEX_STATE dummy
+                    int rrsDummy = bytecode[pc++];
+                    sb.append("RESTORE_REGEX_STATE r").append(rrsDummy).append("\n");
+                    break;
+                }
+
                 default:
                     sb.append("UNKNOWN(").append(opcode).append(")\n");
                     break;
             }
         }
         return sb.toString();
-    }
-
-    /**
-     * Read a 32-bit integer from bytecode (stored as 1 int slot).
-     * With int[] storage a full int fits in a single slot.
-     */
-    private static int readInt(int[] bytecode, int pc) {
-        return bytecode[pc];
     }
 
     /**
@@ -1757,7 +2357,7 @@ public class InterpretedCode extends RuntimeCode {
                 throw new IllegalStateException("Bytecode is required");
             }
             return new InterpretedCode(bytecode, constants, stringPool, maxRegisters,
-                                      capturedVars, sourceName, sourceLine, null, null);
+                    capturedVars, sourceName, sourceLine, null, null);
         }
     }
 }

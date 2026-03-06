@@ -120,7 +120,7 @@ public class IOOperator {
     public static RuntimeScalar tell(RuntimeScalar fileHandle) {
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
-        
+
         // If no explicit filehandle was provided (tell with no args),
         // fall back to the last accessed handle like Perl does.
         if (fh == null) {

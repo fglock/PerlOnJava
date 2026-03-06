@@ -1,25 +1,25 @@
 package org.perlonjava.backend.bytecode;
 
 
+import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
-import org.perlonjava.backend.jvm.EmitterMethodCreator;
-import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.*;
-import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;
 
 /**
  * BytecodeCompiler traverses the AST and generates interpreter bytecode.
- *
+ * <p>
  * This is analogous to EmitterVisitor but generates custom bytecode
  * for the interpreter instead of JVM bytecode via ASM.
- *
+ * <p>
  * Key responsibilities:
  * - Visit AST nodes and emit interpreter opcodes
  * - Allocate registers for variables and temporaries
@@ -30,101 +30,64 @@ public class BytecodeCompiler implements Visitor {
     // Pre-allocate with reasonable initial capacity to reduce resizing
     // Typical small eval/subroutine needs 20-50 bytecodes, 5-10 constants, 3-8 strings
     final List<Integer> bytecode = new ArrayList<>(64);
-    private final List<Object> constants = new ArrayList<>(16);
-    private final List<String> stringPool = new ArrayList<>(16);
-    private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
-    private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
-
     // Scoped symbol table for variable tracking, package/class tracking, and eval STRING support.
     // Replaces the old variableScopes Stack + allDeclaredVariables flat map.
     // Using ScopedSymbolTable gives us proper scope-aware variable lookups and
     // getAllVisibleVariables()/getVisibleVariableRegistry() for per-eval-site snapshots.
     final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
-
-    // Scope index stack for proper ScopedSymbolTable.exitScope() calls
-    private final Stack<Integer> scopeIndices = new Stack<>();
-
-    // Stack to save/restore register state when entering/exiting scopes
-    private final Stack<Integer> savedNextRegister = new Stack<>();
-    private final Stack<Integer> savedBaseRegister = new Stack<>();
-
-    // Loop label stack for last/next/redo control flow
-    // Each entry tracks loop boundaries and optional label
-    private final Stack<LoopInfo> loopStack = new Stack<>();
-
-    // Helper class to track loop boundaries
-    private static class LoopInfo {
-        final String label;           // Loop label (null if unlabeled)
-        final int startPc;           // PC for redo (start of loop body)
-        int continuePc;              // PC for next (continue block or increment)
-        final List<Integer> breakPcs; // PCs to patch for last (break)
-        final List<Integer> nextPcs;  // PCs to patch for next
-        final List<Integer> redoPcs;  // PCs to patch for redo
-        final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
-
-        LoopInfo(String label, int startPc, boolean isTrueLoop) {
-            this.label = label;
-            this.startPc = startPc;
-            this.isTrueLoop = isTrueLoop;
-            this.continuePc = -1;  // Will be set later
-            this.breakPcs = new ArrayList<>();
-            this.nextPcs = new ArrayList<>();
-            this.redoPcs = new ArrayList<>();
-        }
-    }
-
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     final Map<String, Integer> gotoLabelPcs = new HashMap<>();
     final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), labelName(String)]
-
-    // Token index tracking for error reporting
-    private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
-    int currentTokenIndex = -1;  // Track current token for error reporting
-
     // Error reporting
     final ErrorMessageUtil errorUtil;
-
-    // EmitterContext for strict checks and other compile-time options
-    private EmitterContext emitterContext;
-
-    // Register allocation
-    private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
-    private int baseRegisterForStatement = 3;  // Reset point after each statement
-    private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
-
-    // Track last result register for expression chaining
-    int lastResultReg = -1;
-
-    // Track current calling context for subroutine calls
-    int currentCallContext = RuntimeContextType.LIST; // Default to LIST
-
-    // True when this compiler was constructed for eval STRING (has parentRegistry)
-    private boolean isEvalString;
-
-    // Closure support
-    private RuntimeBase[] capturedVars;           // Captured variable values
-    private String[] capturedVarNames;            // Parallel array of names
-    Map<String, Integer> capturedVarIndices;  // Name → register index
-
     // Per-eval-site variable registries: each eval STRING emission snapshots the
     // currently visible variables so at runtime the correct registers are captured.
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
     final List<int[]> evalSitePragmaFlags = new ArrayList<>();
-
-    // BEGIN support for named subroutine closures
-    int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
-    Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
-
     // Variables captured by inner closures (named or anonymous subs compiled within this scope).
     // Assignments to these variables must use SET_SCALAR alone (in-place modification)
     // instead of LOAD_UNDEF + SET_SCALAR, to preserve the RuntimeScalar identity that
     // closures share.
     final Set<String> closureCapturedVarNames = new HashSet<>();
-
     // Source information
     final String sourceName;
     final int sourceLine;
+    private final List<Object> constants = new ArrayList<>(16);
+    private final List<String> stringPool = new ArrayList<>(16);
+    private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
+    private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
+    // Scope index stack for proper ScopedSymbolTable.exitScope() calls
+    private final Stack<Integer> scopeIndices = new Stack<>();
+    // Stack to save/restore register state when entering/exiting scopes
+    private final Stack<Integer> savedNextRegister = new Stack<>();
+    private final Stack<Integer> savedBaseRegister = new Stack<>();
+    // Loop label stack for last/next/redo control flow
+    // Each entry tracks loop boundaries and optional label
+    private final Stack<LoopInfo> loopStack = new Stack<>();
+    // Token index tracking for error reporting
+    private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
+    int currentTokenIndex = -1;  // Track current token for error reporting
+    // Track last result register for expression chaining
+    int lastResultReg = -1;
+
+    // Track current calling context for subroutine calls
+    int currentCallContext = RuntimeContextType.LIST; // Default to LIST
+    Map<String, Integer> capturedVarIndices;  // Name → register index
+    // BEGIN support for named subroutine closures
+    int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
+    Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
+    // EmitterContext for strict checks and other compile-time options
+    private EmitterContext emitterContext;
+    // Register allocation
+    private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
+    private int baseRegisterForStatement = 3;  // Reset point after each statement
+    private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
+    // True when this compiler was constructed for eval STRING (has parentRegistry)
+    private boolean isEvalString;
+    // Closure support
+    private RuntimeBase[] capturedVars;           // Captured variable values
+    private String[] capturedVarNames;            // Parallel array of names
 
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil) {
         this.sourceName = sourceName;
@@ -146,13 +109,13 @@ public class BytecodeCompiler implements Visitor {
      * Constructor for eval STRING with parent scope variable registry.
      * Initializes symbolTable with variables from parent scope.
      *
-     * @param sourceName Source name for error messages
-     * @param sourceLine Source line for error messages
-     * @param errorUtil Error message utility
+     * @param sourceName     Source name for error messages
+     * @param sourceLine     Source line for error messages
+     * @param errorUtil      Error message utility
      * @param parentRegistry Variable registry from parent scope (for eval STRING)
      */
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
-                           Map<String, Integer> parentRegistry) {
+                            Map<String, Integer> parentRegistry) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
@@ -195,6 +158,70 @@ public class BytecodeCompiler implements Visitor {
             this.maxRegisterEverUsed = maxRegister;
             this.baseRegisterForStatement = this.nextRegister;
         }
+    }
+
+    /**
+     * Helper: Check if a variable is a built-in special length-one variable.
+     * Single-character non-letter variables like $_, $0, $!, $; are always allowed under strict.
+     * Mirrors logic from EmitVariable.java.
+     */
+    private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        // In Perl, many single-character non-identifier variables (punctuation/digits)
+        // are built-in special vars and are exempt from strict 'vars'.
+        return !Character.isLetter(c);
+    }
+
+    /**
+     * Helper: Check if a variable is a built-in special scalar variable.
+     * Variables like ${^GLOBAL_PHASE}, $ARGV, $ENV are always allowed under strict.
+     * Mirrors logic from EmitVariable.java.
+     */
+    private static boolean isBuiltinSpecialScalarVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.isEmpty()) {
+            return false;
+        }
+        // ${^FOO} variables are encoded as a leading ASCII control character.
+        // (e.g. ${^GLOBAL_PHASE} -> "\aLOBAL_PHASE"). These are built-in and strict-safe.
+        if (name.charAt(0) < 32) {
+            return true;
+        }
+        return name.equals("ARGV")
+                || name.equals("ARGVOUT")
+                || name.equals("ENV")
+                || name.equals("INC")
+                || name.equals("SIG")
+                || name.equals("STDIN")
+                || name.equals("STDOUT")
+                || name.equals("STDERR");
+    }
+
+    /**
+     * Helper: Check if a variable is a built-in special container variable.
+     * Variables like %ENV, @ARGV, @INC are always allowed under strict.
+     * Mirrors logic from EmitVariable.java.
+     */
+    private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
+        if (name == null) {
+            return false;
+        }
+        if ("%".equals(sigil)) {
+            return name.equals("SIG")
+                    || name.equals("ENV")
+                    || name.equals("INC")
+                    || name.equals("+")
+                    || name.equals("-");
+        }
+        if ("@".equals(sigil)) {
+            return name.equals("ARGV")
+                    || name.equals("INC")
+                    || name.equals("_")
+                    || name.equals("F");
+        }
+        return false;
     }
 
     boolean hasVariable(String name) {
@@ -274,77 +301,13 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
-     * Helper: Check if a variable is a built-in special length-one variable.
-     * Single-character non-letter variables like $_, $0, $!, $; are always allowed under strict.
-     * Mirrors logic from EmitVariable.java.
-     */
-    private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
-        if (!"$".equals(sigil) || name == null || name.length() != 1) {
-            return false;
-        }
-        char c = name.charAt(0);
-        // In Perl, many single-character non-identifier variables (punctuation/digits)
-        // are built-in special vars and are exempt from strict 'vars'.
-        return !Character.isLetter(c);
-    }
-
-    /**
-     * Helper: Check if a variable is a built-in special scalar variable.
-     * Variables like ${^GLOBAL_PHASE}, $ARGV, $ENV are always allowed under strict.
-     * Mirrors logic from EmitVariable.java.
-     */
-    private static boolean isBuiltinSpecialScalarVar(String sigil, String name) {
-        if (!"$".equals(sigil) || name == null || name.isEmpty()) {
-            return false;
-        }
-        // ${^FOO} variables are encoded as a leading ASCII control character.
-        // (e.g. ${^GLOBAL_PHASE} -> "\aLOBAL_PHASE"). These are built-in and strict-safe.
-        if (name.charAt(0) < 32) {
-            return true;
-        }
-        return name.equals("ARGV")
-                || name.equals("ARGVOUT")
-                || name.equals("ENV")
-                || name.equals("INC")
-                || name.equals("SIG")
-                || name.equals("STDIN")
-                || name.equals("STDOUT")
-                || name.equals("STDERR");
-    }
-
-    /**
-     * Helper: Check if a variable is a built-in special container variable.
-     * Variables like %ENV, @ARGV, @INC are always allowed under strict.
-     * Mirrors logic from EmitVariable.java.
-     */
-    private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
-        if (name == null) {
-            return false;
-        }
-        if ("%".equals(sigil)) {
-            return name.equals("SIG")
-                    || name.equals("ENV")
-                    || name.equals("INC")
-                    || name.equals("+")
-                    || name.equals("-");
-        }
-        if ("@".equals(sigil)) {
-            return name.equals("ARGV")
-                    || name.equals("INC")
-                    || name.equals("_")
-                    || name.equals("F");
-        }
-        return false;
-    }
-
-    /**
      * Helper: Check if a non-ASCII length-1 scalar is allowed under 'no utf8'.
      * Under 'no utf8', Latin-1 characters (0x80-0xFF) in single-char variable names
      * are treated as special and exempt from strict vars checking.
      * Mirrors logic from EmitVariable.java lines 82-88.
      *
      * @param sigil The variable sigil
-     * @param name The bare variable name (without sigil)
+     * @param name  The bare variable name (without sigil)
      * @return true if this is a non-ASCII length-1 scalar allowed under 'no utf8'
      */
     private boolean isNonAsciiLengthOneScalarAllowedUnderNoUtf8(String sigil, String name) {
@@ -358,6 +321,14 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Returns true if strict refs is currently enabled in the symbol table.
+     */
+    boolean isStrictRefsEnabled() {
+        return emitterContext != null && emitterContext.symbolTable != null
+                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
+    }
+
+    /**
      * Helper: Check if strict vars should block access to this global variable.
      * Returns true if the variable should be BLOCKED (not allowed).
      * Mirrors the createIfNotExists logic from EmitVariable.java lines 362-371.
@@ -365,11 +336,6 @@ public class BytecodeCompiler implements Visitor {
      * @param varName The variable name with sigil (e.g., "$A", "@array")
      * @return true if access should be blocked under strict vars
      */
-    /** Returns true if strict refs is currently enabled in the symbol table. */
-    boolean isStrictRefsEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
-    }
 
     boolean isIntegerEnabled() {
         return emitterContext != null && emitterContext.symbolTable != null
@@ -427,10 +393,7 @@ public class BytecodeCompiler implements Visitor {
         // (e.g., created by `use vars` at parse time)
         // This mirrors the allowIfAlreadyExists logic in EmitVariable.java
         String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
-        boolean allowIfAlreadyExists = false;
-        if (sigil.equals("$") && GlobalVariable.existsGlobalVariable(normalizedName)) {
-            allowIfAlreadyExists = true;
-        }
+        boolean allowIfAlreadyExists = sigil.equals("$") && GlobalVariable.existsGlobalVariable(normalizedName);
         if (sigil.equals("@") && GlobalVariable.existsGlobalArray(normalizedName)) {
             allowIfAlreadyExists = true;
         }
@@ -452,19 +415,16 @@ public class BytecodeCompiler implements Visitor {
             allowIfAlreadyExists = false;
         }
 
-        if (allowIfAlreadyExists) {
-            return false;
-        }
+        return !allowIfAlreadyExists;
 
         // BLOCK: Unqualified variable under strict vars
-        return true;
     }
 
     /**
      * Throw a compiler exception with proper error formatting.
      * Uses PerlCompilerException which formats with line numbers and code context.
      *
-     * @param message The error message
+     * @param message    The error message
      * @param tokenIndex The token index where the error occurred
      */
     void throwCompilerException(String message, int tokenIndex) {
@@ -522,7 +482,7 @@ public class BytecodeCompiler implements Visitor {
             // See InterpreterState.currentPackage javadoc for details.
             if (ctx.symbolTable != null) {
                 symbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(),
-                    ctx.symbolTable.currentPackageIsClass());
+                        ctx.symbolTable.currentPackageIsClass());
                 symbolTable.strictOptionsStack.pop();
                 symbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
                 symbolTable.featureFlagsStack.pop();
@@ -585,28 +545,24 @@ public class BytecodeCompiler implements Visitor {
 
         // Build InterpretedCode
         return new InterpretedCode(
-            toShortArray(),
-            constants.toArray(),
-            stringPool.toArray(new String[0]),
-            maxRegisterEverUsed + 1,
-            capturedVars,
-            sourceName,
-            sourceLine,
-            pcToTokenIndex,
-            variableRegistry,
-            errorUtil,
-            strictOptions,
-            featureFlags,
-            warningFlags,
-            symbolTable.getCurrentPackage(),
-            evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
-            evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags
+                toShortArray(),
+                constants.toArray(),
+                stringPool.toArray(new String[0]),
+                maxRegisterEverUsed + 1,
+                capturedVars,
+                sourceName,
+                sourceLine,
+                pcToTokenIndex,
+                variableRegistry,
+                errorUtil,
+                strictOptions,
+                featureFlags,
+                warningFlags,
+                symbolTable.getCurrentPackage(),
+                evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
+                evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags
         );
     }
-
-    // =========================================================================
-    // CLOSURE DETECTION
-    // =========================================================================
 
     /**
      * Detect closure variables: variables referenced but not declared locally.
@@ -627,7 +583,7 @@ public class BytecodeCompiler implements Visitor {
         // Use getAllVisibleVariables() (TreeMap sorted by register index) with the same
         // filtering as SubroutineParser to ensure capturedVars ordering matches exactly.
         Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> outerVars =
-            ctx.symbolTable.getAllVisibleVariables();
+                ctx.symbolTable.getAllVisibleVariables();
         int skipVariables = org.perlonjava.backend.jvm.EmitterMethodCreator.skipVariables;
 
         List<String> outerVarNames = new ArrayList<>();
@@ -667,7 +623,7 @@ public class BytecodeCompiler implements Visitor {
         Set<String> localVars = getLocalVariableNames(ctx);
         referencedVars.removeAll(localVars);
         referencedVars.removeIf(name ->
-            name.equals("$_") || name.equals("$@") || name.equals("$!")
+                name.equals("$_") || name.equals("$@") || name.equals("$!")
         );
         for (String varName : referencedVars) {
             if (!capturedVarIndices.containsKey(varName)) {
@@ -683,6 +639,10 @@ public class BytecodeCompiler implements Visitor {
         capturedVarNames = outerVarNames.toArray(new String[0]);
         capturedVars = outerValues.toArray(new RuntimeBase[0]);
     }
+
+    // =========================================================================
+    // CLOSURE DETECTION
+    // =========================================================================
 
     /**
      * Collect all variable references in AST.
@@ -725,10 +685,10 @@ public class BytecodeCompiler implements Visitor {
     private RuntimeBase getVariableValueFromContext(String varName, EmitterContext ctx) {
         // For eval STRING, runtime values are available via evalRuntimeContext ThreadLocal
         RuntimeCode.EvalRuntimeContext evalCtx = RuntimeCode.getEvalRuntimeContext();
-        if (evalCtx != null && evalCtx.runtimeValues != null) {
+        if (evalCtx != null && evalCtx.runtimeValues() != null) {
             // Find variable in captured environment
-            String[] capturedEnv = evalCtx.capturedEnv;
-            Object[] runtimeValues = evalCtx.runtimeValues;
+            String[] capturedEnv = evalCtx.capturedEnv();
+            Object[] runtimeValues = evalCtx.runtimeValues();
 
             for (int i = 0; i < capturedEnv.length; i++) {
                 if (capturedEnv[i].equals(varName)) {
@@ -744,10 +704,6 @@ public class BytecodeCompiler implements Visitor {
         // This is OK - closures are typically created at runtime via eval
         return new RuntimeScalar();
     }
-
-    // =========================================================================
-    // VISITOR METHODS
-    // =========================================================================
 
     /**
      * Compiles a block node, creating a new lexical scope.
@@ -878,6 +834,10 @@ public class BytecodeCompiler implements Visitor {
         // Set lastResultReg to the outer register (or -1 if VOID context)
         lastResultReg = outerResultReg;
     }
+
+    // =========================================================================
+    // VISITOR METHODS
+    // =========================================================================
 
     @Override
     public void visit(NumberNode node) {
@@ -1066,7 +1026,7 @@ public class BytecodeCompiler implements Visitor {
                 if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
                     // This is a bareword (no sigil)
                     if (emitterContext != null && emitterContext.symbolTable != null &&
-                        emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                            emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
                     }
                     // Not strict - treat bareword as string literal
@@ -1101,10 +1061,6 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
-     * Handle hash slice operations: @hash{keys} or @$hashref{keys}
-     * Must be called before automatic operand compilation to avoid compiling @ operator
-     */
-    /**
      * Handle array element access: $array[index]
      * Example: $ARGV[0] or $array[$i]
      */
@@ -1132,8 +1088,8 @@ public class BytecodeCompiler implements Visitor {
         } else {
             arrayReg = allocateRegister();
             String globalArrayName = NameNormalizer.normalizeVariableName(
-                varName,
-                getCurrentPackage()
+                    varName,
+                    getCurrentPackage()
             );
             int nameIdx = addToStringPool(globalArrayName);
             emit(Opcodes.LOAD_GLOBAL_ARRAY);
@@ -1142,11 +1098,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Compile the index expression (right side)
-        if (!(node.right instanceof ArrayLiteralNode)) {
+        if (!(node.right instanceof ArrayLiteralNode indexNode)) {
             throwCompilerException("Array subscript requires ArrayLiteralNode");
             return;
         }
-        ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
         if (indexNode.elements.isEmpty()) {
             throwCompilerException("Array subscript requires at least one index");
             return;
@@ -1170,6 +1125,11 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Multi-element array access not yet implemented");
         }
     }
+
+    /**
+     * Handle hash slice operations: @hash{keys} or @$hashref{keys}
+     * Must be called before automatic operand compilation to avoid compiling @ operator
+     */
 
     /**
      * Handle array slice: @array[indices]
@@ -1197,17 +1157,16 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 arrayReg = allocateRegister();
                 String globalArrayName = NameNormalizer.normalizeVariableName(
-                    varName,
-                    getCurrentPackage()
+                        varName,
+                        getCurrentPackage()
                 );
                 int nameIdx = addToStringPool(globalArrayName);
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
                 emitReg(arrayReg);
                 emit(nameIdx);
             }
-        } else if (leftOp.operand instanceof OperatorNode) {
+        } else if (leftOp.operand instanceof OperatorNode derefOp) {
             // Array dereference slice: @$arrayref[indices]
-            OperatorNode derefOp = (OperatorNode) leftOp.operand;
             if (derefOp.operator.equals("$")) {
                 // Compile the scalar reference
                 derefOp.accept(this);
@@ -1236,11 +1195,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Compile the indices (right side) - this is an ArrayLiteralNode
-        if (!(node.right instanceof ArrayLiteralNode)) {
+        if (!(node.right instanceof ArrayLiteralNode indicesNode)) {
             throwCompilerException("Array slice requires ArrayLiteralNode");
             return;
         }
-        ArrayLiteralNode indicesNode = (ArrayLiteralNode) node.right;
 
         // Compile the indices into a list
         // The ArrayLiteralNode might contain a range operator (..) or multiple elements
@@ -1298,8 +1256,8 @@ public class BytecodeCompiler implements Visitor {
         } else {
             hashReg = allocateRegister();
             String globalHashName = NameNormalizer.normalizeVariableName(
-                varName,
-                getCurrentPackage()
+                    varName,
+                    getCurrentPackage()
             );
             int nameIdx = addToStringPool(globalHashName);
             emit(Opcodes.LOAD_GLOBAL_HASH);
@@ -1308,11 +1266,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Compile the key expression (right side)
-        if (!(node.right instanceof HashLiteralNode)) {
+        if (!(node.right instanceof HashLiteralNode keyNode)) {
             throwCompilerException("Hash subscript requires HashLiteralNode");
             return;
         }
-        HashLiteralNode keyNode = (HashLiteralNode) node.right;
         if (keyNode.elements.isEmpty()) {
             throwCompilerException("Hash subscript requires at least one key");
             return;
@@ -1382,8 +1339,8 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 hashReg = allocateRegister();
                 String globalHashName = NameNormalizer.normalizeVariableName(
-                    varName,
-                    getCurrentPackage()
+                        varName,
+                        getCurrentPackage()
                 );
                 int nameIdx = addToStringPool(globalHashName);
                 emit(Opcodes.LOAD_GLOBAL_HASH);
@@ -1509,12 +1466,11 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        if (!(node.right instanceof HashLiteralNode)) {
+        if (!(node.right instanceof HashLiteralNode keysNode)) {
             throwCompilerException("Key/value slice requires HashLiteralNode");
             return;
         }
 
-        HashLiteralNode keysNode = (HashLiteralNode) node.right;
         if (keysNode.elements.isEmpty()) {
             throwCompilerException("Key/value slice requires at least one key");
             return;
@@ -1578,8 +1534,7 @@ public class BytecodeCompiler implements Visitor {
         boolean isGlobal = false;
 
         // Check if left side is a simple variable reference
-        if (node.left instanceof OperatorNode) {
-            OperatorNode leftOp = (OperatorNode) node.left;
+        if (node.left instanceof OperatorNode leftOp) {
 
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
@@ -1594,7 +1549,7 @@ public class BytecodeCompiler implements Visitor {
                     targetReg = allocateRegister();
                     // Strip sigil before normalizing (varName is "$x", need "x" for normalize)
                     String normalizedName = NameNormalizer.normalizeVariableName(
-                        varName.substring(1), getCurrentPackage());
+                            varName.substring(1), getCurrentPackage());
                     int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emitReg(targetReg);
@@ -1688,11 +1643,10 @@ public class BytecodeCompiler implements Visitor {
         int baseReg = lastResultReg;
 
         // Compile the index expression (right side)
-        if (!(node.right instanceof ArrayLiteralNode)) {
+        if (!(node.right instanceof ArrayLiteralNode indexNode)) {
             throwCompilerException("Array subscript requires ArrayLiteralNode");
             return;
         }
-        ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
         if (indexNode.elements.isEmpty()) {
             throwCompilerException("Array subscript requires at least one index");
             return;
@@ -1747,11 +1701,10 @@ public class BytecodeCompiler implements Visitor {
         int baseReg = lastResultReg;
 
         // Compile the key expression (right side)
-        if (!(node.right instanceof HashLiteralNode)) {
+        if (!(node.right instanceof HashLiteralNode keyNode)) {
             throwCompilerException("Hash subscript requires HashLiteralNode");
             return;
         }
-        HashLiteralNode keyNode = (HashLiteralNode) node.right;
         if (keyNode.elements.isEmpty()) {
             throwCompilerException("Hash subscript requires at least one key");
             return;
@@ -1780,7 +1733,7 @@ public class BytecodeCompiler implements Visitor {
             // Check if this is a glob slot access: *X{key}
             // In this case, node.left is an OperatorNode with operator "*"
             boolean isGlobSlotAccess = (node.left instanceof OperatorNode) &&
-                                       ((OperatorNode) node.left).operator.equals("*");
+                    ((OperatorNode) node.left).operator.equals("*");
 
             if (isGlobSlotAccess) {
                 // For glob slot access, call hashDerefGetNonStrict directly
@@ -1838,8 +1791,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Get the array
         int arrayReg;
-        if (node.left instanceof OperatorNode) {
-            OperatorNode leftOp = (OperatorNode) node.left;
+        if (node.left instanceof OperatorNode leftOp) {
 
             if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
                 // Direct array: @array
@@ -1853,8 +1805,8 @@ public class BytecodeCompiler implements Visitor {
                     // Global array - load it
                     arrayReg = allocateRegister();
                     String globalArrayName = NameNormalizer.normalizeVariableName(
-                        varName,
-                        getCurrentPackage()
+                            varName,
+                            getCurrentPackage()
                     );
                     int nameIdx = addToStringPool(globalArrayName);
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
@@ -1926,8 +1878,7 @@ public class BytecodeCompiler implements Visitor {
         if (op.equals("my") || op.equals("state")) {
             // my $x / my @x / my %x / state $x / state @x / state %x - variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
                 if (sigilOp.operand instanceof IdentifierNode) {
@@ -2037,9 +1988,8 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                 }
-            } else if (node.operand instanceof ListNode) {
+            } else if (node.operand instanceof ListNode listNode) {
                 // my ($x, $y, @rest) - list of variable declarations
-                ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
                 List<Boolean> wrapWithRef = new ArrayList<>();
 
@@ -2052,8 +2002,7 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
-                    if (element instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) element;
+                    if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         // Handle backslash operator (reference constructor): my (\$x) or my (\($x, $y))
@@ -2113,7 +2062,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Check if it's a double backslash first: my (\\$x)
                             if (sigilOp.operand instanceof OperatorNode innerBackslash &&
-                                       innerBackslash.operator.equals("\\")) {
+                                    innerBackslash.operator.equals("\\")) {
                                 // Double backslash: my (\\$x)
                                 // This creates a reference to a reference
                                 // We handle this completely here and add the final result to varRegs
@@ -2147,7 +2096,7 @@ public class BytecodeCompiler implements Visitor {
                                 // Process each element in the nested list as a declared reference
                                 for (Node nestedElement : nestedList.elements) {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
-                                        "$@%".contains(nestedVarNode.operator)) {
+                                            "$@%".contains(nestedVarNode.operator)) {
                                         // Get the variable name
                                         if (nestedVarNode.operand instanceof IdentifierNode idNode) {
                                             // Initialize based on original sigil.
@@ -2185,7 +2134,7 @@ public class BytecodeCompiler implements Visitor {
                                     }
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
-                                       "$@%".contains(varNode.operator)) {
+                                    "$@%".contains(varNode.operator)) {
                                 // Single variable: my (\$x) or state (\$x) or my (\@x) or my (\%x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
                                     String originalSigil = varNode.operator;
@@ -2309,7 +2258,8 @@ public class BytecodeCompiler implements Visitor {
                                         emit(persistId);
                                         registerVariable(varName, reg);
                                     }
-                                    default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                    default ->
+                                            throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
 
                                 varRegs.add(reg);
@@ -2332,7 +2282,8 @@ public class BytecodeCompiler implements Visitor {
                                         emit(Opcodes.NEW_HASH);
                                         emitReg(reg);
                                     }
-                                    default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                    default ->
+                                            throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
 
                                 varRegs.add(reg);
@@ -2403,8 +2354,7 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("our")) {
             // our $x / our @x / our %x - package variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
                 if (sigilOp.operand instanceof IdentifierNode) {
@@ -2503,8 +2453,8 @@ public class BytecodeCompiler implements Visitor {
 
                     // Load from global variable using normalized name
                     String globalVarName = NameNormalizer.normalizeVariableName(
-                        ((IdentifierNode) sigilOp.operand).name,
-                        getCurrentPackage()
+                            ((IdentifierNode) sigilOp.operand).name,
+                            getCurrentPackage()
                     );
                     int nameIdx = addToStringPool(globalVarName);
 
@@ -2553,9 +2503,8 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                 }
-            } else if (node.operand instanceof ListNode) {
+            } else if (node.operand instanceof ListNode listNode) {
                 // our ($x, $y) - list of package variable declarations
-                ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
 
                 // Check if this is a declared reference (our \($x, $y))
@@ -2567,8 +2516,7 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
-                    if (element instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) element;
+                    if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         // Parser may rewrite element-level declared refs like \$h/\@h/\%h into a scalar $h
@@ -2633,7 +2581,7 @@ public class BytecodeCompiler implements Visitor {
                         if (sigil.equals("\\")) {
                             // Check if it's a double backslash first: our (\\$x)
                             if (sigilOp.operand instanceof OperatorNode innerBackslash &&
-                                       innerBackslash.operator.equals("\\")) {
+                                    innerBackslash.operator.equals("\\")) {
                                 // Double backslash: our (\\$x)
                                 // Recursively compile the inner part
                                 OperatorNode innerOur = new OperatorNode("our", innerBackslash, node.getIndex());
@@ -2661,7 +2609,7 @@ public class BytecodeCompiler implements Visitor {
                                 // Process each element in the nested list as a declared reference
                                 for (Node nestedElement : nestedList.elements) {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
-                                        "$@%".contains(nestedVarNode.operator)) {
+                                            "$@%".contains(nestedVarNode.operator)) {
                                         if (nestedVarNode.operand instanceof IdentifierNode idNode) {
                                             String originalSigil = nestedVarNode.operator;
                                             String varName = originalSigil + idNode.name;
@@ -2669,8 +2617,8 @@ public class BytecodeCompiler implements Visitor {
                                             // Declare and load the package variable
                                             int reg = addVariable(varName, "our");
                                             String globalVarName = NameNormalizer.normalizeVariableName(
-                                                idNode.name,
-                                                getCurrentPackage()
+                                                    idNode.name,
+                                                    getCurrentPackage()
                                             );
                                             int nameIdx = addToStringPool(globalVarName);
 
@@ -2702,7 +2650,7 @@ public class BytecodeCompiler implements Visitor {
                                     }
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
-                                       "$@%".contains(varNode.operator)) {
+                                    "$@%".contains(varNode.operator)) {
                                 // Single variable: our (\$x) or our (\@x) or our (\%x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
                                     String originalSigil = varNode.operator;
@@ -2711,8 +2659,8 @@ public class BytecodeCompiler implements Visitor {
                                     // Declare and load the package variable
                                     int reg = addVariable(varName, "our");
                                     String globalVarName = NameNormalizer.normalizeVariableName(
-                                        idNode.name,
-                                        getCurrentPackage()
+                                            idNode.name,
+                                            getCurrentPackage()
                                     );
                                     int nameIdx = addToStringPool(globalVarName);
 
@@ -2759,8 +2707,8 @@ public class BytecodeCompiler implements Visitor {
 
                                 // Load from global variable using normalized name
                                 String globalVarName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) sigilOp.operand).name,
-                                    getCurrentPackage()
+                                        ((IdentifierNode) sigilOp.operand).name,
+                                        getCurrentPackage()
                                 );
                                 int nameIdx = addToStringPool(globalVarName);
 
@@ -2780,7 +2728,8 @@ public class BytecodeCompiler implements Visitor {
                                         emitReg(reg);
                                         emit(nameIdx);
                                     }
-                                    default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                    default ->
+                                            throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
                             }
 
@@ -2840,8 +2789,7 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("local")) {
             // local $x - temporarily localize a global variable
             // The operand will be OperatorNode("$", IdentifierNode("x"))
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
@@ -2925,8 +2873,8 @@ public class BytecodeCompiler implements Visitor {
                     if (isDeclaredReference) {
                         // Check if operand is a variable operator ($, @, %)
                         if (sigilOp.operand instanceof OperatorNode innerOp &&
-                            "$@%".contains(innerOp.operator) &&
-                            innerOp.operand instanceof IdentifierNode idNode) {
+                                "$@%".contains(innerOp.operator) &&
+                                innerOp.operand instanceof IdentifierNode idNode) {
 
                             String originalSigil = innerOp.operator;
                             String varName = originalSigil + idNode.name;
@@ -3020,9 +2968,8 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = rd;
                     return;
                 }
-            } else if (node.operand instanceof ListNode) {
+            } else if (node.operand instanceof ListNode listNode) {
                 // local ($x, $y) - list of localized global variables
-                ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
 
                 // Check if this is a declared reference
@@ -3033,8 +2980,7 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
-                    if (element instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) element;
+                    if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         // Handle backslash operator: local (\$x) or local (\($x, $y))
@@ -3047,8 +2993,8 @@ public class BytecodeCompiler implements Visitor {
                                 // Double backslash: local (\\$x)
                                 // Localize, create ref, create ref to ref
                                 if (sigilOp.operand instanceof OperatorNode varNode &&
-                                    "$@%".contains(varNode.operator) &&
-                                    varNode.operand instanceof IdentifierNode idNode) {
+                                        "$@%".contains(varNode.operator) &&
+                                        varNode.operand instanceof IdentifierNode idNode) {
 
                                     String varName = varNode.operator + idNode.name;
 
@@ -3098,8 +3044,8 @@ public class BytecodeCompiler implements Visitor {
                             if (sigilOp.operand instanceof ListNode nestedList) {
                                 for (Node nestedElement : nestedList.elements) {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
-                                        "$@%".contains(nestedVarNode.operator) &&
-                                        nestedVarNode.operand instanceof IdentifierNode idNode) {
+                                            "$@%".contains(nestedVarNode.operator) &&
+                                            nestedVarNode.operand instanceof IdentifierNode idNode) {
                                         String varName = nestedVarNode.operator + idNode.name;
 
                                         if (hasVariable(varName) && !isOurVariable(varName)) {
@@ -3128,8 +3074,8 @@ public class BytecodeCompiler implements Visitor {
                                     }
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
-                                       "$@%".contains(varNode.operator) &&
-                                       varNode.operand instanceof IdentifierNode idNode) {
+                                    "$@%".contains(varNode.operator) &&
+                                    varNode.operand instanceof IdentifierNode idNode) {
                                 // Single variable: local (\$x), local (\@x), local (\%x)
                                 String originalSigil = varNode.operator;
                                 String varName = originalSigil + idNode.name;
@@ -3276,8 +3222,8 @@ public class BytecodeCompiler implements Visitor {
                     // which must always be in the "main" package
                     String globalVarName = varName.substring(1); // Remove $ sigil first
                     globalVarName = NameNormalizer.normalizeVariableName(
-                        globalVarName,
-                        getCurrentPackage()
+                            globalVarName,
+                            getCurrentPackage()
                     );
 
                     int rd = allocateRegister();
@@ -3289,10 +3235,9 @@ public class BytecodeCompiler implements Visitor {
 
                     lastResultReg = rd;
                 }
-            } else if (node.operand instanceof BlockNode) {
+            } else if (node.operand instanceof BlockNode block) {
                 // Symbolic reference via block: ${label:expr} or ${expr}
                 // Execute the block to get a variable name string, then load that variable
-                BlockNode block = (BlockNode) node.operand;
 
                 // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
                 int savedCtx = currentCallContext;
@@ -3396,9 +3341,8 @@ public class BytecodeCompiler implements Visitor {
                 } else {
                     lastResultReg = arrayReg;
                 }
-            } else if (node.operand instanceof OperatorNode) {
+            } else if (node.operand instanceof OperatorNode operandOp) {
                 // Dereference: @$arrayref or @{$hashref}
-                OperatorNode operandOp = (OperatorNode) node.operand;
 
                 // Compile the reference
                 operandOp.accept(this);
@@ -3424,10 +3368,9 @@ public class BytecodeCompiler implements Visitor {
                 // Note: We don't check scalar context here because dereferencing
                 // should return the array itself. The slice or other operation
                 // will handle scalar context conversion if needed.
-            } else if (node.operand instanceof BlockNode) {
+            } else if (node.operand instanceof BlockNode blockNode) {
                 // @{ block } - evaluate block and dereference the result
                 // The block should return an arrayref
-                BlockNode blockNode = (BlockNode) node.operand;
                 int savedCtx = currentCallContext;
                 currentCallContext = RuntimeContextType.SCALAR;
                 blockNode.accept(this);
@@ -3556,8 +3499,7 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("*")) {
             // Glob variable dereference: *x
-            if (node.operand instanceof IdentifierNode) {
-                IdentifierNode idNode = (IdentifierNode) node.operand;
+            if (node.operand instanceof IdentifierNode idNode) {
                 String varName = idNode.name;
 
                 // Add package prefix if not present
@@ -3607,8 +3549,7 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("&")) {
             // Code reference: &subname
             // Gets a reference to a named subroutine
-            if (node.operand instanceof IdentifierNode) {
-                IdentifierNode idNode = (IdentifierNode) node.operand;
+            if (node.operand instanceof IdentifierNode idNode) {
                 String subName = idNode.name;
 
                 // Use NameNormalizer to properly handle package prefixes
@@ -3673,10 +3614,6 @@ public class BytecodeCompiler implements Visitor {
         CompileOperator.visitOperator(this, node);
     }
 
-    // =========================================================================
-    // HELPER METHODS
-    // =========================================================================
-
     int allocateRegister() {
         int reg = nextRegister++;
         if (reg > 65535) {
@@ -3689,6 +3626,10 @@ public class BytecodeCompiler implements Visitor {
         }
         return reg;
     }
+
+    // =========================================================================
+    // HELPER METHODS
+    // =========================================================================
 
     TreeMap<Integer, String> collectVisiblePerlVariables() {
         TreeMap<Integer, String> closureVarsByReg = new TreeMap<>();
@@ -3734,13 +3675,13 @@ public class BytecodeCompiler implements Visitor {
      * Reset temporary registers after a statement completes.
      * This allows register reuse for the next statement, preventing register exhaustion
      * in large scripts.
-     *
+     * <p>
      * IMPORTANT: Only resets registers that are truly temporary. Preserves:
      * - Reserved registers (0-2)
      * - All variables in all scopes
      * - Captured variables (closures)
      * - Registers protected by enterScope() (baseRegisterForStatement)
-     *
+     * <p>
      * NOTE: This assumes that by the end of a statement, all intermediate values
      * have either been stored in variables or used/discarded. Any value that needs
      * to persist must be in a variable, not just a temporary register.
@@ -3858,10 +3799,6 @@ public class BytecodeCompiler implements Visitor {
         return result;
     }
 
-    // =========================================================================
-    // UNIMPLEMENTED VISITOR METHODS (TODO)
-    // =========================================================================
-
     @Override
     public void visit(ArrayLiteralNode node) {
         // Array literal: [expr1, expr2, ...]
@@ -3914,6 +3851,10 @@ public class BytecodeCompiler implements Visitor {
 
         lastResultReg = refReg;
     }
+
+    // =========================================================================
+    // UNIMPLEMENTED VISITOR METHODS (TODO)
+    // =========================================================================
 
     @Override
     public void visit(HashLiteralNode node) {
@@ -3989,7 +3930,7 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Visit a named subroutine: sub foo { ... }
-     *
+     * <p>
      * NOTE: In practice, named subroutines are compiled by the parser using the JVM compiler,
      * not the interpreter. This method exists for completeness but may not be called for
      * typical named sub definitions. The parser creates compiled RuntimeCode objects that
@@ -4060,13 +4001,13 @@ public class BytecodeCompiler implements Visitor {
         }
 
         BytecodeCompiler subCompiler = new BytecodeCompiler(
-            this.sourceName,
-            node.getIndex(),
-            this.errorUtil,
-            packedRegistry
+                this.sourceName,
+                node.getIndex(),
+                this.errorUtil,
+                packedRegistry
         );
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
-            symbolTable.currentPackageIsClass());
+                symbolTable.currentPackageIsClass());
 
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
         subCompiler.currentSubroutineBeginId = beginId;
@@ -4084,7 +4025,7 @@ public class BytecodeCompiler implements Visitor {
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty()) {
-            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+            RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);
@@ -4117,15 +4058,7 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Visit an anonymous subroutine: sub { ... }
-     *
-     * Compiles the subroutine body to bytecode and creates an InterpretedCode instance.
-     * Handles closure variable capture if needed.
-     *
-     * The result is an InterpretedCode wrapped in RuntimeScalar, stored in lastResultReg.
-     */
-    /**
-     * Visit an anonymous subroutine: sub { ... }
-     *
+     * <p>
      * Compiles the subroutine body to bytecode with closure support.
      * Anonymous subs capture lexical variables from the enclosing scope.
      */
@@ -4157,13 +4090,13 @@ public class BytecodeCompiler implements Visitor {
         }
 
         BytecodeCompiler subCompiler = new BytecodeCompiler(
-            this.sourceName,
-            node.getIndex(),
-            this.errorUtil,
-            parentRegistry  // Pass parent variable registry for nested closure support
+                this.sourceName,
+                node.getIndex(),
+                this.errorUtil,
+                parentRegistry  // Pass parent variable registry for nested closure support
         );
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
-            symbolTable.currentPackageIsClass());
+                symbolTable.currentPackageIsClass());
 
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
@@ -4181,7 +4114,7 @@ public class BytecodeCompiler implements Visitor {
 
         if (closureVarIndices.isEmpty()) {
             // No closures - just wrap the InterpretedCode
-            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+            RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);
@@ -4202,17 +4135,26 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Visit an anonymous subroutine: sub { ... }
+     *
+     * Compiles the subroutine body to bytecode and creates an InterpretedCode instance.
+     * Handles closure variable capture if needed.
+     *
+     * The result is an InterpretedCode wrapped in RuntimeScalar, stored in lastResultReg.
+     */
+
+    /**
      * Visit an eval block: eval { ... }
-     *
+     * <p>
      * Generates:
-     *   EVAL_TRY catch_offset    # Set up exception handler, clear $@
-     *   ... block bytecode ...
-     *   EVAL_END                 # Clear $@ on success
-     *   GOTO end
-     *   LABEL catch:
-     *   EVAL_CATCH rd            # Set $@, store undef in rd
-     *   LABEL end:
-     *
+     * EVAL_TRY catch_offset    # Set up exception handler, clear $@
+     * ... block bytecode ...
+     * EVAL_END                 # Clear $@ on success
+     * GOTO end
+     * LABEL catch:
+     * EVAL_CATCH rd            # Set $@, store undef in rd
+     * LABEL end:
+     * <p>
      * The result is stored in lastResultReg.
      */
     private void visitEvalBlock(SubroutineNode node) {
@@ -4352,10 +4294,8 @@ public class BytecodeCompiler implements Visitor {
         enterScope();
 
         // Step 5: If we have a named lexical loop variable, add it to the scope now
-        if (node.variable != null && node.variable instanceof OperatorNode) {
-            OperatorNode varOp2 = (OperatorNode) node.variable;
-            if (varOp2.operator.equals("my") && varOp2.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) varOp2.operand;
+        if (node.variable != null && node.variable instanceof OperatorNode varOp2) {
+            if (varOp2.operator.equals("my") && varOp2.operand instanceof OperatorNode sigilOp) {
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
                     registerVariable(varName, varReg);
@@ -4889,10 +4829,6 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
-    // =================================================================
-    // PACKAGE-LEVEL ACCESSORS FOR REFACTORED CLASSES
-    // =================================================================
-
     /**
      * Get the symbol table for package/strict/feature tracking.
      * Used by refactored compiler classes.
@@ -4900,6 +4836,10 @@ public class BytecodeCompiler implements Visitor {
     ScopedSymbolTable getSymbolTable() {
         return symbolTable;
     }
+
+    // =================================================================
+    // PACKAGE-LEVEL ACCESSORS FOR REFACTORED CLASSES
+    // =================================================================
 
     /**
      * Get the source name for error messages.
@@ -4928,7 +4868,6 @@ public class BytecodeCompiler implements Visitor {
     Map<String, Integer> getCapturedVarIndices() {
         return capturedVarIndices;
     }
-
 
     /**
      * Handle loop control operators: last, next, redo
@@ -4968,8 +4907,8 @@ public class BytecodeCompiler implements Visitor {
             // No matching loop found - non-local control flow
             // Emit CREATE_LAST/NEXT/REDO + RETURN to propagate via RuntimeControlFlowList
             short createOp = op.equals("last") ? Opcodes.CREATE_LAST
-                           : op.equals("next") ? Opcodes.CREATE_NEXT
-                           : Opcodes.CREATE_REDO;
+                    : op.equals("next") ? Opcodes.CREATE_NEXT
+                    : Opcodes.CREATE_REDO;
             int rd = allocateRegister();
             emit(createOp);
             emitReg(rd);
@@ -4987,8 +4926,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Emit the opcode and record the PC to be patched later
         short opcode = op.equals("last") ? Opcodes.LAST
-                      : op.equals("next") ? Opcodes.NEXT
-                      : Opcodes.REDO;
+                : op.equals("next") ? Opcodes.NEXT
+                : Opcodes.REDO;
 
         emitWithToken(opcode, node.getIndex());
 
@@ -5003,6 +4942,27 @@ public class BytecodeCompiler implements Visitor {
             targetLoop.nextPcs.add(patchPc);
         } else { // redo
             targetLoop.redoPcs.add(patchPc);
+        }
+    }
+
+    // Helper class to track loop boundaries
+    private static class LoopInfo {
+        final String label;           // Loop label (null if unlabeled)
+        final int startPc;           // PC for redo (start of loop body)
+        final List<Integer> breakPcs; // PCs to patch for last (break)
+        final List<Integer> nextPcs;  // PCs to patch for next
+        final List<Integer> redoPcs;  // PCs to patch for redo
+        final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
+        int continuePc;              // PC for next (continue block or increment)
+
+        LoopInfo(String label, int startPc, boolean isTrueLoop) {
+            this.label = label;
+            this.startPc = startPc;
+            this.isTrueLoop = isTrueLoop;
+            this.continuePc = -1;  // Will be set later
+            this.breakPcs = new ArrayList<>();
+            this.nextPcs = new ArrayList<>();
+            this.redoPcs = new ArrayList<>();
         }
     }
 }

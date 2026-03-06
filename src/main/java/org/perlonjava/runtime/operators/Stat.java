@@ -7,12 +7,7 @@ import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
-import org.perlonjava.runtime.runtimetypes.RuntimeBase;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.runtime.runtimetypes.RuntimeIO;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,26 +19,12 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
-import static org.perlonjava.runtime.operators.FileTestOperator.lastBasicAttr;
-import static org.perlonjava.runtime.operators.FileTestOperator.lastFileHandle;
-import static org.perlonjava.runtime.operators.FileTestOperator.lastPosixAttr;
-import static org.perlonjava.runtime.operators.FileTestOperator.lastStatOk;
-import static org.perlonjava.runtime.operators.FileTestOperator.lastStatErrno;
-import static org.perlonjava.runtime.operators.FileTestOperator.updateLastStat;
+import static org.perlonjava.runtime.operators.FileTestOperator.*;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.resolvePath;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 public class Stat {
-
-    private record NativeStatFields(
-        long dev, long ino, long mode, long nlink,
-        long uid, long gid, long rdev, long size,
-        long atime, long mtime, long ctime,
-        long blksize, long blocks
-    ) {}
 
     static NativeStatFields lastNativeStatFields;
 
@@ -51,14 +32,14 @@ public class Stat {
         try {
             if (NativeUtils.IS_WINDOWS) return null;
             FileStat fs = followLinks
-                ? PosixLibrary.INSTANCE.stat(path)
-                : PosixLibrary.INSTANCE.lstat(path);
+                    ? PosixLibrary.INSTANCE.stat(path)
+                    : PosixLibrary.INSTANCE.lstat(path);
             if (fs == null) return null;
             return new NativeStatFields(
-                fs.dev(), fs.ino(), fs.mode(), fs.nlink(),
-                fs.uid(), fs.gid(), fs.rdev(), fs.st_size(),
-                fs.atime(), fs.mtime(), fs.ctime(),
-                fs.blockSize(), fs.blocks()
+                    fs.dev(), fs.ino(), fs.mode(), fs.nlink(),
+                    fs.uid(), fs.gid(), fs.rdev(), fs.st_size(),
+                    fs.atime(), fs.mtime(), fs.ctime(),
+                    fs.blockSize(), fs.blocks()
             );
         } catch (Throwable e) {
             return null;
@@ -335,5 +316,13 @@ public class Stat {
         res.add(getScalarInt(basicAttr.creationTime().toMillis() / 1000));
         res.add(scalarUndef);
         res.add(scalarUndef);
+    }
+
+    private record NativeStatFields(
+            long dev, long ino, long mode, long nlink,
+            long uid, long gid, long rdev, long size,
+            long atime, long mtime, long ctime,
+            long blksize, long blocks
+    ) {
     }
 }

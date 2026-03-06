@@ -1,10 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.runtime.operators.RuntimeTransliterate;
-import org.perlonjava.runtime.operators.FileTestOperator;
-import org.perlonjava.runtime.operators.IOOperator;
-import org.perlonjava.runtime.operators.Operator;
-import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Map;
@@ -61,16 +57,20 @@ public class SlowOpcodeHandler {
     private static final boolean EVAL_TRACE =
             System.getenv("JPERL_EVAL_TRACE") != null;
 
-    private static void evalTrace(String msg) {
-        if (EVAL_TRACE) {
-            System.err.println("[eval-trace] " + msg);
-        }
+    private SlowOpcodeHandler() {
+        // Utility class - no instantiation
     }
 
     // =================================================================
     // SLICE AND DEREFERENCE OPERATIONS
     // =================================================================
     // =================================================================
+
+    private static void evalTrace(String msg) {
+        if (EVAL_TRACE) {
+            System.err.println("[eval-trace] " + msg);
+        }
+    }
 
     /**
      * SLOW_GETPPID: rd = getppid()
@@ -368,8 +368,8 @@ public class SlowOpcodeHandler {
 
         // Call IOOperator.select() which handles the logic
         RuntimeScalar result = IOOperator.select(
-            list,
-            RuntimeContextType.SCALAR
+                list,
+                RuntimeContextType.SCALAR
         );
 
         registers[rd] = result;
@@ -415,7 +415,7 @@ public class SlowOpcodeHandler {
         int pkgIdx = bytecode[pc++];
 
         String pkg = code.stringPool[pkgIdx];
-        String name = ((RuntimeScalar) registers[nameReg]).toString();
+        String name = registers[nameReg].toString();
         String globalName = NameNormalizer.normalizeVariableName(name, pkg);
 
         registers[rd] = GlobalVariable.getGlobalIO(globalName);
@@ -561,7 +561,7 @@ public class SlowOpcodeHandler {
         }
         if (scalarBase instanceof RuntimeList) {
             RuntimeArray arr = new RuntimeArray();
-            ((RuntimeList) scalarBase).addToArray(arr);
+            scalarBase.addToArray(arr);
             registers[rd] = arr;
             return pc;
         }
@@ -808,8 +808,8 @@ public class SlowOpcodeHandler {
 
         // For now, throw unsupported - basic exists should use fast path
         throw new UnsupportedOperationException(
-            "exists() slow path not yet implemented in interpreter. " +
-            "Use simple hash access: exists $hash{key}"
+                "exists() slow path not yet implemented in interpreter. " +
+                        "Use simple hash access: exists $hash{key}"
         );
     }
 
@@ -828,8 +828,8 @@ public class SlowOpcodeHandler {
 
         // For now, throw unsupported - basic delete should use fast path
         throw new UnsupportedOperationException(
-            "delete() slow path not yet implemented in interpreter. " +
-            "Use simple hash access: delete $hash{key}"
+                "delete() slow path not yet implemented in interpreter. " +
+                        "Use simple hash access: delete $hash{key}"
         );
     }
 
@@ -895,7 +895,7 @@ public class SlowOpcodeHandler {
         }
         if (scalarBase instanceof RuntimeList) {
             RuntimeArray arr = new RuntimeArray();
-            ((RuntimeList) scalarBase).addToArray(arr);
+            scalarBase.addToArray(arr);
             registers[rd] = arr;
             return pc;
         }
@@ -989,7 +989,7 @@ public class SlowOpcodeHandler {
         } else if (valuesBase instanceof RuntimeArray) {
             // Convert RuntimeArray to RuntimeList
             valuesList = new RuntimeList();
-            for (RuntimeScalar elem : (RuntimeArray) valuesBase) {
+            for (RuntimeScalar elem : valuesBase) {
                 valuesList.elements.add(elem);
             }
         } else {
@@ -1028,7 +1028,7 @@ public class SlowOpcodeHandler {
         } else if (listBase instanceof RuntimeArray) {
             // Convert RuntimeArray to RuntimeList
             sourceList = new RuntimeList();
-            for (RuntimeScalar elem : (RuntimeArray) listBase) {
+            for (RuntimeScalar elem : listBase) {
                 sourceList.elements.add(elem);
             }
         } else {
@@ -1174,9 +1174,5 @@ public class SlowOpcodeHandler {
         registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
 
         return pc;
-    }
-
-    private SlowOpcodeHandler() {
-        // Utility class - no instantiation
     }
 }

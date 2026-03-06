@@ -4,27 +4,15 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
-import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeCode;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.runtime.runtimetypes.RuntimeIO;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
-import java.nio.file.attribute.PosixFileAttributes;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.UserPrincipal;
+import java.nio.file.attribute.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.resolvePath;
@@ -454,7 +442,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
+                    yield getScalarBoolean
+                            ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
                 }
                 case "-g" -> {
                     // Check if setgid bit is set
@@ -463,7 +452,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
+                    yield getScalarBoolean
+                            ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
                 }
                 case "-k" -> {
                     // Approximate check for sticky bit (using others execute permission)
@@ -472,7 +462,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
+                    yield getScalarBoolean
+                            ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
                 }
                 case "-T", "-B" -> {
                     // Check if file is text (-T) or binary (-B)

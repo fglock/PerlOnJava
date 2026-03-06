@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -7,9 +8,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
-import org.perlonjava.runtime.operators.ReferenceOperators;
-
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 public class CompressZlib extends PerlModuleBase {
 
@@ -125,14 +124,13 @@ public class CompressZlib extends PerlModuleBase {
 
         RuntimeScalar inflaterScalar = self.get(INFLATER_KEY);
         if (inflaterScalar == null || inflaterScalar.type != RuntimeScalarType.JAVAOBJECT
-                || !(inflaterScalar.value instanceof Inflater)) {
+                || !(inflaterScalar.value instanceof Inflater inflater)) {
             RuntimeList result = new RuntimeList();
             result.add(scalarUndef);
             result.add(new RuntimeScalar(-2));
             return result;
         }
 
-        Inflater inflater = (Inflater) inflaterScalar.value;
         String dataStr = dataScalar.toString();
         byte[] input = dataStr.getBytes(StandardCharsets.ISO_8859_1);
         inflater.setInput(input);
@@ -160,8 +158,7 @@ public class CompressZlib extends PerlModuleBase {
             return result;
         }
 
-        byte[] outputBytes = baos.toByteArray();
-        String outputStr = new String(outputBytes, StandardCharsets.ISO_8859_1);
+        String outputStr = baos.toString(StandardCharsets.ISO_8859_1);
 
         RuntimeList result = new RuntimeList();
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
@@ -181,11 +178,10 @@ public class CompressZlib extends PerlModuleBase {
 
         RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
         if (deflaterScalar == null || deflaterScalar.type != RuntimeScalarType.JAVAOBJECT
-                || !(deflaterScalar.value instanceof Deflater)) {
+                || !(deflaterScalar.value instanceof Deflater deflater)) {
             return scalarUndef.getList();
         }
 
-        Deflater deflater = (Deflater) deflaterScalar.value;
         String dataStr = dataScalar.toString();
         byte[] input = dataStr.getBytes(StandardCharsets.ISO_8859_1);
         deflater.setInput(input);
@@ -198,8 +194,7 @@ public class CompressZlib extends PerlModuleBase {
             baos.write(outputBuf, 0, count);
         }
 
-        byte[] outputBytes = baos.toByteArray();
-        String outputStr = new String(outputBytes, StandardCharsets.ISO_8859_1);
+        String outputStr = baos.toString(StandardCharsets.ISO_8859_1);
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
         outputScalar.type = RuntimeScalarType.BYTE_STRING;
         return outputScalar.getList();
@@ -213,11 +208,10 @@ public class CompressZlib extends PerlModuleBase {
         RuntimeHash self = args.get(0).hashDeref();
         RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
         if (deflaterScalar == null || deflaterScalar.type != RuntimeScalarType.JAVAOBJECT
-                || !(deflaterScalar.value instanceof Deflater)) {
+                || !(deflaterScalar.value instanceof Deflater deflater)) {
             return scalarUndef.getList();
         }
 
-        Deflater deflater = (Deflater) deflaterScalar.value;
         deflater.finish();
 
         byte[] outputBuf = new byte[1024];
@@ -232,8 +226,7 @@ public class CompressZlib extends PerlModuleBase {
             }
         }
 
-        byte[] outputBytes = baos.toByteArray();
-        String outputStr = new String(outputBytes, StandardCharsets.ISO_8859_1);
+        String outputStr = baos.toString(StandardCharsets.ISO_8859_1);
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
         outputScalar.type = RuntimeScalarType.BYTE_STRING;
         return outputScalar.getList();

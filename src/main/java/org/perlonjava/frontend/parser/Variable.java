@@ -5,11 +5,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.runtime.runtimetypes.PerlParserException;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +16,7 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
 
 /**
  * Parser for Perl variables with sigils ($, @, %, &, *).
- * 
+ *
  * <p>This class handles the parsing of Perl variables including:
  * <ul>
  *   <li>Simple variables: {@code $var}, {@code @array}, {@code %hash}</li>
@@ -31,7 +27,7 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  *   <li>Code references: {@code &sub}</li>
  *   <li>Class field access: automatic transformation of {@code $field} to {@code $self->{field}} in methods</li>
  * </ul>
- * 
+ *
  * <p>The parser also handles special cases like:
  * <ul>
  *   <li>Special variables: {@code $@}, {@code $_}, {@code $!}, etc.</li>
@@ -75,7 +71,7 @@ public class Variable {
 
     /**
      * Parses a variable from the given lexer token.
-     * 
+     *
      * <p>This is the main entry point for parsing Perl variables. It handles various forms:
      * <ul>
      *   <li>Simple variables: {@code $var}, {@code @array}, {@code %hash}</li>
@@ -84,7 +80,7 @@ public class Variable {
      *   <li>Special cases: {@code $#array} (array size), {@code $#[...]} (empty string)</li>
      *   <li>Class fields: automatic transformation in method context</li>
      * </ul>
-     * 
+     *
      * <p>The method also handles special parsing rules:
      * <ul>
      *   <li>Validates variable names according to Perl rules</li>
@@ -520,7 +516,7 @@ public class Variable {
             String subName = peeked.text;
             String lexicalKey = "&" + subName;
             SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
-            
+
             if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
                 // Check if this is an "our sub" - if so, replace with fully qualified name
                 Boolean isOurSub = (Boolean) varNode.getAnnotation("isOurSub");
@@ -530,9 +526,9 @@ public class Variable {
                         // Consume the identifier token
                         TokenUtils.consume(parser);
                         // Create node with fully qualified name
-                        Node qualifiedNode = new OperatorNode("&", 
-                            new IdentifierNode(storedFullName, index), index);
-                        
+                        Node qualifiedNode = new OperatorNode("&",
+                                new IdentifierNode(storedFullName, index), index);
+
                         // Handle arguments if present
                         Node list;
                         if (!TokenUtils.peek(parser).text.equals("(")) {
@@ -543,39 +539,39 @@ public class Variable {
                         return new BinaryOperatorNode("(", qualifiedNode, list, index);
                     }
                 }
-                
+
                 // Check if this is a "my sub" or "state sub" - use hidden variable
                 String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                 if (hiddenVarName != null) {
                     // Consume the identifier token
                     TokenUtils.consume(parser);
-                    
+
                     // Get the package where this lexical sub was declared
                     String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
-                    
+
                     // Make the hidden variable name fully qualified with the declaring package
                     String qualifiedHiddenVarName = hiddenVarName;
                     if (declaringPackage != null && !hiddenVarName.contains("::")) {
                         qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
                     }
-                    
+
                     // Create reference to hidden variable: &$hiddenVar
                     // IMPORTANT: For state variables, we need to preserve the ID from the declaration!
-                    OperatorNode dollarOp = new OperatorNode("$", 
-                        new IdentifierNode(qualifiedHiddenVarName, index), index);
-                    
+                    OperatorNode dollarOp = new OperatorNode("$",
+                            new IdentifierNode(qualifiedHiddenVarName, index), index);
+
                     // Copy the ID from the original declaration if it's a state variable
                     if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
                         dollarOp.id = innerNode.id;
                     }
-                    
+
                     // If we're taking a reference (\&foo), return &$hiddenVar
                     // This becomes \&$hiddenVar which calls createCodeReference
                     // createCodeReference will detect the CODE value and return it directly
                     if (parser.parsingTakeReference) {
                         return new OperatorNode("&", dollarOp, index);
                     }
-                    
+
                     // Handle arguments for actual calls (&foo or &foo())
                     // Use $hiddenVar directly - the () operator will handle dereferencing
                     Node list;
@@ -588,7 +584,7 @@ public class Variable {
                 }
             }
         }
-        
+
         // Set a flag to allow parentheses after a variable, as in &$sub(...)
         parser.parsingForLoopVariable = true;
         // Parse the variable following the `&` sigil
@@ -651,7 +647,7 @@ public class Variable {
 
     /**
      * Parses a braced variable expression like {@code ${var}} or {@code ${expr}}.
-     * 
+     *
      * <p>This method handles various braced forms:
      * <ul>
      *   <li>Simple braced variables: {@code ${var}}, {@code @{array}}, {@code %{hash}}</li>
@@ -659,13 +655,13 @@ public class Variable {
      *   <li>Array/hash access: {@code ${array[0]}}, {@code ${hash{key}}}</li>
      *   <li>Empty braces: {@code ${}} (returns empty string)</li>
      * </ul>
-     * 
+     *
      * <p>The method is shared between regular variable parsing and string interpolation.
      * When used in string interpolation context, it handles special escaping rules for
      * quotes inside the braces (e.g., {@code "${\"quoted\"}"})</p>
-     * 
-     * @param parser the parser instance
-     * @param sigil the sigil that precedes the braced expression ($, @, %, etc.)
+     *
+     * @param parser                the parser instance
+     * @param sigil                 the sigil that precedes the braced expression ($, @, %, etc.)
      * @param isStringInterpolation true if parsing within a string interpolation context
      * @return A Node representing the parsed braced variable expression
      * @throws PerlCompilerException if the braced expression is malformed or unterminated
@@ -921,7 +917,7 @@ public class Variable {
     /**
      * Determines if a '[' in regex context should be treated as an array subscript
      * rather than a character class by looking ahead for character class patterns.
-     * 
+     *
      * <p>This is a critical disambiguation in regex string interpolation. Consider:
      * <pre>
      * /$foo[$A]/    # Array subscript - interpolate $foo[$A]
@@ -929,7 +925,7 @@ public class Variable {
      * /$foo[0]/     # Array subscript - interpolate $foo[0]
      * /$foo[a-z]/   # Character class - do NOT interpolate
      * </pre>
-     * 
+     *
      * <p>The method uses lookahead to detect the pattern:
      * <ul>
      *   <li>Array subscript: {@code [expr]} where expr is a simple variable or number</li>

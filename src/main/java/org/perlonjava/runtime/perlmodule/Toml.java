@@ -9,7 +9,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -56,12 +57,12 @@ public class Toml extends PerlModuleBase {
         if (args.size() < 1) {
             throw new PerlCompilerException("from_toml requires a TOML string argument");
         }
-        
+
         String tomlString = args.get(0).toString();
-        
+
         try {
             TomlParseResult result = org.tomlj.Toml.parse(tomlString);
-            
+
             // Check for parse errors
             if (result.hasErrors()) {
                 StringBuilder errorMsg = new StringBuilder();
@@ -69,7 +70,7 @@ public class Toml extends PerlModuleBase {
                     if (errorMsg.length() > 0) errorMsg.append("; ");
                     errorMsg.append(error.toString());
                 });
-                
+
                 // In list context, return (undef, error_string)
                 if (ctx == RuntimeContextType.LIST) {
                     RuntimeList list = new RuntimeList();
@@ -80,9 +81,9 @@ public class Toml extends PerlModuleBase {
                 // In scalar context, return undef
                 return scalarUndef.getList();
             }
-            
+
             RuntimeScalar data = convertTomlToRuntimeScalar(result);
-            
+
             // In list context, return (hashref, undef)
             if (ctx == RuntimeContextType.LIST) {
                 RuntimeList list = new RuntimeList();
@@ -92,10 +93,10 @@ public class Toml extends PerlModuleBase {
             }
             // In scalar context, return just the hashref
             return data.getList();
-            
+
         } catch (Exception e) {
             String errorMsg = "Error parsing TOML: " + e.getMessage();
-            
+
             if (ctx == RuntimeContextType.LIST) {
                 RuntimeList list = new RuntimeList();
                 list.add(scalarUndef);
@@ -117,9 +118,9 @@ public class Toml extends PerlModuleBase {
         if (args.size() < 1) {
             throw new PerlCompilerException("to_toml requires a data structure argument");
         }
-        
+
         RuntimeScalar data = args.get(0);
-        
+
         try {
             StringBuilder sb = new StringBuilder();
             convertRuntimeScalarToToml(data, sb, "", false);
@@ -136,7 +137,7 @@ public class Toml extends PerlModuleBase {
         if (toml == null) {
             return scalarUndef;
         }
-        
+
         if (toml instanceof TomlTable table) {
             RuntimeHash hash = new RuntimeHash();
             for (String key : table.keySet()) {
@@ -179,15 +180,15 @@ public class Toml extends PerlModuleBase {
             // TOML doesn't have null, skip or use empty string
             return;
         }
-        
+
         switch (scalar.type) {
             case HASHREFERENCE -> {
                 RuntimeHash hash = (RuntimeHash) scalar.value;
-                
+
                 // Separate simple values from nested tables/arrays
                 List<String> simpleKeys = new ArrayList<>();
                 List<String> tableKeys = new ArrayList<>();
-                
+
                 for (String key : hash.elements.keySet()) {
                     RuntimeScalar value = hash.get(key);
                     if (value.type == RuntimeScalarType.HASHREFERENCE) {
@@ -203,7 +204,7 @@ public class Toml extends PerlModuleBase {
                         simpleKeys.add(key);
                     }
                 }
-                
+
                 // Output simple key-value pairs first
                 for (String key : simpleKeys) {
                     RuntimeScalar value = hash.get(key);
@@ -211,12 +212,12 @@ public class Toml extends PerlModuleBase {
                     appendValue(value, sb);
                     sb.append("\n");
                 }
-                
+
                 // Output nested tables
                 for (String key : tableKeys) {
                     RuntimeScalar value = hash.get(key);
                     String newPrefix = prefix.isEmpty() ? key : prefix + "." + key;
-                    
+
                     if (value.type == ARRAYREFERENCE) {
                         RuntimeArray arr = (RuntimeArray) value.value;
                         if (!arr.elements.isEmpty() && arr.elements.get(0).type == RuntimeScalarType.HASHREFERENCE) {

@@ -23,6 +23,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * data over sockets.
  */
 public class SocketIO implements IOHandle {
+    // Socket options storage: key is "level:optname", value is the option value
+    private final Map<String, Integer> socketOptions;
     private Socket socket;
     private ServerSocket serverSocket;
     private SocketChannel socketChannel;
@@ -31,9 +33,6 @@ public class SocketIO implements IOHandle {
     private OutputStream outputStream;
     private boolean isEOF;
     private CharsetDecoderHelper decoderHelper;
-
-    // Socket options storage: key is "level:optname", value is the option value
-    private final Map<String, Integer> socketOptions;
 
     /**
      * Constructs a SocketIO instance for a client socket.

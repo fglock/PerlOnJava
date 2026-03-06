@@ -382,16 +382,16 @@ public class PrototypeArgs {
     private static boolean isFilehandleOperator(String operatorName) {
         if (operatorName == null) return false;
         return operatorName.equals("truncate") ||
-               operatorName.equals("seek") ||
-               operatorName.equals("tell") ||
-               operatorName.equals("eof") ||
-               operatorName.equals("binmode") ||
-               operatorName.equals("fileno") ||
-               operatorName.equals("getc") ||
-               operatorName.equals("read") ||
-               operatorName.equals("sysread") ||
-               operatorName.equals("syswrite") ||
-               operatorName.equals("sysseek");
+                operatorName.equals("seek") ||
+                operatorName.equals("tell") ||
+                operatorName.equals("eof") ||
+                operatorName.equals("binmode") ||
+                operatorName.equals("fileno") ||
+                operatorName.equals("getc") ||
+                operatorName.equals("read") ||
+                operatorName.equals("sysread") ||
+                operatorName.equals("syswrite") ||
+                operatorName.equals("sysseek");
     }
 
     private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
@@ -514,16 +514,16 @@ public class PrototypeArgs {
                     // Reject bare arrays, hashes, and scalars
                     String subName = parser.ctx.symbolTable.getCurrentSubroutine();
                     if (subName != null && !subName.isEmpty()) {
-                        parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not " + 
-                            (opNode.operator.equals("@") ? "array" : 
-                             opNode.operator.equals("%") ? "hash" : "scalar variable") + ")");
+                        parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not " +
+                                (opNode.operator.equals("@") ? "array" :
+                                        opNode.operator.equals("%") ? "hash" : "scalar variable") + ")");
                     } else {
-                        parser.throwError("Type of arg 1 must be block or sub {} (not " + 
-                            (opNode.operator.equals("@") ? "array" : 
-                             opNode.operator.equals("%") ? "hash" : "scalar variable") + ")");
+                        parser.throwError("Type of arg 1 must be block or sub {} (not " +
+                                (opNode.operator.equals("@") ? "array" :
+                                        opNode.operator.equals("%") ? "hash" : "scalar variable") + ")");
                     }
                 }
-                
+
                 // Unwrap reference to code reference: \(&code) should be treated as &code
                 // This matches Perl's behavior where prototype (&) unwraps REF to CODE
                 if (opNode.operator.equals("\\")) {
@@ -590,7 +590,7 @@ public class PrototypeArgs {
      * Unwraps unary plus from expressions like +(%hash) or +(@array) for backslash prototypes.
      * In Perl, +() is used for disambiguation but should be transparent for \% and \@ prototypes.
      *
-     * @param arg The argument node to potentially unwrap
+     * @param arg     The argument node to potentially unwrap
      * @param refType The reference type from the prototype ('%', '@', etc.)
      * @return The unwrapped node if applicable, or the original node
      */
@@ -599,20 +599,20 @@ public class PrototypeArgs {
         if (refType != '%' && refType != '@') {
             return arg;
         }
-        
+
         // Check if arg is unary plus: OperatorNode with operator "+"
         if (!(arg instanceof OperatorNode plusOp) || !plusOp.operator.equals("+")) {
             return arg;
         }
-        
+
         // Get the operand of the unary plus
         Node operand = plusOp.operand;
-        
+
         // If the operand is a ListNode with a single element, extract it
         if (operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             operand = listNode.elements.get(0);
         }
-        
+
         // Check if the operand is the expected type (hash or array variable)
         if (operand instanceof OperatorNode varOp) {
             String expectedSigil = (refType == '%') ? "%" : "@";
@@ -620,7 +620,7 @@ public class PrototypeArgs {
                 return operand;
             }
         }
-        
+
         // Also check if operand is directly a ListNode containing a hash/array expression
         // This handles cases like +(%hash) where the parentheses create a list context
         if (operand instanceof ListNode listNode) {
@@ -636,7 +636,7 @@ public class PrototypeArgs {
                 }
             }
         }
-        
+
         // Return original if no match
         return arg;
     }
@@ -656,9 +656,9 @@ public class PrototypeArgs {
         if (refType == '&') {
             parser.parsingTakeReference = true;
         }
-        
+
         Node referenceArg = parseArgumentWithComma(parser, isOptional, needComma, expectedType);
-        
+
         // Restore flag
         parser.parsingTakeReference = oldParsingTakeReference;
         if (referenceArg != null) {
@@ -669,20 +669,20 @@ public class PrototypeArgs {
             if (refType == '&') {
                 String subName = parser.ctx.symbolTable.getCurrentSubroutine();
                 String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
-                
+
                 // Check for function calls: &foo() or foo()
                 if (referenceArg instanceof BinaryOperatorNode binOp && binOp.operator.equals("(")) {
                     parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart +
                             " must be subroutine (not subroutine entry)");
                 }
-                
+
                 // Check for bareword (identifier without &)
                 if (referenceArg instanceof IdentifierNode) {
                     parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart +
                             " must be subroutine (not subroutine entry)");
                 }
             }
-            
+
             // Check if user passed an explicit reference when prototype expects auto-reference
             if (refType == '$' && referenceArg instanceof OperatorNode opNode &&
                     opNode.operator.equals("\\")) {

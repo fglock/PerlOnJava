@@ -10,7 +10,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 /**
  * Helper class to manage overloading context for a given scalar in Perl-style object system.
  * Handles method overloading and fallback mechanisms for blessed objects.
- * 
+ *
  * <p><b>How Perl Overloading Works:</b>
  * <ul>
  *   <li>Classes use {@code use overload} to define operator overloads</li>
@@ -32,7 +32,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  *     </ol>
  *   </li>
  * </ul>
- * 
+ *
  * <p><b>Math::BigInt Example:</b>
  * <pre>
  * package Math::BigInt;
@@ -43,14 +43,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  *     ;
  * # The overload pragma also creates (( and () markers
  * </pre>
- * 
+ *
  * @see InheritanceResolver#findMethodInHierarchy
  * @see Overload#numify
  * @see Overload#stringify
  */
 public class OverloadContext {
     private static final boolean TRACE_OVERLOAD_CONTEXT = false;
-    
+
     /**
      * The Perl class name of the blessed object
      */

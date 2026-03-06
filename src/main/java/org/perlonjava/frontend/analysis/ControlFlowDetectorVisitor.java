@@ -9,10 +9,10 @@ import java.util.Set;
  * that could potentially jump outside of a refactored block.
  */
 public class ControlFlowDetectorVisitor implements Visitor {
+    private static final boolean DEBUG = "1".equals(System.getenv("JPERL_TRACE_CONTROLFLOW"));
     private boolean hasUnsafeControlFlow = false;
     private int loopDepth = 0;
     private Set<String> allowedGotoLabels = null;
-    private static final boolean DEBUG = "1".equals(System.getenv("JPERL_TRACE_CONTROLFLOW"));
 
     /**
      * Check if unsafe control flow was detected during traversal.
@@ -82,7 +82,8 @@ public class ControlFlowDetectorVisitor implements Visitor {
                     String oper = op.operator;
 
                     if ("return".equals(oper)) {
-                        if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE return at tokenIndex=" + op.tokenIndex);
+                        if (DEBUG)
+                            System.err.println("ControlFlowDetector(scan): UNSAFE return at tokenIndex=" + op.tokenIndex);
                         hasUnsafeControlFlow = true;
                         continue;
                     }
@@ -91,14 +92,17 @@ public class ControlFlowDetectorVisitor implements Visitor {
                         if (allowedGotoLabels != null && op.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
                             Node arg = labelNode.elements.getFirst();
                             if (arg instanceof IdentifierNode identifierNode && allowedGotoLabels.contains(identifierNode.name)) {
-                                if (DEBUG) System.err.println("ControlFlowDetector(scan): goto " + identifierNode.name + " allowed (in allowedGotoLabels)");
+                                if (DEBUG)
+                                    System.err.println("ControlFlowDetector(scan): goto " + identifierNode.name + " allowed (in allowedGotoLabels)");
                             } else {
-                                if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE goto at tokenIndex=" + op.tokenIndex);
+                                if (DEBUG)
+                                    System.err.println("ControlFlowDetector(scan): UNSAFE goto at tokenIndex=" + op.tokenIndex);
                                 hasUnsafeControlFlow = true;
                                 continue;
                             }
                         } else {
-                            if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE goto at tokenIndex=" + op.tokenIndex);
+                            if (DEBUG)
+                                System.err.println("ControlFlowDetector(scan): UNSAFE goto at tokenIndex=" + op.tokenIndex);
                             hasUnsafeControlFlow = true;
                             continue;
                         }
@@ -115,11 +119,13 @@ public class ControlFlowDetectorVisitor implements Visitor {
                         }
 
                         if (isLabeled) {
-                            if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " (labeled) at tokenIndex=" + op.tokenIndex + " label=" + label);
+                            if (DEBUG)
+                                System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " (labeled) at tokenIndex=" + op.tokenIndex + " label=" + label);
                             hasUnsafeControlFlow = true;
                             continue;
                         } else if (currentLoopDepth == 0) {
-                            if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " at tokenIndex=" + op.tokenIndex + " loopDepth=" + currentLoopDepth + " isLabeled=" + isLabeled + " label=" + label);
+                            if (DEBUG)
+                                System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " at tokenIndex=" + op.tokenIndex + " loopDepth=" + currentLoopDepth + " isLabeled=" + isLabeled + " label=" + label);
                             hasUnsafeControlFlow = true;
                             continue;
                         }
@@ -956,7 +962,8 @@ public class ControlFlowDetectorVisitor implements Visitor {
             if (allowedGotoLabels != null && node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
                 Node arg = labelNode.elements.getFirst();
                 if (arg instanceof IdentifierNode identifierNode && allowedGotoLabels.contains(identifierNode.name)) {
-                    if (DEBUG) System.err.println("ControlFlowDetector: goto " + identifierNode.name + " allowed (in allowedGotoLabels)");
+                    if (DEBUG)
+                        System.err.println("ControlFlowDetector: goto " + identifierNode.name + " allowed (in allowedGotoLabels)");
                     return;
                 }
             }
@@ -974,14 +981,16 @@ public class ControlFlowDetectorVisitor implements Visitor {
                 }
             }
             if ("next".equals(node.operator) && isLabeled) {
-                if (DEBUG) System.err.println("ControlFlowDetector: safe labeled next at tokenIndex=" + node.tokenIndex + " label=" + label);
-            } else
-            if (loopDepth == 0 || isLabeled) {
-                if (DEBUG) System.err.println("ControlFlowDetector: UNSAFE " + node.operator + " at tokenIndex=" + node.tokenIndex + " loopDepth=" + loopDepth + " isLabeled=" + isLabeled + " label=" + label);
+                if (DEBUG)
+                    System.err.println("ControlFlowDetector: safe labeled next at tokenIndex=" + node.tokenIndex + " label=" + label);
+            } else if (loopDepth == 0 || isLabeled) {
+                if (DEBUG)
+                    System.err.println("ControlFlowDetector: UNSAFE " + node.operator + " at tokenIndex=" + node.tokenIndex + " loopDepth=" + loopDepth + " isLabeled=" + isLabeled + " label=" + label);
                 hasUnsafeControlFlow = true;
                 return;
             }
-            if (DEBUG) System.err.println("ControlFlowDetector: safe " + node.operator + " at tokenIndex=" + node.tokenIndex + " loopDepth=" + loopDepth);
+            if (DEBUG)
+                System.err.println("ControlFlowDetector: safe " + node.operator + " at tokenIndex=" + node.tokenIndex + " loopDepth=" + loopDepth);
         }
         if (hasUnsafeControlFlow) {
             return;

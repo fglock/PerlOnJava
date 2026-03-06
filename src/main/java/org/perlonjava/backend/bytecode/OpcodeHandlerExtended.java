@@ -1,15 +1,15 @@
 package org.perlonjava.backend.bytecode;
 
-import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.operators.*;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 /**
  * Extended opcode handlers for recently added operations.
- *
+ * <p>
  * Extracted from BytecodeInterpreter.execute() to reduce method size
  * and keep it under the 8KB JIT compilation limit.
- *
+ * <p>
  * Handles: SPRINTF, CHOP, GET_REPLACEMENT_REGEX, SUBSTR_VAR, and other
  * less-frequently-used string/regex operations.
  */
@@ -19,8 +19,8 @@ public class OpcodeHandlerExtended {
      * Execute sprintf operation.
      * Format: SPRINTF rd formatReg argsListReg
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -40,8 +40,8 @@ public class OpcodeHandlerExtended {
      * Execute chop operation.
      * Format: CHOP rd scalarReg
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -57,8 +57,8 @@ public class OpcodeHandlerExtended {
      * Execute get replacement regex operation.
      * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -80,8 +80,8 @@ public class OpcodeHandlerExtended {
      * Execute substr with variable arguments.
      * Format: SUBSTR_VAR rd argsListReg ctx
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -101,8 +101,8 @@ public class OpcodeHandlerExtended {
      * Execute repeat assign operation.
      * Format: REPEAT_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -113,9 +113,9 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeBase result = Operator.repeat(
-            registers[rd],
-            (RuntimeScalar) registers[rs],
-            1  // scalar context
+                registers[rd],
+                (RuntimeScalar) registers[rs],
+                1  // scalar context
         );
         ((RuntimeScalar) registers[rd]).set((RuntimeScalar) result);
         return pc;
@@ -125,8 +125,8 @@ public class OpcodeHandlerExtended {
      * Execute power assign operation.
      * Format: POW_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -149,8 +149,8 @@ public class OpcodeHandlerExtended {
      * Execute left shift assign operation.
      * Format: LEFT_SHIFT_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -171,8 +171,8 @@ public class OpcodeHandlerExtended {
      * Execute right shift assign operation.
      * Format: RIGHT_SHIFT_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -193,8 +193,8 @@ public class OpcodeHandlerExtended {
      * Execute logical AND assign operation.
      * Format: LOGICAL_AND_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -204,11 +204,11 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
-        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+        RuntimeScalar s1 = registers[rd].scalar();
         if (!s1.getBoolean()) {
             return pc;
         }
-        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+        RuntimeScalar s2 = registers[rs].scalar();
         ((RuntimeScalar) registers[rd]).set(s2);
         return pc;
     }
@@ -217,8 +217,8 @@ public class OpcodeHandlerExtended {
      * Execute logical OR assign operation.
      * Format: LOGICAL_OR_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -228,11 +228,11 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
-        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+        RuntimeScalar s1 = registers[rd].scalar();
         if (s1.getBoolean()) {
             return pc;
         }
-        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+        RuntimeScalar s2 = registers[rs].scalar();
         ((RuntimeScalar) registers[rd]).set(s2);
         return pc;
     }
@@ -243,11 +243,11 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
-        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+        RuntimeScalar s1 = registers[rd].scalar();
         if (s1.getDefinedBoolean()) {
             return pc;
         }
-        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+        RuntimeScalar s2 = registers[rs].scalar();
         ((RuntimeScalar) registers[rd]).set(s2);
         return pc;
     }
@@ -256,8 +256,8 @@ public class OpcodeHandlerExtended {
      * Execute string concatenation assign operation.
      * Format: STRING_CONCAT_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -268,8 +268,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = StringOperators.stringConcat(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -279,8 +279,8 @@ public class OpcodeHandlerExtended {
      * Execute bitwise AND assign operation.
      * Format: BITWISE_AND_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -291,8 +291,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = BitwiseOperators.bitwiseAnd(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -302,8 +302,8 @@ public class OpcodeHandlerExtended {
      * Execute bitwise OR assign operation.
      * Format: BITWISE_OR_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -314,8 +314,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -325,8 +325,8 @@ public class OpcodeHandlerExtended {
      * Execute bitwise XOR assign operation.
      * Format: BITWISE_XOR_ASSIGN rd rs
      *
-     * @param bytecode The bytecode array
-     * @param pc Current program counter
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
      * @param registers Register file
      * @return Updated program counter
      */
@@ -337,8 +337,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -351,8 +351,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = BitwiseOperators.bitwiseAndDot(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -365,8 +365,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = BitwiseOperators.bitwiseOrDot(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -379,8 +379,8 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar result = BitwiseOperators.bitwiseXorDot(
-            (RuntimeScalar) registers[rd],
-            (RuntimeScalar) registers[rs]
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
@@ -397,8 +397,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseAnd(
-            registers[rs1].scalar(),
-            registers[rs2].scalar()
+                registers[rs1].scalar(),
+                registers[rs2].scalar()
         );
         return pc;
     }
@@ -412,8 +412,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseOr(
-            registers[rs1].scalar(),
-            registers[rs2].scalar()
+                registers[rs1].scalar(),
+                registers[rs2].scalar()
         );
         return pc;
     }
@@ -427,8 +427,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseXor(
-            registers[rs1].scalar(),
-            registers[rs2].scalar()
+                registers[rs1].scalar(),
+                registers[rs2].scalar()
         );
         return pc;
     }
@@ -442,8 +442,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseAndDot(
-            registers[rs1].scalar(),
-            registers[rs2].scalar()
+                registers[rs1].scalar(),
+                registers[rs2].scalar()
         );
         return pc;
     }
@@ -457,8 +457,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseOrDot(
-            registers[rs1].scalar(),
-            registers[rs2].scalar()
+                registers[rs1].scalar(),
+                registers[rs2].scalar()
         );
         return pc;
     }
@@ -472,8 +472,8 @@ public class OpcodeHandlerExtended {
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
         registers[rd] = BitwiseOperators.bitwiseXorDot(
-            registers[rs1].scalar(),
-            registers[rs2].scalar()
+                registers[rs1].scalar(),
+                registers[rs2].scalar()
         );
         return pc;
     }
@@ -551,8 +551,8 @@ public class OpcodeHandlerExtended {
         // Filehandle should be scalar - convert if needed
         RuntimeBase fhBase = registers[filehandleReg];
         RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
-            ? (RuntimeScalar) fhBase
-            : fhBase.scalar();
+                ? (RuntimeScalar) fhBase
+                : fhBase.scalar();
 
         RuntimeList list;
         if (val instanceof RuntimeList) {
@@ -589,8 +589,8 @@ public class OpcodeHandlerExtended {
         // Filehandle should be scalar - convert if needed
         RuntimeBase fhBase = registers[filehandleReg];
         RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
-            ? (RuntimeScalar) fhBase
-            : fhBase.scalar();
+                ? (RuntimeScalar) fhBase
+                : fhBase.scalar();
 
         RuntimeList list;
         if (val instanceof RuntimeList) {
@@ -669,9 +669,9 @@ public class OpcodeHandlerExtended {
         int substrReg = bytecode[pc++];
         int posReg = bytecode[pc++];
         registers[rd] = StringOperators.index(
-            (RuntimeScalar) registers[strReg],
-            (RuntimeScalar) registers[substrReg],
-            (RuntimeScalar) registers[posReg]
+                (RuntimeScalar) registers[strReg],
+                (RuntimeScalar) registers[substrReg],
+                (RuntimeScalar) registers[posReg]
         );
         return pc;
     }
@@ -686,9 +686,9 @@ public class OpcodeHandlerExtended {
         int substrReg = bytecode[pc++];
         int posReg = bytecode[pc++];
         registers[rd] = StringOperators.rindex(
-            (RuntimeScalar) registers[strReg],
-            (RuntimeScalar) registers[substrReg],
-            (RuntimeScalar) registers[posReg]
+                (RuntimeScalar) registers[strReg],
+                (RuntimeScalar) registers[substrReg],
+                (RuntimeScalar) registers[posReg]
         );
         return pc;
     }
@@ -790,9 +790,9 @@ public class OpcodeHandlerExtended {
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
         registers[rd] = RuntimeRegex.matchRegex(
-            (RuntimeScalar) registers[regexReg],
-            (RuntimeScalar) registers[stringReg],
-            ctx
+                (RuntimeScalar) registers[regexReg],
+                (RuntimeScalar) registers[stringReg],
+                ctx
         );
         return pc;
     }
@@ -807,9 +807,9 @@ public class OpcodeHandlerExtended {
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
         RuntimeBase matchResult = RuntimeRegex.matchRegex(
-            (RuntimeScalar) registers[regexReg],
-            (RuntimeScalar) registers[stringReg],
-            ctx
+                (RuntimeScalar) registers[regexReg],
+                (RuntimeScalar) registers[stringReg],
+                ctx
         );
         // Negate the boolean result
         registers[rd] = new RuntimeScalar(matchResult.scalar().getBoolean() ? 0 : 1);
@@ -839,7 +839,7 @@ public class OpcodeHandlerExtended {
         InterpretedCode closureCode = template.withCapturedVars(capturedVars);
 
         // Wrap in RuntimeScalar
-        registers[rd] = new RuntimeScalar((RuntimeCode) closureCode);
+        registers[rd] = new RuntimeScalar(closureCode);
         return pc;
     }
 
@@ -871,7 +871,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
         @SuppressWarnings("unchecked")
         java.util.Iterator<RuntimeScalar> iterator =
-            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+                (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
         boolean hasNext = iterator.hasNext();
         registers[rd] = hasNext ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
@@ -889,7 +889,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
         @SuppressWarnings("unchecked")
         java.util.Iterator<RuntimeScalar> iterator =
-            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+                (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
         RuntimeScalar next = iterator.next();
         registers[rd] = BytecodeInterpreter.isImmutableProxy(next) ? BytecodeInterpreter.ensureMutableScalar(next) : next;

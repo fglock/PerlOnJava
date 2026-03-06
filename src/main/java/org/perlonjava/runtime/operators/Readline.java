@@ -64,7 +64,7 @@ public class Readline {
 
         // Handle different modes of $/
         boolean isSlurp = (rs != null && rs.isSlurpMode()) ||
-                          (rs == null && rsScalar.type == RuntimeScalarType.UNDEF);
+                (rs == null && rsScalar.type == RuntimeScalarType.UNDEF);
         if (isSlurp) {
             StringBuilder content = new StringBuilder();
             boolean isByteData = true;
@@ -358,7 +358,10 @@ public class Readline {
             String s = scalarValue.toString();
             boolean safe = true;
             for (int i = 0; safe && i < s.length(); i++) {
-                if (s.charAt(i) > 255) safe = false;
+                if (s.charAt(i) > 255) {
+                    safe = false;
+                    break;
+                }
             }
             if (safe) {
                 scalar.set(new RuntimeScalar(s.getBytes(StandardCharsets.ISO_8859_1)));

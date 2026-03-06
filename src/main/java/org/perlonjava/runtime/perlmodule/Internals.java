@@ -68,7 +68,7 @@ public class Internals extends PerlModuleBase {
 
         return new RuntimeList();
     }
-    
+
     /**
      * Sets or gets the read-only status of a variable.
      *

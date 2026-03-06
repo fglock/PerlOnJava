@@ -6,10 +6,10 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.frontend.semantic.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +19,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
 
 /**
  * Bytecode emitter for Perl variable operations.
- * 
+ *
  * <p>This class generates JVM bytecode for accessing and manipulating Perl variables,
  * including:
  * <ul>
@@ -30,7 +30,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
  *   <li>Array/hash element access: {@code $array[0]}, {@code $hash{key}}</li>
  *   <li>Array/hash slices: {@code @array[0,1,2]}, {@code @hash{keys}}</li>
  * </ul>
- * 
+ *
  * <p>The class handles several important Perl semantics:
  * <ul>
  *   <li><b>Strict vars checking:</b> Enforces {@code use strict 'vars'} by preventing
@@ -42,7 +42,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
  *   <li><b>Variable vivification:</b> Auto-creates variables when needed (except under strict)</li>
  *   <li><b>Context-sensitive access:</b> Handles scalar vs list context appropriately</li>
  * </ul>
- * 
+ *
  * <p>Key methods:
  * <ul>
  *   <li>{@link #handleVariableOperator} - Main entry point for variable operations</li>
@@ -110,10 +110,10 @@ public class EmitVariable {
 
     /**
      * Emits bytecode to fetch a global (package) variable.
-     * 
+     *
      * <p>This method generates JVM bytecode to access global variables stored in the
      * {@link GlobalVariable} registry. It handles several important cases:
-     * 
+     *
      * <h3>Strict Vars Enforcement</h3>
      * When {@code use strict 'vars'} is enabled and {@code createIfNotExists} is false,
      * this method enforces that only the following variables are allowed:
@@ -121,11 +121,11 @@ public class EmitVariable {
      *   <li>Built-in special variables (checked via {@link #isBuiltinSpecialVariable})</li>
      *   <li>Variables that were explicitly allowed by the caller</li>
      * </ul>
-     * 
+     *
      * <p>Note: The strict vars checking is done in the caller (handleVariableOperator)
      * before this method is called. This method only fetches variables that have been
      * determined to be accessible.
-     * 
+     *
      * <h3>Variable Types Handled</h3>
      * <ul>
      *   <li><b>Scalars ($):</b> Calls {@code GlobalVariable.getGlobalVariable()}</li>
@@ -133,12 +133,12 @@ public class EmitVariable {
      *   <li><b>Hashes (%):</b> Calls {@code GlobalVariable.getGlobalHash()}</li>
      *   <li><b>Stashes (%Package::):</b> Calls {@code HashSpecialVariable.getStash()}</li>
      * </ul>
-     * 
-     * @param ctx the emitter context containing the method visitor and symbol table
+     *
+     * @param ctx               the emitter context containing the method visitor and symbol table
      * @param createIfNotExists if true, allows variable creation; if false, enforces strict checking
-     * @param sigil the variable sigil ($, @, %)
-     * @param varName the variable name (without sigil, may include package qualifier)
-     * @param tokenIndex the token index for error reporting
+     * @param sigil             the variable sigil ($, @, %)
+     * @param varName           the variable name (without sigil, may include package qualifier)
+     * @param tokenIndex        the token index for error reporting
      * @throws PerlCompilerException if strict vars is enabled and the variable is not allowed
      */
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
@@ -222,10 +222,10 @@ public class EmitVariable {
 
     /**
      * Main entry point for emitting bytecode for variable operations.
-     * 
+     *
      * <p>This method handles all forms of Perl variable access and generates appropriate
      * JVM bytecode. It distinguishes between:
-     * 
+     *
      * <h3>Variable Types</h3>
      * <ul>
      *   <li><b>Simple variables:</b> {@code $var}, {@code @array}, {@code %hash}</li>
@@ -233,7 +233,7 @@ public class EmitVariable {
      *   <li><b>Code references:</b> {@code &sub} (subroutine references)</li>
      *   <li><b>Dereferencing:</b> {@code $$ref}, {@code @$ref}, {@code %$ref}</li>
      * </ul>
-     * 
+     *
      * <h3>Variable Storage</h3>
      * Variables can be stored in two places:
      * <ul>
@@ -241,7 +241,7 @@ public class EmitVariable {
      *       in JVM local variable slots</li>
      *   <li><b>Global (package):</b> Package variables stored in {@link GlobalVariable} registry</li>
      * </ul>
-     * 
+     *
      * <h3>Strict Vars Logic</h3>
      * The method computes {@code createIfNotExists} flag based on:
      * <ul>
@@ -251,23 +251,23 @@ public class EmitVariable {
      *   <li>Strict mode: {@code use strict 'vars'} (disallows undeclared globals)</li>
      *   <li>Lexical declaration: {@code my/our/state} (allowed under strict)</li>
      * </ul>
-     * 
+     *
      * <h3>Context Handling</h3>
      * In scalar context, array/hash variables are automatically converted to scalar
      * using {@code RuntimeBase.scalar()}.
-     * 
+     *
      * @param emitterVisitor the visitor containing the emitter context and method visitor
-     * @param node the OperatorNode representing the variable operation
+     * @param node           the OperatorNode representing the variable operation
      */
     static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         // In void context, don't emit any code
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
-        
+
         String sigil = node.operator;
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        
+
         // Case 1: Simple variable with identifier (most common case)
         // Examples: $var, @array, %hash, *glob, &sub
         if (node.operand instanceof IdentifierNode identifierNode) { // $a @a %a
@@ -303,10 +303,10 @@ public class EmitVariable {
             // ===== SYMBOL TABLE LOOKUP =====
             // Check if this variable is declared in the current lexical scope
             SymbolTable.SymbolEntry symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(sigil + name);
-            
+
             // Note: @_ is lexical in PerlOnJava (unlike standard Perl where it's package-scoped)
             boolean isDeclared = symbolEntry != null;
-            
+
             // A variable is lexical if it was declared with my/our/state
             // These are stored in JVM local variable slots, not in GlobalVariable registry
             boolean isLexical = isDeclared && (
@@ -320,7 +320,7 @@ public class EmitVariable {
             if (!isLexical) {
                 // ===== GLOBAL VARIABLE ACCESS =====
                 // This is not a lexically declared variable, so fetch it from the global registry
-                
+
                 // If there's a symbol entry (e.g., from 'our' declaration), use its package
                 if (symbolEntry != null) {
                     name = NameNormalizer.normalizeVariableName(name, symbolEntry.perlPackage());
@@ -328,7 +328,7 @@ public class EmitVariable {
 
                 // ===== STRICT VARS LOGIC =====
                 // Determine if this variable should be allowed under 'use strict "vars"'
-                
+
                 // Special case: $a and $b are exempt from strict
                 // (they're used by sort() without declaration)
                 String normalizedName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
@@ -370,7 +370,7 @@ public class EmitVariable {
                         || allowIfAlreadyExists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
                         || (isDeclared && isLexical);            // Lexically declared (my/our/state)
-                
+
                 // Fetch the global variable (may throw exception if strict and not allowed)
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
@@ -378,13 +378,13 @@ public class EmitVariable {
                 // Variable is lexical (my/our/state), load it from JVM local variable slot
                 mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
             }
-            
+
             // ===== CONTEXT CONVERSION =====
             // In scalar context, convert array/hash to scalar (e.g., array length, hash key count)
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             }
-            
+
             emitterVisitor.ctx.logDebug("GETVAR end " + symbolEntry);
             return;
         }
@@ -474,7 +474,7 @@ public class EmitVariable {
                 } else {
                     // Regular case: `&$a`
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                    
+
                     // Check if the variable is a lexical subroutine (already a CODE reference)
                     // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
                     boolean isLexicalSub = false;
@@ -482,7 +482,7 @@ public class EmitVariable {
                         String hiddenVarName = (String) opNode.getAnnotation("hiddenVarName");
                         isLexicalSub = (hiddenVarName != null);
                     }
-                    
+
                     // Dereference the scalar to get the CODE reference
                     if (!isLexicalSub) {
                         // Not a lexical sub: call codeDerefNonStrict to look up CODE slot from glob if needed
@@ -490,14 +490,14 @@ public class EmitVariable {
                         emitterVisitor.pushCurrentPackage();
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "codeDerefNonStrict", 
+                                "codeDerefNonStrict",
                                 "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                 false);
                     }
                 }
 
                 emitterVisitor.ctx.logDebug("EmitVariable: about to call RuntimeCode.apply for &$var");
-                
+
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
                 mv.visitMethodInsn(
@@ -979,34 +979,34 @@ public class EmitVariable {
                 // Check if this is a declared reference (my \($b, $c))
                 boolean isDeclaredReference = node.annotations != null &&
                         Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
-                
+
                 if (isDeclaredReference) {
                     // For declared references, return a list of references to the variables
                     emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=true, emitting references for list elements");
                     MethodVisitor mv = emitterVisitor.ctx.mv;
-                    
+
                     // Create a new RuntimeList
                     mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
                     mv.visitInsn(Opcodes.DUP);
                     mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
-                    
+
                     // For each element in the list, emit the variable and create a reference
                     for (Node element : listNode.elements) {
                         ctx.logDebug("handleMyOperator: processing element: " + element + ", class=" + element.getClass().getSimpleName());
                         if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
                             ctx.logDebug("handleMyOperator: emitting createReference for " + elemOpNode.operator);
                             mv.visitInsn(Opcodes.DUP);  // Dup the RuntimeList
-                            
+
                             // Emit the variable in SCALAR context
                             element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                            
+
                             // Create a reference to the variable
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                     "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                                     "createReference",
                                     "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                     false);
-                            
+
                             // Add to the list
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
@@ -1019,39 +1019,39 @@ public class EmitVariable {
                     // Check if any element has isDeclaredReference annotation
                     boolean hasAnyDeclaredRef = false;
                     for (Node element : listNode.elements) {
-                        if (element instanceof OperatorNode elemOpNode && 
-                            elemOpNode.annotations != null && 
-                            Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
+                        if (element instanceof OperatorNode elemOpNode &&
+                                elemOpNode.annotations != null &&
+                                Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
                             hasAnyDeclaredRef = true;
                             break;
                         }
                     }
-                    
+
                     if (hasAnyDeclaredRef) {
                         // Mixed case: some elements are declared refs, some are not
                         // Build the list manually, emitting references for declared refs
                         emitterVisitor.ctx.logDebug("handleMyOperator: hasAnyDeclaredRef=true, building mixed list");
                         MethodVisitor mv = emitterVisitor.ctx.mv;
-                        
+
                         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
                         mv.visitInsn(Opcodes.DUP);
                         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
-                        
+
                         for (Node element : listNode.elements) {
                             if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
                                 mv.visitInsn(Opcodes.DUP);
                                 element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                                
+
                                 // If this element has isDeclaredReference, create a reference
-                                if (elemOpNode.annotations != null && 
-                                    Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
+                                if (elemOpNode.annotations != null &&
+                                        Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
                                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                             "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                                             "createReference",
                                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                             false);
                                 }
-                                
+
                                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                         "org/perlonjava/runtime/runtimetypes/RuntimeList",
                                         "add",
@@ -1068,22 +1068,22 @@ public class EmitVariable {
             return;
         } else if (node.operand instanceof OperatorNode sigilNode) { //  [my our] followed by [$ @ %]
             String sigil = sigilNode.operator;
-            
+
             // Handle my \\$x - reference to a declared reference
-            if (sigil.equals("\\") && node.annotations != null && 
-                Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"))) {
+            if (sigil.equals("\\") && node.annotations != null &&
+                    Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"))) {
                 // This is my \\$x which means: create a declared reference and then take a reference to it
                 // The operand is \$x, so we need to emit the declared reference creation
                 // and then take a reference to it
-                
+
                 // First, emit the declared reference variable (the inner part)
                 sigilNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                
+
                 // The variable is now on the stack, and we're in an assignment context
                 // The assignment operator will handle storing the reference
                 return;
             }
-            
+
             if ("$@%".contains(sigil)) {
                 Node identifierNode = sigilNode.operand;
                 if (identifierNode instanceof IdentifierNode) { // my $a
@@ -1189,7 +1189,7 @@ public class EmitVariable {
                     }
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-                    
+
                     // For declared references in non-void context, return a reference to the variable
                     if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                         // Load the variable back from the local variable slot
