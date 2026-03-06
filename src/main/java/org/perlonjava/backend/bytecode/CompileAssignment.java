@@ -1154,15 +1154,11 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(indexReg);
                         }
 
-                        // Compile values (RHS of assignment)
-                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                        int valuesReg = bytecodeCompiler.lastResultReg;
-
-                        // Emit direct opcode ARRAY_SLICE_SET
+                        // Emit direct opcode ARRAY_SLICE_SET (use valueReg from line 729)
                         bytecodeCompiler.emit(Opcodes.ARRAY_SLICE_SET);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(indicesReg);
-                        bytecodeCompiler.emitReg(valuesReg);
+                        bytecodeCompiler.emitReg(valueReg);
 
                         bytecodeCompiler.lastResultReg = arrayReg;
                         
@@ -1244,17 +1240,13 @@ public class CompileAssignment {
                     bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, rhsContext);
                     int indexReg = bytecodeCompiler.lastResultReg;
 
-                    // Compile RHS value
-                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                    int assignValueReg = bytecodeCompiler.lastResultReg;
-
-                    // Emit ARRAY_SET
+                    // Emit ARRAY_SET (use valueReg from line 729)
                     bytecodeCompiler.emit(Opcodes.ARRAY_SET);
                     bytecodeCompiler.emitReg(arrayReg);
                     bytecodeCompiler.emitReg(indexReg);
-                    bytecodeCompiler.emitReg(assignValueReg);
+                    bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = assignValueReg;
+                    bytecodeCompiler.lastResultReg = valueReg;
                     
                     return;
                 } else if (leftBin.operator.equals("{")) {
@@ -1351,17 +1343,13 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(keyReg);
                             }
 
-                            // Compile RHS values
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valuesReg = bytecodeCompiler.lastResultReg;
-
-                            // Emit direct opcode HASH_SLICE_SET
+                            // Emit direct opcode HASH_SLICE_SET (use valueReg from line 729)
                             bytecodeCompiler.emit(Opcodes.HASH_SLICE_SET);
                             bytecodeCompiler.emitReg(hashReg);
                             bytecodeCompiler.emitReg(keysListReg);
-                            bytecodeCompiler.emitReg(valuesReg);
+                            bytecodeCompiler.emitReg(valueReg);
 
-                            bytecodeCompiler.lastResultReg = valuesReg;
+                            bytecodeCompiler.lastResultReg = valueReg;
                             
                             return;
                         } else if (hashOp.operator.equals("$")) {
@@ -1464,17 +1452,13 @@ public class CompileAssignment {
                         keyReg = bytecodeCompiler.lastResultReg;
                     }
 
-                    // 3. Compile RHS value
-                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                    int hashValueReg = bytecodeCompiler.lastResultReg;
-
-                    // 4. Emit HASH_SET
+                    // 3. Emit HASH_SET (use valueReg from line 729)
                     bytecodeCompiler.emit(Opcodes.HASH_SET);
                     bytecodeCompiler.emitReg(hashReg);
                     bytecodeCompiler.emitReg(keyReg);
-                    bytecodeCompiler.emitReg(hashValueReg);
+                    bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = hashValueReg;
+                    bytecodeCompiler.lastResultReg = valueReg;
                     
                     return;
                 }
@@ -1522,14 +1506,12 @@ public class CompileAssignment {
                             return;
                         }
 
-                        // Compile RHS and emit HASH_SET
-                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                        int valReg = bytecodeCompiler.lastResultReg;
+                        // Emit HASH_SET (use valueReg from line 729)
                         bytecodeCompiler.emit(Opcodes.HASH_SET);
                         bytecodeCompiler.emitReg(hashReg);
                         bytecodeCompiler.emitReg(keyReg);
-                        bytecodeCompiler.emitReg(valReg);
-                        bytecodeCompiler.lastResultReg = valReg;
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = valueReg;
                         
                         return;
                     } else if (rightSide instanceof ArrayLiteralNode arrayIdx) {
@@ -1559,14 +1541,12 @@ public class CompileAssignment {
                         bytecodeCompiler.compileNode(arrayIdx.elements.get(0), -1, rhsContext);
                         int idxReg = bytecodeCompiler.lastResultReg;
 
-                        // Compile RHS and emit ARRAY_SET
-                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                        int valReg = bytecodeCompiler.lastResultReg;
+                        // Emit ARRAY_SET (use valueReg from line 729)
                         bytecodeCompiler.emit(Opcodes.ARRAY_SET);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(idxReg);
-                        bytecodeCompiler.emitReg(valReg);
-                        bytecodeCompiler.lastResultReg = valReg;
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = valueReg;
                         
                         return;
                     }

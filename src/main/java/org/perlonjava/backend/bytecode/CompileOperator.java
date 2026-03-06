@@ -1330,6 +1330,106 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(indexReg);
 
                 bytecodeCompiler.lastResultReg = rd;
+            } else if (arg instanceof BinaryOperatorNode arrowAccess && arrowAccess.operator.equals("->")) {
+                // Handle exists $hashref->{key}
+                if (arrowAccess.right instanceof HashLiteralNode keyNode) {
+                    // Compile left side to get the hash reference
+                    bytecodeCompiler.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);
+                    int refReg = bytecodeCompiler.lastResultReg;
+
+                    // Dereference to get hash
+                    int hashReg = bytecodeCompiler.allocateRegister();
+                    if (bytecodeCompiler.isStrictRefsEnabled()) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(refReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(refReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
+
+                    // Compile key
+                    int keyReg;
+                    if (!keyNode.elements.isEmpty()) {
+                        Node keyElement = keyNode.elements.get(0);
+                        if (keyElement instanceof IdentifierNode) {
+                            // Bareword key - autoquote
+                            String keyString = ((IdentifierNode) keyElement).name;
+                            keyReg = bytecodeCompiler.allocateRegister();
+                            int keyIdx = bytecodeCompiler.addToStringPool(keyString);
+                            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
+                            bytecodeCompiler.emitReg(keyReg);
+                            bytecodeCompiler.emit(keyIdx);
+                        } else {
+                            // Expression key
+                            keyElement.accept(bytecodeCompiler);
+                            keyReg = bytecodeCompiler.lastResultReg;
+                        }
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Hash key required for exists");
+                        return;
+                    }
+
+                    // Emit HASH_EXISTS
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.HASH_EXISTS);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(hashReg);
+                    bytecodeCompiler.emitReg(keyReg);
+
+                    bytecodeCompiler.lastResultReg = rd;
+                } else if (arrowAccess.right instanceof ArrayLiteralNode indexNode) {
+                    // Handle exists $arrayref->[index]
+                    bytecodeCompiler.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);
+                    int refReg = bytecodeCompiler.lastResultReg;
+
+                    // Dereference to get array
+                    int arrayReg = bytecodeCompiler.allocateRegister();
+                    if (bytecodeCompiler.isStrictRefsEnabled()) {
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(refReg);
+                    } else {
+                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(refReg);
+                        bytecodeCompiler.emit(pkgIdx);
+                    }
+
+                    // Compile index
+                    int indexReg;
+                    if (!indexNode.elements.isEmpty()) {
+                        indexNode.elements.get(0).accept(bytecodeCompiler);
+                        indexReg = bytecodeCompiler.lastResultReg;
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Array index required for exists");
+                        return;
+                    }
+
+                    // Emit ARRAY_EXISTS
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.ARRAY_EXISTS);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(arrayReg);
+                    bytecodeCompiler.emitReg(indexReg);
+
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    // Unknown arrow dereference pattern
+                    arg.accept(bytecodeCompiler);
+                    int argReg = bytecodeCompiler.lastResultReg;
+
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.EXISTS);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(argReg);
+
+                    bytecodeCompiler.lastResultReg = rd;
+                }
             } else {
                 arg.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
