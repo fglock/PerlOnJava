@@ -546,9 +546,9 @@ public class Opcodes {
     /** Localize global variable: rd = GlobalRuntimeScalar.makeLocal(var_name) */
     public static final short LOCAL_SCALAR = 131;
     /** Localize global array: rd = GlobalVariable.getGlobalArray(var_name) (dynamicSaveState via DynamicVariableManager) */
-    public static final short LOCAL_ARRAY = 345;
+    public static final short LOCAL_ARRAY = 343;
     /** Localize global hash: rd = GlobalVariable.getGlobalHash(var_name) (dynamicSaveState via DynamicVariableManager) */
-    public static final short LOCAL_HASH = 346;
+    public static final short LOCAL_HASH = 344;
 
     // Group 6: System Calls (132-141) - CONTIGUOUS
     /** chown(list, uid, gid) */
@@ -613,7 +613,7 @@ public class Opcodes {
 
     // Math Operators (400-409) - CONTIGUOUS
     /** Power operator: rd = MathOperators.pow(rs1, rs2) - equivalent to rs1 ** rs2 */
-    public static final short OP_POW = 155;
+    public static final short OP_POW = 310;
     /** Absolute value: rd = MathOperators.abs(rs) - equivalent to abs(rs) */
     public static final short OP_ABS = 156;
     /** Integer conversion: rd = MathOperators.integer(rs) - equivalent to int(rs) */
@@ -648,12 +648,12 @@ public class Opcodes {
     /** Localize a typeglob: rd = DynamicVariableManager.pushLocalVariable(LOAD_GLOB(nameIdx))
      * Saves current glob state and returns the glob for potential assignment.
      * Format: LOCAL_GLOB rd nameIdx */
-    public static final short LOCAL_GLOB = 342;
+    public static final short LOCAL_GLOB = 340;
 
     /** Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
      * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive */
-    public static final short FLIP_FLOP = 343;
+    public static final short FLIP_FLOP = 341;
 
     /** Open file: rd = IOOperator.open(ctx, args...)
      * Format: OPEN rd ctx argsReg */
@@ -1017,7 +1017,7 @@ public class Opcodes {
     /** Save current DynamicVariableManager local level into register rd.
      * Used to bracket scoped package blocks so local pushes (PUSH_PACKAGE etc) are restored.
      * Format: GET_LOCAL_LEVEL rd */
-    public static final short GET_LOCAL_LEVEL = 341;
+    public static final short GET_LOCAL_LEVEL = 339;
 
     /** Superinstruction: foreach loop step for a global loop variable (e.g. $_).
      * Combines: hasNext check, next() into varReg, aliasGlobalVariable(name, varReg), conditional exit.
@@ -1042,46 +1042,46 @@ public class Opcodes {
     /** close FILEHANDLE: Format: CLOSE rd argsReg ctx */
     public static final short CLOSE = 309;
     /** binmode FILEHANDLE,LAYER: Format: BINMODE rd argsReg ctx */
-    public static final short BINMODE = 312;
+    public static final short BINMODE = 311;
     /** seek FILEHANDLE,POS,WHENCE: Format: SEEK rd argsReg ctx */
-    public static final short SEEK = 313;
+    public static final short SEEK = 312;
     /** eof FILEHANDLE: Format: EOF_OP rd argsReg ctx */
-    public static final short EOF_OP = 315;
+    public static final short EOF_OP = 313;
     /** sysread FILEHANDLE,SCALAR,LENGTH: Format: SYSREAD rd argsReg ctx */
-    public static final short SYSREAD = 316;
+    public static final short SYSREAD = 314;
     /** syswrite FILEHANDLE,SCALAR: Format: SYSWRITE rd argsReg ctx */
-    public static final short SYSWRITE = 317;
+    public static final short SYSWRITE = 315;
     /** sysopen FILEHANDLE,FILENAME,MODE: Format: SYSOPEN rd argsReg ctx */
-    public static final short SYSOPEN = 318;
+    public static final short SYSOPEN = 316;
     /** socket SOCKET,DOMAIN,TYPE,PROTOCOL: Format: SOCKET rd argsReg ctx */
-    public static final short SOCKET = 319;
+    public static final short SOCKET = 317;
     /** bind SOCKET,NAME: Format: BIND rd argsReg ctx */
-    public static final short BIND = 320;
+    public static final short BIND = 318;
     /** connect SOCKET,NAME: Format: CONNECT rd argsReg ctx */
-    public static final short CONNECT = 321;
+    public static final short CONNECT = 319;
     /** listen SOCKET,QUEUESIZE: Format: LISTEN rd argsReg ctx */
-    public static final short LISTEN = 322;
+    public static final short LISTEN = 320;
     /** write FILEHANDLE: Format: WRITE rd argsReg ctx */
-    public static final short WRITE = 323;
+    public static final short WRITE = 321;
     /** formline PICTURE,LIST: Format: FORMLINE rd argsReg ctx */
-    public static final short FORMLINE = 324;
+    public static final short FORMLINE = 322;
     /** printf FILEHANDLE,FORMAT,LIST: Format: PRINTF rd argsReg ctx */
-    public static final short PRINTF = 325;
+    public static final short PRINTF = 323;
     /** accept NEWSOCKET,GENERICSOCKET: Format: ACCEPT rd argsReg ctx */
-    public static final short ACCEPT = 326;
+    public static final short ACCEPT = 324;
     /** sysseek FILEHANDLE,POS,WHENCE: Format: SYSSEEK rd argsReg ctx */
-    public static final short SYSSEEK = 327;
+    public static final short SYSSEEK = 325;
     /** truncate FILEHANDLE,LENGTH: Format: TRUNCATE rd argsReg ctx */
-    public static final short TRUNCATE = 328;
+    public static final short TRUNCATE = 326;
     /** read FILEHANDLE,SCALAR,LENGTH: Format: READ rd argsReg ctx */
-    public static final short READ = 329;
+    public static final short READ = 327;
 
     /** opendir DIRHANDLE,EXPR: Format: OPENDIR rd argsReg ctx */
-    public static final short OPENDIR = 330;
+    public static final short OPENDIR = 328;
     /** readdir DIRHANDLE: Format: READDIR rd argsReg ctx */
-    public static final short READDIR = 331;
+    public static final short READDIR = 329;
     /** seekdir DIRHANDLE,POS: Format: SEEKDIR rd argsReg ctx */
-    public static final short SEEKDIR = 332;
+    public static final short SEEKDIR = 330;
 
     /** Enter scoped package block (package Foo { ...).
      * Format: PUSH_PACKAGE nameIdx
@@ -1096,133 +1096,133 @@ public class Opcodes {
     /** Dereference a scalar as a glob: rd = rs.globDerefNonStrict(currentPackage)
      * Used for $ref->** postfix glob deref
      * Format: DEREF_GLOB rd rs nameIdx(currentPackage) */
-    public static final short DEREF_GLOB = 333;
+    public static final short DEREF_GLOB = 331;
 
     /** Load glob by runtime name (symbolic ref): rd = GlobalVariable.getGlobalIO(normalize(nameReg, pkg))
      * Used for *{"name"} = value typeglob assignment with dynamic name
      * Format: LOAD_GLOB_DYNAMIC rd nameReg pkgIdx */
-    public static final short LOAD_GLOB_DYNAMIC = 334;
+    public static final short LOAD_GLOB_DYNAMIC = 332;
 
     /** Scalar dereference (strict refs): rd = rs.scalarDeref()
      * Throws "Can't use string as a SCALAR ref while strict refs in use" for non-refs.
      * Matches JVM path: scalarDeref() — used when strict refs is enabled.
      * Format: DEREF_SCALAR_STRICT rd rs */
-    public static final short DEREF_SCALAR_STRICT = 335;
+    public static final short DEREF_SCALAR_STRICT = 333;
 
     /** Scalar dereference (no strict refs): rd = rs.scalarDerefNonStrict(pkg)
      * Allows symbolic references (string name -> global variable lookup).
      * Matches JVM path: scalarDerefNonStrict(pkg) — used when strict refs is disabled.
      * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx */
-    public static final short DEREF_SCALAR_NONSTRICT = 336;
+    public static final short DEREF_SCALAR_NONSTRICT = 334;
 
     /** Load v-string literal: rd = new RuntimeScalar(stringPool[index]) with type=VSTRING
      * Mirrors JVM EmitLiteral handling of isVString nodes.
      * Format: LOAD_VSTRING rd strIndex */
-    public static final short LOAD_VSTRING = 337;
+    public static final short LOAD_VSTRING = 335;
 
     /** Convert list/array to its last element in scalar context: rd = list.scalar()
      * A list in scalar context returns its last element (Perl semantics).
      * Contrast with LIST_TO_COUNT which returns list size.
      * Format: LIST_TO_SCALAR rd rs */
-    public static final short LIST_TO_SCALAR = 338;
+    public static final short LIST_TO_SCALAR = 336;
 
     /** Glob operator: rd = ScalarGlobOperator.evaluate(globId, patternReg, ctx)
      * Mirrors JVM EmitOperator.handleGlobBuiltin — uses a per-call-site globId for
      * scalar-context iteration state across calls.
      * Format: GLOB_OP rd globId patternReg ctx */
-    public static final short GLOB_OP = 339;
+    public static final short GLOB_OP = 337;
 
     /** Execute a file: rd = ModuleOperators.doFile(fileReg, ctx)
      * Implements Perl's do FILE operator.
      * Format: DO_FILE rd fileReg ctx */
-    public static final short DO_FILE = 340;
+    public static final short DO_FILE = 338;
 
     /** Hash key/value slice: rd = hash.getKeyValueSlice(keys_list)
      * Perl: %hash{keys} returns alternating key/value pairs.
      * Format: HASH_KEYVALUE_SLICE rd hashReg keysListReg */
-    public static final short HASH_KEYVALUE_SLICE = 344;
+    public static final short HASH_KEYVALUE_SLICE = 342;
 
     /** Set $#array = value: Format: SET_ARRAY_LAST_INDEX arrayReg valueReg */
-    public static final short SET_ARRAY_LAST_INDEX = 347;
+    public static final short SET_ARRAY_LAST_INDEX = 345;
 
     /** Logical xor: rd = left xor right. Format: XOR_LOGICAL rd rs1 rs2 */
-    public static final short XOR_LOGICAL = 348;
+    public static final short XOR_LOGICAL = 346;
 
     /** Defined-or assignment: rd //= rs. Format: DEFINED_OR_ASSIGN rd rs */
-    public static final short DEFINED_OR_ASSIGN = 349;
+    public static final short DEFINED_OR_ASSIGN = 347;
 
     /** stat _ (use cached stat buffer): rd = Stat.statLastHandle()
      * Format: STAT_LASTHANDLE rd ctx */
-    public static final short STAT_LASTHANDLE = 350;
+    public static final short STAT_LASTHANDLE = 348;
 
     /** lstat _ (use cached stat buffer): rd = Stat.lstatLastHandle()
      * Format: LSTAT_LASTHANDLE rd ctx */
-    public static final short LSTAT_LASTHANDLE = 351;
+    public static final short LSTAT_LASTHANDLE = 349;
 
     /** Mutable scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
      * Superinstruction combining LOAD_UNDEF + SET_SCALAR for lexical scalar assignment.
      * Format: MY_SCALAR rd rs */
-    public static final short MY_SCALAR = 352;
+    public static final short MY_SCALAR = 350;
 
     /** Undefine a scalar variable in-place: rd.undefine(). Used by `undef $x`. */
-    public static final short UNDEFINE_SCALAR = 353;
+    public static final short UNDEFINE_SCALAR = 351;
 
     /** Push a labeled block entry for non-local last/next/redo handling.
      * Format: PUSH_LABELED_BLOCK label_string_idx exit_pc(int) */
-    public static final short PUSH_LABELED_BLOCK = 354;
+    public static final short PUSH_LABELED_BLOCK = 352;
 
     /** Pop a labeled block entry.
      * Format: POP_LABELED_BLOCK */
-    public static final short POP_LABELED_BLOCK = 355;
+    public static final short POP_LABELED_BLOCK = 353;
 
     /** Save regex state (Perl 5 dynamic scoping of $1, $&amp;, etc.) into register rd.
      *  The register receives an integer index into the interpreter's regexStateStack.
      *  Emitted at block entry for blocks containing regex operations.
      *  @see org.perlonjava.runtime.runtimetypes.RegexState
      *  Format: SAVE_REGEX_STATE rd */
-    public static final short SAVE_REGEX_STATE = 356;
+    public static final short SAVE_REGEX_STATE = 354;
 
     /** Restore regex state from the level stored in register rs, undoing all
      *  regex state changes made within the block.  Also truncates any orphaned
      *  stack entries (from inner blocks skipped by last/next/redo/die).
      *  Emitted at block exit.
      *  Format: RESTORE_REGEX_STATE rs */
-    public static final short RESTORE_REGEX_STATE = 357;
+    public static final short RESTORE_REGEX_STATE = 355;
 
-    public static final short DEREF_HASH_NONSTRICT = 358;
-    public static final short DEREF_ARRAY_NONSTRICT = 359;
+    public static final short DEREF_HASH_NONSTRICT = 356;
+    public static final short DEREF_ARRAY_NONSTRICT = 357;
 
     /** Perl time() builtin: rd = current epoch seconds.
      *  Format: TIME_OP rd */
-    public static final short TIME_OP = 360;
+    public static final short TIME_OP = 358;
 
-    public static final short INTEGER_LEFT_SHIFT = 361;
-    public static final short INTEGER_RIGHT_SHIFT = 362;
-    public static final short INTEGER_DIV = 363;
-    public static final short INTEGER_MOD = 364;
-    public static final short INTEGER_LEFT_SHIFT_ASSIGN = 365;
-    public static final short INTEGER_RIGHT_SHIFT_ASSIGN = 366;
-    public static final short INTEGER_DIV_ASSIGN = 367;
-    public static final short INTEGER_MOD_ASSIGN = 368;
-    public static final short RESET = 369;
+    public static final short INTEGER_LEFT_SHIFT = 359;
+    public static final short INTEGER_RIGHT_SHIFT = 360;
+    public static final short INTEGER_DIV = 361;
+    public static final short INTEGER_MOD = 362;
+    public static final short INTEGER_LEFT_SHIFT_ASSIGN = 363;
+    public static final short INTEGER_RIGHT_SHIFT_ASSIGN = 364;
+    public static final short INTEGER_DIV_ASSIGN = 365;
+    public static final short INTEGER_MOD_ASSIGN = 366;
+    public static final short RESET = 367;
 
     /** Dereference a scalar as a glob (no strict refs): rd = rs.globDerefNonStrict(pkg)
      * Allows symbolic glob references (string names resolved to globs).
      * Format: DEREF_GLOB_NONSTRICT rd rs pkgIdx */
-    public static final short DEREF_GLOB_NONSTRICT = 370;
+    public static final short DEREF_GLOB_NONSTRICT = 368;
 
     /** Array exists: rd = array_reg.exists(index_reg) */
-    public static final short ARRAY_EXISTS = 371;
+    public static final short ARRAY_EXISTS = 369;
     /** Array delete: rd = array_reg.delete(index_reg) */
-    public static final short ARRAY_DELETE = 372;
+    public static final short ARRAY_DELETE = 370;
     /** List assignment: rd = lhs_list_reg.setFromList(rhs_list_reg)
      * Format: SET_FROM_LIST rd lhsListReg rhsListReg */
-    public static final short SET_FROM_LIST = 373;
+    public static final short SET_FROM_LIST = 371;
 
     /** Load byte string: rd = new RuntimeScalar(stringPool[index]) with BYTE_STRING type.
      * Used for string literals under `no utf8` (the default).
      * Format: LOAD_BYTE_STRING rd strIndex */
-    public static final short LOAD_BYTE_STRING = 374;
+    public static final short LOAD_BYTE_STRING = 372;
 
     private Opcodes() {} // Utility class - no instantiation
 }
