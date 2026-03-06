@@ -730,8 +730,8 @@ public class CompileOperator {
         if (visitSimpleUnaryOp(bytecodeCompiler, node, op)) return;
         if (visitGenericListOp(bytecodeCompiler, node, op)) return;
 
-        // File test operators
-        if (op.startsWith("-") && op.length() == 2) {
+        // File test operators (but not --)
+        if (op.startsWith("-") && op.length() == 2 && !op.equals("--")) {
             visitFileTestOp(bytecodeCompiler, node, op);
             return;
         }
