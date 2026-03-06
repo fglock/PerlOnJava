@@ -42,6 +42,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return size() > MAX_REGEX_CACHE_SIZE;
         }
     };
+    // Cache for /o modifier - maps callsite ID to compiled regex (only first compilation is used)
+    private static final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
     // Global matcher used for regex operations
     public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
     public static String globalMatchString; // Provides Perl regex variables like $&
@@ -315,6 +317,37 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
+     * Variant of getQuotedRegex that supports the /o modifier.
+     * When callsiteId is provided and modifiers contain 'o', the regex is compiled only once
+     * and cached for subsequent calls from the same callsite.
+     *
+     * @param patternString The regex pattern string.
+     * @param modifiers     Modifiers for the regex pattern (may include 'o').
+     * @param callsiteId    Unique identifier for this callsite (used for /o caching).
+     * @return A RuntimeScalar representing the compiled regex.
+     */
+    public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
+        String modifierStr = modifiers.toString();
+        
+        // Check if /o modifier is present
+        if (modifierStr.contains("o")) {
+            // Check if we already have a cached regex for this callsite
+            RuntimeScalar cached = optimizedRegexCache.get(callsiteId);
+            if (cached != null) {
+                return cached;
+            }
+            
+            // Compile the regex and cache it
+            RuntimeScalar result = getQuotedRegex(patternString, modifiers);
+            optimizedRegexCache.put(callsiteId, result);
+            return result;
+        }
+        
+        // No /o modifier, use normal compilation
+        return getQuotedRegex(patternString, modifiers);
+    }
+
+    /**
      * Internal variant of qr// that includes a `replacement`.
      * This is the internal representation of the `s///` operation.
      *
@@ -409,6 +442,33 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegex regex = resolveRegex(quotedRegex);
         regex = ensureCompiledForRuntime(regex);
+        
+        // Save original flags before potentially changing regex
+        RegexFlags originalFlags = regex.regexFlags;
+
+        // Handle empty pattern - reuse last successful pattern or use empty pattern
+        if (regex.patternString == null || regex.patternString.isEmpty()) {
+            if (lastSuccessfulPattern != null) {
+                // Use the pattern from last successful match
+                // But keep the current flags (especially /g and /i)
+                Pattern pattern = lastSuccessfulPattern.pattern;
+                // Re-apply current flags if they differ
+                if (originalFlags != null && !originalFlags.equals(lastSuccessfulPattern.regexFlags)) {
+                    // Need to recompile with current flags
+                    int newFlags = originalFlags.toPatternFlags();
+                    pattern = Pattern.compile(lastSuccessfulPattern.patternString, newFlags);
+                }
+                // Create a temporary regex with the right pattern and current flags
+                RuntimeRegex tempRegex = new RuntimeRegex();
+                tempRegex.pattern = pattern;
+                tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
+                tempRegex.regexFlags = originalFlags;
+                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
+                regex = tempRegex;
+            }
+            // If no previous pattern, the empty pattern matches empty string at start (default behavior)
+        }
 
         // Debug logging
         if (DEBUG_REGEX) {

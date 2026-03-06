@@ -16,6 +16,8 @@ import java.util.HashMap;
  * transliteration and replacement.
  */
 public class EmitRegex {
+    // Callsite ID counter for /o modifier support (unique across all JVM compilations)
+    private static int nextCallsiteId = 100000;  // Start at 100000 to avoid collision with interpreter IDs
 
     /**
      * Handles the binding regex operation where a variable is bound to a regex operation.
@@ -247,14 +249,29 @@ public class EmitRegex {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
+        // Check if /o modifier is present
+        boolean hasOModifier = false;
+        Node flagsNode = operand.elements.get(1);
+        if (flagsNode instanceof StringNode) {
+            hasOModifier = ((StringNode) flagsNode).value.contains("o");
+        }
+
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
-        operand.elements.get(1).accept(scalarVisitor);  // Flags
+        flagsNode.accept(scalarVisitor);  // Flags
 
-        // Create the regex matcher
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        // Create the regex matcher (use 3-argument version for /o)
+        if (hasOModifier) {
+            int callsiteId = nextCallsiteId++;
+            emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        } else {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        }
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledRegex = regexSlot >= 0;

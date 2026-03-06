@@ -540,7 +540,7 @@ public class BytecodeInterpreter {
                             // =================================================================
 
                             case Opcodes.DEFINED, Opcodes.REF, Opcodes.BLESS, Opcodes.ISA, Opcodes.PROTOTYPE,
-                                 Opcodes.QUOTE_REGEX -> {
+                                 Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
 
@@ -1856,6 +1856,14 @@ public class BytecodeInterpreter {
                 int patternReg = bytecode[pc++];
                 int flagsReg = bytecode[pc++];
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), registers[flagsReg].scalar());
+                return pc;
+            }
+            case Opcodes.QUOTE_REGEX_O -> {
+                int rd = bytecode[pc++];
+                int patternReg = bytecode[pc++];
+                int flagsReg = bytecode[pc++];
+                int callsiteId = bytecode[pc++];
+                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), registers[flagsReg].scalar(), callsiteId);
                 return pc;
             }
             default -> throw new RuntimeException("Unknown type opcode: " + opcode);

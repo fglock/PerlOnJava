@@ -68,6 +68,8 @@ public class BytecodeCompiler implements Visitor {
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
+    // Callsite ID counter for /o modifier support (unique across all compilations)
+    private static int nextCallsiteId = 1;
     // Track last result register for expression chaining
     int lastResultReg = -1;
     // Target output register for ALIAS elimination (same save/restore pattern as currentCallContext).
@@ -3603,6 +3605,14 @@ public class BytecodeCompiler implements Visitor {
             maxRegisterEverUsed = reg;
         }
         return reg;
+    }
+
+    /**
+     * Allocate a unique callsite ID for /o modifier support.
+     * Each callsite with /o gets a unique ID so the pattern is compiled only once per callsite.
+     */
+    int allocateCallsiteId() {
+        return nextCallsiteId++;
     }
 
     int allocateOutputRegister() {
