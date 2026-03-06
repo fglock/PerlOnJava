@@ -151,6 +151,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeList constantValue;
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
+
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
@@ -161,6 +162,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.prototype = prototype;
         this.attributes = attributes;
     }
+
     public RuntimeCode(MethodHandle methodObject, Object codeObject, String prototype) {
         this.methodHandle = methodObject;
         this.codeObject = codeObject;
@@ -405,7 +407,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 } else if (runtimeValue instanceof RuntimeScalar) {
                                     GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
                                 }
-                                evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
+                                evalAliasKeys.add(entry.name().charAt(0) + fullName);
                             }
                         }
                     }
@@ -490,14 +492,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         apply(sigHandler, args, RuntimeContextType.SCALAR);
                     } catch (Throwable handlerException) {
                         // If the handler dies, use its payload as the new error
-                        if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException) {
-                            PerlDieException pde = (PerlDieException) handlerException.getCause();
+                        if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException pde) {
                             RuntimeBase handlerPayload = pde.getPayload();
                             if (handlerPayload != null) {
                                 err.set(handlerPayload.getFirst());
                             }
-                        } else if (handlerException instanceof PerlDieException) {
-                            PerlDieException pde = (PerlDieException) handlerException;
+                        } else if (handlerException instanceof PerlDieException pde) {
                             RuntimeBase handlerPayload = pde.getPayload();
                             if (handlerPayload != null) {
                                 err.set(handlerPayload.getFirst());
@@ -793,7 +793,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 } else if (runtimeValue instanceof RuntimeScalar) {
                                     GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
                                 }
-                                evalAliasKeys.add(entry.name().substring(0, 1) + fullName);
+                                evalAliasKeys.add(entry.name().charAt(0) + fullName);
                             }
                         }
                     }
@@ -920,14 +920,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         apply(sigHandler, handlerArgs, RuntimeContextType.SCALAR);
                     } catch (Throwable handlerException) {
                         // If the handler dies, use its payload as the new error
-                        if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException) {
-                            PerlDieException pde = (PerlDieException) handlerException.getCause();
+                        if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException pde) {
                             RuntimeBase handlerPayload = pde.getPayload();
                             if (handlerPayload != null) {
                                 err.set(handlerPayload.getFirst());
                             }
-                        } else if (handlerException instanceof PerlDieException) {
-                            PerlDieException pde = (PerlDieException) handlerException;
+                        } else if (handlerException instanceof PerlDieException pde) {
                             RuntimeBase handlerPayload = pde.getPayload();
                             if (handlerPayload != null) {
                                 err.set(handlerPayload.getFirst());
@@ -1965,43 +1963,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Container for runtime context during eval STRING compilation.
-     * Holds both the runtime values and variable names so SpecialBlockParser can
-     * match variables to their values.
-     */
-    public static class EvalRuntimeContext {
-        public final Object[] runtimeValues;
-        public final String[] capturedEnv;
-        public final String evalTag;
-
-        public EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
-            this.runtimeValues = runtimeValues;
-            this.capturedEnv = capturedEnv;
-            this.evalTag = evalTag;
-        }
+         * Container for runtime context during eval STRING compilation.
+         * Holds both the runtime values and variable names so SpecialBlockParser can
+         * match variables to their values.
+         */
+        public record EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
 
         /**
-         * Get the runtime value for a variable by name.
-         * <p>
-         * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
-         * but runtimeValues array skips the first skipVariables (currently 3).
-         * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
-         *
-         * @param varName The variable name (e.g., "@imports", "$scalar")
-         * @return The runtime value, or null if not found
-         */
-        public Object getRuntimeValue(String varName) {
-            int skipVariables = 3; // 'this', '@_', 'wantarray'
-            for (int i = skipVariables; i < capturedEnv.length; i++) {
-                if (varName.equals(capturedEnv[i])) {
-                    int runtimeIndex = i - skipVariables;
-                    if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
-                        return runtimeValues[runtimeIndex];
+             * Get the runtime value for a variable by name.
+             * <p>
+             * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
+             * but runtimeValues array skips the first skipVariables (currently 3).
+             * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
+             *
+             * @param varName The variable name (e.g., "@imports", "$scalar")
+             * @return The runtime value, or null if not found
+             */
+            public Object getRuntimeValue(String varName) {
+                int skipVariables = 3; // 'this', '@_', 'wantarray'
+                for (int i = skipVariables; i < capturedEnv.length; i++) {
+                    if (varName.equals(capturedEnv[i])) {
+                        int runtimeIndex = i - skipVariables;
+                        if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
+                            return runtimeValues[runtimeIndex];
+                        }
                     }
                 }
+                return null;
             }
-            return null;
         }
-    }
 
 }

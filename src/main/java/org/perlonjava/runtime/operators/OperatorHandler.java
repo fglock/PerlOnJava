@@ -349,7 +349,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @param methodName The name of the method to associate with the operator.
      * @param className  The name of the class containing the method.
      */
-    static void put (String operator, String methodName, String className){
+    static void put(String operator, String methodName, String className) {
         operatorHandlers.put(operator,
                 new OperatorHandler(className,
                         methodName,
@@ -365,7 +365,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @param className  The name of the class containing the method.
      * @param descriptor The JVM parameter descriptor
      */
-    static void put (String operator, String methodName, String className, String descriptor){
+    static void put(String operator, String methodName, String className, String descriptor) {
         operatorHandlers.put(operator,
                 new OperatorHandler(className,
                         methodName,
@@ -379,7 +379,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @param operator The operator symbol.
      * @return The OperatorHandler associated with the operator, or null if not found.
      */
-    public static OperatorHandler get (String operator){
+    public static OperatorHandler get(String operator) {
         return operatorHandlers.get(operator);
     }
 
@@ -389,7 +389,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @return The class name.
      */
     @Override
-    public String className () {
+    public String className() {
         return className;
     }
 
@@ -399,7 +399,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @return The method name.
      */
     @Override
-    public String methodName () {
+    public String methodName() {
         return methodName;
     }
 
@@ -409,7 +409,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @return The method type.
      */
     @Override
-    public int methodType () {
+    public int methodType() {
         return methodType;
     }
 
@@ -419,7 +419,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @return The method descriptor.
      */
     @Override
-    public String descriptor () {
+    public String descriptor() {
         return descriptor;
     }
 
@@ -428,7 +428,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      *
      * @return The modified method descriptor.
      */
-    public String getDescriptorWithIntParameter () {
+    public String getDescriptorWithIntParameter() {
         String descriptor = this.descriptor;
         // replace last argument with `I`
         return descriptor.replace("Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)", "I)");
@@ -440,7 +440,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      * @return The return type class name with semicolon (e.g., "RuntimeScalar;"),
      * or null if return type cannot be determined
      */
-    public String getReturnTypeDescriptor () {
+    public String getReturnTypeDescriptor() {
         if (descriptor == null) {
             return null;
         }

@@ -1420,8 +1420,7 @@ public class EmitterMethodCreator implements Opcodes {
             ));
 
             // Add refactoring information if available
-            if (ast instanceof BlockNode) {
-                BlockNode blockNode = (BlockNode) ast;
+            if (ast instanceof BlockNode blockNode) {
                 Object estimatedSize = blockNode.getAnnotation("estimatedBytecodeSize");
                 Object skipReason = blockNode.getAnnotation("refactorSkipReason");
 

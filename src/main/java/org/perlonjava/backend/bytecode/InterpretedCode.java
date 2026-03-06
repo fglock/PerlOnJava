@@ -320,12 +320,10 @@ public class InterpretedCode extends RuntimeCode {
                     if (constants != null && constIdx < constants.length) {
                         Object obj = constants[constIdx];
                         sb.append(" (");
-                        if (obj instanceof RuntimeScalar) {
-                            RuntimeScalar scalar = (RuntimeScalar) obj;
+                        if (obj instanceof RuntimeScalar scalar) {
                             sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=").append(scalar.value.getClass().getSimpleName()).append("}");
-                        } else if (obj instanceof PerlRange) {
+                        } else if (obj instanceof PerlRange range) {
                             // Special handling for PerlRange to avoid expanding large ranges
-                            PerlRange range = (PerlRange) obj;
                             sb.append("PerlRange{").append(range.getStart().toString()).append("..")
                                     .append(range.getEnd().toString()).append("}");
                         } else {

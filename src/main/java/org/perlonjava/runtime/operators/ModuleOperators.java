@@ -132,8 +132,7 @@ public class ModuleOperators {
         // ===== STEP 1: Handle ARRAY reference =====
         // Array format: [coderef|filehandle, state...]
         if (runtimeScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
-                runtimeScalar.value instanceof RuntimeArray) {
-            RuntimeArray arr = (RuntimeArray) runtimeScalar.value;
+                runtimeScalar.value instanceof RuntimeArray arr) {
             if (arr.size() > 0) {
                 RuntimeScalar firstElem = arr.get(0);
 
@@ -486,8 +485,7 @@ public class ModuleOperators {
                                 incHookRef = dirScalar;
                                 break;
                             } else if (hookResultScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
-                                    hookResultScalar.value instanceof RuntimeArray) {
-                                RuntimeArray resultArray = (RuntimeArray) hookResultScalar.value;
+                                    hookResultScalar.value instanceof RuntimeArray resultArray) {
                                 if (resultArray.size() > 0) {
                                     RuntimeScalar firstElem = resultArray.get(0);
                                     if (firstElem.type == RuntimeScalarType.GLOB ||
@@ -848,8 +846,7 @@ public class ModuleOperators {
             codeRef = (RuntimeCode) hook.value;
         }
         // Case 4: ARRAY reference (not blessed) - call first element as coderef with array as $self
-        else if (hook.type == RuntimeScalarType.ARRAYREFERENCE && hook.value instanceof RuntimeArray) {
-            RuntimeArray arr = (RuntimeArray) hook.value;
+        else if (hook.type == RuntimeScalarType.ARRAYREFERENCE && hook.value instanceof RuntimeArray arr) {
             if (arr.size() > 0) {
                 RuntimeScalar firstElem = arr.get(0);
                 if (firstElem.type == RuntimeScalarType.CODE) {

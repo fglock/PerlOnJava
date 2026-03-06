@@ -288,13 +288,6 @@ public class JavaClassInfo {
                 "}";
     }
 
-    public static final class SpillRef {
-        public final int slot;
-        public final boolean pooled;
-
-        public SpillRef(int slot, boolean pooled) {
-            this.slot = slot;
-            this.pooled = pooled;
-        }
+    public record SpillRef(int slot, boolean pooled) {
     }
 }

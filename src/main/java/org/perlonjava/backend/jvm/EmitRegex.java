@@ -133,8 +133,7 @@ public class EmitRegex {
         // Handle two cases:
         // 1. readpipe() with no args -> operand is OperatorNode for $_
         // 2. readpipe($expr) or `cmd` -> operand is ListNode with command
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
+        if (node.operand instanceof ListNode operand) {
             commandNode = operand.elements.getFirst();
         } else {
             // readpipe() with no arguments uses $_

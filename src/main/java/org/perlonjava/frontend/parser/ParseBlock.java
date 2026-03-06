@@ -149,15 +149,8 @@ public class ParseBlock {
     }
 
     /**
-     * Result of parseBlock when scope exit is delayed.
-     */
-    public static class BlockWithScope {
-        public final BlockNode block;
-        public final int scopeIndex;
-
-        public BlockWithScope(BlockNode block, int scopeIndex) {
-            this.block = block;
-            this.scopeIndex = scopeIndex;
-        }
+         * Result of parseBlock when scope exit is delayed.
+         */
+        public record BlockWithScope(BlockNode block, int scopeIndex) {
     }
 }

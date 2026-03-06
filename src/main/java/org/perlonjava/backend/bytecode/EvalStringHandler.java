@@ -201,9 +201,8 @@ public class EvalStringHandler {
                         // Only capture actual Perl variables: Scalar, Array, Hash, Code
                         if (value == null) {
                             // Null is fine - capture it
-                        } else if (value instanceof RuntimeScalar) {
+                        } else if (value instanceof RuntimeScalar scalar) {
                             // Check if the scalar contains an Iterator (used by for loops)
-                            RuntimeScalar scalar = (RuntimeScalar) value;
                             if (scalar.value instanceof java.util.Iterator) {
                                 // Skip - this is a for loop iterator, not a user variable
                                 continue;

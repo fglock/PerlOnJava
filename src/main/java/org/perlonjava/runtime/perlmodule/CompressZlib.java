@@ -124,14 +124,13 @@ public class CompressZlib extends PerlModuleBase {
 
         RuntimeScalar inflaterScalar = self.get(INFLATER_KEY);
         if (inflaterScalar == null || inflaterScalar.type != RuntimeScalarType.JAVAOBJECT
-                || !(inflaterScalar.value instanceof Inflater)) {
+                || !(inflaterScalar.value instanceof Inflater inflater)) {
             RuntimeList result = new RuntimeList();
             result.add(scalarUndef);
             result.add(new RuntimeScalar(-2));
             return result;
         }
 
-        Inflater inflater = (Inflater) inflaterScalar.value;
         String dataStr = dataScalar.toString();
         byte[] input = dataStr.getBytes(StandardCharsets.ISO_8859_1);
         inflater.setInput(input);
@@ -179,11 +178,10 @@ public class CompressZlib extends PerlModuleBase {
 
         RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
         if (deflaterScalar == null || deflaterScalar.type != RuntimeScalarType.JAVAOBJECT
-                || !(deflaterScalar.value instanceof Deflater)) {
+                || !(deflaterScalar.value instanceof Deflater deflater)) {
             return scalarUndef.getList();
         }
 
-        Deflater deflater = (Deflater) deflaterScalar.value;
         String dataStr = dataScalar.toString();
         byte[] input = dataStr.getBytes(StandardCharsets.ISO_8859_1);
         deflater.setInput(input);
@@ -210,11 +208,10 @@ public class CompressZlib extends PerlModuleBase {
         RuntimeHash self = args.get(0).hashDeref();
         RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
         if (deflaterScalar == null || deflaterScalar.type != RuntimeScalarType.JAVAOBJECT
-                || !(deflaterScalar.value instanceof Deflater)) {
+                || !(deflaterScalar.value instanceof Deflater deflater)) {
             return scalarUndef.getList();
         }
 
-        Deflater deflater = (Deflater) deflaterScalar.value;
         deflater.finish();
 
         byte[] outputBuf = new byte[1024];

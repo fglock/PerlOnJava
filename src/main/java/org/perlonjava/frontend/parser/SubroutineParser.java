@@ -795,10 +795,8 @@ public class SubroutineParser {
                     EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
 
             try {
-                if (runtimeCode instanceof CompiledCode) {
+                if (runtimeCode instanceof CompiledCode compiledCode) {
                     // CompiledCode path - fill in the existing placeholder
-                    CompiledCode compiledCode =
-                            (CompiledCode) runtimeCode;
                     Class<?> generatedClass = compiledCode.generatedClass;
 
                     // Prepare constructor with the captured variable types
@@ -816,14 +814,12 @@ public class SubroutineParser {
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
                     field.set(placeholder.codeObject, codeRef);
 
-                } else if (runtimeCode instanceof InterpretedCode) {
+                } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
                     // This is critical: hash assignments copy RuntimeScalar but share the same
                     // RuntimeCode value object. If we replace codeRef.value, hash copies won't see
                     // the update. By setting methodHandle/codeObject on the placeholder, ALL
                     // references (including hash copies) will see the compiled code.
-                    InterpretedCode interpretedCode =
-                            (InterpretedCode) runtimeCode;
 
                     // Set captured variables if there are any
                     if (!paramList.isEmpty()) {

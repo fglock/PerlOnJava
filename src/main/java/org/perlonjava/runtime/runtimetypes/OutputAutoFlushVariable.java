@@ -14,9 +14,6 @@ public class OutputAutoFlushVariable extends RuntimeScalar {
         return handle != null ? handle : RuntimeIO.stdout;
     }
 
-    private record State(RuntimeIO handle, boolean autoFlush) {
-    }
-
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         RuntimeIO handle = currentHandle();
@@ -96,5 +93,8 @@ public class OutputAutoFlushVariable extends RuntimeScalar {
                 previous.handle.setAutoFlush(previous.autoFlush);
             }
         }
+    }
+
+    private record State(RuntimeIO handle, boolean autoFlush) {
     }
 }

@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.TokenUtils.consume;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
@@ -558,8 +559,8 @@ public class StatementResolver {
                     if (!isStatementTerminator) {
                         throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                     }
-                    yield dieWarnNode (parser, "die", new ListNode(List.of(
-                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex), parser.tokenIndex)
+                    yield dieWarnNode(parser, "die", new ListNode(List.of(
+                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex), parser.tokenIndex);
                 }
 
                 case "{" -> {

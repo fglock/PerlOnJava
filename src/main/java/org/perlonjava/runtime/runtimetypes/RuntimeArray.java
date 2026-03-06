@@ -98,7 +98,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield pop (runtimeArray); // Recursive call after vivification
+                yield pop(runtimeArray); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedPop(runtimeArray);
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -122,7 +122,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield shift (runtimeArray); // Recursive call after vivification
+                yield shift(runtimeArray); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedShift(runtimeArray);
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -154,11 +154,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 value.addToArray(runtimeArray);
-                yield getScalarInt (runtimeArray.elements.size());
+                yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield push (runtimeArray, value)
+                yield push(runtimeArray, value);
             }
             case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, value);
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -180,11 +180,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeArray arr = new RuntimeArray();
                 RuntimeArray.push(arr, value);
                 runtimeArray.elements.addAll(0, arr.elements);
-                yield getScalarInt (runtimeArray.elements.size());
+                yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield unshift (runtimeArray, value)
+                yield unshift(runtimeArray, value);
             }
             case TIED_ARRAY -> TieArray.tiedUnshift(runtimeArray, value);
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -300,7 +300,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 // Check if the element at index is null
                 RuntimeScalar element = elements.get(index);
-                yield(element == null) ? scalarFalse : scalarTrue;
+                yield (element == null) ? scalarFalse : scalarTrue;
             }
             case AUTOVIVIFY_ARRAY -> scalarFalse;
             case TIED_ARRAY -> TieArray.tiedExists(this, getScalarInt(index));
@@ -312,7 +312,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield scalarFalse;
                 }
                 RuntimeScalar element = elements.get(index);
-                yield(element == null) ? scalarFalse : scalarTrue;
+                yield (element == null) ? scalarFalse : scalarTrue;
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -338,7 +338,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield scalarUndef;
                 }
                 if (index == elements.size() - 1) {
-                    yield pop (this);
+                    yield pop(this);
                 }
                 RuntimeScalar previous = this.get(index);
                 this.elements.set(index, null);
@@ -612,22 +612,22 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case PLAIN_ARRAY -> {
                 // If this array was created from hash assignment, use the original list size
                 if (scalarContextSize != null) {
-                    yield getScalarInt (scalarContextSize);
+                    yield getScalarInt(scalarContextSize);
                 }
-                yield getScalarInt (elements.size());
+                yield getScalarInt(elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
                 if (this.strictAutovivify) {
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
                 }
-                yield getScalarInt (0);
+                yield getScalarInt(0);
             }
             case TIED_ARRAY -> TieArray.tiedFetchSize(this);
             case READONLY_ARRAY -> {
                 if (scalarContextSize != null) {
-                    yield getScalarInt (scalarContextSize);
+                    yield getScalarInt(scalarContextSize);
                 }
-                yield getScalarInt (elements.size());
+                yield getScalarInt(elements.size());
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -641,7 +641,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (this.strictAutovivify) {
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
                 }
-                yield - 1;
+                yield -1;
             }
             case TIED_ARRAY -> TieArray.tiedFetchSize(this).getInt() - 1;
             case READONLY_ARRAY -> elements.size() - 1;

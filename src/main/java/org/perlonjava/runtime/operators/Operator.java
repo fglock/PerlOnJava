@@ -381,7 +381,7 @@ public class Operator {
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield splice (runtimeArray, list)// Recursive call after vivification
+                yield splice(runtimeArray, list); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);

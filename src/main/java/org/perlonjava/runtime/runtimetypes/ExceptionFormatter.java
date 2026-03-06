@@ -80,36 +80,36 @@ public class ExceptionFormatter {
                 // in order correctly maps each JVM execute() frame to its Perl level.
                 if (interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
-                    if (frame != null && frame.code != null) {
+                    if (frame != null && frame.code() != null) {
                         // For the innermost frame (index 0), use the runtime current package
                         // tracked by SET_PACKAGE/PUSH_PACKAGE opcodes, which reflects runtime
                         // "package Foo;" declarations.  Outer frames still use compile-time names.
                         String pkg = (interpreterFrameIndex == 0)
                                 ? InterpreterState.currentPackage.get().toString()
-                                : frame.packageName;
+                                : frame.packageName();
                         int currentInterpreterFrameIndex = interpreterFrameIndex;
                         interpreterFrameIndex++;
 
-                        String subName = frame.subroutineName;
+                        String subName = frame.subroutineName();
                         if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
                             subName = pkg + "::" + subName;
                         }
 
                         var entry = new ArrayList<String>();
                         entry.add(pkg);
-                        String filename = frame.code.sourceName;
-                        String line = String.valueOf(frame.code.sourceLine);
+                        String filename = frame.code().sourceName;
+                        String line = String.valueOf(frame.code().sourceLine);
                         if (currentInterpreterFrameIndex < interpreterPcs.size()) {
                             Integer tokenIndex = null;
                             int pc = interpreterPcs.get(currentInterpreterFrameIndex);
-                            if (frame.code.pcToTokenIndex != null && !frame.code.pcToTokenIndex.isEmpty()) {
-                                var entryPc = frame.code.pcToTokenIndex.floorEntry(pc);
+                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
                                 if (entryPc != null) {
                                     tokenIndex = entryPc.getValue();
                                 }
                             }
-                            if (tokenIndex != null && frame.code.errorUtil != null) {
-                                ErrorMessageUtil.SourceLocation loc = frame.code.errorUtil.getSourceLocationAccurate(tokenIndex);
+                            if (tokenIndex != null && frame.code().errorUtil != null) {
+                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
                                 filename = loc.fileName();
                                 line = String.valueOf(loc.lineNumber());
                             }

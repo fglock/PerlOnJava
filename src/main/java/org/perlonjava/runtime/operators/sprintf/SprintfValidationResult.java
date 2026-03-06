@@ -8,7 +8,7 @@ public record SprintfValidationResult(Status status, String errorMessage) {
         this(status, null);
     }
 
-    public boolean isValid () {
+    public boolean isValid() {
         return status == Status.VALID;
     }
 

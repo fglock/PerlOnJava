@@ -88,6 +88,7 @@ public class BytecodeCompiler implements Visitor {
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
     private String[] capturedVarNames;            // Parallel array of names
+
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
@@ -684,10 +685,10 @@ public class BytecodeCompiler implements Visitor {
     private RuntimeBase getVariableValueFromContext(String varName, EmitterContext ctx) {
         // For eval STRING, runtime values are available via evalRuntimeContext ThreadLocal
         RuntimeCode.EvalRuntimeContext evalCtx = RuntimeCode.getEvalRuntimeContext();
-        if (evalCtx != null && evalCtx.runtimeValues != null) {
+        if (evalCtx != null && evalCtx.runtimeValues() != null) {
             // Find variable in captured environment
-            String[] capturedEnv = evalCtx.capturedEnv;
-            Object[] runtimeValues = evalCtx.runtimeValues;
+            String[] capturedEnv = evalCtx.capturedEnv();
+            Object[] runtimeValues = evalCtx.runtimeValues();
 
             for (int i = 0; i < capturedEnv.length; i++) {
                 if (capturedEnv[i].equals(varName)) {
@@ -1097,11 +1098,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Compile the index expression (right side)
-        if (!(node.right instanceof ArrayLiteralNode)) {
+        if (!(node.right instanceof ArrayLiteralNode indexNode)) {
             throwCompilerException("Array subscript requires ArrayLiteralNode");
             return;
         }
-        ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
         if (indexNode.elements.isEmpty()) {
             throwCompilerException("Array subscript requires at least one index");
             return;
@@ -1165,9 +1165,8 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(arrayReg);
                 emit(nameIdx);
             }
-        } else if (leftOp.operand instanceof OperatorNode) {
+        } else if (leftOp.operand instanceof OperatorNode derefOp) {
             // Array dereference slice: @$arrayref[indices]
-            OperatorNode derefOp = (OperatorNode) leftOp.operand;
             if (derefOp.operator.equals("$")) {
                 // Compile the scalar reference
                 derefOp.accept(this);
@@ -1196,11 +1195,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Compile the indices (right side) - this is an ArrayLiteralNode
-        if (!(node.right instanceof ArrayLiteralNode)) {
+        if (!(node.right instanceof ArrayLiteralNode indicesNode)) {
             throwCompilerException("Array slice requires ArrayLiteralNode");
             return;
         }
-        ArrayLiteralNode indicesNode = (ArrayLiteralNode) node.right;
 
         // Compile the indices into a list
         // The ArrayLiteralNode might contain a range operator (..) or multiple elements
@@ -1268,11 +1266,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Compile the key expression (right side)
-        if (!(node.right instanceof HashLiteralNode)) {
+        if (!(node.right instanceof HashLiteralNode keyNode)) {
             throwCompilerException("Hash subscript requires HashLiteralNode");
             return;
         }
-        HashLiteralNode keyNode = (HashLiteralNode) node.right;
         if (keyNode.elements.isEmpty()) {
             throwCompilerException("Hash subscript requires at least one key");
             return;
@@ -1469,12 +1466,11 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        if (!(node.right instanceof HashLiteralNode)) {
+        if (!(node.right instanceof HashLiteralNode keysNode)) {
             throwCompilerException("Key/value slice requires HashLiteralNode");
             return;
         }
 
-        HashLiteralNode keysNode = (HashLiteralNode) node.right;
         if (keysNode.elements.isEmpty()) {
             throwCompilerException("Key/value slice requires at least one key");
             return;
@@ -1538,8 +1534,7 @@ public class BytecodeCompiler implements Visitor {
         boolean isGlobal = false;
 
         // Check if left side is a simple variable reference
-        if (node.left instanceof OperatorNode) {
-            OperatorNode leftOp = (OperatorNode) node.left;
+        if (node.left instanceof OperatorNode leftOp) {
 
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
@@ -1648,11 +1643,10 @@ public class BytecodeCompiler implements Visitor {
         int baseReg = lastResultReg;
 
         // Compile the index expression (right side)
-        if (!(node.right instanceof ArrayLiteralNode)) {
+        if (!(node.right instanceof ArrayLiteralNode indexNode)) {
             throwCompilerException("Array subscript requires ArrayLiteralNode");
             return;
         }
-        ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
         if (indexNode.elements.isEmpty()) {
             throwCompilerException("Array subscript requires at least one index");
             return;
@@ -1707,11 +1701,10 @@ public class BytecodeCompiler implements Visitor {
         int baseReg = lastResultReg;
 
         // Compile the key expression (right side)
-        if (!(node.right instanceof HashLiteralNode)) {
+        if (!(node.right instanceof HashLiteralNode keyNode)) {
             throwCompilerException("Hash subscript requires HashLiteralNode");
             return;
         }
-        HashLiteralNode keyNode = (HashLiteralNode) node.right;
         if (keyNode.elements.isEmpty()) {
             throwCompilerException("Hash subscript requires at least one key");
             return;
@@ -1798,8 +1791,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Get the array
         int arrayReg;
-        if (node.left instanceof OperatorNode) {
-            OperatorNode leftOp = (OperatorNode) node.left;
+        if (node.left instanceof OperatorNode leftOp) {
 
             if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
                 // Direct array: @array
@@ -1886,8 +1878,7 @@ public class BytecodeCompiler implements Visitor {
         if (op.equals("my") || op.equals("state")) {
             // my $x / my @x / my %x / state $x / state @x / state %x - variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
                 if (sigilOp.operand instanceof IdentifierNode) {
@@ -1997,9 +1988,8 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                 }
-            } else if (node.operand instanceof ListNode) {
+            } else if (node.operand instanceof ListNode listNode) {
                 // my ($x, $y, @rest) - list of variable declarations
-                ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
                 List<Boolean> wrapWithRef = new ArrayList<>();
 
@@ -2012,8 +2002,7 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
-                    if (element instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) element;
+                    if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         // Handle backslash operator (reference constructor): my (\$x) or my (\($x, $y))
@@ -2365,8 +2354,7 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("our")) {
             // our $x / our @x / our %x - package variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
                 if (sigilOp.operand instanceof IdentifierNode) {
@@ -2515,9 +2503,8 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                 }
-            } else if (node.operand instanceof ListNode) {
+            } else if (node.operand instanceof ListNode listNode) {
                 // our ($x, $y) - list of package variable declarations
-                ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
 
                 // Check if this is a declared reference (our \($x, $y))
@@ -2529,8 +2516,7 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
-                    if (element instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) element;
+                    if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         // Parser may rewrite element-level declared refs like \$h/\@h/\%h into a scalar $h
@@ -2803,8 +2789,7 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("local")) {
             // local $x - temporarily localize a global variable
             // The operand will be OperatorNode("$", IdentifierNode("x"))
-            if (node.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) node.operand;
+            if (node.operand instanceof OperatorNode sigilOp) {
                 String sigil = sigilOp.operator;
 
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
@@ -2983,9 +2968,8 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = rd;
                     return;
                 }
-            } else if (node.operand instanceof ListNode) {
+            } else if (node.operand instanceof ListNode listNode) {
                 // local ($x, $y) - list of localized global variables
-                ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
 
                 // Check if this is a declared reference
@@ -2996,8 +2980,7 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
-                    if (element instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) element;
+                    if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         // Handle backslash operator: local (\$x) or local (\($x, $y))
@@ -3252,10 +3235,9 @@ public class BytecodeCompiler implements Visitor {
 
                     lastResultReg = rd;
                 }
-            } else if (node.operand instanceof BlockNode) {
+            } else if (node.operand instanceof BlockNode block) {
                 // Symbolic reference via block: ${label:expr} or ${expr}
                 // Execute the block to get a variable name string, then load that variable
-                BlockNode block = (BlockNode) node.operand;
 
                 // Check strict refs at compile time — mirrors JVM path in EmitVariable.java
                 int savedCtx = currentCallContext;
@@ -3359,9 +3341,8 @@ public class BytecodeCompiler implements Visitor {
                 } else {
                     lastResultReg = arrayReg;
                 }
-            } else if (node.operand instanceof OperatorNode) {
+            } else if (node.operand instanceof OperatorNode operandOp) {
                 // Dereference: @$arrayref or @{$hashref}
-                OperatorNode operandOp = (OperatorNode) node.operand;
 
                 // Compile the reference
                 operandOp.accept(this);
@@ -3387,10 +3368,9 @@ public class BytecodeCompiler implements Visitor {
                 // Note: We don't check scalar context here because dereferencing
                 // should return the array itself. The slice or other operation
                 // will handle scalar context conversion if needed.
-            } else if (node.operand instanceof BlockNode) {
+            } else if (node.operand instanceof BlockNode blockNode) {
                 // @{ block } - evaluate block and dereference the result
                 // The block should return an arrayref
-                BlockNode blockNode = (BlockNode) node.operand;
                 int savedCtx = currentCallContext;
                 currentCallContext = RuntimeContextType.SCALAR;
                 blockNode.accept(this);
@@ -3519,8 +3499,7 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("*")) {
             // Glob variable dereference: *x
-            if (node.operand instanceof IdentifierNode) {
-                IdentifierNode idNode = (IdentifierNode) node.operand;
+            if (node.operand instanceof IdentifierNode idNode) {
                 String varName = idNode.name;
 
                 // Add package prefix if not present
@@ -3570,8 +3549,7 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("&")) {
             // Code reference: &subname
             // Gets a reference to a named subroutine
-            if (node.operand instanceof IdentifierNode) {
-                IdentifierNode idNode = (IdentifierNode) node.operand;
+            if (node.operand instanceof IdentifierNode idNode) {
                 String subName = idNode.name;
 
                 // Use NameNormalizer to properly handle package prefixes
@@ -4316,10 +4294,8 @@ public class BytecodeCompiler implements Visitor {
         enterScope();
 
         // Step 5: If we have a named lexical loop variable, add it to the scope now
-        if (node.variable != null && node.variable instanceof OperatorNode) {
-            OperatorNode varOp2 = (OperatorNode) node.variable;
-            if (varOp2.operator.equals("my") && varOp2.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) varOp2.operand;
+        if (node.variable != null && node.variable instanceof OperatorNode varOp2) {
+            if (varOp2.operator.equals("my") && varOp2.operand instanceof OperatorNode sigilOp) {
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
                     registerVariable(varName, varReg);

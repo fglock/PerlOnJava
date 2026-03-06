@@ -178,9 +178,6 @@ public class ErrorMessageUtil {
         return sb.toString();
     }
 
-    public record SourceLocation(String fileName, int lineNumber) {
-    }
-
     public String getFileName() {
         return fileName;
     }
@@ -354,6 +351,9 @@ public class ErrorMessageUtil {
         }
 
         return new SourceLocation(currentFileName, lineNumber);
+    }
+
+    public record SourceLocation(String fileName, int lineNumber) {
     }
 }
 

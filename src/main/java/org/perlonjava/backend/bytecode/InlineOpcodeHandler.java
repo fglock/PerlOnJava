@@ -390,11 +390,9 @@ public class InlineOpcodeHandler {
         RuntimeBase arrayBase = registers[arrayReg];
         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
 
-        if (arrayBase instanceof RuntimeArray) {
-            RuntimeArray arr = (RuntimeArray) arrayBase;
+        if (arrayBase instanceof RuntimeArray arr) {
             registers[rd] = arr.get(idx.getInt());
-        } else if (arrayBase instanceof RuntimeList) {
-            RuntimeList list = (RuntimeList) arrayBase;
+        } else if (arrayBase instanceof RuntimeList list) {
             int index = idx.getInt();
             if (index < 0) index = list.elements.size() + index;
             registers[rd] = (index >= 0 && index < list.elements.size())
@@ -1084,8 +1082,7 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeBase value = registers[rs];
-        if (value instanceof RuntimeScalar) {
-            RuntimeScalar scalar = (RuntimeScalar) value;
+        if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.REFERENCE) {
                 registers[rd] = scalar.scalarDeref();
             } else {

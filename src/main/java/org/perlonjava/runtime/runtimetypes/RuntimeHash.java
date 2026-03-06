@@ -383,7 +383,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield delete (key);
+                yield delete(key);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, key);
             default -> throw new IllegalStateException("Unknown array type: " + type);
@@ -401,7 +401,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield delete (key);
+                yield delete(key);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, new RuntimeScalar(key));
             default -> throw new IllegalStateException("Unknown array type: " + type);

@@ -113,19 +113,10 @@ public class InterpreterState {
     }
 
     /**
-     * Represents a single interpreter call frame.
-     * Contains minimal information needed for stack trace formatting.
-     */
-    public static class InterpreterFrame {
-        public final InterpretedCode code;
-        public final String packageName;
-        public final String subroutineName;
-
-        public InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
-            this.code = code;
-            this.packageName = packageName;
-            this.subroutineName = subroutineName;
-        }
+         * Represents a single interpreter call frame.
+         * Contains minimal information needed for stack trace formatting.
+         */
+        public record InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
     }
 
 }

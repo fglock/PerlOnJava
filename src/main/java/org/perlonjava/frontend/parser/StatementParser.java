@@ -867,8 +867,8 @@ public class StatementParser {
                     // For classes, delay scope exit until after ClassTransformer runs
                     // This allows methods to capture class-level lexical variables
                     ParseBlock.BlockWithScope result = ParseBlock.parseBlock(parser, false);
-                    block = result.block;
-                    blockScopeIndex = result.scopeIndex;
+                    block = result.block();
+                    blockScopeIndex = result.scopeIndex();
                 } else {
                     // For packages, exit scope normally
                     block = ParseBlock.parseBlock(parser);

@@ -522,6 +522,7 @@ public class Pack {
     /**
      * Result of packing operation, containing final state.
      */
-    public static record PackResult(int valueIndex, boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
+    public record PackResult(int valueIndex, boolean byteMode, boolean byteModeUsed,
+                             boolean hasUnicodeInNormalMode) {
     }
 }

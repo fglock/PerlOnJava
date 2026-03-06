@@ -20,10 +20,8 @@ public class CompileAssignment {
         int rhsContext = RuntimeContextType.LIST; // Default
 
         // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
-        if (node.left instanceof OperatorNode) {
-            OperatorNode leftOp = (OperatorNode) node.left;
-            if ((leftOp.operator.equals("my") || leftOp.operator.equals("state") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode) {
-                OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+        if (node.left instanceof OperatorNode leftOp) {
+            if ((leftOp.operator.equals("my") || leftOp.operator.equals("state") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode sigilOp) {
                 if (sigilOp.operator.equals("$")) {
                     // Scalar assignment: use SCALAR context for RHS
                     rhsContext = RuntimeContextType.SCALAR;
@@ -41,15 +39,13 @@ public class CompileAssignment {
             bytecodeCompiler.currentCallContext = rhsContext;
 
             // Special case: my $x = value
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
+            if (node.left instanceof OperatorNode leftOp) {
                 if (leftOp.operator.equals("my") || leftOp.operator.equals("state")) {
                     // Extract variable name from "my"/"state" operand
                     Node myOperand = leftOp.operand;
 
                     // Handle my $x (where $x is OperatorNode("$", IdentifierNode("x")))
-                    if (myOperand instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) myOperand;
+                    if (myOperand instanceof OperatorNode sigilOp) {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
@@ -240,8 +236,7 @@ public class CompileAssignment {
 
                     // Handle my ($x, $y, @rest) = ... - list declaration with assignment
                     // Uses SET_FROM_LIST to match JVM backend's setFromList() semantics
-                    if (myOperand instanceof ListNode) {
-                        ListNode listNode = (ListNode) myOperand;
+                    if (myOperand instanceof ListNode listNode) {
 
                         // Compile RHS first
                         node.right.accept(bytecodeCompiler);
@@ -339,8 +334,7 @@ public class CompileAssignment {
                     Node localOperand = leftOp.operand;
 
                     // Handle local $hash{key} = value (localizing hash element)
-                    if (localOperand instanceof BinaryOperatorNode) {
-                        BinaryOperatorNode hashAccess = (BinaryOperatorNode) localOperand;
+                    if (localOperand instanceof BinaryOperatorNode hashAccess) {
                         if (hashAccess.operator.equals("{")) {
                             // Compile the hash access to get the hash element reference
                             // This returns a RuntimeScalar that is aliased to the hash slot
@@ -366,8 +360,7 @@ public class CompileAssignment {
                     }
 
                     // Handle local $x (where $x is OperatorNode("$", IdentifierNode("x")))
-                    if (localOperand instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) localOperand;
+                    if (localOperand instanceof OperatorNode sigilOp) {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
@@ -548,15 +541,13 @@ public class CompileAssignment {
                             }
                             return;
                         }
-                    } else if (localOperand instanceof ListNode) {
+                    } else if (localOperand instanceof ListNode listNode) {
                         // Handle local($x) = value or local($x, $y) = (v1, v2)
-                        ListNode listNode = (ListNode) localOperand;
 
                         // Special case: single element list local($x) = value
                         if (listNode.elements.size() == 1) {
                             Node element = listNode.elements.get(0);
-                            if (element instanceof OperatorNode) {
-                                OperatorNode sigilOp = (OperatorNode) element;
+                            if (element instanceof OperatorNode sigilOp) {
                                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
@@ -600,8 +591,7 @@ public class CompileAssignment {
                         for (int i = 0; i < listNode.elements.size(); i++) {
                             Node element = listNode.elements.get(i);
 
-                            if (element instanceof OperatorNode) {
-                                OperatorNode sigilOp = (OperatorNode) element;
+                            if (element instanceof OperatorNode sigilOp) {
                                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
@@ -647,16 +637,13 @@ public class CompileAssignment {
 
             // Regular assignment: $x = value
             // OPTIMIZATION: Detect $x = $x + $y and emit ADD_ASSIGN instead of ADD_SCALAR + ALIAS
-            if (node.left instanceof OperatorNode && node.right instanceof BinaryOperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
-                BinaryOperatorNode rightBin = (BinaryOperatorNode) node.right;
+            if (node.left instanceof OperatorNode leftOp && node.right instanceof BinaryOperatorNode rightBin) {
 
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode &&
                         rightBin.operator.equals("+") &&
-                        rightBin.left instanceof OperatorNode) {
+                        rightBin.left instanceof OperatorNode rightLeftOp) {
 
                     String leftVarName = "$" + ((IdentifierNode) leftOp.operand).name;
-                    OperatorNode rightLeftOp = (OperatorNode) rightBin.left;
 
                     if (rightLeftOp.operator.equals("$") && rightLeftOp.operand instanceof IdentifierNode) {
                         String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
@@ -691,9 +678,8 @@ public class CompileAssignment {
             if (node.left instanceof OperatorNode leftOp && leftOp.operator.equals("$")) {
                 boolean strictRefsEnabled = bytecodeCompiler.isStrictRefsEnabled();
 
-                if (leftOp.operand instanceof BlockNode) {
+                if (leftOp.operand instanceof BlockNode block) {
                     // ${block} = value — mirrors JVM EmitVariable.java case "$"
-                    BlockNode block = (BlockNode) leftOp.operand;
                     block.accept(bytecodeCompiler);
                     int nameReg = bytecodeCompiler.lastResultReg;
 
@@ -755,8 +741,7 @@ public class CompileAssignment {
             int valueReg = bytecodeCompiler.lastResultReg;
 
             // Assign to LHS
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
+            if (node.left instanceof OperatorNode leftOp) {
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
@@ -900,8 +885,7 @@ public class CompileAssignment {
                     // We need to determine which and use the appropriate assignment
 
                     // Extract the sigil from our operand
-                    if (leftOp.operand instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+                    if (leftOp.operand instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
                         if (sigil.equals("$")) {
@@ -920,10 +904,9 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         }
-                    } else if (leftOp.operand instanceof ListNode) {
+                    } else if (leftOp.operand instanceof ListNode listNode) {
                         // our ($a, $b) = ... - list declaration with assignment
                         // Uses SET_FROM_LIST to match JVM backend's setFromList() semantics
-                        ListNode listNode = (ListNode) leftOp.operand;
 
                         // Convert RHS to list
                         int rhsListReg = bytecodeCompiler.allocateRegister();
@@ -1035,10 +1018,9 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
-                } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode) {
+                } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode derefOp) {
                     // Array dereference assignment: @$r = ...
                     // The operand should be a scalar variable containing an array reference
-                    OperatorNode derefOp = (OperatorNode) leftOp.operand;
 
                     if (derefOp.operator.equals("$")) {
                         // Compile the scalar to get the array reference
@@ -1130,12 +1112,10 @@ public class CompileAssignment {
                     bytecodeCompiler.emit(nameIdx);
                     bytecodeCompiler.lastResultReg = lvalueReg;
                 }
-            } else if (node.left instanceof BinaryOperatorNode) {
-                BinaryOperatorNode leftBin = (BinaryOperatorNode) node.left;
+            } else if (node.left instanceof BinaryOperatorNode leftBin) {
 
                 // Handle array slice assignment: @array[1, 3, 5] = (20, 30, 40)
-                if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode) {
-                    OperatorNode arrayOp = (OperatorNode) leftBin.left;
+                if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode arrayOp) {
 
                     // Must be @array (not $array)
                     if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
@@ -1208,8 +1188,7 @@ public class CompileAssignment {
                     int arrayReg;
 
                     // Check if left side is a variable or multidimensional access
-                    if (leftBin.left instanceof OperatorNode) {
-                        OperatorNode arrayOp = (OperatorNode) leftBin.left;
+                    if (leftBin.left instanceof OperatorNode arrayOp) {
 
                         // Single element assignment: $array[index] = value
                         if (arrayOp.operator.equals("$") && arrayOp.operand instanceof IdentifierNode) {
@@ -1297,8 +1276,7 @@ public class CompileAssignment {
 
                     // 1. Get hash variable (leftBin.left)
                     int hashReg;
-                    if (leftBin.left instanceof OperatorNode) {
-                        OperatorNode hashOp = (OperatorNode) leftBin.left;
+                    if (leftBin.left instanceof OperatorNode hashOp) {
 
                         // Check for hash slice assignment: @hash{keys} = values
                         if (hashOp.operator.equals("@")) {
@@ -1348,11 +1326,10 @@ public class CompileAssignment {
                             }
 
                             // Get the keys from HashLiteralNode
-                            if (!(leftBin.right instanceof HashLiteralNode)) {
+                            if (!(leftBin.right instanceof HashLiteralNode keysNode)) {
                                 bytecodeCompiler.throwCompilerException("Hash slice assignment requires HashLiteralNode");
                                 return;
                             }
-                            HashLiteralNode keysNode = (HashLiteralNode) leftBin.right;
                             if (keysNode.elements.isEmpty()) {
                                 bytecodeCompiler.throwCompilerException("Hash slice assignment requires at least one key");
                                 return;
@@ -1472,11 +1449,10 @@ public class CompileAssignment {
                     }
 
                     // 2. Compile key expression
-                    if (!(leftBin.right instanceof HashLiteralNode)) {
+                    if (!(leftBin.right instanceof HashLiteralNode keyNode)) {
                         bytecodeCompiler.throwCompilerException("Hash assignment requires HashLiteralNode on right side");
                         return;
                     }
-                    HashLiteralNode keyNode = (HashLiteralNode) leftBin.right;
                     if (keyNode.elements.isEmpty()) {
                         bytecodeCompiler.throwCompilerException("Hash key required for assignment");
                         return;
@@ -1642,12 +1618,11 @@ public class CompileAssignment {
                 bytecodeCompiler.emitReg(rhsReg);
                 bytecodeCompiler.lastResultReg = rhsReg;
                 bytecodeCompiler.currentCallContext = savedContext;
-            } else if (node.left instanceof ListNode) {
+            } else if (node.left instanceof ListNode listNode) {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS
                 // In list context, returns the RHS list
                 LValueVisitor.getContext(node.left);
-                ListNode listNode = (ListNode) node.left;
 
                 // RHS was already compiled at the "regular assignment" fallthrough above (valueReg).
                 // Reuse it instead of compiling again.

@@ -542,14 +542,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return this;
     }
 
-    private record GlobSlotSnapshot(
-            String globName,
-            RuntimeScalar scalar,
-            RuntimeArray array,
-            RuntimeHash hash,
-            RuntimeScalar code) {
-    }
-
     @Override
     public void dynamicSaveState() {
         RuntimeScalar savedScalar = GlobalVariable.getGlobalVariable(this.globName);
@@ -586,5 +578,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();
+    }
+
+    private record GlobSlotSnapshot(
+            String globName,
+            RuntimeScalar scalar,
+            RuntimeArray array,
+            RuntimeHash hash,
+            RuntimeScalar code) {
     }
 }

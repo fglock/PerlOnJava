@@ -726,7 +726,7 @@ public class MathOperators {
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
             case STRING, BYTE_STRING -> {
                 String s = (String) runtimeScalar.value;
-                yield getScalarBoolean (s.isEmpty() || s.equals("0"));
+                yield getScalarBoolean(s.isEmpty() || s.equals("0"));
             }
             case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
             case GLOB -> scalarFalse;

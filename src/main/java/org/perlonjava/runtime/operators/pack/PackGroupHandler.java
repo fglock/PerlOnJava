@@ -399,6 +399,7 @@ public class PackGroupHandler {
     /**
      * Result of processing a group, containing both the template position and updated value index.
      */
-    public record GroupResult(int position, int valueIndex, boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
+    public record GroupResult(int position, int valueIndex, boolean byteMode, boolean byteModeUsed,
+                              boolean hasUnicodeInNormalMode) {
     }
 }
