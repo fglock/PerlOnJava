@@ -57,7 +57,7 @@ public class Main {
             }
 
             String errorMessage = ErrorMessageUtil.stringifyException(t);
-            System.out.println(errorMessage);
+            System.err.print(errorMessage);
 
             // Match system perl behavior for unhandled die:
             // Prefer $! (errno) if non-zero, else prefer ($? >> 8), else 255.

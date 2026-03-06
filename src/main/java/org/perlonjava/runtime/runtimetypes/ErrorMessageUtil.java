@@ -90,10 +90,21 @@ public class ErrorMessageUtil {
             return message != null ? message : "\n";
         }
 
+        // Check if the innermost cause is a PerlCompilerException — these already
+        // contain fully-formatted error messages with file/line/near context and
+        // never have Perl stack frames, so they'd get JVM stack traces appended.
+        Throwable innermostCause = findInnermostCause(t);
+        if (innermostCause instanceof PerlCompilerException) {
+            String message = innermostCause.getMessage();
+            if (message != null && !message.endsWith("\n")) {
+                message += "\n";
+            }
+            return message != null ? message : "\n";
+        }
+
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 
-        Throwable innermostCause = findInnermostCause(t);
         String message = innermostCause.getMessage();
 
         // Use this for debugging
@@ -195,14 +206,30 @@ public class ErrorMessageUtil {
      * @return the formatted error message with context
      */
     public String errorMessage(int index, String message) {
-        // Retrieve the line number by counting newlines up to the specified index
-        int line = getLineNumber(index);
+        SourceLocation loc = getSourceLocationAccurate(index);
 
-        // Retrieve the string context around the error by collecting tokens near the specified index
-        String nearString = TokenUtils.toText(tokens, index - 4, index + 2);
+        String nearString = buildNearString(index);
 
-        // Return the formatted error message with the file name, line number, and context
-        return message + " at " + fileName + " line " + line + ", near " + errorMessageQuote(nearString) + "\n";
+        return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + errorMessageQuote(nearString) + "\n";
+    }
+
+    private String buildNearString(int index) {
+        int end = Math.min(tokens.size() - 1, index + 5);
+        StringBuilder sb = new StringBuilder();
+        int nonWsCount = 0;
+        for (int i = index; i <= end; i++) {
+            LexerToken tok = tokens.get(i);
+            if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) break;
+            if (tok.text.equals("{") || tok.text.equals("}")) break;
+            if (tok.type != LexerTokenType.WHITESPACE) {
+                nonWsCount++;
+                if (nonWsCount > 3) break;
+            }
+            sb.append(tok.text);
+        }
+        String near = sb.toString();
+        near = near.replaceAll("^\\s+", "");
+        return near;
     }
 
     /**
