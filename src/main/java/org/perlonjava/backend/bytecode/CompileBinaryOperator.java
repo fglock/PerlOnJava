@@ -20,10 +20,7 @@ public class CompileBinaryOperator {
             int filehandleReg = bytecodeCompiler.lastResultReg;
 
             // Compile the content (right operand) in LIST context
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            node.right.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             int contentReg = bytecodeCompiler.lastResultReg;
 
             // Emit PRINT or SAY with both registers
@@ -32,7 +29,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(filehandleReg);
 
             // print/say return 1 on success
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LOAD_INT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(1);
@@ -56,12 +53,9 @@ public class CompileBinaryOperator {
             // scalar expressions keep current context to avoid wrapping in RuntimeList
             int argsListReg = bytecodeCompiler.allocateRegister();
             if (node.right instanceof ListNode argsList) {
-                int savedContext = bytecodeCompiler.currentCallContext;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (Node arg : argsList.elements) {
-                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                    arg.accept(bytecodeCompiler);
-                    bytecodeCompiler.currentCallContext = savedContext;
+                    bytecodeCompiler.compileNode(arg, -1, RuntimeContextType.LIST);
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
@@ -71,22 +65,17 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.emitReg(argReg);
                 }
             } else {
-                // Single argument - wrap in list
-                int savedContext2 = bytecodeCompiler.currentCallContext;
-                if (isArrayLikeNode(node.right)) {
-                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                }
-                node.right.accept(bytecodeCompiler);
+                int rightCtx = isArrayLikeNode(node.right) ? RuntimeContextType.LIST : bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.compileNode(node.right, -1, rightCtx);
                 int argReg = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.currentCallContext = savedContext2;
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(argsListReg);
-                bytecodeCompiler.emit(1);  // emit count = 1
+                bytecodeCompiler.emit(1);
                 bytecodeCompiler.emitReg(argReg);
             }
 
             // Call sprintf
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SPRINTF);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(formatReg);
@@ -175,7 +164,7 @@ public class CompileBinaryOperator {
                 }
 
                 // Access hash element
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.HASH_GET);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(hashReg);
@@ -208,7 +197,7 @@ public class CompileBinaryOperator {
                 int indexReg = bytecodeCompiler.lastResultReg;
 
                 // Access array element
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.ARRAY_GET);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(arrayReg);
@@ -228,20 +217,14 @@ public class CompileBinaryOperator {
                 }
 
                 // This is a code reference call: $coderef->(args)
-                // Compile the code reference in scalar context
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                node.left.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int coderefReg = bytecodeCompiler.lastResultReg;
 
-                // Compile arguments in list context
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                node.right.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                 int argsReg = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.currentCallContext = savedContext;
 
                 // Allocate result register
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Emit CALL_SUB opcode
                 bytecodeCompiler.emit(Opcodes.CALL_SUB);
@@ -281,13 +264,11 @@ public class CompileBinaryOperator {
                     }
 
                     // Compile invocant in scalar context
-                    int savedContext = bytecodeCompiler.currentCallContext;
-                    bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                    invocantNode.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(invocantNode, -1, RuntimeContextType.SCALAR);
                     int invocantReg = bytecodeCompiler.lastResultReg;
 
                     // Compile method name in scalar context
-                    methodNode.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(methodNode, -1, RuntimeContextType.SCALAR);
                     int methodReg = bytecodeCompiler.lastResultReg;
 
                     // Get currentSub (__SUB__ for SUPER:: resolution)
@@ -298,13 +279,11 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.emit(subIdx);
 
                     // Compile arguments in list context
-                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                    argsNode.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(argsNode, -1, RuntimeContextType.LIST);
                     int argsReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.currentCallContext = savedContext;
 
                     // Allocate result register
-                    int rd = bytecodeCompiler.allocateRegister();
+                    int rd = bytecodeCompiler.allocateOutputRegister();
 
                     // Emit CALL_METHOD
                     bytecodeCompiler.emit(Opcodes.CALL_METHOD);
@@ -395,20 +374,13 @@ public class CompileBinaryOperator {
         // Handle "join" operator specially to ensure proper context
         // Left operand (separator) needs SCALAR context, right operand (list) needs LIST context
         if (node.operator.equals("join")) {
-            // Save and set context for left operand (separator)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
-            // Set context for right operand (array/list)
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            node.right.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             int rs2 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
 
-            // Emit JOIN opcode
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.JOIN);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs1);
@@ -418,21 +390,12 @@ public class CompileBinaryOperator {
             return;
         }
 
-        // Handle function call operators specially to ensure arguments are in LIST context
         if (node.operator.equals("(") || node.operator.equals("()")) {
-            // Function call: subname(args) or $coderef->(args)
-            // Save and set context for left operand (code reference)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
-            // Arguments must ALWAYS be evaluated in LIST context
-            // Even if the call itself is in SCALAR context (e.g., scalar(func()))
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            node.right.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             int rs2 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
 
             // Emit CALL_SUB opcode
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
@@ -442,48 +405,24 @@ public class CompileBinaryOperator {
 
         // Handle short-circuit operators specially - don't compile right operand yet!
         if (node.operator.equals("&&") || node.operator.equals("and")) {
-            // Logical AND with short-circuit evaluation
-            // Only evaluate right side if left side is true
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
-            // Compile left operand in scalar context (need boolean value)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, rd, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
-            // Allocate result register and move left value to it
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.ALIAS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
-
-            // Mark position for forward jump
             int skipRightPos = bytecodeCompiler.bytecode.size();
-
-            // Emit conditional jump: if (!rd) skip right evaluation
             bytecodeCompiler.emit(Opcodes.GOTO_IF_FALSE);
             bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
+            bytecodeCompiler.emitInt(0);
 
-            // NOW compile right operand (only executed if left was true)
-            // Force SCALAR context so the right operand always produces a result register
-            int savedContext2 = bytecodeCompiler.currentCallContext;
-            if (bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            }
-            node.right.accept(bytecodeCompiler);
+            int rightCtx = bytecodeCompiler.currentCallContext == RuntimeContextType.VOID ? RuntimeContextType.SCALAR : bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.compileNode(node.right, rd, rightCtx);
             int rs2 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext2;
-
-            // Move right result to rd (overwriting left value)
             if (rs2 >= 0) {
-                bytecodeCompiler.emit(Opcodes.ALIAS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs2);
+                bytecodeCompiler.emitAliasWithTarget(rd, rs2);
             }
 
-            // Patch the forward jump offset
             int skipRightTarget = bytecodeCompiler.bytecode.size();
             bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
@@ -492,47 +431,24 @@ public class CompileBinaryOperator {
         }
 
         if (node.operator.equals("||") || node.operator.equals("or")) {
-            // Logical OR with short-circuit evaluation
-            // Only evaluate right side if left side is false
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
-            // Compile left operand in scalar context (need boolean value)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, rd, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
-            // Allocate result register and move left value to it
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.ALIAS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
-
-            // Mark position for forward jump
             int skipRightPos = bytecodeCompiler.bytecode.size();
-
-            // Emit conditional jump: if (rd) skip right evaluation
             bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
             bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
+            bytecodeCompiler.emitInt(0);
 
-            // NOW compile right operand (only executed if left was false)
-            int savedContext2 = bytecodeCompiler.currentCallContext;
-            if (bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            }
-            node.right.accept(bytecodeCompiler);
+            int rightCtx = bytecodeCompiler.currentCallContext == RuntimeContextType.VOID ? RuntimeContextType.SCALAR : bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.compileNode(node.right, rd, rightCtx);
             int rs2 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext2;
-
-            // Move right result to rd (overwriting left value)
             if (rs2 >= 0) {
-                bytecodeCompiler.emit(Opcodes.ALIAS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs2);
+                bytecodeCompiler.emitAliasWithTarget(rd, rs2);
             }
 
-            // Patch the forward jump offset
             int skipRightTarget = bytecodeCompiler.bytecode.size();
             bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
@@ -541,53 +457,29 @@ public class CompileBinaryOperator {
         }
 
         if (node.operator.equals("//")) {
-            // Defined-OR with short-circuit evaluation
-            // Only evaluate right side if left side is undefined
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
-            // Compile left operand in scalar context (need to test definedness)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, rd, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
-            // Allocate result register and move left value to it
-            int rd = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.ALIAS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
-
-            // Check if left is defined
             int definedReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.DEFINED);
             bytecodeCompiler.emitReg(definedReg);
             bytecodeCompiler.emitReg(rd);
 
-            // Mark position for forward jump
             int skipRightPos = bytecodeCompiler.bytecode.size();
-
-            // Emit conditional jump: if (defined) skip right evaluation
             bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
             bytecodeCompiler.emitReg(definedReg);
-            bytecodeCompiler.emitInt(0); // Placeholder for offset (will be patched)
+            bytecodeCompiler.emitInt(0);
 
-            // NOW compile right operand (only executed if left was undefined)
-            int savedContext2 = bytecodeCompiler.currentCallContext;
-            if (bytecodeCompiler.currentCallContext == RuntimeContextType.VOID) {
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            }
-            node.right.accept(bytecodeCompiler);
+            int rightCtx = bytecodeCompiler.currentCallContext == RuntimeContextType.VOID ? RuntimeContextType.SCALAR : bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.compileNode(node.right, rd, rightCtx);
             int rs2 = bytecodeCompiler.lastResultReg;
-            bytecodeCompiler.currentCallContext = savedContext2;
-
-            // Move right result to rd (overwriting left value)
             if (rs2 >= 0) {
-                bytecodeCompiler.emit(Opcodes.ALIAS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs2);
+                bytecodeCompiler.emitAliasWithTarget(rd, rs2);
             }
 
-            // Patch the forward jump offset
             int skipRightTarget = bytecodeCompiler.bytecode.size();
             bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
@@ -643,7 +535,7 @@ public class CompileBinaryOperator {
                         int matchReg = bytecodeCompiler.lastResultReg;
 
                         // Negate the result
-                        int rd = bytecodeCompiler.allocateRegister();
+                        int rd = bytecodeCompiler.allocateOutputRegister();
                         bytecodeCompiler.emit(Opcodes.NOT);
                         bytecodeCompiler.emitReg(rd);
                         bytecodeCompiler.emitReg(matchReg);
@@ -668,20 +560,15 @@ public class CompileBinaryOperator {
                  "&.", "|.", "^." -> true;
             default -> false;
         };
-        int savedCtx = bytecodeCompiler.currentCallContext;
-        if (forceScalar) {
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-        }
-        node.left.accept(bytecodeCompiler);
+        int outerCtx = bytecodeCompiler.currentCallContext;
+        int leftCtx = forceScalar ? RuntimeContextType.SCALAR : outerCtx;
+        bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
-        // For =~ and !~, force SCALAR context on the right side (the regex/pattern)
-        if (!forceScalar && (node.operator.equals("=~") || node.operator.equals("!~"))) {
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-        }
-        node.right.accept(bytecodeCompiler);
+        int rightCtx = (forceScalar || node.operator.equals("=~") || node.operator.equals("!~"))
+                ? RuntimeContextType.SCALAR : outerCtx;
+        bytecodeCompiler.compileNode(node.right, -1, rightCtx);
         int rs2 = bytecodeCompiler.lastResultReg;
-        bytecodeCompiler.currentCallContext = savedCtx;
 
         // Emit opcode based on operator (delegated to helper method)
         int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
@@ -707,18 +594,13 @@ public class CompileBinaryOperator {
         java.util.List<Integer> argRegs = new java.util.ArrayList<>();
         argRegs.add(fhReg);
 
-        int savedContext = bytecodeCompiler.currentCallContext;
         if (node.right instanceof ListNode argsList) {
             for (Node arg : argsList.elements) {
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                arg.accept(bytecodeCompiler);
-                bytecodeCompiler.currentCallContext = savedContext;
+                bytecodeCompiler.compileNode(arg, -1, RuntimeContextType.LIST);
                 argRegs.add(bytecodeCompiler.lastResultReg);
             }
         } else {
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            node.right.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             argRegs.add(bytecodeCompiler.lastResultReg);
         }
 
@@ -741,7 +623,7 @@ public class CompileBinaryOperator {
             default -> throw new RuntimeException("Unknown operator: " + node.operator);
         };
 
-        int rd = bytecodeCompiler.allocateRegister();
+        int rd = bytecodeCompiler.allocateOutputRegister();
         bytecodeCompiler.emit(opcode);
         bytecodeCompiler.emitReg(rd);
         bytecodeCompiler.emitReg(argsListReg);
@@ -754,7 +636,7 @@ public class CompileBinaryOperator {
         node.left.accept(bytecodeCompiler);
         int fhReg = bytecodeCompiler.lastResultReg;
 
-        int rd = bytecodeCompiler.allocateRegister();
+        int rd = bytecodeCompiler.allocateOutputRegister();
         bytecodeCompiler.emit(Opcodes.TELL);
         bytecodeCompiler.emitReg(rd);
         bytecodeCompiler.emitReg(fhReg);
@@ -768,14 +650,11 @@ public class CompileBinaryOperator {
 
         int listReg;
         if (node.right instanceof ListNode listNode) {
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
             java.util.List<Integer> argRegs = new java.util.ArrayList<>();
             for (Node arg : listNode.elements) {
-                arg.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(arg, -1, RuntimeContextType.LIST);
                 argRegs.add(bytecodeCompiler.lastResultReg);
             }
-            bytecodeCompiler.currentCallContext = savedContext;
             listReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.CREATE_LIST);
             bytecodeCompiler.emitReg(listReg);
@@ -784,14 +663,11 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitReg(argReg);
             }
         } else {
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            node.right.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             listReg = bytecodeCompiler.lastResultReg;
         }
 
-        int rd = bytecodeCompiler.allocateRegister();
+        int rd = bytecodeCompiler.allocateOutputRegister();
         bytecodeCompiler.emit(Opcodes.JOIN);
         bytecodeCompiler.emitReg(rd);
         bytecodeCompiler.emitReg(separatorReg);

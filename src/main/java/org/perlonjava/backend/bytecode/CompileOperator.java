@@ -9,20 +9,14 @@ import java.util.List;
 
 public class CompileOperator {
     private static void compileScalarOperand(BytecodeCompiler bc, OperatorNode node, String opName) {
-        int savedContext = bc.currentCallContext;
-        bc.currentCallContext = RuntimeContextType.SCALAR;
-        try {
-            if (node.operand instanceof ListNode list) {
-                if (!list.elements.isEmpty()) {
-                    list.elements.get(0).accept(bc);
-                } else {
-                    bc.throwCompilerException(opName + " requires an argument");
-                }
+        if (node.operand instanceof ListNode list) {
+            if (!list.elements.isEmpty()) {
+                bc.compileNode(list.elements.get(0), -1, RuntimeContextType.SCALAR);
             } else {
-                node.operand.accept(bc);
+                bc.throwCompilerException(opName + " requires an argument");
             }
-        } finally {
-            bc.currentCallContext = savedContext;
+        } else {
+            bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
         }
     }
 
@@ -88,24 +82,17 @@ public class CompileOperator {
             // Force scalar context: scalar(expr)
             // Evaluates the operand and converts the result to scalar
             if (node.operand != null) {
-                // Evaluate operand in scalar context
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int operandReg = bytecodeCompiler.lastResultReg;
 
-                    // Emit ARRAY_SIZE to convert to scalar
-                    // This handles arrays/hashes (converts to size) and passes through scalars
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
+                // Emit ARRAY_SIZE to convert to scalar
+                // This handles arrays/hashes (converts to size) and passes through scalars
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(operandReg);
 
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
-                }
+                bytecodeCompiler.lastResultReg = rd;
             } else {
                 bytecodeCompiler.throwCompilerException("scalar operator requires an operand");
             }
@@ -166,14 +153,11 @@ public class CompileOperator {
             // Logical NOT operator: not $x or !$x
             // Evaluate operand in scalar context (need boolean value)
             if (node.operand != null) {
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                node.operand.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int rs = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.currentCallContext = savedContext;
 
                 // Allocate result register
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Emit NOT opcode
                 bytecodeCompiler.emit(Opcodes.NOT);
@@ -192,7 +176,7 @@ public class CompileOperator {
                 int rs = bytecodeCompiler.lastResultReg;
 
                 // Allocate result register
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Emit BITWISE_NOT_BINARY opcode
                 bytecodeCompiler.emit(Opcodes.BITWISE_NOT_BINARY);
@@ -211,7 +195,7 @@ public class CompileOperator {
                 int rs = bytecodeCompiler.lastResultReg;
 
                 // Allocate result register
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Emit BITWISE_NOT_STRING opcode
                 bytecodeCompiler.emit(Opcodes.BITWISE_NOT_STRING);
@@ -230,7 +214,7 @@ public class CompileOperator {
                 int rs = bytecodeCompiler.lastResultReg;
 
                 // Allocate result register
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Emit DEFINED opcode
                 bytecodeCompiler.emit(Opcodes.DEFINED);
@@ -261,7 +245,7 @@ public class CompileOperator {
             int argReg = bytecodeCompiler.lastResultReg;
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Emit REF opcode
             bytecodeCompiler.emit(Opcodes.REF);
@@ -289,7 +273,7 @@ public class CompileOperator {
             int argReg = bytecodeCompiler.lastResultReg;
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Add current package to string pool
             int packageIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
@@ -321,7 +305,7 @@ public class CompileOperator {
             int flagsReg = bytecodeCompiler.lastResultReg;
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Emit QUOTE_REGEX opcode
             bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
@@ -390,27 +374,24 @@ public class CompileOperator {
                     // Handle &sub syntax (goto &foo)
                     if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
                         // This is a tail call: goto &sub
+                        int outerContext = bytecodeCompiler.currentCallContext;
                         // Evaluate the code reference in scalar context
-                        int savedContext = bytecodeCompiler.currentCallContext;
-                        bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                        callTarget.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
                         int codeRefReg = bytecodeCompiler.lastResultReg;
 
                         // Evaluate the arguments in list context (usually @_)
-                        bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                        callNode.right.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(callNode.right, -1, RuntimeContextType.LIST);
                         int argsReg = bytecodeCompiler.lastResultReg;
-                        bytecodeCompiler.currentCallContext = savedContext;
 
                         // Allocate register for call result
-                        int rd = bytecodeCompiler.allocateRegister();
+                        int rd = bytecodeCompiler.allocateOutputRegister();
 
                         // Emit CALL_SUB to invoke the code reference with proper context
                         bytecodeCompiler.emit(Opcodes.CALL_SUB);
                         bytecodeCompiler.emitReg(rd);  // Result register
                         bytecodeCompiler.emitReg(codeRefReg); // Code reference register
                         bytecodeCompiler.emitReg(argsReg); // Arguments register
-                        bytecodeCompiler.emit(savedContext); // Use saved calling context for the tail call
+                        bytecodeCompiler.emit(outerContext); // Use outer calling context for the tail call
 
                         // Then return the result
                         bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
@@ -447,7 +428,7 @@ public class CompileOperator {
         } else if (op.equals("rand")) {
             // rand() or rand($max)
             // Calls Random.rand(max) where max defaults to 1
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             if (node.operand != null) {
                 // rand($max) - evaluate operand
@@ -475,7 +456,7 @@ public class CompileOperator {
         } else if (op.equals("sleep")) {
             // sleep $seconds
             // Calls Time.sleep(seconds)
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             if (node.operand != null) {
                 // sleep($seconds) - evaluate operand
@@ -500,7 +481,7 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("alarm")) {
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             if (node.operand != null) {
                 node.operand.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
@@ -528,7 +509,7 @@ public class CompileOperator {
             }
 
             // Return 1 (true)
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LOAD_INT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(1);
@@ -536,86 +517,59 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("require")) {
             // require MODULE_NAME or require VERSION
-            // Evaluate operand in scalar context
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            try {
-                node.operand.accept(bytecodeCompiler);
-                int operandReg = bytecodeCompiler.lastResultReg;
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+            int operandReg = bytecodeCompiler.lastResultReg;
 
-                // Call ModuleOperators.require()
-                int rd = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.REQUIRE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(operandReg);
+            int rd = bytecodeCompiler.allocateOutputRegister();
+            bytecodeCompiler.emit(Opcodes.REQUIRE);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(operandReg);
 
-                bytecodeCompiler.lastResultReg = rd;
-            } finally {
-                bytecodeCompiler.currentCallContext = savedContext;
-            }
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("pos")) {
             // pos($var) - get or set regex match position
-            // Returns an lvalue that can be assigned to
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            try {
-                node.operand.accept(bytecodeCompiler);
-                int operandReg = bytecodeCompiler.lastResultReg;
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+            int operandReg = bytecodeCompiler.lastResultReg;
 
-                // Call RuntimeScalar.pos()
-                int rd = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.POS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(operandReg);
+            int rd = bytecodeCompiler.allocateOutputRegister();
+            bytecodeCompiler.emit(Opcodes.POS);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(operandReg);
 
-                bytecodeCompiler.lastResultReg = rd;
-            } finally {
-                bytecodeCompiler.currentCallContext = savedContext;
-            }
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("index") || op.equals("rindex")) {
             // index(str, substr, pos?) or rindex(str, substr, pos?)
             if (node.operand instanceof ListNode args) {
-
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    // Evaluate first arg (string)
-                    if (args.elements.isEmpty()) {
-                        bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
-                    }
-                    args.elements.get(0).accept(bytecodeCompiler);
-                    int strReg = bytecodeCompiler.lastResultReg;
-
-                    // Evaluate second arg (substring)
-                    if (args.elements.size() < 2) {
-                        bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
-                    }
-                    args.elements.get(1).accept(bytecodeCompiler);
-                    int substrReg = bytecodeCompiler.lastResultReg;
-
-                    // Evaluate third arg (position) - optional, defaults to undef
-                    int posReg;
-                    if (args.elements.size() >= 3) {
-                        args.elements.get(2).accept(bytecodeCompiler);
-                        posReg = bytecodeCompiler.lastResultReg;
-                    } else {
-                        posReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                        bytecodeCompiler.emitReg(posReg);
-                    }
-
-                    // Call index or rindex
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(op.equals("index") ? Opcodes.INDEX : Opcodes.RINDEX);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(strReg);
-                    bytecodeCompiler.emitReg(substrReg);
-                    bytecodeCompiler.emitReg(posReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
+                if (args.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
                 }
+                bytecodeCompiler.compileNode(args.elements.get(0), -1, RuntimeContextType.SCALAR);
+                int strReg = bytecodeCompiler.lastResultReg;
+
+                if (args.elements.size() < 2) {
+                    bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
+                }
+                bytecodeCompiler.compileNode(args.elements.get(1), -1, RuntimeContextType.SCALAR);
+                int substrReg = bytecodeCompiler.lastResultReg;
+
+                int posReg;
+                if (args.elements.size() >= 3) {
+                    bytecodeCompiler.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
+                    posReg = bytecodeCompiler.lastResultReg;
+                } else {
+                    posReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(posReg);
+                }
+
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(op.equals("index") ? Opcodes.INDEX : Opcodes.RINDEX);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(strReg);
+                bytecodeCompiler.emitReg(substrReg);
+                bytecodeCompiler.emitReg(posReg);
+
+                bytecodeCompiler.lastResultReg = rd;
             } else {
                 bytecodeCompiler.throwCompilerException(op + " requires a list of arguments");
             }
@@ -625,27 +579,22 @@ public class CompileOperator {
                     && ((IdentifierNode) node.operand).name.equals("_");
 
             if (isUnderscoreOperand) {
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT_LASTHANDLE : Opcodes.LSTAT_LASTHANDLE);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
                 bytecodeCompiler.lastResultReg = rd;
             } else {
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
+                int outerContext = bytecodeCompiler.currentCallContext;
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int operandReg = bytecodeCompiler.lastResultReg;
 
-                    int rd = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
-                    bytecodeCompiler.emit(savedContext);
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
-                }
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(operandReg);
+                bytecodeCompiler.emit(outerContext);
+                bytecodeCompiler.lastResultReg = rd;
             }
         } else if (op.startsWith("-") && op.length() == 2) {
             // File test operators: -r, -w, -x, etc.
@@ -657,7 +606,7 @@ public class CompileOperator {
             if (isUnderscoreOperand) {
                 // Special case: -r _ uses cached file handle
                 // Call FileTestOperator.fileTestLastHandle(String)
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 int operatorStrIndex = bytecodeCompiler.addToStringPool(op);
 
                 // Emit FILETEST_LASTHANDLE opcode
@@ -668,112 +617,106 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             } else {
                 // Normal case: evaluate operand and test it
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int operandReg = bytecodeCompiler.lastResultReg;
 
-                    int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
-                    // Map operator to opcode
-                    char testChar = op.charAt(1);
-                    short opcode;
-                    switch (testChar) {
-                        case 'r':
-                            opcode = Opcodes.FILETEST_R;
-                            break;
-                        case 'w':
-                            opcode = Opcodes.FILETEST_W;
-                            break;
-                        case 'x':
-                            opcode = Opcodes.FILETEST_X;
-                            break;
-                        case 'o':
-                            opcode = Opcodes.FILETEST_O;
-                            break;
-                        case 'R':
-                            opcode = Opcodes.FILETEST_R_REAL;
-                            break;
-                        case 'W':
-                            opcode = Opcodes.FILETEST_W_REAL;
-                            break;
-                        case 'X':
-                            opcode = Opcodes.FILETEST_X_REAL;
-                            break;
-                        case 'O':
-                            opcode = Opcodes.FILETEST_O_REAL;
-                            break;
-                        case 'e':
-                            opcode = Opcodes.FILETEST_E;
-                            break;
-                        case 'z':
-                            opcode = Opcodes.FILETEST_Z;
-                            break;
-                        case 's':
-                            opcode = Opcodes.FILETEST_S;
-                            break;
-                        case 'f':
-                            opcode = Opcodes.FILETEST_F;
-                            break;
-                        case 'd':
-                            opcode = Opcodes.FILETEST_D;
-                            break;
-                        case 'l':
-                            opcode = Opcodes.FILETEST_L;
-                            break;
-                        case 'p':
-                            opcode = Opcodes.FILETEST_P;
-                            break;
-                        case 'S':
-                            opcode = Opcodes.FILETEST_S_UPPER;
-                            break;
-                        case 'b':
-                            opcode = Opcodes.FILETEST_B;
-                            break;
-                        case 'c':
-                            opcode = Opcodes.FILETEST_C;
-                            break;
-                        case 't':
-                            opcode = Opcodes.FILETEST_T;
-                            break;
-                        case 'u':
-                            opcode = Opcodes.FILETEST_U;
-                            break;
-                        case 'g':
-                            opcode = Opcodes.FILETEST_G;
-                            break;
-                        case 'k':
-                            opcode = Opcodes.FILETEST_K;
-                            break;
-                        case 'T':
-                            opcode = Opcodes.FILETEST_T_UPPER;
-                            break;
-                        case 'B':
-                            opcode = Opcodes.FILETEST_B_UPPER;
-                            break;
-                        case 'M':
-                            opcode = Opcodes.FILETEST_M;
-                            break;
-                        case 'A':
-                            opcode = Opcodes.FILETEST_A;
-                            break;
-                        case 'C':
-                            opcode = Opcodes.FILETEST_C_UPPER;
-                            break;
-                        default:
-                            bytecodeCompiler.throwCompilerException("Unsupported file test operator: " + op);
-                            return;
-                    }
-
-                    bytecodeCompiler.emit(opcode);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } finally {
-                    bytecodeCompiler.currentCallContext = savedContext;
+                // Map operator to opcode
+                char testChar = op.charAt(1);
+                short opcode;
+                switch (testChar) {
+                    case 'r':
+                        opcode = Opcodes.FILETEST_R;
+                        break;
+                    case 'w':
+                        opcode = Opcodes.FILETEST_W;
+                        break;
+                    case 'x':
+                        opcode = Opcodes.FILETEST_X;
+                        break;
+                    case 'o':
+                        opcode = Opcodes.FILETEST_O;
+                        break;
+                    case 'R':
+                        opcode = Opcodes.FILETEST_R_REAL;
+                        break;
+                    case 'W':
+                        opcode = Opcodes.FILETEST_W_REAL;
+                        break;
+                    case 'X':
+                        opcode = Opcodes.FILETEST_X_REAL;
+                        break;
+                    case 'O':
+                        opcode = Opcodes.FILETEST_O_REAL;
+                        break;
+                    case 'e':
+                        opcode = Opcodes.FILETEST_E;
+                        break;
+                    case 'z':
+                        opcode = Opcodes.FILETEST_Z;
+                        break;
+                    case 's':
+                        opcode = Opcodes.FILETEST_S;
+                        break;
+                    case 'f':
+                        opcode = Opcodes.FILETEST_F;
+                        break;
+                    case 'd':
+                        opcode = Opcodes.FILETEST_D;
+                        break;
+                    case 'l':
+                        opcode = Opcodes.FILETEST_L;
+                        break;
+                    case 'p':
+                        opcode = Opcodes.FILETEST_P;
+                        break;
+                    case 'S':
+                        opcode = Opcodes.FILETEST_S_UPPER;
+                        break;
+                    case 'b':
+                        opcode = Opcodes.FILETEST_B;
+                        break;
+                    case 'c':
+                        opcode = Opcodes.FILETEST_C;
+                        break;
+                    case 't':
+                        opcode = Opcodes.FILETEST_T;
+                        break;
+                    case 'u':
+                        opcode = Opcodes.FILETEST_U;
+                        break;
+                    case 'g':
+                        opcode = Opcodes.FILETEST_G;
+                        break;
+                    case 'k':
+                        opcode = Opcodes.FILETEST_K;
+                        break;
+                    case 'T':
+                        opcode = Opcodes.FILETEST_T_UPPER;
+                        break;
+                    case 'B':
+                        opcode = Opcodes.FILETEST_B_UPPER;
+                        break;
+                    case 'M':
+                        opcode = Opcodes.FILETEST_M;
+                        break;
+                    case 'A':
+                        opcode = Opcodes.FILETEST_A;
+                        break;
+                    case 'C':
+                        opcode = Opcodes.FILETEST_C_UPPER;
+                        break;
+                    default:
+                        bytecodeCompiler.throwCompilerException("Unsupported file test operator: " + op);
+                        return;
                 }
+
+                bytecodeCompiler.emit(opcode);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(operandReg);
+
+                bytecodeCompiler.lastResultReg = rd;
             }
         } else if (op.equals("die")) {
             // die $message;
@@ -908,7 +851,7 @@ public class CompileOperator {
             if (node.operand != null) {
                 node.operand.accept(bytecodeCompiler);
                 int stringReg = bytecodeCompiler.lastResultReg;
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Snapshot visible variables and pragma flags for this eval site
                 int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
@@ -939,7 +882,7 @@ public class CompileOperator {
             // Format: [SELECT] [rd] [rs_list]
             // Effect: rd = IOOperator.select(registers[rs_list], SCALAR)
 
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             boolean hasArgs = node.operand instanceof ListNode ln && !ln.elements.isEmpty();
             if (hasArgs) {
@@ -983,16 +926,10 @@ public class CompileOperator {
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
             // Compile operand in scalar context (negation always produces a scalar)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.operand.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int operandReg = bytecodeCompiler.lastResultReg;
 
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
-
-            // Emit NEG_SCALAR
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.NEG_SCALAR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(operandReg);
@@ -1062,7 +999,7 @@ public class CompileOperator {
             }
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Emit ARRAY_POP
             bytecodeCompiler.emit(Opcodes.ARRAY_POP);
@@ -1134,7 +1071,7 @@ public class CompileOperator {
             }
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Emit ARRAY_SHIFT
             bytecodeCompiler.emit(Opcodes.ARRAY_SHIFT);
@@ -1222,7 +1159,7 @@ public class CompileOperator {
             }
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Emit direct opcode SPLICE
             bytecodeCompiler.emit(Opcodes.SPLICE);
@@ -1258,7 +1195,7 @@ public class CompileOperator {
             }
 
             // Allocate result register
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
 
             // Emit direct opcode REVERSE
             bytecodeCompiler.emit(Opcodes.REVERSE);
@@ -1375,7 +1312,7 @@ public class CompileOperator {
                 }
 
                 // Emit HASH_EXISTS
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.HASH_EXISTS);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(hashReg);
@@ -1386,7 +1323,7 @@ public class CompileOperator {
                 int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
                 int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.ARRAY_EXISTS);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(arrayReg);
@@ -1397,7 +1334,7 @@ public class CompileOperator {
                 arg.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.EXISTS);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(argReg);
@@ -1483,7 +1420,7 @@ public class CompileOperator {
                         }
 
                         // Use SLOW_OP for hash slice delete
-                        int rd = bytecodeCompiler.allocateRegister();
+                        int rd = bytecodeCompiler.allocateOutputRegister();
                         bytecodeCompiler.emit(Opcodes.HASH_SLICE_DELETE);
                         bytecodeCompiler.emitReg(rd);
                         bytecodeCompiler.emitReg(hashReg);
@@ -1586,7 +1523,7 @@ public class CompileOperator {
                 }
 
                 // Emit HASH_DELETE
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.HASH_DELETE);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(hashReg);
@@ -1632,7 +1569,7 @@ public class CompileOperator {
                     keyReg = bytecodeCompiler.lastResultReg;
                 }
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.HASH_DELETE);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(hashReg);
@@ -1643,7 +1580,7 @@ public class CompileOperator {
                 int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
                 int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.ARRAY_DELETE);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(arrayReg);
@@ -1654,7 +1591,7 @@ public class CompileOperator {
                 arg.accept(bytecodeCompiler);
                 int argReg = bytecodeCompiler.lastResultReg;
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.DELETE);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(argReg);
@@ -1669,17 +1606,10 @@ public class CompileOperator {
             }
 
             // Compile the hash operand in LIST context (to avoid scalar conversion)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            try {
-                node.operand.accept(bytecodeCompiler);
-            } finally {
-                bytecodeCompiler.currentCallContext = savedContext;
-            }
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
             int hashReg = bytecodeCompiler.lastResultReg;
 
-            // Emit HASH_KEYS
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.HASH_KEYS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(hashReg);
@@ -1687,7 +1617,7 @@ public class CompileOperator {
             // keys() returns a list in list context, scalar count in scalar context
             // The RuntimeHash.keys() method returns a RuntimeList
             // In scalar context, convert to scalar (count)
-            if (savedContext == RuntimeContextType.SCALAR) {
+            if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
                 int scalarReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
                 bytecodeCompiler.emitReg(scalarReg);
@@ -1722,7 +1652,7 @@ public class CompileOperator {
                 scalarReg = bytecodeCompiler.lastResultReg;
             }
 
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.CHOP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(scalarReg);
@@ -1736,25 +1666,15 @@ public class CompileOperator {
             }
 
             // Compile the hash operand in LIST context (to avoid scalar conversion)
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            try {
-                node.operand.accept(bytecodeCompiler);
-            } finally {
-                bytecodeCompiler.currentCallContext = savedContext;
-            }
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
             int hashReg = bytecodeCompiler.lastResultReg;
 
-            // Emit HASH_VALUES
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.HASH_VALUES);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(hashReg);
 
-            // values() returns a list in list context, scalar count in scalar context
-            // The RuntimeHash.values() method returns a RuntimeList
-            // In scalar context, convert to scalar (count)
-            if (savedContext == RuntimeContextType.SCALAR) {
+            if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
                 int scalarReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
                 bytecodeCompiler.emitReg(scalarReg);
@@ -1845,7 +1765,7 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(oneReg);
             bytecodeCompiler.emitInt(1);
 
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SUB_SCALAR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(sizeReg);
@@ -1872,7 +1792,7 @@ public class CompileOperator {
             int stringReg = bytecodeCompiler.lastResultReg;
 
             // Call length builtin using SLOW_OP
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LENGTH_OP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(stringReg);
@@ -1884,13 +1804,10 @@ public class CompileOperator {
             String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
             if (argument.isEmpty() || argument.equals("<>")) {
                 // True diamond <>  or  <<>> : read from @ARGV / STDIN via DiamondIO.readline
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                node.operand.accept(bytecodeCompiler);
-                bytecodeCompiler.currentCallContext = savedContext;
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int fhReg = bytecodeCompiler.lastResultReg;
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.READLINE);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(fhReg);
@@ -1941,7 +1858,7 @@ public class CompileOperator {
             }
 
             // Call open with context and args
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.OPEN);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
@@ -1997,14 +1914,10 @@ public class CompileOperator {
             if (args.elements.size() > 2) {
                 // String provided - perform the match in SCALAR context so that
                 // ($_ = "x") =~ m/.../ returns the lvalue, not a RuntimeList.
-                int savedCtx = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                args.elements.get(2).accept(bytecodeCompiler);
-                bytecodeCompiler.currentCallContext = savedCtx;
+                bytecodeCompiler.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
                 int stringReg = bytecodeCompiler.lastResultReg;
 
-                // Call MATCH_REGEX to perform the match
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
@@ -2024,7 +1937,7 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(stringReg);
                     bytecodeCompiler.emit(nameIdx);
                 }
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(stringReg);
@@ -2070,10 +1983,7 @@ public class CompileOperator {
                 // String provided in operand list (from =~ binding).
                 // Must compile in SCALAR context: a list like ($_ = "x") must yield
                 // the last element as a scalar lvalue, not a RuntimeList.
-                int savedCtx = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-                args.elements.get(3).accept(bytecodeCompiler);
-                bytecodeCompiler.currentCallContext = savedCtx;
+                bytecodeCompiler.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
                 stringReg = bytecodeCompiler.lastResultReg;
             } else {
                 // Use $_ as default
@@ -2090,7 +2000,7 @@ public class CompileOperator {
             }
 
             // Apply the regex match (which handles replacement)
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(stringReg);
@@ -2127,7 +2037,7 @@ public class CompileOperator {
             }
 
             // Call SUBSTR_VAR opcode
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SUBSTR_VAR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argsListReg);
@@ -2151,7 +2061,7 @@ public class CompileOperator {
                     bytecodeCompiler.emit(nameIdx);
                 }
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.CHOMP);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(targetReg);
@@ -2167,7 +2077,7 @@ public class CompileOperator {
                 }
                 int targetReg = bytecodeCompiler.lastResultReg;
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.CHOMP);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(targetReg);
@@ -2185,7 +2095,7 @@ public class CompileOperator {
         } else if (op.equals("wantarray")) {
             // wantarray operator: returns undef in VOID, false in SCALAR, true in LIST
             // Read register 2 (wantarray context) and convert to Perl convention
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.WANTARRAY);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(2);  // Register 2 contains the calling context
@@ -2203,13 +2113,9 @@ public class CompileOperator {
                 int formatReg = bytecodeCompiler.lastResultReg;
 
                 // Compile remaining arguments; use LIST context only for array/hash args
-                int savedContext = bytecodeCompiler.currentCallContext;
                 java.util.List<Integer> argRegs = new java.util.ArrayList<>();
                 for (int i = 1; i < list.elements.size(); i++) {
-                    Node arg = list.elements.get(i);
-                    bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                    arg.accept(bytecodeCompiler);
-                    bytecodeCompiler.currentCallContext = savedContext;
+                    bytecodeCompiler.compileNode(list.elements.get(i), -1, RuntimeContextType.LIST);
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
 
@@ -2223,7 +2129,7 @@ public class CompileOperator {
                 }
 
                 // Call sprintf with format and arg list
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.SPRINTF);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(formatReg);
@@ -2236,7 +2142,7 @@ public class CompileOperator {
         } else if (op.equals("int")) {
             compileScalarOperand(bytecodeCompiler, node, "int");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.INT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2244,7 +2150,7 @@ public class CompileOperator {
         } else if (op.equals("log")) {
             compileScalarOperand(bytecodeCompiler, node, "log");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LOG);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2252,7 +2158,7 @@ public class CompileOperator {
         } else if (op.equals("sqrt")) {
             compileScalarOperand(bytecodeCompiler, node, "sqrt");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SQRT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2260,7 +2166,7 @@ public class CompileOperator {
         } else if (op.equals("cos")) {
             compileScalarOperand(bytecodeCompiler, node, "cos");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.COS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2268,7 +2174,7 @@ public class CompileOperator {
         } else if (op.equals("sin")) {
             compileScalarOperand(bytecodeCompiler, node, "sin");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SIN);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2276,7 +2182,7 @@ public class CompileOperator {
         } else if (op.equals("exp")) {
             compileScalarOperand(bytecodeCompiler, node, "exp");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.EXP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2284,7 +2190,7 @@ public class CompileOperator {
         } else if (op.equals("abs")) {
             compileScalarOperand(bytecodeCompiler, node, "abs");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.ABS);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2292,7 +2198,7 @@ public class CompileOperator {
         } else if (op.equals("binary~")) {
             compileScalarOperand(bytecodeCompiler, node, "binary~");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.BINARY_NOT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2300,7 +2206,7 @@ public class CompileOperator {
         } else if (op.equals("integerBitwiseNot")) {
             compileScalarOperand(bytecodeCompiler, node, "integerBitwiseNot");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.INTEGER_BITWISE_NOT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2308,7 +2214,7 @@ public class CompileOperator {
         } else if (op.equals("ord")) {
             compileScalarOperand(bytecodeCompiler, node, "ord");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.ORD);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2316,7 +2222,7 @@ public class CompileOperator {
         } else if (op.equals("ordBytes")) {
             compileScalarOperand(bytecodeCompiler, node, "ordBytes");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.ORD_BYTES);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2324,7 +2230,7 @@ public class CompileOperator {
         } else if (op.equals("oct")) {
             compileScalarOperand(bytecodeCompiler, node, "oct");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.OCT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2332,7 +2238,7 @@ public class CompileOperator {
         } else if (op.equals("hex")) {
             compileScalarOperand(bytecodeCompiler, node, "hex");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.HEX);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2340,7 +2246,7 @@ public class CompileOperator {
         } else if (op.equals("srand")) {
             compileScalarOperand(bytecodeCompiler, node, "srand");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SRAND);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2348,7 +2254,7 @@ public class CompileOperator {
         } else if (op.equals("chr")) {
             compileScalarOperand(bytecodeCompiler, node, "chr");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.CHR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2356,7 +2262,7 @@ public class CompileOperator {
         } else if (op.equals("chrBytes")) {
             compileScalarOperand(bytecodeCompiler, node, "chrBytes");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.CHR_BYTES);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2364,7 +2270,7 @@ public class CompileOperator {
         } else if (op.equals("lengthBytes")) {
             compileScalarOperand(bytecodeCompiler, node, "lengthBytes");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LENGTH_BYTES);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2372,7 +2278,7 @@ public class CompileOperator {
         } else if (op.equals("quotemeta")) {
             compileScalarOperand(bytecodeCompiler, node, "quotemeta");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.QUOTEMETA);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2380,7 +2286,7 @@ public class CompileOperator {
         } else if (op.equals("fc")) {
             compileScalarOperand(bytecodeCompiler, node, "fc");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.FC);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2388,7 +2294,7 @@ public class CompileOperator {
         } else if (op.equals("lc")) {
             compileScalarOperand(bytecodeCompiler, node, "lc");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LC);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2396,7 +2302,7 @@ public class CompileOperator {
         } else if (op.equals("lcfirst")) {
             compileScalarOperand(bytecodeCompiler, node, "lcfirst");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.LCFIRST);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2404,7 +2310,7 @@ public class CompileOperator {
         } else if (op.equals("uc")) {
             compileScalarOperand(bytecodeCompiler, node, "uc");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.UC);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2412,7 +2318,7 @@ public class CompileOperator {
         } else if (op.equals("ucfirst")) {
             compileScalarOperand(bytecodeCompiler, node, "ucfirst");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.UCFIRST);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2420,7 +2326,7 @@ public class CompileOperator {
         } else if (op.equals("sleep")) {
             compileScalarOperand(bytecodeCompiler, node, "sleep");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.SLEEP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2428,7 +2334,7 @@ public class CompileOperator {
         } else if (op.equals("tell")) {
             compileScalarOperand(bytecodeCompiler, node, "tell");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.TELL);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2436,7 +2342,7 @@ public class CompileOperator {
         } else if (op.equals("rmdir")) {
             compileScalarOperand(bytecodeCompiler, node, "rmdir");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.RMDIR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2444,7 +2350,7 @@ public class CompileOperator {
         } else if (op.equals("closedir")) {
             compileScalarOperand(bytecodeCompiler, node, "closedir");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.CLOSEDIR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2452,7 +2358,7 @@ public class CompileOperator {
         } else if (op.equals("rewinddir")) {
             compileScalarOperand(bytecodeCompiler, node, "rewinddir");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.REWINDDIR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2460,7 +2366,7 @@ public class CompileOperator {
         } else if (op.equals("telldir")) {
             compileScalarOperand(bytecodeCompiler, node, "telldir");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.TELLDIR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2468,7 +2374,7 @@ public class CompileOperator {
         } else if (op.equals("chdir")) {
             compileScalarOperand(bytecodeCompiler, node, "chdir");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.CHDIR);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2476,7 +2382,7 @@ public class CompileOperator {
         } else if (op.equals("exit")) {
             compileScalarOperand(bytecodeCompiler, node, "exit");
             int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.EXIT);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(argReg);
@@ -2522,7 +2428,7 @@ public class CompileOperator {
             }
 
             // Emit TR_TRANSLITERATE operation
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.TR_TRANSLITERATE);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(searchReg);
@@ -2539,7 +2445,7 @@ public class CompileOperator {
                 node.operand.accept(bytecodeCompiler);
                 int argsReg = bytecodeCompiler.lastResultReg;
 
-                int rd = bytecodeCompiler.allocateRegister();
+                int rd = bytecodeCompiler.allocateOutputRegister();
                 short opcode = switch (op) {
                     case "tie" -> Opcodes.TIE;
                     case "untie" -> Opcodes.UNTIE;
@@ -2558,7 +2464,7 @@ public class CompileOperator {
         } else if (op.equals("getppid")) {
             // getppid() - returns parent process ID
             // Format: GETPPID rd
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.lastResultReg = rd;
@@ -2571,7 +2477,7 @@ public class CompileOperator {
                     int rs1 = bytecodeCompiler.lastResultReg;
                     list.elements.get(1).accept(bytecodeCompiler);
                     int rs2 = bytecodeCompiler.lastResultReg;
-                    int rd = bytecodeCompiler.allocateRegister();
+                    int rd = bytecodeCompiler.allocateOutputRegister();
                     bytecodeCompiler.emitWithToken(Opcodes.ATAN2, node.getIndex());
                     bytecodeCompiler.emitReg(rd);
                     bytecodeCompiler.emitReg(rs1);
@@ -2591,14 +2497,11 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("each requires an argument");
             }
 
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-            node.operand.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
             int containerReg = bytecodeCompiler.lastResultReg;
 
             // Pass container directly to EACH
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emitWithToken(Opcodes.EACH, node.getIndex());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(containerReg);
@@ -2629,10 +2532,7 @@ public class CompileOperator {
             int argsReg;
             if (node.operand != null) {
                 // Save current context and evaluate operand in list context
-                int savedContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
-                node.operand.accept(bytecodeCompiler);
-                bytecodeCompiler.currentCallContext = savedContext;
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
 
                 int operandReg = bytecodeCompiler.lastResultReg;
 
@@ -2649,7 +2549,7 @@ public class CompileOperator {
                 bytecodeCompiler.emit(0);
             }
 
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             short opcode = switch (op) {
                 case "chmod" -> Opcodes.CHMOD;
                 case "unlink" -> Opcodes.UNLINK;
@@ -2716,13 +2616,10 @@ public class CompileOperator {
             // in SCALAR context, then emit GLOB_OP.
             int globId = ScalarGlobOperator.currentId++;
 
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.operand.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int patternReg = bytecodeCompiler.lastResultReg;
 
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.GLOB_OP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emit(globId);
@@ -2731,13 +2628,10 @@ public class CompileOperator {
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("doFile")) {
             // do FILE: executes a Perl file
-            int savedContext = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
-            node.operand.accept(bytecodeCompiler);
-            bytecodeCompiler.currentCallContext = savedContext;
+            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int fileReg = bytecodeCompiler.lastResultReg;
 
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.DO_FILE);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(fileReg);
@@ -2766,7 +2660,7 @@ public class CompileOperator {
             }
             bytecodeCompiler.lastResultReg = -1;
         } else if (op.equals("time")) {
-            int rd = bytecodeCompiler.allocateRegister();
+            int rd = bytecodeCompiler.allocateOutputRegister();
             bytecodeCompiler.emit(Opcodes.TIME_OP);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.lastResultReg = rd;
