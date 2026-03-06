@@ -15,8 +15,7 @@ public class CompileBinaryOperator {
             // left = filehandle reference (\*STDERR)
             // right = list to print
 
-            // Compile the filehandle (left operand)
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
             int filehandleReg = bytecodeCompiler.lastResultReg;
 
             // Compile the content (right operand) in LIST context
@@ -44,8 +43,7 @@ public class CompileBinaryOperator {
             // left = format string
             // right = ListNode of arguments
 
-            // Compile the format string (left operand)
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
             int formatReg = bytecodeCompiler.lastResultReg;
 
             // Compile the arguments (right operand) into a list
@@ -131,26 +129,21 @@ public class CompileBinaryOperator {
                 // left: scalar containing hash reference
                 // right: HashLiteralNode containing key
 
-                // Compile the reference (left side)
-                node.left.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int scalarRefReg = bytecodeCompiler.lastResultReg;
 
-                // Dereference the scalar to get the actual hash
                 int hashReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                 bytecodeCompiler.emitReg(hashReg);
                 bytecodeCompiler.emitReg(scalarRefReg);
 
-                // Get the key
                 if (keyNode.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("Hash dereference requires key");
                 }
 
-                // Compile the key - handle bareword autoquoting
                 int keyReg;
                 Node keyElement = keyNode.elements.get(0);
                 if (keyElement instanceof IdentifierNode) {
-                    // Bareword key: $ref->{key} -> key is autoquoted
                     String keyString = ((IdentifierNode) keyElement).name;
                     keyReg = bytecodeCompiler.allocateRegister();
                     int keyIdx = bytecodeCompiler.addToStringPool(keyString);
@@ -158,8 +151,7 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.emitReg(keyReg);
                     bytecodeCompiler.emit(keyIdx);
                 } else {
-                    // Expression key: $ref->{$var}
-                    keyElement.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                     keyReg = bytecodeCompiler.lastResultReg;
                 }
 
@@ -177,23 +169,19 @@ public class CompileBinaryOperator {
                 // left: scalar containing array reference
                 // right: ArrayLiteralNode containing index
 
-                // Compile the reference (left side)
-                node.left.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int scalarRefReg = bytecodeCompiler.lastResultReg;
 
-                // Dereference the scalar to get the actual array
                 int arrayReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 bytecodeCompiler.emitReg(arrayReg);
                 bytecodeCompiler.emitReg(scalarRefReg);
 
-                // Get the index
                 if (indexNode.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("Array dereference requires index");
                 }
 
-                // Compile the index expression
-                indexNode.elements.get(0).accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
                 int indexReg = bytecodeCompiler.lastResultReg;
 
                 // Access array element
@@ -530,8 +518,7 @@ public class CompileBinaryOperator {
 
                     // For !~, we need to negate the result
                     if (node.operator.equals("!~")) {
-                        // Compile the bound operator
-                        boundOp.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(boundOp, -1, bytecodeCompiler.currentCallContext);
                         int matchReg = bytecodeCompiler.lastResultReg;
 
                         // Negate the result
@@ -587,7 +574,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emit(nameIdx);
             bytecodeCompiler.lastResultReg = fhReg;
         } else {
-            node.left.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
         }
         int fhReg = bytecodeCompiler.lastResultReg;
 
@@ -633,7 +620,7 @@ public class CompileBinaryOperator {
     }
 
     private static void compileTellBinaryOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
-        node.left.accept(bytecodeCompiler);
+        bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
         int fhReg = bytecodeCompiler.lastResultReg;
 
         int rd = bytecodeCompiler.allocateOutputRegister();
@@ -645,7 +632,7 @@ public class CompileBinaryOperator {
     }
 
     private static void compileJoinBinaryOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
-        node.left.accept(bytecodeCompiler);
+        bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
         int separatorReg = bytecodeCompiler.lastResultReg;
 
         int listReg;

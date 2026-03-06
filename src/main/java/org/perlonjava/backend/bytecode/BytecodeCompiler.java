@@ -513,17 +513,18 @@ public class BytecodeCompiler implements Visitor {
             currentCallContext = RuntimeContextType.LIST;
         }
 
-        // Visit the node to generate bytecode
+        int returnTargetReg = allocateRegister();
+        targetOutputReg = returnTargetReg;
+
         node.accept(this);
 
-        // Emit RETURN with last result register
-        // If no result was produced, return undef instead of register 0 ("this")
+        targetOutputReg = -1;
+
         int returnReg;
         if (lastResultReg >= 0) {
             returnReg = lastResultReg;
         } else {
-            // No result - allocate register for undef
-            returnReg = allocateRegister();
+            returnReg = returnTargetReg;
             emit(Opcodes.LOAD_UNDEF);
             emitReg(returnReg);
         }
