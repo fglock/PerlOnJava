@@ -59,2756 +59,1262 @@ public class CompileOperator {
         return bc.lastResultReg;
     }
 
-    public static void visitOperator(BytecodeCompiler bytecodeCompiler, OperatorNode node) {
-        // Track token index for error reporting
-        bytecodeCompiler.currentTokenIndex = node.getIndex();
+    private static int resolveHashFromBinaryOp(BytecodeCompiler bc, BinaryOperatorNode hashAccess, int tokenIndex) {
+        if (hashAccess.left instanceof OperatorNode leftOp) {
+            if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode id) {
+                String hashVarName = "%" + id.name;
+                if (bc.hasVariable(hashVarName)) {
+                    return bc.getVariableRegister(hashVarName);
+                }
+                int hashReg = bc.allocateRegister();
+                String globalHashName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalHashName);
+                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                bc.emitReg(hashReg);
+                bc.emit(nameIdx);
+                return hashReg;
+            } else {
+                leftOp.operand.accept(bc);
+                int scalarReg = bc.lastResultReg;
+                return derefHash(bc, scalarReg, tokenIndex);
+            }
+        } else if (hashAccess.left instanceof BinaryOperatorNode) {
+            hashAccess.left.accept(bc);
+            int scalarReg = bc.lastResultReg;
+            return derefHash(bc, scalarReg, tokenIndex);
+        }
+        bc.throwCompilerException("Hash access requires variable or expression on left side");
+        return -1;
+    }
 
+    private static int derefHash(BytecodeCompiler bc, int scalarReg, int tokenIndex) {
+        int hashReg = bc.allocateRegister();
+        if (bc.isStrictRefsEnabled()) {
+            bc.emitWithToken(Opcodes.DEREF_HASH, tokenIndex);
+            bc.emitReg(hashReg);
+            bc.emitReg(scalarReg);
+        } else {
+            int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+            bc.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, tokenIndex);
+            bc.emitReg(hashReg);
+            bc.emitReg(scalarReg);
+            bc.emit(pkgIdx);
+        }
+        return hashReg;
+    }
+
+    private static int compileHashKey(BytecodeCompiler bc, Node keySpec) {
+        if (keySpec instanceof HashLiteralNode keyNode && !keyNode.elements.isEmpty()) {
+            Node keyElement = keyNode.elements.get(0);
+            if (keyElement instanceof IdentifierNode id) {
+                int keyReg = bc.allocateRegister();
+                int keyIdx = bc.addToStringPool(id.name);
+                bc.emit(Opcodes.LOAD_STRING);
+                bc.emitReg(keyReg);
+                bc.emit(keyIdx);
+                return keyReg;
+            } else {
+                keyElement.accept(bc);
+                return bc.lastResultReg;
+            }
+        } else {
+            keySpec.accept(bc);
+            return bc.lastResultReg;
+        }
+    }
+
+    private static int resolveArrayOperand(BytecodeCompiler bc, OperatorNode node, String opName) {
+        if (node.operand == null) {
+            bc.throwCompilerException(opName + " requires array argument");
+            return -1;
+        }
+        OperatorNode arrayOp;
+        if (node.operand instanceof OperatorNode directOp && directOp.operator.equals("@")) {
+            arrayOp = directOp;
+        } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()
+                && list.elements.get(0) instanceof OperatorNode listOp
+                && listOp.operator.equals("@")) {
+            arrayOp = listOp;
+        } else {
+            bc.throwCompilerException(opName + " requires array variable: " + opName + " @array");
+            return -1;
+        }
+        if (arrayOp.operand instanceof IdentifierNode id) {
+            String varName = "@" + id.name;
+            if (bc.hasVariable(varName)) {
+                return bc.getVariableRegister(varName);
+            } else {
+                int arrayReg = bc.allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalArrayName);
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(arrayReg);
+                bc.emit(nameIdx);
+                return arrayReg;
+            }
+        } else if (arrayOp.operand instanceof OperatorNode) {
+            arrayOp.operand.accept(bc);
+            int refReg = bc.lastResultReg;
+            int arrayReg = bc.allocateRegister();
+            if (bc.isStrictRefsEnabled()) {
+                bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                bc.emitReg(arrayReg);
+                bc.emitReg(refReg);
+            } else {
+                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                bc.emitReg(arrayReg);
+                bc.emitReg(refReg);
+                bc.emit(pkgIdx);
+            }
+            return arrayReg;
+        } else {
+            bc.throwCompilerException(opName + " requires array variable or dereferenced array");
+            return -1;
+        }
+    }
+
+    private static int emitLocationString(BytecodeCompiler bc, OperatorNode node) {
+        String locationMsg;
+        Object lineObj = node.getAnnotation("line");
+        Object fileObj = node.getAnnotation("file");
+        if (lineObj != null && fileObj != null) {
+            locationMsg = " at " + fileObj + " line " + lineObj;
+        } else if (bc.errorUtil != null) {
+            locationMsg = " at " + bc.errorUtil.getFileName() + " line " + bc.errorUtil.getLineNumberAccurate(node.getIndex());
+        } else {
+            locationMsg = " at " + bc.sourceName + " line " + bc.sourceLine;
+        }
+        int locationReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_STRING);
+        bc.emitReg(locationReg);
+        bc.emit(bc.addToStringPool(locationMsg));
+        return locationReg;
+    }
+
+    private static int loadDefaultUnderscore(BytecodeCompiler bc) {
+        if (bc.hasVariable("$_")) {
+            return bc.getVariableRegister("$_");
+        }
+        int reg = bc.allocateRegister();
+        int nameIdx = bc.addToStringPool("main::_");
+        bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+        bc.emitReg(reg);
+        bc.emit(nameIdx);
+        return reg;
+    }
+
+    private static void visitMatchRegex(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode args) || args.elements.size() < 2) {
+            bc.throwCompilerException("matchRegex requires pattern and flags");
+            return;
+        }
+        boolean hasOModifier = false;
+        Node flagsNode = args.elements.get(1);
+        if (flagsNode instanceof StringNode) {
+            hasOModifier = ((StringNode) flagsNode).value.contains("o");
+        }
+        args.elements.get(0).accept(bc);
+        int patternReg = bc.lastResultReg;
+        flagsNode.accept(bc);
+        int flagsReg = bc.lastResultReg;
+        int regexReg = bc.allocateRegister();
+        if (hasOModifier) {
+            int callsiteId = bc.allocateCallsiteId();
+            bc.emit(Opcodes.QUOTE_REGEX_O);
+            bc.emitReg(regexReg);
+            bc.emitReg(patternReg);
+            bc.emitReg(flagsReg);
+            bc.emitReg(callsiteId);
+        } else {
+            bc.emit(Opcodes.QUOTE_REGEX);
+            bc.emitReg(regexReg);
+            bc.emitReg(patternReg);
+            bc.emitReg(flagsReg);
+        }
+        int stringReg;
+        if (args.elements.size() > 2) {
+            bc.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
+            stringReg = bc.lastResultReg;
+        } else {
+            stringReg = loadDefaultUnderscore(bc);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.MATCH_REGEX);
+        bc.emitReg(rd);
+        bc.emitReg(stringReg);
+        bc.emitReg(regexReg);
+        bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitReplaceRegex(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode args) || args.elements.size() < 3) {
+            bc.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
+            return;
+        }
+        args.elements.get(0).accept(bc);
+        int patternReg = bc.lastResultReg;
+        args.elements.get(1).accept(bc);
+        int replacementReg = bc.lastResultReg;
+        args.elements.get(2).accept(bc);
+        int flagsReg = bc.lastResultReg;
+        int regexReg = bc.allocateRegister();
+        bc.emit(Opcodes.GET_REPLACEMENT_REGEX);
+        bc.emitReg(regexReg);
+        bc.emitReg(patternReg);
+        bc.emitReg(replacementReg);
+        bc.emitReg(flagsReg);
+        int stringReg;
+        if (args.elements.size() > 3) {
+            bc.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
+            stringReg = bc.lastResultReg;
+        } else {
+            stringReg = loadDefaultUnderscore(bc);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.MATCH_REGEX);
+        bc.emitReg(rd);
+        bc.emitReg(stringReg);
+        bc.emitReg(regexReg);
+        bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitOpen(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode argsList) || argsList.elements.isEmpty()) {
+            bc.throwCompilerException("open requires arguments");
+            return;
+        }
+        int argsReg = bc.allocateRegister();
+        bc.emit(Opcodes.NEW_ARRAY);
+        bc.emitReg(argsReg);
+        int fhReg = -1;
+        boolean first = true;
+        for (Node arg : argsList.elements) {
+            arg.accept(bc);
+            int elemReg = bc.lastResultReg;
+            if (first) { fhReg = elemReg; first = false; }
+            bc.emit(Opcodes.ARRAY_PUSH);
+            bc.emitReg(argsReg);
+            bc.emitReg(elemReg);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.OPEN);
+        bc.emitReg(rd);
+        bc.emit(bc.currentCallContext);
+        bc.emitReg(argsReg);
+        if (fhReg >= 0) {
+            int idx0Reg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(idx0Reg);
+            bc.emit(0);
+            int gotReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_GET);
+            bc.emitReg(gotReg);
+            bc.emitReg(argsReg);
+            bc.emitReg(idx0Reg);
+            bc.emit(Opcodes.SET_SCALAR);
+            bc.emitReg(fhReg);
+            bc.emitReg(gotReg);
+        }
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitSubstr(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode args) || args.elements.size() < 2) {
+            bc.throwCompilerException("substr requires at least 2 arguments");
+            return;
+        }
+        java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+        for (Node arg : args.elements) {
+            arg.accept(bc);
+            argRegs.add(bc.lastResultReg);
+        }
+        int argsListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(argsListReg);
+        bc.emit(argRegs.size());
+        for (int argReg : argRegs) bc.emitReg(argReg);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.SUBSTR_VAR);
+        bc.emitReg(rd);
+        bc.emitReg(argsListReg);
+        bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitChomp(BytecodeCompiler bc, OperatorNode node) {
+        boolean noArgs = node.operand == null ||
+                (node.operand instanceof ListNode l && l.elements.isEmpty());
+        int targetReg;
+        if (noArgs) {
+            targetReg = loadDefaultUnderscore(bc);
+        } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()) {
+            list.elements.get(0).accept(bc);
+            targetReg = bc.lastResultReg;
+        } else {
+            node.operand.accept(bc);
+            targetReg = bc.lastResultReg;
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.CHOMP);
+        bc.emitReg(rd);
+        bc.emitReg(targetReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitSprintf(BytecodeCompiler bc, OperatorNode node) {
+        if (!(node.operand instanceof ListNode list) || list.elements.isEmpty()) {
+            bc.throwCompilerException("sprintf requires a format argument");
+            return;
+        }
+        list.elements.get(0).accept(bc);
+        int formatReg = bc.lastResultReg;
+        java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+        for (int i = 1; i < list.elements.size(); i++) {
+            bc.compileNode(list.elements.get(i), -1, RuntimeContextType.LIST);
+            argRegs.add(bc.lastResultReg);
+        }
+        int listReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(listReg);
+        bc.emit(argRegs.size());
+        for (int argReg : argRegs) bc.emitReg(argReg);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.SPRINTF);
+        bc.emitReg(rd);
+        bc.emitReg(formatReg);
+        bc.emitReg(listReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static short getGenericOpcode(String op) {
+        return switch (op) {
+            case "chmod" -> Opcodes.CHMOD;
+            case "unlink" -> Opcodes.UNLINK;
+            case "utime" -> Opcodes.UTIME;
+            case "rename" -> Opcodes.RENAME;
+            case "link" -> Opcodes.LINK;
+            case "readlink" -> Opcodes.READLINK;
+            case "umask" -> Opcodes.UMASK;
+            case "getc" -> Opcodes.GETC;
+            case "fileno" -> Opcodes.FILENO;
+            case "qx" -> Opcodes.QX;
+            case "system" -> Opcodes.SYSTEM;
+            case "caller" -> Opcodes.CALLER;
+
+            case "pack" -> Opcodes.PACK;
+            case "unpack" -> Opcodes.UNPACK;
+            case "vec" -> Opcodes.VEC;
+            case "localtime" -> Opcodes.LOCALTIME;
+            case "gmtime" -> Opcodes.GMTIME;
+            case "reset" -> Opcodes.RESET;
+            case "times" -> Opcodes.TIMES;
+            case "crypt" -> Opcodes.CRYPT;
+            case "close" -> Opcodes.CLOSE;
+            case "binmode" -> Opcodes.BINMODE;
+            case "seek" -> Opcodes.SEEK;
+            case "eof" -> Opcodes.EOF_OP;
+            case "sysread" -> Opcodes.SYSREAD;
+            case "syswrite" -> Opcodes.SYSWRITE;
+            case "sysopen" -> Opcodes.SYSOPEN;
+            case "socket" -> Opcodes.SOCKET;
+            case "bind" -> Opcodes.BIND;
+            case "connect" -> Opcodes.CONNECT;
+            case "listen" -> Opcodes.LISTEN;
+            case "write" -> Opcodes.WRITE;
+            case "formline" -> Opcodes.FORMLINE;
+            case "printf" -> Opcodes.PRINTF;
+            case "accept" -> Opcodes.ACCEPT;
+            case "sysseek" -> Opcodes.SYSSEEK;
+            case "truncate" -> Opcodes.TRUNCATE;
+            case "read" -> Opcodes.READ;
+            case "chown" -> Opcodes.CHOWN;
+            case "waitpid" -> Opcodes.WAITPID;
+            case "setsockopt" -> Opcodes.SETSOCKOPT;
+            case "getsockopt" -> Opcodes.GETSOCKOPT;
+            case "getpgrp" -> Opcodes.GETPGRP;
+            case "setpgrp" -> Opcodes.SETPGRP;
+            case "getpriority" -> Opcodes.GETPRIORITY;
+            case "setpriority" -> Opcodes.SETPRIORITY;
+            case "opendir" -> Opcodes.OPENDIR;
+            case "readdir" -> Opcodes.READDIR;
+            case "seekdir" -> Opcodes.SEEKDIR;
+            default -> -1;
+        };
+    }
+
+    private static boolean visitGenericListOp(BytecodeCompiler bc, OperatorNode node, String op) {
+        short opcode = getGenericOpcode(op);
+        if (opcode < 0) return false;
+        int argsReg;
+        if (node.operand != null) {
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+            int operandReg = bc.lastResultReg;
+            argsReg = bc.allocateRegister();
+            bc.emit(Opcodes.SCALAR_TO_LIST);
+            bc.emitReg(argsReg);
+            bc.emitReg(operandReg);
+        } else {
+            argsReg = bc.allocateRegister();
+            bc.emit(Opcodes.CREATE_LIST);
+            bc.emitReg(argsReg);
+            bc.emit(0);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emitWithToken(opcode, node.getIndex());
+        bc.emitReg(rd);
+        bc.emitReg(argsReg);
+        bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+        return true;
+    }
+
+    private static void emitSimpleUnary(BytecodeCompiler bc, OperatorNode node, short opcode) {
+        node.operand.accept(bc);
+        int rs = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(opcode);
+        bc.emitReg(rd);
+        bc.emitReg(rs);
+        bc.lastResultReg = rd;
+    }
+
+    private static void emitSimpleUnaryScalar(BytecodeCompiler bc, OperatorNode node, short opcode) {
+        bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+        int rs = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(opcode);
+        bc.emitReg(rd);
+        bc.emitReg(rs);
+        bc.lastResultReg = rd;
+    }
+
+    private static boolean dispatchOperator(BytecodeCompiler bc, OperatorNode node, String op) {
+        switch (op) {
+            case "not", "!" -> { emitSimpleUnaryScalar(bc, node, Opcodes.NOT); return true; }
+            case "~", "binary~" -> { emitSimpleUnary(bc, node, Opcodes.BITWISE_NOT_BINARY); return true; }
+            case "~." -> { emitSimpleUnary(bc, node, Opcodes.BITWISE_NOT_STRING); return true; }
+            case "defined" -> { emitSimpleUnary(bc, node, Opcodes.DEFINED); return true; }
+            case "wantarray" -> {
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.WANTARRAY);
+                bc.emitReg(rd);
+                bc.emitReg(2);
+                bc.lastResultReg = rd;
+                return true;
+            }
+            case "time" -> {
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.TIME_OP);
+                bc.emitReg(rd);
+                bc.lastResultReg = rd;
+                return true;
+            }
+            case "getppid" -> {
+                int rd = bc.allocateOutputRegister();
+                bc.emitWithToken(Opcodes.GETPPID, node.getIndex());
+                bc.emitReg(rd);
+                bc.lastResultReg = rd;
+                return true;
+            }
+            case "open" -> { visitOpen(bc, node); return true; }
+            case "matchRegex" -> { visitMatchRegex(bc, node); return true; }
+            case "replaceRegex" -> { visitReplaceRegex(bc, node); return true; }
+            case "substr" -> { visitSubstr(bc, node); return true; }
+            case "chomp" -> { visitChomp(bc, node); return true; }
+            case "sprintf" -> { visitSprintf(bc, node); return true; }
+            case "exists" -> { CompileExistsDelete.visitExists(bc, node); return true; }
+            case "delete" -> { CompileExistsDelete.visitDelete(bc, node); return true; }
+            case "die", "warn" -> { visitDieWarn(bc, node, op); return true; }
+            default -> { return false; }
+        }
+    }
+
+    private static boolean visitDieWarn(BytecodeCompiler bc, OperatorNode node, String op) {
+        short opcode = op.equals("die") ? Opcodes.DIE : Opcodes.WARN;
+        int msgReg;
+        if (node.operand != null) {
+            node.operand.accept(bc);
+            msgReg = bc.lastResultReg;
+        } else {
+            msgReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_UNDEF);
+            bc.emitReg(msgReg);
+        }
+        int locationReg = emitLocationString(bc, node);
+        bc.emitWithToken(opcode, node.getIndex());
+        bc.emitReg(msgReg);
+        bc.emitReg(locationReg);
+        if (op.equals("die")) {
+            bc.lastResultReg = -1;
+        } else {
+            int resultReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(resultReg);
+            bc.emitInt(1);
+            bc.lastResultReg = resultReg;
+        }
+        return true;
+    }
+
+    private static boolean visitPopShift(BytecodeCompiler bc, OperatorNode node, String op) {
+        short opcode = switch (op) {
+            case "pop" -> Opcodes.ARRAY_POP;
+            case "shift" -> Opcodes.ARRAY_SHIFT;
+            default -> -1;
+        };
+        if (opcode == -1) return false;
+        int arrayReg = resolveArrayOperand(bc, node, op);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(opcode);
+        bc.emitReg(rd);
+        bc.emitReg(arrayReg);
+        bc.lastResultReg = rd;
+        return true;
+    }
+
+    private static boolean visitSimpleUnaryOp(BytecodeCompiler bc, OperatorNode node, String op) {
+        short opcode = switch (op) {
+            case "int" -> Opcodes.INT;
+            case "log" -> Opcodes.LOG;
+            case "sqrt" -> Opcodes.SQRT;
+            case "cos" -> Opcodes.COS;
+            case "sin" -> Opcodes.SIN;
+            case "exp" -> Opcodes.EXP;
+            case "abs" -> Opcodes.ABS;
+            case "integerBitwiseNot" -> Opcodes.INTEGER_BITWISE_NOT;
+            case "ord" -> Opcodes.ORD;
+            case "ordBytes" -> Opcodes.ORD_BYTES;
+            case "oct" -> Opcodes.OCT;
+            case "hex" -> Opcodes.HEX;
+            case "srand" -> Opcodes.SRAND;
+            case "chr" -> Opcodes.CHR;
+            case "chrBytes" -> Opcodes.CHR_BYTES;
+            case "lengthBytes" -> Opcodes.LENGTH_BYTES;
+            case "quotemeta" -> Opcodes.QUOTEMETA;
+            case "fc" -> Opcodes.FC;
+            case "lc" -> Opcodes.LC;
+            case "lcfirst" -> Opcodes.LCFIRST;
+            case "uc" -> Opcodes.UC;
+            case "ucfirst" -> Opcodes.UCFIRST;
+            case "tell" -> Opcodes.TELL;
+            case "rmdir" -> Opcodes.RMDIR;
+            case "closedir" -> Opcodes.CLOSEDIR;
+            case "rewinddir" -> Opcodes.REWINDDIR;
+            case "telldir" -> Opcodes.TELLDIR;
+            case "chdir" -> Opcodes.CHDIR;
+            case "exit" -> Opcodes.EXIT;
+            default -> -1;
+        };
+        if (opcode == -1) return false;
+        compileScalarOperand(bc, node, op);
+        int argReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(opcode);
+        bc.emitReg(rd);
+        bc.emitReg(argReg);
+        bc.lastResultReg = rd;
+        return true;
+    }
+
+    private static void visitFileTestOp(BytecodeCompiler bc, OperatorNode node, String op) {
+        boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
+                && ((IdentifierNode) node.operand).name.equals("_");
+        if (isUnderscoreOperand) {
+            int rd = bc.allocateOutputRegister();
+            int operatorStrIndex = bc.addToStringPool(op);
+            bc.emit(Opcodes.FILETEST_LASTHANDLE);
+            bc.emitReg(rd);
+            bc.emit(operatorStrIndex);
+            bc.lastResultReg = rd;
+        } else {
+            bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+            int operandReg = bc.lastResultReg;
+            int rd = bc.allocateOutputRegister();
+            char testChar = op.charAt(1);
+            short opcode = switch (testChar) {
+                case 'r' -> Opcodes.FILETEST_R;
+                case 'w' -> Opcodes.FILETEST_W;
+                case 'x' -> Opcodes.FILETEST_X;
+                case 'o' -> Opcodes.FILETEST_O;
+                case 'R' -> Opcodes.FILETEST_R_REAL;
+                case 'W' -> Opcodes.FILETEST_W_REAL;
+                case 'X' -> Opcodes.FILETEST_X_REAL;
+                case 'O' -> Opcodes.FILETEST_O_REAL;
+                case 'e' -> Opcodes.FILETEST_E;
+                case 'z' -> Opcodes.FILETEST_Z;
+                case 's' -> Opcodes.FILETEST_S;
+                case 'f' -> Opcodes.FILETEST_F;
+                case 'd' -> Opcodes.FILETEST_D;
+                case 'l' -> Opcodes.FILETEST_L;
+                case 'p' -> Opcodes.FILETEST_P;
+                case 'S' -> Opcodes.FILETEST_S_UPPER;
+                case 'b' -> Opcodes.FILETEST_B;
+                case 'c' -> Opcodes.FILETEST_C;
+                case 't' -> Opcodes.FILETEST_T;
+                case 'u' -> Opcodes.FILETEST_U;
+                case 'g' -> Opcodes.FILETEST_G;
+                case 'k' -> Opcodes.FILETEST_K;
+                case 'T' -> Opcodes.FILETEST_T_UPPER;
+                case 'B' -> Opcodes.FILETEST_B_UPPER;
+                case 'M' -> Opcodes.FILETEST_M;
+                case 'A' -> Opcodes.FILETEST_A;
+                case 'C' -> Opcodes.FILETEST_C_UPPER;
+                default -> {
+                    bc.throwCompilerException("Unsupported file test operator: " + op);
+                    yield -1;
+                }
+            };
+            bc.emit(opcode);
+            bc.emitReg(rd);
+            bc.emitReg(operandReg);
+            bc.lastResultReg = rd;
+        }
+    }
+
+    private static void visitIncrDecr(BytecodeCompiler bc, OperatorNode node, String op) {
+        boolean isPostfix = op.endsWith("postfix");
+        boolean isIncrement = op.startsWith("++");
+        if (node.operand == null) {
+            bc.throwCompilerException("Increment/decrement operator requires operand");
+            return;
+        }
+        if (node.operand instanceof IdentifierNode) {
+            String varName = ((IdentifierNode) node.operand).name;
+            if (bc.hasVariable(varName)) {
+                int varReg = bc.getVariableRegister(varName);
+                if (isPostfix) {
+                    int resultReg = bc.allocateRegister();
+                    bc.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+                    bc.emitReg(resultReg);
+                    bc.emitReg(varReg);
+                    bc.lastResultReg = resultReg;
+                } else {
+                    bc.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
+                    bc.emitReg(varReg);
+                    bc.lastResultReg = varReg;
+                }
+                return;
+            }
+        }
+        node.operand.accept(bc);
+        int operandReg = bc.lastResultReg;
+        if (isPostfix) {
+            int resultReg = bc.allocateRegister();
+            bc.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+            bc.emitReg(resultReg);
+            bc.emitReg(operandReg);
+            bc.lastResultReg = resultReg;
+        } else {
+            bc.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
+            bc.emitReg(operandReg);
+            bc.lastResultReg = operandReg;
+        }
+    }
+
+    public static void visitOperator(BytecodeCompiler bytecodeCompiler, OperatorNode node) {
+        bytecodeCompiler.currentTokenIndex = node.getIndex();
         String op = node.operator;
 
-        // Group 1: Variable declarations (my, our, local, state)
-        if (op.equals("my") || op.equals("our") || op.equals("local") || op.equals("state")) {
-            bytecodeCompiler.compileVariableDeclaration(node, op);
+        // Variable declarations and references
+        switch (op) {
+            case "my", "our", "local", "state" -> { bytecodeCompiler.compileVariableDeclaration(node, op); return; }
+            case "$", "@", "%", "*", "&", "\\" -> { bytecodeCompiler.compileVariableReference(node, op); return; }
+        }
+
+        // Dispatch common operators, then helpers
+        if (dispatchOperator(bytecodeCompiler, node, op)) return;
+        if (visitPopShift(bytecodeCompiler, node, op)) return;
+        if (visitSimpleUnaryOp(bytecodeCompiler, node, op)) return;
+        if (visitGenericListOp(bytecodeCompiler, node, op)) return;
+
+        // File test operators
+        if (op.startsWith("-") && op.length() == 2) {
+            visitFileTestOp(bytecodeCompiler, node, op);
             return;
         }
 
-        // Group 2: Variable reference operators ($, @, %, *, &, \)
-        if (op.equals("$") || op.equals("@") || op.equals("%") || op.equals("*") || op.equals("&") || op.equals("\\")) {
-            bytecodeCompiler.compileVariableReference(node, op);
-            return;
-        }
-
-        // Handle remaining operators
-        if (op.equals("scalar")) {
-            // Force scalar context: scalar(expr)
-            // Evaluates the operand and converts the result to scalar
-            if (node.operand != null) {
-                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-                int operandReg = bytecodeCompiler.lastResultReg;
-
-                // Emit ARRAY_SIZE to convert to scalar
-                // This handles arrays/hashes (converts to size) and passes through scalars
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(operandReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("scalar operator requires an operand");
-            }
-        } else if (op.equals("package") || op.equals("class")) {
-            // Package/Class declaration: package Foo; or class Foo;
-            // This updates the current package context for subsequent variable declarations
-            if (node.operand instanceof IdentifierNode) {
-                String packageName = ((IdentifierNode) node.operand).name;
-
-                // Check if this is a class declaration (either "class" operator or isClass annotation)
-                Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
-                boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
-
-                // Check if there's a version associated with this package and set $Package::VERSION
-                String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
-                if (version != null) {
-                    // Set $PackageName::VERSION at compile time using GlobalVariable
-                    String versionVarName = packageName + "::VERSION";
-                    GlobalVariable.getGlobalVariable(versionVarName)
-                            .set(new RuntimeScalar(version));
-                }
-
-                // Update the current package/class in symbol table (compile-time tracking)
-                bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
-
-                // Register as Perl 5.38+ class for proper stringification if needed
-                if (isClass) {
-                    ClassRegistry.registerClass(packageName);
-                }
-
-                // Emit runtime package tracking opcode so caller() and eval STRING work.
-                // Scoped blocks (package Foo { }) use PUSH_PACKAGE so DynamicVariableManager
-                // can restore the previous package when the scope exits.
-                // Non-scoped (package Foo;) use SET_PACKAGE which just overwrites.
-                boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
-                int nameIdx = bytecodeCompiler.addToStringPool(packageName);
-                if (isScoped) {
-                    bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
+        // Main operator switch
+        switch (op) {
+            case "scalar" -> {
+                if (node.operand != null) {
+                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                    int operandReg = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(operandReg);
+                    bytecodeCompiler.lastResultReg = rd;
                 } else {
-                    bytecodeCompiler.emit(Opcodes.SET_PACKAGE);
+                    bytecodeCompiler.throwCompilerException("scalar operator requires an operand");
                 }
-                bytecodeCompiler.emit(nameIdx);
-
-                bytecodeCompiler.lastResultReg = -1;  // No runtime value
-            } else {
-                bytecodeCompiler.throwCompilerException(op + " operator requires an identifier");
             }
-        } else if (op.equals("say") || op.equals("print")) {
-            // say/print $x
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int rs = bytecodeCompiler.lastResultReg;
-
-                bytecodeCompiler.emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-                bytecodeCompiler.emitReg(rs);
+            case "package", "class" -> {
+                if (node.operand instanceof IdentifierNode) {
+                    String packageName = ((IdentifierNode) node.operand).name;
+                    Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
+                    boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
+                    String version = bytecodeCompiler.symbolTable.getPackageVersion(packageName);
+                    if (version != null) {
+                        String versionVarName = packageName + "::VERSION";
+                        GlobalVariable.getGlobalVariable(versionVarName).set(new RuntimeScalar(version));
+                    }
+                    bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
+                    if (isClass) ClassRegistry.registerClass(packageName);
+                    boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
+                    int nameIdx = bytecodeCompiler.addToStringPool(packageName);
+                    bytecodeCompiler.emit(isScoped ? Opcodes.PUSH_PACKAGE : Opcodes.SET_PACKAGE);
+                    bytecodeCompiler.emit(nameIdx);
+                    bytecodeCompiler.lastResultReg = -1;
+                } else {
+                    bytecodeCompiler.throwCompilerException(op + " operator requires an identifier");
+                }
             }
-        } else if (op.equals("not") || op.equals("!")) {
-            // Logical NOT operator: not $x or !$x
-            // Evaluate operand in scalar context (need boolean value)
-            if (node.operand != null) {
-                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-                int rs = bytecodeCompiler.lastResultReg;
-
-                // Allocate result register
-                int rd = bytecodeCompiler.allocateOutputRegister();
-
-                // Emit NOT opcode
-                bytecodeCompiler.emit(Opcodes.NOT);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("NOT operator requires operand");
+            case "say", "print" -> {
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int rs = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
+                    bytecodeCompiler.emitReg(rs);
+                }
             }
-        } else if (op.equals("~") || op.equals("binary~")) {
-            // Bitwise NOT operator: ~$x or binary~$x
-            // Evaluate operand and emit BITWISE_NOT_BINARY opcode
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int rs = bytecodeCompiler.lastResultReg;
-
-                // Allocate result register
-                int rd = bytecodeCompiler.allocateOutputRegister();
-
-                // Emit BITWISE_NOT_BINARY opcode
-                bytecodeCompiler.emit(Opcodes.BITWISE_NOT_BINARY);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("Bitwise NOT operator requires operand");
-            }
-        } else if (op.equals("~.")) {
-            // String bitwise NOT operator: ~.$x
-            // Evaluate operand and emit BITWISE_NOT_STRING opcode
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int rs = bytecodeCompiler.lastResultReg;
-
-                // Allocate result register
-                int rd = bytecodeCompiler.allocateOutputRegister();
-
-                // Emit BITWISE_NOT_STRING opcode
-                bytecodeCompiler.emit(Opcodes.BITWISE_NOT_STRING);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("String bitwise NOT operator requires operand");
-            }
-        } else if (op.equals("defined")) {
-            // Defined operator: defined($x)
-            // Check if value is defined (not undef)
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int rs = bytecodeCompiler.lastResultReg;
-
-                // Allocate result register
-                int rd = bytecodeCompiler.allocateOutputRegister();
-
-                // Emit DEFINED opcode
-                bytecodeCompiler.emit(Opcodes.DEFINED);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("defined operator requires operand");
-            }
-        } else if (op.equals("ref")) {
-            // Ref operator: ref($x)
-            // Get reference type (blessed class name or base type)
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("ref requires an argument");
-            }
-
-            // Compile the operand
-            if (node.operand instanceof ListNode list) {
-                if (list.elements.isEmpty()) {
+            case "ref" -> {
+                if (node.operand == null) {
                     bytecodeCompiler.throwCompilerException("ref requires an argument");
                 }
-                // Get first element
-                list.elements.get(0).accept(bytecodeCompiler);
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
-            int argReg = bytecodeCompiler.lastResultReg;
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Emit REF opcode
-            bytecodeCompiler.emit(Opcodes.REF);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("prototype")) {
-            // Prototype operator: prototype(\&func) or prototype("func_name")
-            // Returns the prototype string for a subroutine
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("prototype requires an argument");
-            }
-
-            // Compile the operand (code reference or function name)
-            if (node.operand instanceof ListNode list) {
-                if (list.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("prototype requires an argument");
-                }
-                // Get first element
-                list.elements.get(0).accept(bytecodeCompiler);
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
-            int argReg = bytecodeCompiler.lastResultReg;
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Add current package to string pool
-            int packageIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-
-            // Emit PROTOTYPE opcode
-            bytecodeCompiler.emit(Opcodes.PROTOTYPE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.emitInt(packageIdx);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("quoteRegex")) {
-            // Quote regex operator: qr{pattern}flags
-            // operand is a ListNode with [pattern, flags]
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
-            }
-
-            ListNode operand = (ListNode) node.operand;
-            if (operand.elements.size() < 2) {
-                bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
-            }
-
-            // Check if /o modifier is used (flags are typically a StringNode)
-            boolean hasOModifier = false;
-            Node flagsNode = operand.elements.get(1);
-            if (flagsNode instanceof StringNode) {
-                hasOModifier = ((StringNode) flagsNode).value.contains("o");
-            }
-
-            // Compile pattern and flags
-            operand.elements.get(0).accept(bytecodeCompiler);  // Pattern
-            int patternReg = bytecodeCompiler.lastResultReg;
-
-            flagsNode.accept(bytecodeCompiler);  // Flags
-            int flagsReg = bytecodeCompiler.lastResultReg;
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Emit appropriate opcode based on /o modifier
-            if (hasOModifier) {
-                // Use QUOTE_REGEX_O with callsite ID for /o modifier
-                int callsiteId = bytecodeCompiler.allocateCallsiteId();
-                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(patternReg);
-                bytecodeCompiler.emitReg(flagsReg);
-                bytecodeCompiler.emitReg(callsiteId);
-            } else {
-                // Normal QUOTE_REGEX
-                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(patternReg);
-                bytecodeCompiler.emitReg(flagsReg);
-            }
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
-            // Pre/post increment/decrement - recursive approach with fast path optimization
-            boolean isPostfix = op.endsWith("postfix");
-            boolean isIncrement = op.startsWith("++");
-
-            if (node.operand != null) {
-                // Fast path: simple lexical variable (most common case)
-                if (node.operand instanceof IdentifierNode) {
-                    String varName = ((IdentifierNode) node.operand).name;
-                    if (bytecodeCompiler.hasVariable(varName)) {
-                        int varReg = bytecodeCompiler.getVariableRegister(varName);
-                        if (isPostfix) {
-                            int resultReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
-                            bytecodeCompiler.emitReg(resultReg);
-                            bytecodeCompiler.emitReg(varReg);
-                            bytecodeCompiler.lastResultReg = resultReg;
-                        } else {
-                            bytecodeCompiler.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
-                            bytecodeCompiler.emitReg(varReg);
-                            bytecodeCompiler.lastResultReg = varReg;
-                        }
-                        return;
-                    }
-                }
-
-                // General case: recursively compile the lvalue
-                // Handles: $x++, $x[0]++, $x{key}++, $_[0]++, $obj->{field}++, etc.
-                node.operand.accept(bytecodeCompiler);
-                int operandReg = bytecodeCompiler.lastResultReg;
-
-                if (isPostfix) {
-                    int resultReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
-                    bytecodeCompiler.emitReg(resultReg);
-                    bytecodeCompiler.emitReg(operandReg);
-                    bytecodeCompiler.lastResultReg = resultReg;
-                } else {
-                    bytecodeCompiler.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
-                    bytecodeCompiler.emitReg(operandReg);
-                    bytecodeCompiler.lastResultReg = operandReg;
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("Increment/decrement operator requires operand");
-            }
-        } else if (op.equals("return")) {
-            // return $expr;
-            // Also handles 'goto &NAME' tail calls (parsed as 'return (coderef(@_))')
-
-            // Check if this is a 'goto &NAME' or 'goto EXPR' tail call
-            // Pattern: return with ListNode containing single BinaryOperatorNode("(")
-            // where left is OperatorNode("&") and right is @_
-            if (node.operand instanceof ListNode list && list.elements.size() == 1) {
-                Node firstElement = list.elements.getFirst();
-                if (firstElement instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
-                    Node callTarget = callNode.left;
-
-                    // Handle &sub syntax (goto &foo)
-                    if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
-                        // This is a tail call: goto &sub
-                        int outerContext = bytecodeCompiler.currentCallContext;
-                        // Evaluate the code reference in scalar context
-                        bytecodeCompiler.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
-                        int codeRefReg = bytecodeCompiler.lastResultReg;
-
-                        // Evaluate the arguments in list context (usually @_)
-                        bytecodeCompiler.compileNode(callNode.right, -1, RuntimeContextType.LIST);
-                        int argsReg = bytecodeCompiler.lastResultReg;
-
-                        // Allocate register for call result
-                        int rd = bytecodeCompiler.allocateOutputRegister();
-
-                        // Emit CALL_SUB to invoke the code reference with proper context
-                        bytecodeCompiler.emit(Opcodes.CALL_SUB);
-                        bytecodeCompiler.emitReg(rd);  // Result register
-                        bytecodeCompiler.emitReg(codeRefReg); // Code reference register
-                        bytecodeCompiler.emitReg(argsReg); // Arguments register
-                        bytecodeCompiler.emit(outerContext); // Use outer calling context for the tail call
-
-                        // Then return the result
-                        bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
-                        bytecodeCompiler.emitReg(rd);
-
-                        bytecodeCompiler.lastResultReg = -1;
-                        return;
-                    }
-                }
-            }
-
-            if (node.operand != null) {
-                // Regular return with expression
-                node.operand.accept(bytecodeCompiler);
-                int exprReg = bytecodeCompiler.lastResultReg;
-
-                // Emit RETURN with expression register
-                bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
-                bytecodeCompiler.emitReg(exprReg);
-            } else {
-                // return; (no value - return empty list/undef)
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-
-                bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
-                bytecodeCompiler.emitReg(undefReg);
-            }
-            bytecodeCompiler.lastResultReg = -1; // No result after return
-        } else if (op.equals("last") || op.equals("next") || op.equals("redo")) {
-            // Loop control operators: last/next/redo [LABEL]
-            bytecodeCompiler.handleLoopControlOperator(node, op);
-            bytecodeCompiler.lastResultReg = -1; // No result after control flow
-        } else if (op.equals("rand")) {
-            // rand() or rand($max)
-            // Calls Random.rand(max) where max defaults to 1
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            if (node.operand != null) {
-                // rand($max) - evaluate operand
-                node.operand.accept(bytecodeCompiler);
-                int maxReg = bytecodeCompiler.lastResultReg;
-
-                // Emit RAND opcode
-                bytecodeCompiler.emit(Opcodes.RAND);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(maxReg);
-            } else {
-                // rand() with no argument - defaults to 1
-                int oneReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                bytecodeCompiler.emitReg(oneReg);
-                bytecodeCompiler.emitInt(1);
-
-                // Emit RAND opcode
-                bytecodeCompiler.emit(Opcodes.RAND);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(oneReg);
-            }
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("sleep")) {
-            // sleep $seconds
-            // Calls Time.sleep(seconds)
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            if (node.operand != null) {
-                // sleep($seconds) - evaluate operand
-                node.operand.accept(bytecodeCompiler);
-                int secondsReg = bytecodeCompiler.lastResultReg;
-
-                // Emit direct opcode SLEEP_OP
-                bytecodeCompiler.emit(Opcodes.SLEEP_OP);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(secondsReg);
-            } else {
-                // sleep with no argument - defaults to infinity (but we'll use a large number)
-                int maxReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                bytecodeCompiler.emitReg(maxReg);
-                bytecodeCompiler.emitInt(Integer.MAX_VALUE);
-
-                bytecodeCompiler.emit(Opcodes.SLEEP_OP);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(maxReg);
-            }
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("alarm")) {
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int argReg = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.emit(Opcodes.ALARM_OP);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(argReg);
-            } else {
-                int zeroReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                bytecodeCompiler.emitReg(zeroReg);
-                bytecodeCompiler.emitInt(0);
-                bytecodeCompiler.emit(Opcodes.ALARM_OP);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(zeroReg);
-            }
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("study")) {
-            // study $var
-            // In modern Perl, study is a no-op that always returns true
-            // We evaluate the operand for side effects, then return 1
-
-            if (node.operand != null) {
-                // Evaluate operand for side effects (though typically there are none)
-                node.operand.accept(bytecodeCompiler);
-            }
-
-            // Return 1 (true)
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_INT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(1);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("require")) {
-            // require MODULE_NAME or require VERSION
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-            int operandReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.REQUIRE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(operandReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("pos")) {
-            // pos($var) - get or set regex match position
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-            int operandReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.POS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(operandReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("index") || op.equals("rindex")) {
-            // index(str, substr, pos?) or rindex(str, substr, pos?)
-            if (node.operand instanceof ListNode args) {
-                if (args.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
-                }
-                bytecodeCompiler.compileNode(args.elements.get(0), -1, RuntimeContextType.SCALAR);
-                int strReg = bytecodeCompiler.lastResultReg;
-
-                if (args.elements.size() < 2) {
-                    bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
-                }
-                bytecodeCompiler.compileNode(args.elements.get(1), -1, RuntimeContextType.SCALAR);
-                int substrReg = bytecodeCompiler.lastResultReg;
-
-                int posReg;
-                if (args.elements.size() >= 3) {
-                    bytecodeCompiler.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
-                    posReg = bytecodeCompiler.lastResultReg;
-                } else {
-                    posReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                    bytecodeCompiler.emitReg(posReg);
-                }
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(op.equals("index") ? Opcodes.INDEX : Opcodes.RINDEX);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(strReg);
-                bytecodeCompiler.emitReg(substrReg);
-                bytecodeCompiler.emitReg(posReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException(op + " requires a list of arguments");
-            }
-        } else if (op.equals("stat") || op.equals("lstat")) {
-            // stat FILE or lstat FILE
-            boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
-                    && ((IdentifierNode) node.operand).name.equals("_");
-
-            if (isUnderscoreOperand) {
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT_LASTHANDLE : Opcodes.LSTAT_LASTHANDLE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                int outerContext = bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-                int operandReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(operandReg);
-                bytecodeCompiler.emit(outerContext);
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.startsWith("-") && op.length() == 2) {
-            // File test operators: -r, -w, -x, etc.
-
-            // Check if operand is the special filehandle "_"
-            boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
-                    && ((IdentifierNode) node.operand).name.equals("_");
-
-            if (isUnderscoreOperand) {
-                // Special case: -r _ uses cached file handle
-                // Call FileTestOperator.fileTestLastHandle(String)
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                int operatorStrIndex = bytecodeCompiler.addToStringPool(op);
-
-                // Emit FILETEST_LASTHANDLE opcode
-                bytecodeCompiler.emit(Opcodes.FILETEST_LASTHANDLE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emit(operatorStrIndex);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                // Normal case: evaluate operand and test it
-                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-                int operandReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-
-                // Map operator to opcode
-                char testChar = op.charAt(1);
-                short opcode;
-                switch (testChar) {
-                    case 'r':
-                        opcode = Opcodes.FILETEST_R;
-                        break;
-                    case 'w':
-                        opcode = Opcodes.FILETEST_W;
-                        break;
-                    case 'x':
-                        opcode = Opcodes.FILETEST_X;
-                        break;
-                    case 'o':
-                        opcode = Opcodes.FILETEST_O;
-                        break;
-                    case 'R':
-                        opcode = Opcodes.FILETEST_R_REAL;
-                        break;
-                    case 'W':
-                        opcode = Opcodes.FILETEST_W_REAL;
-                        break;
-                    case 'X':
-                        opcode = Opcodes.FILETEST_X_REAL;
-                        break;
-                    case 'O':
-                        opcode = Opcodes.FILETEST_O_REAL;
-                        break;
-                    case 'e':
-                        opcode = Opcodes.FILETEST_E;
-                        break;
-                    case 'z':
-                        opcode = Opcodes.FILETEST_Z;
-                        break;
-                    case 's':
-                        opcode = Opcodes.FILETEST_S;
-                        break;
-                    case 'f':
-                        opcode = Opcodes.FILETEST_F;
-                        break;
-                    case 'd':
-                        opcode = Opcodes.FILETEST_D;
-                        break;
-                    case 'l':
-                        opcode = Opcodes.FILETEST_L;
-                        break;
-                    case 'p':
-                        opcode = Opcodes.FILETEST_P;
-                        break;
-                    case 'S':
-                        opcode = Opcodes.FILETEST_S_UPPER;
-                        break;
-                    case 'b':
-                        opcode = Opcodes.FILETEST_B;
-                        break;
-                    case 'c':
-                        opcode = Opcodes.FILETEST_C;
-                        break;
-                    case 't':
-                        opcode = Opcodes.FILETEST_T;
-                        break;
-                    case 'u':
-                        opcode = Opcodes.FILETEST_U;
-                        break;
-                    case 'g':
-                        opcode = Opcodes.FILETEST_G;
-                        break;
-                    case 'k':
-                        opcode = Opcodes.FILETEST_K;
-                        break;
-                    case 'T':
-                        opcode = Opcodes.FILETEST_T_UPPER;
-                        break;
-                    case 'B':
-                        opcode = Opcodes.FILETEST_B_UPPER;
-                        break;
-                    case 'M':
-                        opcode = Opcodes.FILETEST_M;
-                        break;
-                    case 'A':
-                        opcode = Opcodes.FILETEST_A;
-                        break;
-                    case 'C':
-                        opcode = Opcodes.FILETEST_C_UPPER;
-                        break;
-                    default:
-                        bytecodeCompiler.throwCompilerException("Unsupported file test operator: " + op);
-                        return;
-                }
-
-                bytecodeCompiler.emit(opcode);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(operandReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.equals("die")) {
-            // die $message;
-            if (node.operand != null) {
-                // Evaluate die message
-                node.operand.accept(bytecodeCompiler);
-                int msgReg = bytecodeCompiler.lastResultReg;
-
-                // Precompute location message at compile time (zero overhead!)
-                String locationMsg;
-                // Use annotation from AST node which has the correct line number
-                Object lineObj = node.getAnnotation("line");
-                Object fileObj = node.getAnnotation("file");
-                if (lineObj != null && fileObj != null) {
-                    String fileName = fileObj.toString();
-                    int lineNumber = Integer.parseInt(lineObj.toString());
-                    locationMsg = " at " + fileName + " line " + lineNumber;
-                } else if (bytecodeCompiler.errorUtil != null) {
-                    // Fallback to errorUtil if annotations not available
-                    String fileName = bytecodeCompiler.errorUtil.getFileName();
-                    int lineNumber = bytecodeCompiler.errorUtil.getLineNumberAccurate(node.getIndex());
-                    locationMsg = " at " + fileName + " line " + lineNumber;
-                } else {
-                    // Final fallback if neither available
-                    locationMsg = " at " + bytecodeCompiler.sourceName + " line " + bytecodeCompiler.sourceLine;
-                }
-
-                int locationReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                bytecodeCompiler.emitReg(locationReg);
-                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(locationMsg));
-
-                // Emit DIE with both message and precomputed location
-                bytecodeCompiler.emitWithToken(Opcodes.DIE, node.getIndex());
-                bytecodeCompiler.emitReg(msgReg);
-                bytecodeCompiler.emitReg(locationReg);
-            } else {
-                // die; (no message - use $@)
-                // For now, emit with undef register
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-
-                // Precompute location message for bare die
-                String locationMsg;
-                if (bytecodeCompiler.errorUtil != null) {
-                    String fileName = bytecodeCompiler.errorUtil.getFileName();
-                    int lineNumber = bytecodeCompiler.errorUtil.getLineNumber(node.getIndex());
-                    locationMsg = " at " + fileName + " line " + lineNumber;
-                } else {
-                    locationMsg = " at " + bytecodeCompiler.sourceName + " line " + bytecodeCompiler.sourceLine;
-                }
-
-                int locationReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                bytecodeCompiler.emitReg(locationReg);
-                bytecodeCompiler.emitInt(bytecodeCompiler.addToStringPool(locationMsg));
-
-                bytecodeCompiler.emitWithToken(Opcodes.DIE, node.getIndex());
-                bytecodeCompiler.emitReg(undefReg);
-                bytecodeCompiler.emitReg(locationReg);
-            }
-            bytecodeCompiler.lastResultReg = -1; // No result after die
-        } else if (op.equals("warn")) {
-            // warn $message;
-            if (node.operand != null) {
-                // Evaluate warn message
-                node.operand.accept(bytecodeCompiler);
-                int msgReg = bytecodeCompiler.lastResultReg;
-
-                // Precompute location message at compile time
-                String locationMsg;
-                // Use annotation from AST node which has the correct line number
-                Object lineObj = node.getAnnotation("line");
-                Object fileObj = node.getAnnotation("file");
-                if (lineObj != null && fileObj != null) {
-                    String fileName = fileObj.toString();
-                    int lineNumber = Integer.parseInt(lineObj.toString());
-                    locationMsg = " at " + fileName + " line " + lineNumber;
-                } else if (bytecodeCompiler.errorUtil != null) {
-                    // Fallback to errorUtil if annotations not available
-                    String fileName = bytecodeCompiler.errorUtil.getFileName();
-                    int lineNumber = bytecodeCompiler.errorUtil.getLineNumberAccurate(node.getIndex());
-                    locationMsg = " at " + fileName + " line " + lineNumber;
-                } else {
-                    // Final fallback if neither available
-                    locationMsg = " at " + bytecodeCompiler.sourceName + " line " + bytecodeCompiler.sourceLine;
-                }
-
-                int locationReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                bytecodeCompiler.emitReg(locationReg);
-                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(locationMsg));
-
-                // Emit WARN with both message and precomputed location
-                bytecodeCompiler.emitWithToken(Opcodes.WARN, node.getIndex());
-                bytecodeCompiler.emitReg(msgReg);
-                bytecodeCompiler.emitReg(locationReg);
-            } else {
-                // warn; (no message - use $@)
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-
-                // Precompute location message for bare warn
-                String locationMsg;
-                if (bytecodeCompiler.errorUtil != null) {
-                    String fileName = bytecodeCompiler.errorUtil.getFileName();
-                    int lineNumber = bytecodeCompiler.errorUtil.getLineNumber(node.getIndex());
-                    locationMsg = " at " + fileName + " line " + lineNumber;
-                } else {
-                    locationMsg = " at " + bytecodeCompiler.sourceName + " line " + bytecodeCompiler.sourceLine;
-                }
-
-                int locationReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                bytecodeCompiler.emitReg(locationReg);
-                bytecodeCompiler.emitInt(bytecodeCompiler.addToStringPool(locationMsg));
-
-                bytecodeCompiler.emitWithToken(Opcodes.WARN, node.getIndex());
-                bytecodeCompiler.emitReg(undefReg);
-                bytecodeCompiler.emitReg(locationReg);
-            }
-            // warn returns 1 (true) in Perl
-            int resultReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_INT);
-            bytecodeCompiler.emitReg(resultReg);
-            bytecodeCompiler.emitInt(1);
-            bytecodeCompiler.lastResultReg = resultReg;
-        } else if (op.equals("eval") || op.equals("evalbytes")) {
-            // eval $string; / evalbytes $string;
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int stringReg = bytecodeCompiler.lastResultReg;
-                int rd = bytecodeCompiler.allocateOutputRegister();
-
-                // Snapshot visible variables and pragma flags for this eval site
-                int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
-                bytecodeCompiler.evalSiteRegistries.add(
-                        bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
-                bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
-                        bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
-                        bytecodeCompiler.symbolTable.featureFlagsStack.peek()
-                });
-
-                bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(stringReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-                bytecodeCompiler.emit(evalSiteIndex);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                // eval; (no operand - return undef)
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-                bytecodeCompiler.lastResultReg = undefReg;
-            }
-        } else if (op.equals("select")) {
-            // select FILEHANDLE or select()
-            // SELECT is a fast opcode (used in every print statement)
-            // Format: [SELECT] [rd] [rs_list]
-            // Effect: rd = IOOperator.select(registers[rs_list], SCALAR)
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            boolean hasArgs = node.operand instanceof ListNode ln && !ln.elements.isEmpty();
-            if (hasArgs) {
-                // select FILEHANDLE or select(RBITS,WBITS,EBITS,TIMEOUT) with arguments
-                node.operand.accept(bytecodeCompiler);
-                int listReg = bytecodeCompiler.lastResultReg;
-
-                bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(listReg);
-            } else {
-                // select() with no arguments (or empty ListNode from print-without-filehandle)
-                // Must emit CREATE_LIST so SELECT receives a RuntimeList, not a RuntimeScalar
-                int listReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(listReg);
-                bytecodeCompiler.emit(0); // count = 0
-
-                bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(listReg);
-            }
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("undef")) {
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int operandReg = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
-                bytecodeCompiler.emitReg(operandReg);
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-                bytecodeCompiler.lastResultReg = undefReg;
-            } else {
-                int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
-                bytecodeCompiler.lastResultReg = undefReg;
-            }
-        } else if (op.equals("unaryMinus")) {
-            // Unary minus: -$x
-            // Compile operand in scalar context (negation always produces a scalar)
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-            int operandReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.NEG_SCALAR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(operandReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("pop")) {
-            // Array pop: $x = pop @array or $x = pop @$ref
-            // operand: OperatorNode("@", ...) directly (default @_/@ARGV injected by parser)
-            //       or ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("pop requires array argument");
-            }
-
-            OperatorNode arrayOp;
-            if (node.operand instanceof OperatorNode directOp && directOp.operator.equals("@")) {
-                // Direct OperatorNode("@", ...) - default array case
-                arrayOp = directOp;
-            } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()
-                    && list.elements.get(0) instanceof OperatorNode listOp
-                    && listOp.operator.equals("@")) {
-                // ListNode-wrapped OperatorNode("@", ...) - explicit array case
-                arrayOp = listOp;
-            } else {
-                bytecodeCompiler.throwCompilerException("pop requires array variable: pop @array");
-                return;
-            }
-
-            int arrayReg = -1;  // Will be assigned in if/else blocks
-
-            if (arrayOp.operand instanceof IdentifierNode) {
-                // pop @array
-                String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
-                // Get the array - check lexical first, then global
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    // Lexical array
-                    arrayReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    // Global array - load it
-                    arrayReg = bytecodeCompiler.allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, bytecodeCompiler.getCurrentPackage());
-                    int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-            } else if (arrayOp.operand instanceof OperatorNode) {
-                // pop @$ref - dereference first
-                arrayOp.operand.accept(bytecodeCompiler);
-                int refReg = bytecodeCompiler.lastResultReg;
-
-                // Dereference to get the array
-                arrayReg = bytecodeCompiler.allocateRegister();
-                if (bytecodeCompiler.isStrictRefsEnabled()) {
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
-                } else {
-                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
-                    bytecodeCompiler.emit(pkgIdx);
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("pop requires array variable or dereferenced array: pop @array or pop @$ref");
-            }
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Emit ARRAY_POP
-            bytecodeCompiler.emit(Opcodes.ARRAY_POP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(arrayReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("shift")) {
-            // Array shift: $x = shift @array or $x = shift @$ref
-            // operand: OperatorNode("@", ...) directly (default @_/@ARGV injected by parser)
-            //       or ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("shift requires array argument");
-            }
-
-            OperatorNode arrayOp;
-            if (node.operand instanceof OperatorNode directOp && directOp.operator.equals("@")) {
-                // Direct OperatorNode("@", ...) - default array case
-                arrayOp = directOp;
-            } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()
-                    && list.elements.get(0) instanceof OperatorNode listOp
-                    && listOp.operator.equals("@")) {
-                // ListNode-wrapped OperatorNode("@", ...) - explicit array case
-                arrayOp = listOp;
-            } else {
-                bytecodeCompiler.throwCompilerException("shift requires array variable: shift @array");
-                return;
-            }
-
-            int arrayReg = -1;  // Will be assigned in if/else blocks
-
-            if (arrayOp.operand instanceof IdentifierNode) {
-                // shift @array
-                String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
-                // Get the array - check lexical first, then global
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    // Lexical array
-                    arrayReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    // Global array - load it
-                    arrayReg = bytecodeCompiler.allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, bytecodeCompiler.getCurrentPackage());
-                    int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-            } else if (arrayOp.operand instanceof OperatorNode) {
-                // shift @$ref - dereference first
-                arrayOp.operand.accept(bytecodeCompiler);
-                int refReg = bytecodeCompiler.lastResultReg;
-
-                // Dereference to get the array
-                arrayReg = bytecodeCompiler.allocateRegister();
-                if (bytecodeCompiler.isStrictRefsEnabled()) {
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
-                } else {
-                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
-                    bytecodeCompiler.emit(pkgIdx);
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("shift requires array variable or dereferenced array: shift @array or shift @$ref");
-            }
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Emit ARRAY_SHIFT
-            bytecodeCompiler.emit(Opcodes.ARRAY_SHIFT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(arrayReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("splice")) {
-            // Array splice: splice @array, offset, length, @list
-            // operand: ListNode containing [@array, offset, length, replacement_list]
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("splice requires array and arguments");
-            }
-
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
-                bytecodeCompiler.throwCompilerException("splice requires array variable");
-            }
-
-            // First element is the array
-            OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-            if (!arrayOp.operator.equals("@")) {
-                bytecodeCompiler.throwCompilerException("splice requires array variable: splice @array, ...");
-            }
-
-            int arrayReg = -1;  // Will be assigned in if/else blocks
-
-            if (arrayOp.operand instanceof IdentifierNode) {
-                // splice @array
-                String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
-                // Get the array - check lexical first, then global
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    // Lexical array
-                    arrayReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    // Global array - load it
-                    arrayReg = bytecodeCompiler.allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(
-                            ((IdentifierNode) arrayOp.operand).name,
-                            bytecodeCompiler.getCurrentPackage()
-                    );
-                    int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-            } else if (arrayOp.operand instanceof OperatorNode) {
-                // splice @$ref - dereference first
-                arrayOp.operand.accept(bytecodeCompiler);
-                int refReg = bytecodeCompiler.lastResultReg;
-
-                // Dereference to get the array
-                arrayReg = bytecodeCompiler.allocateRegister();
-                if (bytecodeCompiler.isStrictRefsEnabled()) {
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
-                } else {
-                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(refReg);
-                    bytecodeCompiler.emit(pkgIdx);
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("splice requires array variable or dereferenced array: splice @array or splice @$ref");
-            }
-
-            // Create a list with the remaining arguments (offset, length, replacement values)
-            // Compile each remaining argument and collect them into a RuntimeList
-            List<Integer> argRegs = new ArrayList<>();
-            for (int i = 1; i < list.elements.size(); i++) {
-                list.elements.get(i).accept(bytecodeCompiler);
-                argRegs.add(bytecodeCompiler.lastResultReg);
-            }
-
-            // Create a RuntimeList from these registers
-            int argsListReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-            bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(argRegs.size());
-            for (int argReg : argRegs) {
-                bytecodeCompiler.emitReg(argReg);
-            }
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Emit direct opcode SPLICE
-            bytecodeCompiler.emit(Opcodes.SPLICE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(arrayReg);
-            bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);  // Pass context for scalar/list conversion
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("reverse")) {
-            // Array/string reverse: reverse @array or reverse $string
-            // operand: ListNode containing arguments
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("reverse requires arguments");
-            }
-
-            ListNode list = (ListNode) node.operand;
-
-            // Compile all arguments into registers
-            List<Integer> argRegs = new ArrayList<>();
-            for (Node arg : list.elements) {
-                arg.accept(bytecodeCompiler);
-                argRegs.add(bytecodeCompiler.lastResultReg);
-            }
-
-            // Create a RuntimeList from these registers
-            int argsListReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-            bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(argRegs.size());
-            for (int argReg : argRegs) {
-                bytecodeCompiler.emitReg(argReg);
-            }
-
-            // Allocate result register
-            int rd = bytecodeCompiler.allocateOutputRegister();
-
-            // Emit direct opcode REVERSE
-            bytecodeCompiler.emit(Opcodes.REVERSE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("exists")) {
-            // exists $hash{key} or exists $array[index]
-            // operand: ListNode containing the hash/array access
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("exists requires an argument");
-            }
-
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.isEmpty()) {
-                bytecodeCompiler.throwCompilerException("exists requires an argument");
-            }
-
-            Node arg = list.elements.get(0);
-
-            // Handle hash access: $hash{key}
-            if (arg instanceof BinaryOperatorNode hashAccess && ((BinaryOperatorNode) arg).operator.equals("{")) {
-
-                // Get hash register (need to handle $hash{key} -> %hash)
-                int hashReg;
-                if (hashAccess.left instanceof OperatorNode leftOp) {
-                    if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
-                        // Simple: exists $hash{key} -> get %hash
-                        String varName = ((IdentifierNode) leftOp.operand).name;
-                        String hashVarName = "%" + varName;
-
-                        if (bytecodeCompiler.hasVariable(hashVarName)) {
-                            // Lexical hash
-                            hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
-                        } else {
-                            // Global hash - load it
-                            hashReg = bytecodeCompiler.allocateRegister();
-                            String globalHashName = NameNormalizer.normalizeVariableName(
-                                    varName,
-                                    bytecodeCompiler.getCurrentPackage()
-                            );
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emit(nameIdx);
-                        }
-                    } else {
-                        // Complex: dereference needed
-                        leftOp.operand.accept(bytecodeCompiler);
-                        int scalarReg = bytecodeCompiler.lastResultReg;
-
-                        hashReg = bytecodeCompiler.allocateRegister();
-                        if (bytecodeCompiler.isStrictRefsEnabled()) {
-                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emitReg(scalarReg);
-                        } else {
-                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emitReg(scalarReg);
-                            bytecodeCompiler.emit(pkgIdx);
-                        }
-                    }
-                } else if (hashAccess.left instanceof BinaryOperatorNode) {
-                    // Nested: exists $hash{outer}{inner}
-                    hashAccess.left.accept(bytecodeCompiler);
-                    int scalarReg = bytecodeCompiler.lastResultReg;
-
-                    hashReg = bytecodeCompiler.allocateRegister();
-                    if (bytecodeCompiler.isStrictRefsEnabled()) {
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
-                    } else {
-                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
-                        bytecodeCompiler.emit(pkgIdx);
-                    }
-                } else {
-                    bytecodeCompiler.throwCompilerException("Hash access requires variable or expression on left side");
-                    return;
-                }
-
-                // Compile key (right side contains HashLiteralNode)
-                int keyReg;
-                if (hashAccess.right instanceof HashLiteralNode keyNode) {
-                    if (!keyNode.elements.isEmpty()) {
-                        Node keyElement = keyNode.elements.get(0);
-                        if (keyElement instanceof IdentifierNode) {
-                            // Bareword key - autoquote
-                            String keyString = ((IdentifierNode) keyElement).name;
-                            keyReg = bytecodeCompiler.allocateRegister();
-                            int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                            bytecodeCompiler.emitReg(keyReg);
-                            bytecodeCompiler.emit(keyIdx);
-                        } else {
-                            // Expression key
-                            keyElement.accept(bytecodeCompiler);
-                            keyReg = bytecodeCompiler.lastResultReg;
-                        }
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Hash key required for exists");
-                        return;
-                    }
-                } else {
-                    hashAccess.right.accept(bytecodeCompiler);
-                    keyReg = bytecodeCompiler.lastResultReg;
-                }
-
-                // Emit HASH_EXISTS
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.HASH_EXISTS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(hashReg);
-                bytecodeCompiler.emitReg(keyReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode arrayAccess && ((BinaryOperatorNode) arg).operator.equals("[")) {
-                int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
-                int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_EXISTS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(indexReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode arrowAccess && arrowAccess.operator.equals("->")) {
-                // Handle exists $hashref->{key}
-                if (arrowAccess.right instanceof HashLiteralNode keyNode) {
-                    // Compile left side to get the hash reference
-                    bytecodeCompiler.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);
-                    int refReg = bytecodeCompiler.lastResultReg;
-
-                    // Dereference to get hash
-                    int hashReg = bytecodeCompiler.allocateRegister();
-                    if (bytecodeCompiler.isStrictRefsEnabled()) {
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(refReg);
-                    } else {
-                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(refReg);
-                        bytecodeCompiler.emit(pkgIdx);
-                    }
-
-                    // Compile key
-                    int keyReg;
-                    if (!keyNode.elements.isEmpty()) {
-                        Node keyElement = keyNode.elements.get(0);
-                        if (keyElement instanceof IdentifierNode) {
-                            // Bareword key - autoquote
-                            String keyString = ((IdentifierNode) keyElement).name;
-                            keyReg = bytecodeCompiler.allocateRegister();
-                            int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                            bytecodeCompiler.emitReg(keyReg);
-                            bytecodeCompiler.emit(keyIdx);
-                        } else {
-                            // Expression key
-                            keyElement.accept(bytecodeCompiler);
-                            keyReg = bytecodeCompiler.lastResultReg;
-                        }
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Hash key required for exists");
-                        return;
-                    }
-
-                    // Emit HASH_EXISTS
-                    int rd = bytecodeCompiler.allocateOutputRegister();
-                    bytecodeCompiler.emit(Opcodes.HASH_EXISTS);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(hashReg);
-                    bytecodeCompiler.emitReg(keyReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } else if (arrowAccess.right instanceof ArrayLiteralNode indexNode) {
-                    // Handle exists $arrayref->[index]
-                    bytecodeCompiler.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);
-                    int refReg = bytecodeCompiler.lastResultReg;
-
-                    // Dereference to get array
-                    int arrayReg = bytecodeCompiler.allocateRegister();
-                    if (bytecodeCompiler.isStrictRefsEnabled()) {
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(refReg);
-                    } else {
-                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(refReg);
-                        bytecodeCompiler.emit(pkgIdx);
-                    }
-
-                    // Compile index
-                    int indexReg;
-                    if (!indexNode.elements.isEmpty()) {
-                        indexNode.elements.get(0).accept(bytecodeCompiler);
-                        indexReg = bytecodeCompiler.lastResultReg;
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Array index required for exists");
-                        return;
-                    }
-
-                    // Emit ARRAY_EXISTS
-                    int rd = bytecodeCompiler.allocateOutputRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_EXISTS);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emitReg(indexReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                } else {
-                    // Unknown arrow dereference pattern
-                    arg.accept(bytecodeCompiler);
-                    int argReg = bytecodeCompiler.lastResultReg;
-
-                    int rd = bytecodeCompiler.allocateOutputRegister();
-                    bytecodeCompiler.emit(Opcodes.EXISTS);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(argReg);
-
-                    bytecodeCompiler.lastResultReg = rd;
-                }
-            } else {
-                arg.accept(bytecodeCompiler);
-                int argReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.EXISTS);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(argReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.equals("delete")) {
-            // delete $hash{key} or delete @hash{@keys}
-            // operand: ListNode containing the hash/array access
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("delete requires an argument");
-            }
-
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.isEmpty()) {
-                bytecodeCompiler.throwCompilerException("delete requires an argument");
-            }
-
-            Node arg = list.elements.get(0);
-
-            // Handle hash access: $hash{key} or hash slice delete: delete @hash{keys}
-            if (arg instanceof BinaryOperatorNode hashAccess && ((BinaryOperatorNode) arg).operator.equals("{")) {
-
-                // Check if it's a hash slice delete: delete @hash{keys}
-                if (hashAccess.left instanceof OperatorNode leftOp) {
-                    if (leftOp.operator.equals("@")) {
-                        // Hash slice delete: delete @hash{'key1', 'key2'}
-                        // Use SLOW_OP for slice delete
-                        int hashReg;
-
-                        if (leftOp.operand instanceof IdentifierNode) {
-                            String varName = ((IdentifierNode) leftOp.operand).name;
-                            String hashVarName = "%" + varName;
-
-                            if (bytecodeCompiler.hasVariable(hashVarName)) {
-                                hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
-                            } else {
-                                hashReg = bytecodeCompiler.allocateRegister();
-                                String globalHashName = NameNormalizer.normalizeVariableName(
-                                        varName,
-                                        bytecodeCompiler.getCurrentPackage()
-                                );
-                                int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
-                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                                bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emit(nameIdx);
-                            }
-                        } else {
-                            bytecodeCompiler.throwCompilerException("Hash slice delete requires identifier");
-                            return;
-                        }
-
-                        // Get keys from HashLiteralNode
-                        if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
-                            bytecodeCompiler.throwCompilerException("Hash slice delete requires HashLiteralNode");
-                            return;
-                        }
-
-                        // Compile all keys
-                        List<Integer> keyRegs = new ArrayList<>();
-                        for (Node keyElement : keysNode.elements) {
-                            if (keyElement instanceof IdentifierNode) {
-                                String keyString = ((IdentifierNode) keyElement).name;
-                                int keyReg = bytecodeCompiler.allocateRegister();
-                                int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                                bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                                bytecodeCompiler.emitReg(keyReg);
-                                bytecodeCompiler.emit(keyIdx);
-                                keyRegs.add(keyReg);
-                            } else {
-                                keyElement.accept(bytecodeCompiler);
-                                keyRegs.add(bytecodeCompiler.lastResultReg);
-                            }
-                        }
-
-                        // Create RuntimeList from keys
-                        int keysListReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                        bytecodeCompiler.emitReg(keysListReg);
-                        bytecodeCompiler.emit(keyRegs.size());
-                        for (int keyReg : keyRegs) {
-                            bytecodeCompiler.emitReg(keyReg);
-                        }
-
-                        // Use SLOW_OP for hash slice delete
-                        int rd = bytecodeCompiler.allocateOutputRegister();
-                        bytecodeCompiler.emit(Opcodes.HASH_SLICE_DELETE);
-                        bytecodeCompiler.emitReg(rd);
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(keysListReg);
-
-                        bytecodeCompiler.lastResultReg = rd;
-                        return;
-                    }
-                }
-
-                // Single key delete: delete $hash{key}
-                // Get hash register (need to handle $hash{key} -> %hash)
-                int hashReg;
-                if (hashAccess.left instanceof OperatorNode leftOp) {
-                    if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
-                        // Simple: delete $hash{key} -> get %hash
-                        String varName = ((IdentifierNode) leftOp.operand).name;
-                        String hashVarName = "%" + varName;
-
-                        if (bytecodeCompiler.hasVariable(hashVarName)) {
-                            // Lexical hash
-                            hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
-                        } else {
-                            // Global hash - load it
-                            hashReg = bytecodeCompiler.allocateRegister();
-                            String globalHashName = NameNormalizer.normalizeVariableName(
-                                    varName,
-                                    bytecodeCompiler.getCurrentPackage()
-                            );
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalHashName);
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emit(nameIdx);
-                        }
-                    } else {
-                        // Complex: dereference needed
-                        leftOp.operand.accept(bytecodeCompiler);
-                        int scalarReg = bytecodeCompiler.lastResultReg;
-
-                        hashReg = bytecodeCompiler.allocateRegister();
-                        if (bytecodeCompiler.isStrictRefsEnabled()) {
-                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emitReg(scalarReg);
-                        } else {
-                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emitReg(scalarReg);
-                            bytecodeCompiler.emit(pkgIdx);
-                        }
-                    }
-                } else if (hashAccess.left instanceof BinaryOperatorNode) {
-                    // Nested: delete $hash{outer}{inner}
-                    hashAccess.left.accept(bytecodeCompiler);
-                    int scalarReg = bytecodeCompiler.lastResultReg;
-
-                    hashReg = bytecodeCompiler.allocateRegister();
-                    if (bytecodeCompiler.isStrictRefsEnabled()) {
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
-                    } else {
-                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.emitReg(scalarReg);
-                        bytecodeCompiler.emit(pkgIdx);
-                    }
-                } else {
-                    bytecodeCompiler.throwCompilerException("Hash access requires variable or expression on left side");
-                    return;
-                }
-
-                // Compile key (right side contains HashLiteralNode)
-                int keyReg;
-                if (hashAccess.right instanceof HashLiteralNode keyNode) {
-                    if (!keyNode.elements.isEmpty()) {
-                        Node keyElement = keyNode.elements.get(0);
-                        if (keyElement instanceof IdentifierNode) {
-                            // Bareword key - autoquote
-                            String keyString = ((IdentifierNode) keyElement).name;
-                            keyReg = bytecodeCompiler.allocateRegister();
-                            int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                            bytecodeCompiler.emitReg(keyReg);
-                            bytecodeCompiler.emit(keyIdx);
-                        } else {
-                            // Expression key
-                            keyElement.accept(bytecodeCompiler);
-                            keyReg = bytecodeCompiler.lastResultReg;
-                        }
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Hash key required for delete");
-                        return;
-                    }
-                } else {
-                    hashAccess.right.accept(bytecodeCompiler);
-                    keyReg = bytecodeCompiler.lastResultReg;
-                }
-
-                // Emit HASH_DELETE
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.HASH_DELETE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(hashReg);
-                bytecodeCompiler.emitReg(keyReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode arrowAccess && ((BinaryOperatorNode) arg).operator.equals("->")) {
-                // Arrow dereference: delete $ref->{key}
-                // Compile the reference expression
-                arrowAccess.left.accept(bytecodeCompiler);
-                int scalarReg = bytecodeCompiler.lastResultReg;
-
-                int hashReg = bytecodeCompiler.allocateRegister();
-                if (bytecodeCompiler.isStrictRefsEnabled()) {
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                    bytecodeCompiler.emitReg(hashReg);
-                    bytecodeCompiler.emitReg(scalarReg);
-                } else {
-                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                    bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
-                    bytecodeCompiler.emitReg(hashReg);
-                    bytecodeCompiler.emitReg(scalarReg);
-                    bytecodeCompiler.emit(pkgIdx);
-                }
-
-                // Compile key
-                int keyReg;
-                if (arrowAccess.right instanceof HashLiteralNode keyNode && !keyNode.elements.isEmpty()) {
-                    Node keyElement = keyNode.elements.get(0);
-                    if (keyElement instanceof IdentifierNode) {
-                        String keyString = ((IdentifierNode) keyElement).name;
-                        keyReg = bytecodeCompiler.allocateRegister();
-                        int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                        bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                        bytecodeCompiler.emitReg(keyReg);
-                        bytecodeCompiler.emit(keyIdx);
-                    } else {
-                        keyElement.accept(bytecodeCompiler);
-                        keyReg = bytecodeCompiler.lastResultReg;
-                    }
-                } else {
-                    arrowAccess.right.accept(bytecodeCompiler);
-                    keyReg = bytecodeCompiler.lastResultReg;
-                }
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.HASH_DELETE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(hashReg);
-                bytecodeCompiler.emitReg(keyReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else if (arg instanceof BinaryOperatorNode arrayAccess && ((BinaryOperatorNode) arg).operator.equals("[")) {
-                int arrayReg = compileArrayForExistsDelete(bytecodeCompiler, arrayAccess, node.getIndex());
-                int indexReg = compileArrayIndex(bytecodeCompiler, arrayAccess);
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_DELETE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(indexReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                arg.accept(bytecodeCompiler);
-                int argReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.DELETE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(argReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.equals("keys")) {
-            // keys %hash
-            // operand: hash variable (OperatorNode("%" ...) or other expression)
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("keys requires a hash argument");
-            }
-
-            // Compile the hash operand in LIST context (to avoid scalar conversion)
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
-            int hashReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.HASH_KEYS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(hashReg);
-
-            // keys() returns a list in list context, scalar count in scalar context
-            // The RuntimeHash.keys() method returns a RuntimeList
-            // In scalar context, convert to scalar (count)
-            if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
-                int scalarReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                bytecodeCompiler.emitReg(scalarReg);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.lastResultReg = scalarReg;
-            } else {
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.equals("chop")) {
-            // chop $x - remove last character, modifies argument in place
-            boolean chopNoArgs = node.operand == null ||
-                    (node.operand instanceof ListNode && ((ListNode) node.operand).elements.isEmpty());
-
-            int scalarReg;
-            if (chopNoArgs) {
-                String varName = "$_";
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    scalarReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    scalarReg = bytecodeCompiler.allocateRegister();
-                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                    bytecodeCompiler.emitReg(scalarReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-            } else {
-                Node actualOperand = node.operand;
-                if (actualOperand instanceof ListNode list) {
-                    actualOperand = list.elements.get(0);
-                }
-                actualOperand.accept(bytecodeCompiler);
-                scalarReg = bytecodeCompiler.lastResultReg;
-            }
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.CHOP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(scalarReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("values")) {
-            // values %hash
-            // operand: hash variable (OperatorNode("%" ...) or other expression)
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("values requires a hash argument");
-            }
-
-            // Compile the hash operand in LIST context (to avoid scalar conversion)
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
-            int hashReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.HASH_VALUES);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(hashReg);
-
-            if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
-                int scalarReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                bytecodeCompiler.emitReg(scalarReg);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.lastResultReg = scalarReg;
-            } else {
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.equals("$#")) {
-            // $#array - get last index of array (size - 1)
-            // operand: array variable (OperatorNode("@" ...) or IdentifierNode)
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("$# requires an array argument");
-            }
-
-            int arrayReg = -1;
-
-            // Handle different operand types
-            if (node.operand instanceof OperatorNode operandOp) {
-
-                if (operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode) {
-                    // $#@array or $#array (both work)
-                    String varName = "@" + ((IdentifierNode) operandOp.operand).name;
-
-                    if (bytecodeCompiler.hasVariable(varName)) {
-                        arrayReg = bytecodeCompiler.getVariableRegister(varName);
-                    } else {
-                        arrayReg = bytecodeCompiler.allocateRegister();
-                        String globalArrayName = NameNormalizer.normalizeVariableName(
-                                ((IdentifierNode) operandOp.operand).name,
-                                bytecodeCompiler.getCurrentPackage()
-                        );
-                        int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                        bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emit(nameIdx);
-                    }
-                } else if (operandOp.operator.equals("$")) {
-                    // $#$ref - dereference first
-                    operandOp.accept(bytecodeCompiler);
-                    int refReg = bytecodeCompiler.lastResultReg;
-
-                    arrayReg = bytecodeCompiler.allocateRegister();
-                    if (bytecodeCompiler.isStrictRefsEnabled()) {
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(refReg);
-                    } else {
-                        int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.emitReg(refReg);
-                        bytecodeCompiler.emit(pkgIdx);
-                    }
-                } else {
-                    bytecodeCompiler.throwCompilerException("$# requires array variable or dereferenced array");
-                }
-            } else if (node.operand instanceof IdentifierNode) {
-                // $#array (without @)
-                String varName = "@" + ((IdentifierNode) node.operand).name;
-
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    arrayReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    arrayReg = bytecodeCompiler.allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(
-                            ((IdentifierNode) node.operand).name,
-                            bytecodeCompiler.getCurrentPackage()
-                    );
-                    int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    bytecodeCompiler.emitReg(arrayReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-            } else {
-                bytecodeCompiler.throwCompilerException("$# requires array variable");
-            }
-
-            // Get array size
-            int sizeReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-            bytecodeCompiler.emitReg(sizeReg);
-            bytecodeCompiler.emitReg(arrayReg);
-
-            // Subtract 1 to get last index
-            int oneReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_INT);
-            bytecodeCompiler.emitReg(oneReg);
-            bytecodeCompiler.emitInt(1);
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SUB_SCALAR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(sizeReg);
-            bytecodeCompiler.emitReg(oneReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("length")) {
-            // length($string) - get string length
-            // operand: ListNode containing the string argument
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("length requires an argument");
-            }
-
-            // Compile the operand
-            if (node.operand instanceof ListNode list) {
-                if (list.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("length requires an argument");
-                }
-                // Get first element
-                list.elements.get(0).accept(bytecodeCompiler);
-            } else {
-                node.operand.accept(bytecodeCompiler);
-            }
-            int stringReg = bytecodeCompiler.lastResultReg;
-
-            // Call length builtin using SLOW_OP
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LENGTH_OP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(stringReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("<>")) {
-            // Diamond operator — mirrors JVM EmitOperator.handleDiamondBuiltin exactly.
-            // Extract the string argument to decide between DiamondIO and glob.
-            String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
-            if (argument.isEmpty() || argument.equals("<>")) {
-                // True diamond <>  or  <<>> : read from @ARGV / STDIN via DiamondIO.readline
-                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-                int fhReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.READLINE);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(fhReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                // Non-empty argument: it's a glob pattern — rewrite as "glob" operator
-                // and compile that, exactly as the JVM compiler does.
-                OperatorNode globNode = new OperatorNode("glob", node.operand, node.tokenIndex);
-                globNode.id = node.id;
-                globNode.annotations = node.annotations;
-                globNode.accept(bytecodeCompiler);
-            }
-        } else if (op.equals("open")) {
-            // open(filehandle, mode, filename) or open(filehandle, expr)
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("open requires arguments");
-            }
-
-            ListNode argsList = (ListNode) node.operand;
-            if (argsList.elements.isEmpty()) {
-                bytecodeCompiler.throwCompilerException("open requires arguments");
-            }
-
-            // Compile all arguments into a list.
-            // Track the first-arg (filehandle) register so we can write the GLOB back
-            // after OPEN — IOOperator.open() does fileHandle.set() on a copy in the array,
-            // so we must propagate the result back to the original lexical register.
-            int argsReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
-            bytecodeCompiler.emitReg(argsReg);
-
-            int fhReg = -1;
-            boolean first = true;
-            for (Node arg : argsList.elements) {
-                arg.accept(bytecodeCompiler);
-                int elemReg = bytecodeCompiler.lastResultReg;
-
-                if (first) {
-                    fhReg = elemReg; // remember the filehandle lvalue register
-                    first = false;
-                }
-
-                bytecodeCompiler.emit(Opcodes.ARRAY_PUSH);
-                bytecodeCompiler.emitReg(argsReg);
-                bytecodeCompiler.emitReg(elemReg);
-            }
-
-            // Call open with context and args
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.OPEN);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-            bytecodeCompiler.emitReg(argsReg);
-
-            // Write the (now-modified) first element of args back to the fh register.
-            // IOOperator.open() calls fileHandle.set(glob) on a copy inside the array,
-            // so we must retrieve element 0 and store it back into the lexical $fh.
-            if (fhReg >= 0) {
-                int idx0Reg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                bytecodeCompiler.emitReg(idx0Reg);
-                bytecodeCompiler.emit(0); // index 0
-                int gotReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_GET);
-                bytecodeCompiler.emitReg(gotReg);
-                bytecodeCompiler.emitReg(argsReg);
-                bytecodeCompiler.emitReg(idx0Reg);
-                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                bytecodeCompiler.emitReg(fhReg);
-                bytecodeCompiler.emitReg(gotReg);
-            }
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("matchRegex")) {
-            // m/pattern/flags - create a regex and optionally match against a string
-            // operand: ListNode containing pattern, flags, and optionally string (from =~ binding)
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("matchRegex requires pattern and flags");
-            }
-
-            ListNode args = (ListNode) node.operand;
-            if (args.elements.size() < 2) {
-                bytecodeCompiler.throwCompilerException("matchRegex requires pattern and flags");
-            }
-
-            // Check if /o modifier is used (flags are typically a StringNode)
-            boolean hasOModifier = false;
-            Node flagsNode = args.elements.get(1);
-            if (flagsNode instanceof StringNode) {
-                hasOModifier = ((StringNode) flagsNode).value.contains("o");
-            }
-
-            // Compile pattern
-            args.elements.get(0).accept(bytecodeCompiler);
-            int patternReg = bytecodeCompiler.lastResultReg;
-
-            // Compile flags
-            flagsNode.accept(bytecodeCompiler);
-            int flagsReg = bytecodeCompiler.lastResultReg;
-
-            // Create quoted regex using appropriate opcode
-            int regexReg = bytecodeCompiler.allocateRegister();
-            if (hasOModifier) {
-                // Use QUOTE_REGEX_O with callsite ID for /o modifier
-                int callsiteId = bytecodeCompiler.allocateCallsiteId();
-                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
-                bytecodeCompiler.emitReg(regexReg);
-                bytecodeCompiler.emitReg(patternReg);
-                bytecodeCompiler.emitReg(flagsReg);
-                bytecodeCompiler.emitReg(callsiteId);
-            } else {
-                bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-                bytecodeCompiler.emitReg(regexReg);
-                bytecodeCompiler.emitReg(patternReg);
-                bytecodeCompiler.emitReg(flagsReg);
-            }
-
-            // Check if a string was provided (from =~ binding)
-            if (args.elements.size() > 2) {
-                // String provided - perform the match in SCALAR context so that
-                // ($_ = "x") =~ m/.../ returns the lvalue, not a RuntimeList.
-                bytecodeCompiler.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
-                int stringReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(stringReg);
-                bytecodeCompiler.emitReg(regexReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                // No string provided - match against $_ (Perl default)
-                int stringReg;
-                if (bytecodeCompiler.hasVariable("$_")) {
-                    stringReg = bytecodeCompiler.getVariableRegister("$_");
-                } else {
-                    stringReg = bytecodeCompiler.allocateRegister();
-                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                    bytecodeCompiler.emitReg(stringReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(stringReg);
-                bytecodeCompiler.emitReg(regexReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-                bytecodeCompiler.lastResultReg = rd;
-            }
-        } else if (op.equals("replaceRegex")) {
-            // s/pattern/replacement/flags - regex substitution
-            // operand: ListNode containing [pattern, replacement, flags] or [pattern, replacement, flags, string]
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
-            }
-
-            ListNode args = (ListNode) node.operand;
-            if (args.elements.size() < 3) {
-                bytecodeCompiler.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
-            }
-
-            // Compile pattern
-            args.elements.get(0).accept(bytecodeCompiler);
-            int patternReg = bytecodeCompiler.lastResultReg;
-
-            // Compile replacement
-            args.elements.get(1).accept(bytecodeCompiler);
-            int replacementReg = bytecodeCompiler.lastResultReg;
-
-            // Compile flags
-            args.elements.get(2).accept(bytecodeCompiler);
-            int flagsReg = bytecodeCompiler.lastResultReg;
-
-            // Create replacement regex using GET_REPLACEMENT_REGEX opcode
-            int regexReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.GET_REPLACEMENT_REGEX);
-            bytecodeCompiler.emitReg(regexReg);
-            bytecodeCompiler.emitReg(patternReg);
-            bytecodeCompiler.emitReg(replacementReg);
-            bytecodeCompiler.emitReg(flagsReg);
-
-            // Get the string to operate on (element 3 if provided, else $_)
-            int stringReg;
-            if (args.elements.size() > 3) {
-                // String provided in operand list (from =~ binding).
-                // Must compile in SCALAR context: a list like ($_ = "x") must yield
-                // the last element as a scalar lvalue, not a RuntimeList.
-                bytecodeCompiler.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
-                stringReg = bytecodeCompiler.lastResultReg;
-            } else {
-                // Use $_ as default
-                String varName = "$_";
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    stringReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    stringReg = bytecodeCompiler.allocateRegister();
-                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                    bytecodeCompiler.emitReg(stringReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-            }
-
-            // Apply the regex match (which handles replacement)
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(stringReg);
-            bytecodeCompiler.emitReg(regexReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("substr")) {
-            // substr($string, $offset, $length, $replacement)
-            // operand is a ListNode with 2-4 elements
-            if (node.operand == null || !(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("substr requires arguments");
-            }
-
-            ListNode args = (ListNode) node.operand;
-            if (args.elements.size() < 2) {
-                bytecodeCompiler.throwCompilerException("substr requires at least 2 arguments");
-            }
-
-            // Compile arguments
-            java.util.List<Integer> argRegs = new java.util.ArrayList<>();
-            for (Node arg : args.elements) {
-                arg.accept(bytecodeCompiler);
-                argRegs.add(bytecodeCompiler.lastResultReg);
-            }
-
-            // Create list with arguments: CREATE_LIST rd count [regs...]
-            int argsListReg = bytecodeCompiler.allocateRegister();
-            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-            bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(argRegs.size());  // emit count
-            for (int argReg : argRegs) {
-                bytecodeCompiler.emitReg(argReg);
-            }
-
-            // Call SUBSTR_VAR opcode
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SUBSTR_VAR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argsListReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("chomp")) {
-            // chomp($x) or chomp - remove trailing newlines
-            boolean noArgs = node.operand == null ||
-                    (node.operand instanceof ListNode && ((ListNode) node.operand).elements.isEmpty());
-            if (noArgs) {
-                String varName = "$_";
-                int targetReg;
-                if (bytecodeCompiler.hasVariable(varName)) {
-                    targetReg = bytecodeCompiler.getVariableRegister(varName);
-                } else {
-                    targetReg = bytecodeCompiler.allocateRegister();
-                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
-                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                    bytecodeCompiler.emitReg(targetReg);
-                    bytecodeCompiler.emit(nameIdx);
-                }
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.CHOMP);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(targetReg);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
                 if (node.operand instanceof ListNode list) {
-                    if (!list.elements.isEmpty()) {
-                        list.elements.get(0).accept(bytecodeCompiler);
-                    }
+                    if (list.elements.isEmpty()) bytecodeCompiler.throwCompilerException("ref requires an argument");
+                    list.elements.get(0).accept(bytecodeCompiler);
                 } else {
                     node.operand.accept(bytecodeCompiler);
                 }
-                int targetReg = bytecodeCompiler.lastResultReg;
-
+                int argReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.CHOMP);
+                bytecodeCompiler.emit(Opcodes.REF);
                 bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(targetReg);
-
+                bytecodeCompiler.emitReg(argReg);
                 bytecodeCompiler.lastResultReg = rd;
             }
-        } else if (op.equals("+")) {
-            // Unary + operator: a no-op used for disambiguation (e.g., map +(...), LIST)
-            // It passes through the operand transparently without changing context.
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-            } else {
-                bytecodeCompiler.throwCompilerException("unary + operator requires an operand");
-            }
-        } else if (op.equals("wantarray")) {
-            // wantarray operator: returns undef in VOID, false in SCALAR, true in LIST
-            // Read register 2 (wantarray context) and convert to Perl convention
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.WANTARRAY);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(2);  // Register 2 contains the calling context
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("sprintf")) {
-            // sprintf($format, @args) - SprintfOperator.sprintf
-            if (node.operand instanceof ListNode list) {
-                if (list.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("sprintf requires a format argument");
+            case "prototype" -> {
+                if (node.operand == null) {
+                    bytecodeCompiler.throwCompilerException("prototype requires an argument");
                 }
-
-                // First argument is the format string
-                list.elements.get(0).accept(bytecodeCompiler);
-                int formatReg = bytecodeCompiler.lastResultReg;
-
-                // Compile remaining arguments; use LIST context only for array/hash args
-                java.util.List<Integer> argRegs = new java.util.ArrayList<>();
-                for (int i = 1; i < list.elements.size(); i++) {
-                    bytecodeCompiler.compileNode(list.elements.get(i), -1, RuntimeContextType.LIST);
-                    argRegs.add(bytecodeCompiler.lastResultReg);
-                }
-
-                // Create a RuntimeList with the arguments
-                int listReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(listReg);
-                bytecodeCompiler.emit(argRegs.size());
-                for (int argReg : argRegs) {
-                    bytecodeCompiler.emitReg(argReg);
-                }
-
-                // Call sprintf with format and arg list
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.SPRINTF);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(formatReg);
-                bytecodeCompiler.emitReg(listReg);
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException("sprintf requires arguments");
-            }
-            // GENERATED_OPERATORS_START
-        } else if (op.equals("int")) {
-            compileScalarOperand(bytecodeCompiler, node, "int");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.INT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("log")) {
-            compileScalarOperand(bytecodeCompiler, node, "log");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LOG);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("sqrt")) {
-            compileScalarOperand(bytecodeCompiler, node, "sqrt");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SQRT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("cos")) {
-            compileScalarOperand(bytecodeCompiler, node, "cos");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.COS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("sin")) {
-            compileScalarOperand(bytecodeCompiler, node, "sin");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SIN);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("exp")) {
-            compileScalarOperand(bytecodeCompiler, node, "exp");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.EXP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("abs")) {
-            compileScalarOperand(bytecodeCompiler, node, "abs");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.ABS);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("binary~")) {
-            compileScalarOperand(bytecodeCompiler, node, "binary~");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.BINARY_NOT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("integerBitwiseNot")) {
-            compileScalarOperand(bytecodeCompiler, node, "integerBitwiseNot");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.INTEGER_BITWISE_NOT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("ord")) {
-            compileScalarOperand(bytecodeCompiler, node, "ord");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.ORD);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("ordBytes")) {
-            compileScalarOperand(bytecodeCompiler, node, "ordBytes");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.ORD_BYTES);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("oct")) {
-            compileScalarOperand(bytecodeCompiler, node, "oct");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.OCT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("hex")) {
-            compileScalarOperand(bytecodeCompiler, node, "hex");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.HEX);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("srand")) {
-            compileScalarOperand(bytecodeCompiler, node, "srand");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SRAND);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("chr")) {
-            compileScalarOperand(bytecodeCompiler, node, "chr");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.CHR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("chrBytes")) {
-            compileScalarOperand(bytecodeCompiler, node, "chrBytes");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.CHR_BYTES);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("lengthBytes")) {
-            compileScalarOperand(bytecodeCompiler, node, "lengthBytes");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LENGTH_BYTES);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("quotemeta")) {
-            compileScalarOperand(bytecodeCompiler, node, "quotemeta");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.QUOTEMETA);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("fc")) {
-            compileScalarOperand(bytecodeCompiler, node, "fc");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.FC);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("lc")) {
-            compileScalarOperand(bytecodeCompiler, node, "lc");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LC);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("lcfirst")) {
-            compileScalarOperand(bytecodeCompiler, node, "lcfirst");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LCFIRST);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("uc")) {
-            compileScalarOperand(bytecodeCompiler, node, "uc");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.UC);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("ucfirst")) {
-            compileScalarOperand(bytecodeCompiler, node, "ucfirst");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.UCFIRST);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("sleep")) {
-            compileScalarOperand(bytecodeCompiler, node, "sleep");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SLEEP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("tell")) {
-            compileScalarOperand(bytecodeCompiler, node, "tell");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.TELL);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("rmdir")) {
-            compileScalarOperand(bytecodeCompiler, node, "rmdir");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.RMDIR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("closedir")) {
-            compileScalarOperand(bytecodeCompiler, node, "closedir");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.CLOSEDIR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("rewinddir")) {
-            compileScalarOperand(bytecodeCompiler, node, "rewinddir");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.REWINDDIR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("telldir")) {
-            compileScalarOperand(bytecodeCompiler, node, "telldir");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.TELLDIR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("chdir")) {
-            compileScalarOperand(bytecodeCompiler, node, "chdir");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.CHDIR);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("exit")) {
-            compileScalarOperand(bytecodeCompiler, node, "exit");
-            int argReg = bytecodeCompiler.lastResultReg;
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.EXIT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argReg);
-            bytecodeCompiler.lastResultReg = rd;
-            // GENERATED_OPERATORS_END
-        } else if (op.equals("tr") || op.equals("y")) {
-            // tr/// or y/// transliteration operator
-            // Pattern: tr/search/replace/modifiers on $variable
-            if (!(node.operand instanceof ListNode)) {
-                bytecodeCompiler.throwCompilerException("tr operator requires list operand");
-            }
-
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.size() < 3) {
-                bytecodeCompiler.throwCompilerException("tr operator requires search, replace, and modifiers");
-            }
-
-            // Compile search pattern
-            list.elements.get(0).accept(bytecodeCompiler);
-            int searchReg = bytecodeCompiler.lastResultReg;
-
-            // Compile replace pattern
-            list.elements.get(1).accept(bytecodeCompiler);
-            int replaceReg = bytecodeCompiler.lastResultReg;
-
-            // Compile modifiers
-            list.elements.get(2).accept(bytecodeCompiler);
-            int modifiersReg = bytecodeCompiler.lastResultReg;
-
-            // Compile target variable (element [3] or default to $_)
-            int targetReg;
-            if (list.elements.size() > 3 && list.elements.get(3) != null) {
-                list.elements.get(3).accept(bytecodeCompiler);
-                targetReg = bytecodeCompiler.lastResultReg;
-            } else {
-                // Default to $_ - need to load it
-                targetReg = bytecodeCompiler.allocateRegister();
-                String underscoreName = NameNormalizer.normalizeVariableName("_", bytecodeCompiler.getCurrentPackage());
-                int nameIdx = bytecodeCompiler.addToStringPool(underscoreName);
-                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                bytecodeCompiler.emitReg(targetReg);
-                bytecodeCompiler.emit(nameIdx);
-            }
-
-            // Emit TR_TRANSLITERATE operation
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.TR_TRANSLITERATE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(searchReg);
-            bytecodeCompiler.emitReg(replaceReg);
-            bytecodeCompiler.emitReg(modifiersReg);
-            bytecodeCompiler.emitReg(targetReg);
-            bytecodeCompiler.emitInt(bytecodeCompiler.currentCallContext);
-
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("tie") || op.equals("untie") || op.equals("tied")) {
-            // tie($var, $classname, @args) or untie($var) or tied($var)
-            // Compile all arguments as a list
-            if (node.operand != null) {
-                node.operand.accept(bytecodeCompiler);
-                int argsReg = bytecodeCompiler.lastResultReg;
-
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                short opcode = switch (op) {
-                    case "tie" -> Opcodes.TIE;
-                    case "untie" -> Opcodes.UNTIE;
-                    case "tied" -> Opcodes.TIED;
-                    default -> throw new IllegalStateException("Unexpected operator: " + op);
-                };
-                bytecodeCompiler.emitWithToken(opcode, node.getIndex());
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(argsReg);
-                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-
-                bytecodeCompiler.lastResultReg = rd;
-            } else {
-                bytecodeCompiler.throwCompilerException(op + " requires arguments");
-            }
-        } else if (op.equals("getppid")) {
-            // getppid() - returns parent process ID
-            // Format: GETPPID rd
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex());
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("atan2")) {
-            // atan2($y, $x) - returns arctangent of y/x
-            // Format: ATAN2 rd rs1 rs2
-            if (node.operand instanceof ListNode list) {
-                if (list.elements.size() >= 2) {
+                if (node.operand instanceof ListNode list) {
+                    if (list.elements.isEmpty()) bytecodeCompiler.throwCompilerException("prototype requires an argument");
                     list.elements.get(0).accept(bytecodeCompiler);
-                    int rs1 = bytecodeCompiler.lastResultReg;
-                    list.elements.get(1).accept(bytecodeCompiler);
-                    int rs2 = bytecodeCompiler.lastResultReg;
-                    int rd = bytecodeCompiler.allocateOutputRegister();
-                    bytecodeCompiler.emitWithToken(Opcodes.ATAN2, node.getIndex());
+                } else {
+                    node.operand.accept(bytecodeCompiler);
+                }
+                int argReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                int packageIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                bytecodeCompiler.emit(Opcodes.PROTOTYPE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(argReg);
+                bytecodeCompiler.emitInt(packageIdx);
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "quoteRegex" -> {
+                if (node.operand == null || !(node.operand instanceof ListNode)) {
+                    bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
+                }
+                ListNode operand = (ListNode) node.operand;
+                if (operand.elements.size() < 2) {
+                    bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
+                }
+                boolean hasOModifier = false;
+                Node flagsNode = operand.elements.get(1);
+                if (flagsNode instanceof StringNode) {
+                    hasOModifier = ((StringNode) flagsNode).value.contains("o");
+                }
+                operand.elements.get(0).accept(bytecodeCompiler);
+                int patternReg = bytecodeCompiler.lastResultReg;
+                flagsNode.accept(bytecodeCompiler);
+                int flagsReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                if (hasOModifier) {
+                    int callsiteId = bytecodeCompiler.allocateCallsiteId();
+                    bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
                     bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(rs1);
-                    bytecodeCompiler.emitReg(rs2);
+                    bytecodeCompiler.emitReg(patternReg);
+                    bytecodeCompiler.emitReg(flagsReg);
+                    bytecodeCompiler.emitReg(callsiteId);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(patternReg);
+                    bytecodeCompiler.emitReg(flagsReg);
+                }
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "++", "--", "++postfix", "--postfix" -> visitIncrDecr(bytecodeCompiler, node, op);
+            case "return" -> {
+                if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+                    Node firstElement = list.elements.getFirst();
+                    if (firstElement instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
+                        Node callTarget = callNode.left;
+                        if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
+                            int outerContext = bytecodeCompiler.currentCallContext;
+                            bytecodeCompiler.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
+                            int codeRefReg = bytecodeCompiler.lastResultReg;
+                            bytecodeCompiler.compileNode(callNode.right, -1, RuntimeContextType.LIST);
+                            int argsReg = bytecodeCompiler.lastResultReg;
+                            int rd = bytecodeCompiler.allocateOutputRegister();
+                            bytecodeCompiler.emit(Opcodes.CALL_SUB);
+                            bytecodeCompiler.emitReg(rd);
+                            bytecodeCompiler.emitReg(codeRefReg);
+                            bytecodeCompiler.emitReg(argsReg);
+                            bytecodeCompiler.emit(outerContext);
+                            bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                            bytecodeCompiler.emitReg(rd);
+                            bytecodeCompiler.lastResultReg = -1;
+                            return;
+                        }
+                    }
+                }
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int exprReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bytecodeCompiler.emitReg(exprReg);
+                } else {
+                    int undefReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(undefReg);
+                    bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bytecodeCompiler.emitReg(undefReg);
+                }
+                bytecodeCompiler.lastResultReg = -1;
+            }
+            case "last", "next", "redo" -> {
+                bytecodeCompiler.handleLoopControlOperator(node, op);
+                bytecodeCompiler.lastResultReg = -1;
+            }
+            case "rand" -> {
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int maxReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(Opcodes.RAND);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(maxReg);
+                } else {
+                    int oneReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                    bytecodeCompiler.emitReg(oneReg);
+                    bytecodeCompiler.emitInt(1);
+                    bytecodeCompiler.emit(Opcodes.RAND);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(oneReg);
+                }
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "sleep" -> {
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int secondsReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(Opcodes.SLEEP_OP);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(secondsReg);
+                } else {
+                    int maxReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                    bytecodeCompiler.emitReg(maxReg);
+                    bytecodeCompiler.emitInt(Integer.MAX_VALUE);
+                    bytecodeCompiler.emit(Opcodes.SLEEP_OP);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(maxReg);
+                }
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "alarm" -> {
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int argReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(Opcodes.ALARM_OP);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(argReg);
+                } else {
+                    int zeroReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                    bytecodeCompiler.emitReg(zeroReg);
+                    bytecodeCompiler.emitInt(0);
+                    bytecodeCompiler.emit(Opcodes.ALARM_OP);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(zeroReg);
+                }
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "study" -> {
+                if (node.operand != null) node.operand.accept(bytecodeCompiler);
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitInt(1);
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "require" -> {
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int operandReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.REQUIRE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(operandReg);
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "pos" -> {
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int operandReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.POS);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(operandReg);
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "index", "rindex" -> {
+                if (node.operand instanceof ListNode args) {
+                    if (args.elements.isEmpty()) bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
+                    bytecodeCompiler.compileNode(args.elements.get(0), -1, RuntimeContextType.SCALAR);
+                    int strReg = bytecodeCompiler.lastResultReg;
+                    if (args.elements.size() < 2) bytecodeCompiler.throwCompilerException("Not enough arguments for " + op);
+                    bytecodeCompiler.compileNode(args.elements.get(1), -1, RuntimeContextType.SCALAR);
+                    int substrReg = bytecodeCompiler.lastResultReg;
+                    int posReg;
+                    if (args.elements.size() >= 3) {
+                        bytecodeCompiler.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
+                        posReg = bytecodeCompiler.lastResultReg;
+                    } else {
+                        posReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                        bytecodeCompiler.emitReg(posReg);
+                    }
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(op.equals("index") ? Opcodes.INDEX : Opcodes.RINDEX);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(strReg);
+                    bytecodeCompiler.emitReg(substrReg);
+                    bytecodeCompiler.emitReg(posReg);
                     bytecodeCompiler.lastResultReg = rd;
                 } else {
-                    bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
+                    bytecodeCompiler.throwCompilerException(op + " requires a list of arguments");
                 }
-            } else {
-                bytecodeCompiler.throwCompilerException("atan2 requires two arguments");
             }
-        } else if (op.equals("each")) {
-            // each %hash or each @array - needs the container itself, not flattened.
-            // Compile operand in LIST context so %h stays a RuntimeHash (not scalar size).
-            // Mirrors JVM handleEach which uses RuntimeContextType.LIST.
-            if (node.operand == null) {
-                bytecodeCompiler.throwCompilerException("each requires an argument");
+            case "stat", "lstat" -> {
+                boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
+                        && ((IdentifierNode) node.operand).name.equals("_");
+                if (isUnderscoreOperand) {
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT_LASTHANDLE : Opcodes.LSTAT_LASTHANDLE);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    int outerContext = bytecodeCompiler.currentCallContext;
+                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                    int operandReg = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(operandReg);
+                    bytecodeCompiler.emit(outerContext);
+                    bytecodeCompiler.lastResultReg = rd;
+                }
             }
-
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
-            int containerReg = bytecodeCompiler.lastResultReg;
-
-            // Pass container directly to EACH
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emitWithToken(Opcodes.EACH, node.getIndex());
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(containerReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("chmod") || op.equals("unlink") || op.equals("utime") ||
-                op.equals("rename") || op.equals("link") || op.equals("readlink") ||
-                op.equals("umask") || op.equals("system") || op.equals("pack") ||
-                op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
-                op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") || op.equals("times") ||
-                op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
-                op.equals("close") ||
-                op.equals("binmode") || op.equals("seek") ||
-                op.equals("eof") || op.equals("sysread") || op.equals("syswrite") ||
-                op.equals("sysopen") || op.equals("socket") || op.equals("bind") ||
-                op.equals("connect") || op.equals("listen") || op.equals("write") ||
-                op.equals("formline") || op.equals("printf") || op.equals("accept") ||
-                op.equals("sysseek") || op.equals("truncate") || op.equals("read") ||
-                op.equals("chown") || op.equals("waitpid") ||
-                op.equals("setsockopt") || op.equals("getsockopt") ||
-                op.equals("getpgrp") || op.equals("setpgrp") ||
-                op.equals("getpriority") || op.equals("setpriority") ||
-                op.equals("opendir") || op.equals("readdir") || op.equals("seekdir")) {
-            // Generic handler for operators that take arguments and call runtime methods
-            // Format: OPCODE rd argsReg ctx
-            // argsReg must be a RuntimeList
-
-            int argsReg;
-            if (node.operand != null) {
-                // Save current context and evaluate operand in list context
-                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
-
+            case "eval", "evalbytes" -> {
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int stringReg = bytecodeCompiler.lastResultReg;
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
+                    bytecodeCompiler.evalSiteRegistries.add(bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
+                    bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
+                            bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
+                            bytecodeCompiler.symbolTable.featureFlagsStack.peek()
+                    });
+                    bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(stringReg);
+                    bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                    bytecodeCompiler.emit(evalSiteIndex);
+                    bytecodeCompiler.lastResultReg = rd;
+                } else {
+                    int undefReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(undefReg);
+                    bytecodeCompiler.lastResultReg = undefReg;
+                }
+            }
+            case "select" -> {
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                boolean hasArgs = node.operand instanceof ListNode ln && !ln.elements.isEmpty();
+                if (hasArgs) {
+                    node.operand.accept(bytecodeCompiler);
+                    int listReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(listReg);
+                } else {
+                    int listReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                    bytecodeCompiler.emitReg(listReg);
+                    bytecodeCompiler.emit(0);
+                    bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(listReg);
+                }
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "undef" -> {
+                if (node.operand != null) {
+                    node.operand.accept(bytecodeCompiler);
+                    int operandReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
+                    bytecodeCompiler.emitReg(operandReg);
+                }
+                int undefReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                bytecodeCompiler.emitReg(undefReg);
+                bytecodeCompiler.lastResultReg = undefReg;
+            }
+            case "unaryMinus" -> {
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int operandReg = bytecodeCompiler.lastResultReg;
-
-                // Ensure the result is a list
-                argsReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.SCALAR_TO_LIST);
-                bytecodeCompiler.emitReg(argsReg);
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.NEG_SCALAR);
+                bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(operandReg);
-            } else {
-                // No operand - create empty list
-                argsReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(argsReg);
-                bytecodeCompiler.emit(0);
+                bytecodeCompiler.lastResultReg = rd;
             }
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            short opcode = switch (op) {
-                case "chmod" -> Opcodes.CHMOD;
-                case "unlink" -> Opcodes.UNLINK;
-                case "utime" -> Opcodes.UTIME;
-                case "rename" -> Opcodes.RENAME;
-                case "link" -> Opcodes.LINK;
-                case "readlink" -> Opcodes.READLINK;
-                case "umask" -> Opcodes.UMASK;
-                case "getc" -> Opcodes.GETC;
-                case "fileno" -> Opcodes.FILENO;
-                case "qx" -> Opcodes.QX;
-                case "system" -> Opcodes.SYSTEM;
-                case "caller" -> Opcodes.CALLER;
-                case "each" -> Opcodes.EACH;
-                case "pack" -> Opcodes.PACK;
-                case "unpack" -> Opcodes.UNPACK;
-                case "vec" -> Opcodes.VEC;
-                case "localtime" -> Opcodes.LOCALTIME;
-                case "gmtime" -> Opcodes.GMTIME;
-                case "reset" -> Opcodes.RESET;
-                case "times" -> Opcodes.TIMES;
-                case "crypt" -> Opcodes.CRYPT;
-                case "close" -> Opcodes.CLOSE;
-                case "binmode" -> Opcodes.BINMODE;
-                case "seek" -> Opcodes.SEEK;
-                case "eof" -> Opcodes.EOF_OP;
-                case "sysread" -> Opcodes.SYSREAD;
-                case "syswrite" -> Opcodes.SYSWRITE;
-                case "sysopen" -> Opcodes.SYSOPEN;
-                case "socket" -> Opcodes.SOCKET;
-                case "bind" -> Opcodes.BIND;
-                case "connect" -> Opcodes.CONNECT;
-                case "listen" -> Opcodes.LISTEN;
-                case "write" -> Opcodes.WRITE;
-                case "formline" -> Opcodes.FORMLINE;
-                case "printf" -> Opcodes.PRINTF;
-                case "accept" -> Opcodes.ACCEPT;
-                case "sysseek" -> Opcodes.SYSSEEK;
-                case "truncate" -> Opcodes.TRUNCATE;
-                case "read" -> Opcodes.READ;
-                case "chown" -> Opcodes.CHOWN;
-                case "waitpid" -> Opcodes.WAITPID;
-                case "setsockopt" -> Opcodes.SETSOCKOPT;
-                case "getsockopt" -> Opcodes.GETSOCKOPT;
-                case "getpgrp" -> Opcodes.GETPGRP;
-                case "setpgrp" -> Opcodes.SETPGRP;
-                case "getpriority" -> Opcodes.GETPRIORITY;
-                case "setpriority" -> Opcodes.SETPRIORITY;
-                case "opendir" -> Opcodes.OPENDIR;
-                case "readdir" -> Opcodes.READDIR;
-                case "seekdir" -> Opcodes.SEEKDIR;
-                default -> throw new IllegalStateException("Unexpected operator: " + op);
-            };
-
-            bytecodeCompiler.emitWithToken(opcode, node.getIndex());
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(argsReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("glob")) {
-            // File glob operator: ScalarGlobOperator.evaluate(globId, pattern, ctx)
-            // Mirrors JVM EmitOperator.handleGlobBuiltin exactly: allocate a unique
-            // per-call-site globId for scalar-context iteration state, compile operand
-            // in SCALAR context, then emit GLOB_OP.
-            int globId = ScalarGlobOperator.currentId++;
-
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-            int patternReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.GLOB_OP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emit(globId);
-            bytecodeCompiler.emitReg(patternReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("doFile")) {
-            // do FILE: executes a Perl file
-            bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
-            int fileReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.DO_FILE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(fileReg);
-            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("goto")) {
-            String labelStr = null;
-            if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
-                Node arg = labelNode.elements.getFirst();
-                if (arg instanceof IdentifierNode) {
-                    labelStr = ((IdentifierNode) arg).name;
-                }
+            case "splice" -> visitSplice(bytecodeCompiler, node);
+            case "reverse" -> visitReverse(bytecodeCompiler, node);
+            case "keys" -> visitKeys(bytecodeCompiler, node);
+            case "chop" -> visitChop(bytecodeCompiler, node);
+            case "values" -> visitValues(bytecodeCompiler, node);
+            case "$#" -> visitArrayLastIndex(bytecodeCompiler, node);
+            case "length" -> visitLength(bytecodeCompiler, node);
+            case "<>" -> visitDiamond(bytecodeCompiler, node);
+            case "+" -> { if (node.operand != null) node.operand.accept(bytecodeCompiler); else bytecodeCompiler.throwCompilerException("unary + operator requires an operand"); }
+            case "tr", "y" -> visitTransliterate(bytecodeCompiler, node);
+            case "tie", "untie", "tied" -> visitTie(bytecodeCompiler, node, op);
+            case "atan2" -> visitAtan2(bytecodeCompiler, node);
+            case "each" -> visitEach(bytecodeCompiler, node);
+            case "glob" -> visitGlob(bytecodeCompiler, node);
+            case "doFile" -> visitDoFile(bytecodeCompiler, node);
+            case "goto" -> visitGoto(bytecodeCompiler, node);
+            case "__SUB__" -> {
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                int nameIdx = bytecodeCompiler.addToStringPool("__SUB__");
+                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_CODE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emit(nameIdx);
+                bytecodeCompiler.lastResultReg = rd;
             }
-            if (labelStr == null) {
-                bytecodeCompiler.throwCompilerException("goto must be given label");
-            }
-            Integer targetPc = bytecodeCompiler.gotoLabelPcs.get(labelStr);
-            if (targetPc != null) {
-                bytecodeCompiler.emit(Opcodes.GOTO);
-                bytecodeCompiler.emitInt(targetPc);
-            } else {
-                bytecodeCompiler.emit(Opcodes.GOTO);
-                int patchPc = bytecodeCompiler.bytecode.size();
-                bytecodeCompiler.emitInt(0);
-                bytecodeCompiler.pendingGotos.add(new Object[]{patchPc, labelStr});
-            }
-            bytecodeCompiler.lastResultReg = -1;
-        } else if (op.equals("time")) {
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.TIME_OP);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.lastResultReg = rd;
-        } else if (op.equals("__SUB__")) {
-            // __SUB__ returns the current subroutine being executed
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            int nameIdx = bytecodeCompiler.addToStringPool("__SUB__");
-            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_CODE);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emit(nameIdx);
-            bytecodeCompiler.lastResultReg = rd;
-        } else {
-            bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
+            default -> bytecodeCompiler.throwCompilerException("Unsupported operator: " + op);
         }
+    }
+
+    private static void visitSplice(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode)) bc.throwCompilerException("splice requires array and arguments");
+        ListNode list = (ListNode) node.operand;
+        if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) bc.throwCompilerException("splice requires array variable");
+        OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
+        if (!arrayOp.operator.equals("@")) bc.throwCompilerException("splice requires array variable: splice @array, ...");
+        int arrayReg = resolveArrayOperand(bc, new OperatorNode("splice", arrayOp, node.tokenIndex), "splice");
+        List<Integer> argRegs = new ArrayList<>();
+        for (int i = 1; i < list.elements.size(); i++) { list.elements.get(i).accept(bc); argRegs.add(bc.lastResultReg); }
+        int argsListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST); bc.emitReg(argsListReg); bc.emit(argRegs.size());
+        for (int argReg : argRegs) bc.emitReg(argReg);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.SPLICE); bc.emitReg(rd); bc.emitReg(arrayReg); bc.emitReg(argsListReg); bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitReverse(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode)) bc.throwCompilerException("reverse requires arguments");
+        ListNode list = (ListNode) node.operand;
+        List<Integer> argRegs = new ArrayList<>();
+        for (Node arg : list.elements) { arg.accept(bc); argRegs.add(bc.lastResultReg); }
+        int argsListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST); bc.emitReg(argsListReg); bc.emit(argRegs.size());
+        for (int argReg : argRegs) bc.emitReg(argReg);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.REVERSE); bc.emitReg(rd); bc.emitReg(argsListReg); bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitKeys(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null) bc.throwCompilerException("keys requires a hash argument");
+        bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+        int hashReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.HASH_KEYS); bc.emitReg(rd); bc.emitReg(hashReg);
+        if (bc.currentCallContext == RuntimeContextType.SCALAR) {
+            int scalarReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(scalarReg); bc.emitReg(rd);
+            bc.lastResultReg = scalarReg;
+        } else { bc.lastResultReg = rd; }
+    }
+
+    private static void visitChop(BytecodeCompiler bc, OperatorNode node) {
+        boolean chopNoArgs = node.operand == null || (node.operand instanceof ListNode && ((ListNode) node.operand).elements.isEmpty());
+        int scalarReg;
+        if (chopNoArgs) {
+            scalarReg = loadDefaultUnderscore(bc);
+        } else {
+            if (node.operand instanceof ListNode list) list.elements.get(0).accept(bc);
+            else node.operand.accept(bc);
+            scalarReg = bc.lastResultReg;
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.CHOP); bc.emitReg(rd); bc.emitReg(scalarReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitValues(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null) bc.throwCompilerException("values requires a hash argument");
+        bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+        int hashReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.HASH_VALUES); bc.emitReg(rd); bc.emitReg(hashReg);
+        if (bc.currentCallContext == RuntimeContextType.SCALAR) {
+            int scalarReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(scalarReg); bc.emitReg(rd);
+            bc.lastResultReg = scalarReg;
+        } else { bc.lastResultReg = rd; }
+    }
+
+    private static void visitArrayLastIndex(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null) bc.throwCompilerException("$# requires an array argument");
+        int arrayReg = -1;
+        if (node.operand instanceof OperatorNode operandOp) {
+            if (operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode) {
+                String varName = "@" + ((IdentifierNode) operandOp.operand).name;
+                if (bc.hasVariable(varName)) arrayReg = bc.getVariableRegister(varName);
+                else {
+                    arrayReg = bc.allocateRegister();
+                    int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(((IdentifierNode) operandOp.operand).name, bc.getCurrentPackage()));
+                    bc.emit(Opcodes.LOAD_GLOBAL_ARRAY); bc.emitReg(arrayReg); bc.emit(nameIdx);
+                }
+            } else if (operandOp.operator.equals("$")) {
+                operandOp.accept(bc); int refReg = bc.lastResultReg;
+                arrayReg = bc.allocateRegister();
+                if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
+                else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
+            } else bc.throwCompilerException("$# requires array variable or dereferenced array");
+        } else if (node.operand instanceof IdentifierNode) {
+            String varName = "@" + ((IdentifierNode) node.operand).name;
+            if (bc.hasVariable(varName)) arrayReg = bc.getVariableRegister(varName);
+            else {
+                arrayReg = bc.allocateRegister();
+                int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, bc.getCurrentPackage()));
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY); bc.emitReg(arrayReg); bc.emit(nameIdx);
+            }
+        } else bc.throwCompilerException("$# requires array variable");
+        int sizeReg = bc.allocateRegister(); bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(sizeReg); bc.emitReg(arrayReg);
+        int oneReg = bc.allocateRegister(); bc.emit(Opcodes.LOAD_INT); bc.emitReg(oneReg); bc.emitInt(1);
+        int rd = bc.allocateOutputRegister(); bc.emit(Opcodes.SUB_SCALAR); bc.emitReg(rd); bc.emitReg(sizeReg); bc.emitReg(oneReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitLength(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null) bc.throwCompilerException("length requires an argument");
+        if (node.operand instanceof ListNode list) { if (list.elements.isEmpty()) bc.throwCompilerException("length requires an argument"); list.elements.get(0).accept(bc); }
+        else node.operand.accept(bc);
+        int stringReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister(); bc.emit(Opcodes.LENGTH_OP); bc.emitReg(rd); bc.emitReg(stringReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDiamond(BytecodeCompiler bc, OperatorNode node) {
+        String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
+        if (argument.isEmpty() || argument.equals("<>")) {
+            bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+            int fhReg = bc.lastResultReg;
+            int rd = bc.allocateOutputRegister();
+            bc.emit(Opcodes.READLINE); bc.emitReg(rd); bc.emitReg(fhReg); bc.emit(bc.currentCallContext);
+            bc.lastResultReg = rd;
+        } else {
+            OperatorNode globNode = new OperatorNode("glob", node.operand, node.tokenIndex);
+            globNode.id = node.id; globNode.annotations = node.annotations;
+            globNode.accept(bc);
+        }
+    }
+
+    private static void visitTransliterate(BytecodeCompiler bc, OperatorNode node) {
+        if (!(node.operand instanceof ListNode)) bc.throwCompilerException("tr operator requires list operand");
+        ListNode list = (ListNode) node.operand;
+        if (list.elements.size() < 3) bc.throwCompilerException("tr operator requires search, replace, and modifiers");
+        list.elements.get(0).accept(bc); int searchReg = bc.lastResultReg;
+        list.elements.get(1).accept(bc); int replaceReg = bc.lastResultReg;
+        list.elements.get(2).accept(bc); int modifiersReg = bc.lastResultReg;
+        int targetReg;
+        if (list.elements.size() > 3 && list.elements.get(3) != null) { list.elements.get(3).accept(bc); targetReg = bc.lastResultReg; }
+        else { targetReg = bc.allocateRegister(); int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName("_", bc.getCurrentPackage())); bc.emit(Opcodes.LOAD_GLOBAL_SCALAR); bc.emitReg(targetReg); bc.emit(nameIdx); }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.TR_TRANSLITERATE); bc.emitReg(rd); bc.emitReg(searchReg); bc.emitReg(replaceReg); bc.emitReg(modifiersReg); bc.emitReg(targetReg); bc.emitInt(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitTie(BytecodeCompiler bc, OperatorNode node, String op) {
+        if (node.operand == null) bc.throwCompilerException(op + " requires arguments");
+        node.operand.accept(bc); int argsReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        short opcode = switch (op) { case "tie" -> Opcodes.TIE; case "untie" -> Opcodes.UNTIE; case "tied" -> Opcodes.TIED; default -> throw new IllegalStateException("Unexpected operator: " + op); };
+        bc.emitWithToken(opcode, node.getIndex()); bc.emitReg(rd); bc.emitReg(argsReg); bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitAtan2(BytecodeCompiler bc, OperatorNode node) {
+        if (!(node.operand instanceof ListNode) || ((ListNode) node.operand).elements.size() < 2) bc.throwCompilerException("atan2 requires two arguments");
+        ListNode list = (ListNode) node.operand;
+        list.elements.get(0).accept(bc); int rs1 = bc.lastResultReg;
+        list.elements.get(1).accept(bc); int rs2 = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emitWithToken(Opcodes.ATAN2, node.getIndex()); bc.emitReg(rd); bc.emitReg(rs1); bc.emitReg(rs2);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitEach(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null) bc.throwCompilerException("each requires an argument");
+        bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+        int containerReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emitWithToken(Opcodes.EACH, node.getIndex()); bc.emitReg(rd); bc.emitReg(containerReg); bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitGlob(BytecodeCompiler bc, OperatorNode node) {
+        int globId = ScalarGlobOperator.currentId++;
+        bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+        int patternReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.GLOB_OP); bc.emitReg(rd); bc.emit(globId); bc.emitReg(patternReg); bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDoFile(BytecodeCompiler bc, OperatorNode node) {
+        bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+        int fileReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.DO_FILE); bc.emitReg(rd); bc.emitReg(fileReg); bc.emit(bc.currentCallContext);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitGoto(BytecodeCompiler bc, OperatorNode node) {
+        String labelStr = null;
+        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+            Node arg = labelNode.elements.getFirst();
+            if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;
+        }
+        if (labelStr == null) bc.throwCompilerException("goto must be given label");
+        Integer targetPc = bc.gotoLabelPcs.get(labelStr);
+        if (targetPc != null) { bc.emit(Opcodes.GOTO); bc.emitInt(targetPc); }
+        else { bc.emit(Opcodes.GOTO); int patchPc = bc.bytecode.size(); bc.emitInt(0); bc.pendingGotos.add(new Object[]{patchPc, labelStr}); }
+        bc.lastResultReg = -1;
     }
 }
