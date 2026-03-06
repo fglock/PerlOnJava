@@ -143,7 +143,10 @@ public class Variable {
                     && !afterSigil.text.equals("{")
                     && !afterSigil.text.equals("[")
                     && !afterSigil.text.equals("$")
-                    && !afterSigil.text.equals("'")) {
+                    && !afterSigil.text.equals("'")
+                    && !afterSigil.text.equals("+")
+                    && !afterSigil.text.equals("-")
+                    && !afterSigil.text.equals("^")) {
                 parser.throwCleanError("$# is no longer supported as of Perl 5.30");
             }
         }
