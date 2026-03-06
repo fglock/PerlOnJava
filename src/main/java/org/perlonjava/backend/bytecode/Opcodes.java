@@ -1803,8 +1803,11 @@ public class Opcodes {
     public static final short SET_FROM_LIST = 371;
 
     /**
-     * Load byte string: rd = new RuntimeScalar(stringPool[index]) with BYTE_STRING type.
-     * Used for string literals under `no utf8` (the default).
+     * Load a non-UTF-8 string constant into a register.
+     * Creates a RuntimeScalar with BYTE_STRING type (Perl's default string encoding,
+     * equivalent to Latin-1/ISO-8859-1). This is the most common opcode in typical
+     * Perl programs — it loads hash keys, string literals, and identifiers.
+     * Compare with LOAD_STRING which loads UTF-8 flagged strings (from `use utf8` scope).
      * Format: LOAD_BYTE_STRING rd strIndex
      */
     public static final short LOAD_BYTE_STRING = 372;
