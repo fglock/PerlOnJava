@@ -4033,7 +4033,7 @@ public class BytecodeCompiler implements Visitor {
         InterpretedCode subCode = subCompiler.compile(node.block);
 
         if (RuntimeCode.DISASSEMBLE) {
-            System.out.println(subCode.disassemble());
+            System.out.println(Disassemble.disassemble(subCode));
         }
 
         // Step 5: Emit bytecode to create closure or simple code ref
@@ -4122,7 +4122,7 @@ public class BytecodeCompiler implements Visitor {
         subCode.packageName = getCurrentPackage();
 
         if (RuntimeCode.DISASSEMBLE) {
-            System.out.println(subCode.disassemble());
+            System.out.println(Disassemble.disassemble(subCode));
         }
 
         // Step 5: Create closure or simple code ref

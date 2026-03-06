@@ -9,6 +9,7 @@ import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
+import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
@@ -1657,7 +1658,7 @@ public class EmitterMethodCreator implements Opcodes {
         InterpretedCode code = compiler.compile(ast, ctx);
 
         if (ctx.compilerOptions.disassembleEnabled) {
-            System.out.println(code.disassemble());
+            System.out.println(Disassemble.disassemble(code));
         }
 
         // Handle captured variables if needed (for closures)

@@ -372,7 +372,7 @@ public class BytecodeInterpreter {
 
                                 if (value == null) {
                                     // Output disassembly around the error
-                                    String disasm = code.disassemble();
+                                    String disasm = Disassemble.disassemble(code);
                                     throw new PerlCompilerException("STORE_GLOBAL_ARRAY: Register r" + srcReg +
                                             " is null when storing to @" + name + " at pc=" + (pc - 3) + "\n\nDisassembly:\n" + disasm);
                                 }

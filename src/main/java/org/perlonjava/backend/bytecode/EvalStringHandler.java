@@ -243,7 +243,7 @@ public class EvalStringHandler {
             evalTrace("EvalStringHandler compiled bytecodeLen=" + (evalCode != null ? evalCode.bytecode.length : -1) +
                     " src=" + (evalCode != null ? evalCode.sourceName : "null"));
             if (RuntimeCode.DISASSEMBLE) {
-                System.out.println(evalCode.disassemble());
+                System.out.println(Disassemble.disassemble(evalCode));
             }
 
             // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
@@ -342,7 +342,7 @@ public class EvalStringHandler {
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
             if (RuntimeCode.DISASSEMBLE) {
-                System.out.println(evalCode.disassemble());
+                System.out.println(Disassemble.disassemble(evalCode));
             }
 
             // Store source lines in debugger symbol table if $^P flags are set

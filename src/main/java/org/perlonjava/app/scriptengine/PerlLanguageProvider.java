@@ -2,6 +2,7 @@ package org.perlonjava.app.scriptengine;
 
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
+import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -327,7 +328,7 @@ public class PerlLanguageProvider {
             // If --disassemble is enabled, print the bytecode
             if (ctx.compilerOptions.disassembleEnabled) {
                 System.out.println("=== Interpreter Bytecode ===");
-                System.out.println(interpretedCode.disassemble());
+                System.out.println(Disassemble.disassemble(interpretedCode));
                 System.out.println("=== End Bytecode ===");
             }
 
@@ -391,7 +392,7 @@ public class PerlLanguageProvider {
 
                     if (ctx.compilerOptions.disassembleEnabled) {
                         System.out.println("=== Interpreter Bytecode ===");
-                        System.out.println(interpretedCode.disassemble());
+                        System.out.println(Disassemble.disassemble(interpretedCode));
                         System.out.println("=== End Bytecode ===");
                     }
 

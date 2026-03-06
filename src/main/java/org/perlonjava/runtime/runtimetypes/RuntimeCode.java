@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
+import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -875,7 +876,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         " bytecodeLen=" + (interpretedCode != null ? interpretedCode.bytecode.length : -1) +
                         " src=" + (interpretedCode != null ? interpretedCode.sourceName : "null"));
                 if (DISASSEMBLE) {
-                    System.out.println(interpretedCode.disassemble());
+                    System.out.println(Disassemble.disassemble(interpretedCode));
                 }
 
                 // Set captured variables
