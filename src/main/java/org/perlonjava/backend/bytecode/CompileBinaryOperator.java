@@ -19,8 +19,11 @@ public class CompileBinaryOperator {
             node.left.accept(bytecodeCompiler);
             int filehandleReg = bytecodeCompiler.lastResultReg;
 
-            // Compile the content (right operand)
+            // Compile the content (right operand) in LIST context
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
             node.right.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
             int contentReg = bytecodeCompiler.lastResultReg;
 
             // Emit PRINT or SAY with both registers
@@ -704,13 +707,18 @@ public class CompileBinaryOperator {
         java.util.List<Integer> argRegs = new java.util.ArrayList<>();
         argRegs.add(fhReg);
 
+        int savedContext = bytecodeCompiler.currentCallContext;
         if (node.right instanceof ListNode argsList) {
             for (Node arg : argsList.elements) {
+                bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
                 arg.accept(bytecodeCompiler);
+                bytecodeCompiler.currentCallContext = savedContext;
                 argRegs.add(bytecodeCompiler.lastResultReg);
             }
         } else {
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
             node.right.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
             argRegs.add(bytecodeCompiler.lastResultReg);
         }
 

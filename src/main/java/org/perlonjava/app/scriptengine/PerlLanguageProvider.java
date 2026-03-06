@@ -314,7 +314,7 @@ public class PerlLanguageProvider {
      * @throws Exception if compilation fails
      */
     private static RuntimeCode compileToExecutable(Node ast, EmitterContext ctx) throws Exception {
-        if (ctx.compilerOptions.useInterpreter) {
+        if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {
             // Interpreter path - returns InterpretedCode (extends RuntimeCode)
             ctx.logDebug("Compiling to bytecode interpreter");
             BytecodeCompiler compiler = new BytecodeCompiler(

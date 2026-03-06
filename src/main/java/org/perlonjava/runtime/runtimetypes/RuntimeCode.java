@@ -118,6 +118,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             System.getenv("JPERL_DISASSEMBLE") != null;
     public static boolean USE_INTERPRETER =
             System.getenv("JPERL_INTERPRETER") != null;
+    public static final boolean FORCE_INTERPRETER =
+            System.getenv("JPERL_INTERPRETER") != null;
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
@@ -185,6 +187,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void setUseInterpreter(boolean value) {
         USE_INTERPRETER = value;
     }
+
 
     /**
      * Get the current eval runtime context for accessing variable runtime values during parsing.
