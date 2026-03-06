@@ -73,13 +73,13 @@ echo "Target: under $MAX_SIZE bytes for reliable JIT compilation"
 echo ""
 
 # Check main execute() method
-check_method "org.perlonjava.interpreter.BytecodeInterpreter" "execute" || FAILED=1
+check_method "org.perlonjava.backend.bytecode.BytecodeInterpreter" "execute" || FAILED=1
 
 # Check secondary methods
-check_method "org.perlonjava.interpreter.BytecodeInterpreter" "executeComparisons" || FAILED=1
-check_method "org.perlonjava.interpreter.BytecodeInterpreter" "executeArithmetic" || FAILED=1
-check_method "org.perlonjava.interpreter.BytecodeInterpreter" "executeCollections" || FAILED=1
-check_method "org.perlonjava.interpreter.BytecodeInterpreter" "executeTypeOps" || FAILED=1
+check_method "org.perlonjava.backend.bytecode.BytecodeInterpreter" "executeComparisons" || FAILED=1
+check_method "org.perlonjava.backend.bytecode.BytecodeInterpreter" "executeArithmetic" || FAILED=1
+check_method "org.perlonjava.backend.bytecode.BytecodeInterpreter" "executeCollections" || FAILED=1
+check_method "org.perlonjava.backend.bytecode.BytecodeInterpreter" "executeTypeOps" || FAILED=1
 
 echo ""
 
