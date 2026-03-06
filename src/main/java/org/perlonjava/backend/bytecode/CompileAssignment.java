@@ -10,6 +10,221 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileAssignment {
+
+    private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
+        if (!leftOp.operator.equals("local")) return false;
+        Node localOperand = leftOp.operand;
+        if (localOperand instanceof BinaryOperatorNode hashAccess && hashAccess.operator.equals("{")) {
+            bc.compileNode(hashAccess, -1, rhsContext);
+            int elemReg = bc.lastResultReg;
+            bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+            bc.emitReg(elemReg);
+            bc.compileNode(node.right, -1, rhsContext);
+            int valueReg = bc.lastResultReg;
+            bc.emit(Opcodes.SET_SCALAR);
+            bc.emitReg(elemReg);
+            bc.emitReg(valueReg);
+            bc.lastResultReg = elemReg;
+            return true;
+        }
+        if (localOperand instanceof OperatorNode sigilOp) {
+            String sigil = sigilOp.operator;
+            if ((sigil.equals("$") || sigil.equals("@") || sigil.equals("%") || sigil.equals("*"))
+                    && sigilOp.operand instanceof IdentifierNode idNode) {
+                String varName = sigil + idNode.name;
+                if (bc.hasVariable(varName) && !bc.isOurVariable(varName)) {
+                    bc.throwCompilerException("Can't localize lexical variable " + varName);
+                    return true;
+                }
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalVarName);
+                int localReg = bc.allocateRegister();
+                switch (sigil) {
+                    case "$" -> {
+                        bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                        bc.emitReg(localReg);
+                        bc.emit(nameIdx);
+                        bc.emit(Opcodes.SET_SCALAR);
+                        bc.emitReg(localReg);
+                        bc.emitReg(valueReg);
+                    }
+                    case "@" -> {
+                        bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        bc.emitReg(localReg);
+                        bc.emit(nameIdx);
+                        bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        bc.emitReg(localReg);
+                        bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                        bc.emitReg(localReg);
+                        bc.emitReg(valueReg);
+                    }
+                    case "%" -> {
+                        bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                        bc.emitReg(localReg);
+                        bc.emit(nameIdx);
+                        bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        bc.emitReg(localReg);
+                        bc.emit(Opcodes.HASH_SET_FROM_LIST);
+                        bc.emitReg(localReg);
+                        bc.emitReg(valueReg);
+                    }
+                    case "*" -> {
+                        bc.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
+                        bc.emitReg(localReg);
+                        bc.emit(nameIdx);
+                        bc.emit(Opcodes.STORE_GLOB);
+                        bc.emitReg(localReg);
+                        bc.emitReg(valueReg);
+                    }
+                }
+                bc.lastResultReg = localReg;
+                return true;
+            }
+            if (sigil.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
+                    && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                return handleLocalOurAssignment(bc, node, innerSigilOp, idNode, rhsContext);
+            }
+        }
+        if (localOperand instanceof ListNode listNode) {
+            return handleLocalListAssignment(bc, node, listNode, rhsContext);
+        }
+        return false;
+    }
+
+    private static boolean handleLocalOurAssignment(BytecodeCompiler bc, BinaryOperatorNode node,
+            OperatorNode innerSigilOp, IdentifierNode idNode, int rhsContext) {
+        String innerSigil = innerSigilOp.operator;
+        String varName = innerSigil + idNode.name;
+        String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
+        int nameIdx = bc.addToStringPool(globalVarName);
+        int ourReg = bc.hasVariable(varName) ? bc.getVariableRegister(varName) : bc.addVariable(varName, "our");
+        bc.compileNode(node.right, -1, rhsContext);
+        int valueReg = bc.lastResultReg;
+        int localReg = bc.allocateRegister();
+        switch (innerSigil) {
+            case "$" -> {
+                bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                bc.emitReg(ourReg);
+                bc.emit(nameIdx);
+                bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+                bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                bc.emitReg(ourReg);
+                bc.emit(nameIdx);
+            }
+            case "@" -> {
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(ourReg);
+                bc.emit(nameIdx);
+                bc.emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+            }
+            case "%" -> {
+                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                bc.emitReg(ourReg);
+                bc.emit(nameIdx);
+                bc.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.HASH_SET_FROM_LIST);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+            }
+            default -> {
+                bc.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                return true;
+            }
+        }
+        bc.lastResultReg = localReg;
+        return true;
+    }
+
+    private static boolean tryAddAssignOptimization(BytecodeCompiler bc, BinaryOperatorNode node, int rhsContext) {
+        if (!(node.left instanceof OperatorNode leftOp) || !(node.right instanceof BinaryOperatorNode rightBin)) return false;
+        if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode leftId)) return false;
+        if (!rightBin.operator.equals("+") || !(rightBin.left instanceof OperatorNode rightLeftOp)) return false;
+        if (!rightLeftOp.operator.equals("$") || !(rightLeftOp.operand instanceof IdentifierNode rightLeftId)) return false;
+        String leftVarName = "$" + leftId.name;
+        String rightLeftVarName = "$" + rightLeftId.name;
+        boolean isCaptured = bc.capturedVarIndices != null && bc.capturedVarIndices.containsKey(leftVarName);
+        if (!leftVarName.equals(rightLeftVarName) || !bc.hasVariable(leftVarName) || isCaptured) return false;
+        int targetReg = bc.getVariableRegister(leftVarName);
+        bc.compileNode(rightBin.right, -1, rhsContext);
+        int rhsReg = bc.lastResultReg;
+        bc.emit(Opcodes.ADD_ASSIGN);
+        bc.emitReg(targetReg);
+        bc.emitReg(rhsReg);
+        bc.lastResultReg = targetReg;
+        return true;
+    }
+
+    private static boolean handleLocalListAssignment(BytecodeCompiler bc, BinaryOperatorNode node,
+            ListNode listNode, int rhsContext) {
+        if (listNode.elements.size() == 1) {
+            Node element = listNode.elements.get(0);
+            if (element instanceof OperatorNode sigilOp && sigilOp.operator.equals("$")
+                    && sigilOp.operand instanceof IdentifierNode idNode) {
+                String varName = "$" + idNode.name;
+                if (bc.hasVariable(varName)) {
+                    bc.throwCompilerException("Can't localize lexical variable " + varName);
+                    return true;
+                }
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                String globalVarName = bc.getCurrentPackage() + "::" + idNode.name;
+                int nameIdx = bc.addToStringPool(globalVarName);
+                int localReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = localReg;
+                return true;
+            }
+        }
+        bc.compileNode(node.right, -1, rhsContext);
+        int valueReg = bc.lastResultReg;
+        for (int i = 0; i < listNode.elements.size(); i++) {
+            Node element = listNode.elements.get(i);
+            if (element instanceof OperatorNode sigilOp && sigilOp.operator.equals("$")
+                    && sigilOp.operand instanceof IdentifierNode idNode) {
+                String varName = "$" + idNode.name;
+                if (bc.hasVariable(varName)) {
+                    bc.throwCompilerException("Can't localize lexical variable " + varName);
+                    return true;
+                }
+                String globalVarName = bc.getCurrentPackage() + "::" + idNode.name;
+                int nameIdx = bc.addToStringPool(globalVarName);
+                int localReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                int elemReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(elemReg);
+                bc.emitReg(valueReg);
+                bc.emitInt(i);
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(localReg);
+                bc.emitReg(elemReg);
+                if (i == 0) bc.lastResultReg = localReg;
+            }
+        }
+        return true;
+    }
+
     /**
      * Helper method to compile assignment operators (=).
      * Extracted from visit(BinaryOperatorNode) to reduce method size.
@@ -317,347 +532,15 @@ public class CompileAssignment {
                 }
 
                 // Special case: local $x = value
-                if (leftOp.operator.equals("local")) {
-                    // Extract variable from "local" operand
-                    Node localOperand = leftOp.operand;
-
-                    // Handle local $hash{key} = value (localizing hash element)
-                    if (localOperand instanceof BinaryOperatorNode hashAccess) {
-                        if (hashAccess.operator.equals("{")) {
-                            // Compile the hash access to get the hash element reference
-                            // This returns a RuntimeScalar that is aliased to the hash slot
-                            bytecodeCompiler.compileNode(hashAccess, -1, rhsContext);
-                            int elemReg = bytecodeCompiler.lastResultReg;
-
-                            // Push this hash element to the local variable stack
-                            bytecodeCompiler.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-                            bytecodeCompiler.emitReg(elemReg);
-
-                            // Compile RHS
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valueReg = bytecodeCompiler.lastResultReg;
-
-                            // Assign value to the hash element (which is already localized)
-                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                            bytecodeCompiler.emitReg(elemReg);
-                            bytecodeCompiler.emitReg(valueReg);
-
-                            bytecodeCompiler.lastResultReg = elemReg;
-                            return;
-                        }
-                    }
-
-                    // Handle local $x (where $x is OperatorNode("$", IdentifierNode("x")))
-                    if (localOperand instanceof OperatorNode sigilOp) {
-                        if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                            String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-
-                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
-                                bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
-                                return;
-                            }
-
-                            // Compile RHS first
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valueReg = bytecodeCompiler.lastResultReg;
-
-                            // It's a global variable - call makeLocal which returns the localized scalar
-                            String globalVarName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
-
-                            int localReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                            bytecodeCompiler.emitReg(localReg);
-                            bytecodeCompiler.emit(nameIdx);
-
-                            // Assign value to the localized scalar (not to the global!)
-                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                            bytecodeCompiler.emitReg(localReg);
-                            bytecodeCompiler.emitReg(valueReg);
-
-                            bytecodeCompiler.lastResultReg = localReg;
-                            return;
-                        } else if (sigilOp.operator.equals("@") && sigilOp.operand instanceof IdentifierNode) {
-                            // Handle local @array = value
-                            String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
-
-                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
-                                bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
-                                return;
-                            }
-
-                            // Compile RHS first
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valueReg = bytecodeCompiler.lastResultReg;
-
-                            // It's a global array - get it and push to local stack
-                            String globalVarName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
-
-                            int arrayReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.emit(nameIdx);
-
-                            // Push to local variable stack
-                            bytecodeCompiler.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-                            bytecodeCompiler.emitReg(arrayReg);
-
-                            // Populate array from list
-                            bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.emitReg(valueReg);
-
-                            bytecodeCompiler.lastResultReg = arrayReg;
-                            return;
-                        } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
-                            // Handle local %hash = value
-                            String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
-
-                            if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
-                                bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
-                                return;
-                            }
-
-                            // Compile RHS first
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valueReg = bytecodeCompiler.lastResultReg;
-
-                            // It's a global hash - get it and push to local stack
-                            String globalVarName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
-
-                            int hashReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emit(nameIdx);
-
-                            // Push to local variable stack
-                            bytecodeCompiler.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-                            bytecodeCompiler.emitReg(hashReg);
-
-                            // Populate hash from list
-                            bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
-                            bytecodeCompiler.emitReg(hashReg);
-                            bytecodeCompiler.emitReg(valueReg);
-
-                            bytecodeCompiler.lastResultReg = hashReg;
-                            return;
-                        } else if (sigilOp.operator.equals("*") && sigilOp.operand instanceof IdentifierNode) {
-                            // Handle local *glob = value
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valueReg = bytecodeCompiler.lastResultReg;
-
-                            String globalName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) sigilOp.operand).name,
-                                    bytecodeCompiler.getCurrentPackage());
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalName);
-
-                            int globReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
-                            bytecodeCompiler.emitReg(globReg);
-                            bytecodeCompiler.emit(nameIdx);
-
-                            bytecodeCompiler.emit(Opcodes.STORE_GLOB);
-                            bytecodeCompiler.emitReg(globReg);
-                            bytecodeCompiler.emitReg(valueReg);
-
-                            bytecodeCompiler.lastResultReg = globReg;
-                            return;
-                        } else if (sigilOp.operator.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
-                                && innerSigilOp.operand instanceof IdentifierNode idNode) {
-                            String innerSigil = innerSigilOp.operator;
-                            String varName = innerSigil + idNode.name;
-                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
-
-                            int ourReg = bytecodeCompiler.hasVariable(varName) ? bytecodeCompiler.getVariableRegister(varName) : bytecodeCompiler.addVariable(varName, "our");
-
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                            int valueReg = bytecodeCompiler.lastResultReg;
-
-                            switch (innerSigil) {
-                                case "$" -> {
-                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                                    bytecodeCompiler.emitReg(ourReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    int localReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emitReg(valueReg);
-                                    // After localization, reload ourReg so subsequent accesses
-                                    // to the `our` variable see the new localized scalar.
-                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                                    bytecodeCompiler.emitReg(ourReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    bytecodeCompiler.lastResultReg = localReg;
-                                }
-                                case "@" -> {
-                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                    bytecodeCompiler.emitReg(ourReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    int localReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emitReg(valueReg);
-                                    bytecodeCompiler.lastResultReg = localReg;
-                                }
-                                case "%" -> {
-                                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                                    bytecodeCompiler.emitReg(ourReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    int localReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emit(nameIdx);
-                                    bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emitReg(valueReg);
-                                    bytecodeCompiler.lastResultReg = localReg;
-                                }
-                                default ->
-                                        bytecodeCompiler.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
-                            }
-                            return;
-                        }
-                    } else if (localOperand instanceof ListNode listNode) {
-                        // Handle local($x) = value or local($x, $y) = (v1, v2)
-
-                        // Special case: single element list local($x) = value
-                        if (listNode.elements.size() == 1) {
-                            Node element = listNode.elements.get(0);
-                            if (element instanceof OperatorNode sigilOp) {
-                                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-
-                                    // Check if it's a lexical variable (should not be localized)
-                                    if (bytecodeCompiler.hasVariable(varName)) {
-                                        bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
-                                        return;
-                                    }
-
-                                    // Compile RHS first
-                                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                                    int valueReg = bytecodeCompiler.lastResultReg;
-
-                                    // Get the global variable and localize it
-                                    String packageName = bytecodeCompiler.getCurrentPackage();
-                                    String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
-                                    int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
-
-                                    int localReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emit(nameIdx);
-
-                                    // Assign value to the localized variable
-                                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emitReg(valueReg);
-
-                                    bytecodeCompiler.lastResultReg = localReg;
-                                    return;
-                                }
-                            }
-                        }
-
-                        // Multi-element case: local($x, $y) = (v1, v2)
-                        // Compile RHS first
-                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                        int valueReg = bytecodeCompiler.lastResultReg;
-
-                        // For each element in the list, localize and assign
-                        for (int i = 0; i < listNode.elements.size(); i++) {
-                            Node element = listNode.elements.get(i);
-
-                            if (element instanceof OperatorNode sigilOp) {
-                                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-
-                                    // Check if it's a lexical variable (should not be localized)
-                                    if (bytecodeCompiler.hasVariable(varName)) {
-                                        bytecodeCompiler.throwCompilerException("Can't localize lexical variable " + varName);
-                                        return;
-                                    }
-
-                                    // Get the global variable
-                                    String packageName = bytecodeCompiler.getCurrentPackage();
-                                    String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
-                                    int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
-
-                                    int localReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emit(nameIdx);
-
-                                    // Extract element from RHS list
-                                    int elemReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emit(Opcodes.ARRAY_GET);
-                                    bytecodeCompiler.emitReg(elemReg);
-                                    bytecodeCompiler.emitReg(valueReg);
-                                    bytecodeCompiler.emitInt(i);
-
-                                    // Assign to the localized variable
-                                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
-                                    bytecodeCompiler.emitReg(localReg);
-                                    bytecodeCompiler.emitReg(elemReg);
-
-                                    if (i == 0) {
-                                        // Return the first localized variable
-                                        bytecodeCompiler.lastResultReg = localReg;
-                                    }
-                                }
-                            }
-                        }
-                        return;
-                    }
+                if (handleLocalAssignment(bytecodeCompiler, node, leftOp, rhsContext)) {
+                    return;
                 }
             }
 
             // Regular assignment: $x = value
             // OPTIMIZATION: Detect $x = $x + $y and emit ADD_ASSIGN instead of ADD_SCALAR + ALIAS
-            if (node.left instanceof OperatorNode leftOp && node.right instanceof BinaryOperatorNode rightBin) {
-
-                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode &&
-                        rightBin.operator.equals("+") &&
-                        rightBin.left instanceof OperatorNode rightLeftOp) {
-
-                    String leftVarName = "$" + ((IdentifierNode) leftOp.operand).name;
-
-                    if (rightLeftOp.operator.equals("$") && rightLeftOp.operand instanceof IdentifierNode) {
-                        String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
-
-                        // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
-                        // Skip optimization for captured variables (need SET_SCALAR)
-                        boolean isCaptured = bytecodeCompiler.capturedVarIndices != null &&
-                                bytecodeCompiler.capturedVarIndices.containsKey(leftVarName);
-
-                        if (leftVarName.equals(rightLeftVarName) && bytecodeCompiler.hasVariable(leftVarName) && !isCaptured) {
-                            int targetReg = bytecodeCompiler.getVariableRegister(leftVarName);
-
-                            // Compile RHS operand ($y)
-                            bytecodeCompiler.compileNode(rightBin.right, -1, rhsContext);
-                            int rhsReg = bytecodeCompiler.lastResultReg;
-
-                            // Emit ADD_ASSIGN instead of ADD_SCALAR + ALIAS
-                            bytecodeCompiler.emit(Opcodes.ADD_ASSIGN);
-                            bytecodeCompiler.emitReg(targetReg);
-                            bytecodeCompiler.emitReg(rhsReg);
-
-                            bytecodeCompiler.lastResultReg = targetReg;
-                            return;
-                        }
-                    }
-                }
+            if (tryAddAssignOptimization(bytecodeCompiler, node, rhsContext)) {
+                return;
             }
 
             // Handle ${block} = value and $$var = value (symbolic references)
