@@ -40,6 +40,7 @@ public class SignatureParser {
     private int minParams = 0;
     private int maxParams = 0;
     private boolean hasSlurpy = false;
+    private boolean hasOptional = false;
     private String namedArgsHashName = null; // Track the hash name for named parameters
     private String subroutineName = null; // Optional subroutine name for error messages
     private boolean isMethod = false; // True if parsing method signature (has implicit $self)
@@ -131,6 +132,8 @@ public class SignatureParser {
     }
 
     private void parseParameter() {
+        int paramStartIndex = parser.tokenIndex;
+
         // Check for named parameter (starts with :)
         boolean isNamed = false;
         if (peekToken().text.equals(":")) {
@@ -144,7 +147,7 @@ public class SignatureParser {
         validateSigil(sigil);
 
         if (hasSlurpy) {
-            parser.throwError("Slurpy parameter not last");
+            parser.throwError(paramStartIndex, "Slurpy parameter not last");
         }
 
         // Check if this is a slurpy parameter
@@ -161,9 +164,23 @@ public class SignatureParser {
             paramName = consumeToken().text;
         }
 
+        if (paramName != null && paramName.equals("_")) {
+            parser.throwError(paramStartIndex, "Can't use global " + sigil + "_ in subroutine signature");
+        }
+
         // Named parameters must have a name
         if (isNamed && paramName == null) {
-            parser.throwError("Named parameter must have a name");
+            parser.throwError("Named parameters must actually have a name");
+        }
+
+        // Check for illegal operator after parameter (e.g. $b += 1)
+        LexerToken afterParam = peekToken();
+        if (paramName != null && !afterParam.text.equals(",") && !afterParam.text.equals(")")
+                && !afterParam.text.equals("=") && !afterParam.text.equals("//=") && !afterParam.text.equals("||=")
+                && !afterParam.text.equals("$") && !afterParam.text.equals("@") && !afterParam.text.equals("%")) {
+            if (afterParam.type == LexerTokenType.OPERATOR) {
+                parser.throwError("Illegal operator following parameter in a subroutine signature");
+            }
         }
 
         // Create parameter variable or undef placeholder
@@ -178,7 +195,7 @@ public class SignatureParser {
             if (isSlurpy) {
                 handleSlurpyParameter();
             } else {
-                handleScalarParameter(paramVariable);
+                handleScalarParameter(paramVariable, paramStartIndex);
             }
         }
     }
@@ -215,8 +232,12 @@ public class SignatureParser {
         hasSlurpy = true;
         maxParams = Integer.MAX_VALUE;
 
-        // Verify no more parameters after slurpy
         LexerToken next = peekToken();
+        if (next.text.equals("=") || next.text.equals("//=") || next.text.equals("||=")) {
+            parser.throwError("A slurpy parameter may not have a default value");
+        }
+
+        // Verify no more parameters after slurpy
         if (next.text.equals(",")) {
             consumeToken(); // consume comma
             next = peekToken();
@@ -230,11 +251,12 @@ public class SignatureParser {
         }
     }
 
-    private void handleScalarParameter(Node paramVariable) {
+    private void handleScalarParameter(Node paramVariable, int paramStartIndex) {
         LexerToken next = peekToken();
 
         // Check for default value
         if (next.text.equals("=") || next.text.equals("||=") || next.text.equals("//=")) {
+            hasOptional = true;
             String defaultOp = consumeToken().text;
             Node defaultValue = parseDefaultValue(paramVariable);
 
@@ -242,7 +264,9 @@ public class SignatureParser {
                 astNodes.add(generateDefaultAssignment(paramVariable, defaultValue, defaultOp, maxParams));
             }
         } else {
-            // Mandatory parameter
+            if (hasOptional) {
+                parser.throwError(paramStartIndex, "Mandatory parameter follows optional parameter");
+            }
             minParams++;
         }
 

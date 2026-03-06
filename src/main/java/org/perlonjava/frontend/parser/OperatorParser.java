@@ -799,18 +799,18 @@ public class OperatorParser {
     static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex) {
         Node separator;
         ListNode operand;
+        int firstArgIndex = parser.tokenIndex;
         // Handle operators with a RuntimeList operand
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
         separator = operand.elements.removeFirst();
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
-            // assert that separator is an `@array` or `my @array`
             var op = separator;
             if (op instanceof OperatorNode operatorNode && operatorNode.operator.equals("my")) {
                 op = operatorNode.operand;
             }
             if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
-                parser.throwError("Type of arg 1 to " + operatorName + " must be array (not constant item)");
+                parser.throwError(firstArgIndex, "Type of arg 1 to " + operatorName + " must be array (not constant item)");
             }
         }
 

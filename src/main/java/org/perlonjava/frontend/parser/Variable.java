@@ -135,6 +135,19 @@ public class Variable {
             return parseBracedVariable(parser, sigil, false);
         }
 
+        // Detect bare $# (no array name follows) — deprecated since Perl 5.30
+        if (sigil.equals("$#")) {
+            LexerToken afterSigil = nextNonWsToken;
+            if (afterSigil.type != LexerTokenType.IDENTIFIER
+                    && afterSigil.type != LexerTokenType.NUMBER
+                    && !afterSigil.text.equals("{")
+                    && !afterSigil.text.equals("[")
+                    && !afterSigil.text.equals("$")
+                    && !afterSigil.text.equals("'")) {
+                parser.throwCleanError("$# is no longer supported as of Perl 5.30");
+            }
+        }
+
         // Normal variable parsing: try to parse an identifier
         // Store the current position before parsing the identifier
         int startIndex = parser.tokenIndex;

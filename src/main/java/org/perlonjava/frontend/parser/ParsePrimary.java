@@ -305,6 +305,9 @@ public class ParsePrimary {
 
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
 
+            case "$*":
+                parser.throwCleanError("$* is no longer supported as of Perl 5.30");
+
             case "$", "$#", "@", "%", "*":
                 // Variable sigils: $scalar, @array, %hash, *glob, $#array
                 return Variable.parseVariable(parser, token.text);

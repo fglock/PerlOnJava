@@ -6,6 +6,7 @@ import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
@@ -221,15 +222,17 @@ public class Parser {
         throw new PerlCompilerException(this.tokenIndex, message, this.ctx.errorUtil);
     }
 
+    public void throwError(int index, String message) {
+        throw new PerlCompilerException(index, message, this.ctx.errorUtil);
+    }
+
     /**
      * Throws a clean parser error that matches Perl's exact error message format
      * without additional context or stack traces.
      */
     public void throwCleanError(String message) {
-        // Get current line number for clean error message
-        int lineNumber = this.ctx.errorUtil.getLineNumber(this.tokenIndex);
-        String fileName = this.ctx.errorUtil.getFileName();
-        String cleanMessage = message + " at " + fileName + " line " + lineNumber + ".";
+        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        String cleanMessage = message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".";
         throw new PerlParserException(cleanMessage);
     }
 
