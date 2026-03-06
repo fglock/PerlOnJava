@@ -1811,6 +1811,10 @@ public class Opcodes {
      * Format: LOAD_BYTE_STRING rd strIndex
      */
     public static final short LOAD_BYTE_STRING = 372;
+    /**
+     * times: Format: TIMES rd argsReg ctx
+     */
+    public static final short TIMES = 373;
 
     private Opcodes() {
     } // Utility class - no instantiation

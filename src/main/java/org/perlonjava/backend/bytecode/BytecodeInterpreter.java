@@ -1475,7 +1475,7 @@ public class BytecodeInterpreter {
                             case Opcodes.CHMOD, Opcodes.UNLINK, Opcodes.UTIME, Opcodes.RENAME, Opcodes.LINK,
                                  Opcodes.READLINK, Opcodes.UMASK, Opcodes.GETC, Opcodes.FILENO, Opcodes.QX,
                                  Opcodes.SYSTEM, Opcodes.CALLER, Opcodes.EACH, Opcodes.PACK, Opcodes.UNPACK,
-                                 Opcodes.VEC, Opcodes.LOCALTIME, Opcodes.GMTIME, Opcodes.RESET, Opcodes.CRYPT,
+                                 Opcodes.VEC, Opcodes.LOCALTIME, Opcodes.GMTIME, Opcodes.RESET, Opcodes.TIMES, Opcodes.CRYPT,
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
                                  Opcodes.LISTEN, Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,

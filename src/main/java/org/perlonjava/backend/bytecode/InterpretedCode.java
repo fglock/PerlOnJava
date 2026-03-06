@@ -1554,6 +1554,7 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.LOCALTIME:
                 case Opcodes.GMTIME:
                 case Opcodes.RESET:
+                case Opcodes.TIMES:
                 case Opcodes.CHMOD:
                 case Opcodes.UNLINK:
                 case Opcodes.UTIME:
@@ -1577,6 +1578,7 @@ public class InterpretedCode extends RuntimeCode {
                         case Opcodes.LOCALTIME -> "localtime";
                         case Opcodes.GMTIME -> "gmtime";
                         case Opcodes.RESET -> "reset";
+                        case Opcodes.TIMES -> "times";
                         case Opcodes.CHMOD -> "chmod";
                         case Opcodes.UNLINK -> "unlink";
                         case Opcodes.UTIME -> "utime";

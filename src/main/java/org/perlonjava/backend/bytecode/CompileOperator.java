@@ -2608,7 +2608,7 @@ public class CompileOperator {
                 op.equals("rename") || op.equals("link") || op.equals("readlink") ||
                 op.equals("umask") || op.equals("system") || op.equals("pack") ||
                 op.equals("unpack") || op.equals("vec") || op.equals("crypt") ||
-                op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") ||
+                op.equals("localtime") || op.equals("gmtime") || op.equals("caller") || op.equals("reset") || op.equals("times") ||
                 op.equals("fileno") || op.equals("getc") || op.equals("qx") ||
                 op.equals("close") ||
                 op.equals("binmode") || op.equals("seek") ||
@@ -2670,6 +2670,7 @@ public class CompileOperator {
                 case "localtime" -> Opcodes.LOCALTIME;
                 case "gmtime" -> Opcodes.GMTIME;
                 case "reset" -> Opcodes.RESET;
+                case "times" -> Opcodes.TIMES;
                 case "crypt" -> Opcodes.CRYPT;
                 case "close" -> Opcodes.CLOSE;
                 case "binmode" -> Opcodes.BINMODE;
