@@ -17,7 +17,7 @@ public class CompileBinaryOperatorHelper {
      */
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex) {
         // Allocate result register
-        int rd = bytecodeCompiler.allocateRegister();
+        int rd = bytecodeCompiler.allocateOutputRegister();
 
         // Emit opcode based on operator
         switch (operator) {

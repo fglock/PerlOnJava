@@ -34,9 +34,7 @@ public class CompileAssignment {
         }
 
         // Set the context for subroutine calls in RHS
-        int savedContext = bytecodeCompiler.currentCallContext;
-        try {
-            bytecodeCompiler.currentCallContext = rhsContext;
+        int outerContext = bytecodeCompiler.currentCallContext;
 
             // Special case: my $x = value
             if (node.left instanceof OperatorNode leftOp) {
@@ -62,7 +60,7 @@ public class CompileAssignment {
 
                                 // Now register contains a reference to the persistent RuntimeScalar
                                 // Store the initializer value INTO that RuntimeScalar
-                                node.right.accept(bytecodeCompiler);
+                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                                 int valueReg = bytecodeCompiler.lastResultReg;
 
                                 // Set the value in the persistent scalar using SET_SCALAR
@@ -79,7 +77,7 @@ public class CompileAssignment {
                             // Regular lexical variable (not captured)
                             // Compile RHS first, before adding variable to scope,
                             // so that `my $x = $x` reads the outer $x on the RHS
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // Now allocate register for new lexical variable and add to symbol table
@@ -107,7 +105,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(beginId);
 
                                 // Compile RHS (should evaluate to a list)
-                                node.right.accept(bytecodeCompiler);
+                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                                 int listReg = bytecodeCompiler.lastResultReg;
 
                                 // Populate array from list
@@ -117,9 +115,7 @@ public class CompileAssignment {
 
                                 bytecodeCompiler.registerVariable(varName, arrayReg);
 
-                                // In scalar context, return the count of elements assigned
-                                // In list/void context, return the array
-                                if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
+                                if (rhsContext == RuntimeContextType.SCALAR) {
                                     int countReg = bytecodeCompiler.allocateRegister();
                                     bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
                                     bytecodeCompiler.emitReg(countReg);
@@ -131,28 +127,20 @@ public class CompileAssignment {
                                 return;
                             }
 
-                            // Regular lexical array (not captured)
-                            // Allocate register but don't add to scope yet,
-                            // so that `my @a = @a` reads the outer @a on the RHS
                             int arrayReg = bytecodeCompiler.allocateRegister();
 
-                            // Compile RHS first, before adding variable to scope
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int listReg = bytecodeCompiler.lastResultReg;
 
-                            // Now add to symbol table and create array
                             bytecodeCompiler.registerVariable(varName, arrayReg);
                             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
                             bytecodeCompiler.emitReg(arrayReg);
 
-                            // Populate array from list using setFromList
                             bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(arrayReg);
                             bytecodeCompiler.emitReg(listReg);
 
-                            // In scalar context, return the count of elements assigned
-                            // In list/void context, return the array
-                            if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
+                            if (rhsContext == RuntimeContextType.SCALAR) {
                                 int countReg = bytecodeCompiler.allocateRegister();
                                 bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
                                 bytecodeCompiler.emitReg(countReg);
@@ -178,7 +166,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(beginId);
 
                                 // Compile RHS (should evaluate to a list)
-                                node.right.accept(bytecodeCompiler);
+                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                                 int listReg = bytecodeCompiler.lastResultReg;
 
                                 // Populate hash from list
@@ -197,7 +185,7 @@ public class CompileAssignment {
                             int hashReg = bytecodeCompiler.allocateRegister();
 
                             // Compile RHS first, before adding variable to scope
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int listReg = bytecodeCompiler.lastResultReg;
 
                             // Now add to symbol table and create hash
@@ -220,7 +208,7 @@ public class CompileAssignment {
                         String varName = ((IdentifierNode) myOperand).name;
 
                         // Compile RHS first, before adding variable to scope
-                        node.right.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                         int valueReg = bytecodeCompiler.lastResultReg;
 
                         // Now allocate register and add to symbol table
@@ -239,7 +227,7 @@ public class CompileAssignment {
                     if (myOperand instanceof ListNode listNode) {
 
                         // Compile RHS first
-                        node.right.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                         int listReg = bytecodeCompiler.lastResultReg;
 
                         // Convert to list if needed
@@ -338,7 +326,7 @@ public class CompileAssignment {
                         if (hashAccess.operator.equals("{")) {
                             // Compile the hash access to get the hash element reference
                             // This returns a RuntimeScalar that is aliased to the hash slot
-                            hashAccess.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(hashAccess, -1, rhsContext);
                             int elemReg = bytecodeCompiler.lastResultReg;
 
                             // Push this hash element to the local variable stack
@@ -346,7 +334,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(elemReg);
 
                             // Compile RHS
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // Assign value to the hash element (which is already localized)
@@ -370,12 +358,12 @@ public class CompileAssignment {
                             }
 
                             // Compile RHS first
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // It's a global variable - call makeLocal which returns the localized scalar
-                            String packageName = bytecodeCompiler.getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
                             int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
 
                             int localReg = bytecodeCompiler.allocateRegister();
@@ -400,12 +388,12 @@ public class CompileAssignment {
                             }
 
                             // Compile RHS first
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // It's a global array - get it and push to local stack
-                            String packageName = bytecodeCompiler.getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
                             int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
 
                             int arrayReg = bytecodeCompiler.allocateRegister();
@@ -434,12 +422,12 @@ public class CompileAssignment {
                             }
 
                             // Compile RHS first
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             // It's a global hash - get it and push to local stack
-                            String packageName = bytecodeCompiler.getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name, bytecodeCompiler.getCurrentPackage());
                             int nameIdx = bytecodeCompiler.addToStringPool(globalVarName);
 
                             int hashReg = bytecodeCompiler.allocateRegister();
@@ -460,7 +448,7 @@ public class CompileAssignment {
                             return;
                         } else if (sigilOp.operator.equals("*") && sigilOp.operand instanceof IdentifierNode) {
                             // Handle local *glob = value
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             String globalName = NameNormalizer.normalizeVariableName(
@@ -488,7 +476,7 @@ public class CompileAssignment {
 
                             int ourReg = bytecodeCompiler.hasVariable(varName) ? bytecodeCompiler.getVariableRegister(varName) : bytecodeCompiler.addVariable(varName, "our");
 
-                            node.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int valueReg = bytecodeCompiler.lastResultReg;
 
                             switch (innerSigil) {
@@ -558,7 +546,7 @@ public class CompileAssignment {
                                     }
 
                                     // Compile RHS first
-                                    node.right.accept(bytecodeCompiler);
+                                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                                     int valueReg = bytecodeCompiler.lastResultReg;
 
                                     // Get the global variable and localize it
@@ -584,7 +572,7 @@ public class CompileAssignment {
 
                         // Multi-element case: local($x, $y) = (v1, v2)
                         // Compile RHS first
-                        node.right.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                         int valueReg = bytecodeCompiler.lastResultReg;
 
                         // For each element in the list, localize and assign
@@ -657,7 +645,7 @@ public class CompileAssignment {
                             int targetReg = bytecodeCompiler.getVariableRegister(leftVarName);
 
                             // Compile RHS operand ($y)
-                            rightBin.right.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(rightBin.right, -1, rhsContext);
                             int rhsReg = bytecodeCompiler.lastResultReg;
 
                             // Emit ADD_ASSIGN instead of ADD_SCALAR + ALIAS
@@ -680,7 +668,7 @@ public class CompileAssignment {
 
                 if (leftOp.operand instanceof BlockNode block) {
                     // ${block} = value — mirrors JVM EmitVariable.java case "$"
-                    block.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(block, -1, rhsContext);
                     int nameReg = bytecodeCompiler.lastResultReg;
 
                     // Deref to get lvalue target (strict or non-strict)
@@ -698,7 +686,7 @@ public class CompileAssignment {
                     }
 
                     // Now compile the RHS and assign
-                    node.right.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                     int valueReg = bytecodeCompiler.lastResultReg;
                     bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                     bytecodeCompiler.emitReg(derefReg);
@@ -708,7 +696,7 @@ public class CompileAssignment {
                     return;
                 } else if (leftOp.operand instanceof OperatorNode) {
                     // $$var = value — mirrors JVM EmitVariable.java case "$"
-                    leftOp.operand.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(leftOp.operand, -1, rhsContext);
                     int nameReg = bytecodeCompiler.lastResultReg;
 
                     int derefReg = bytecodeCompiler.allocateRegister();
@@ -724,7 +712,7 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(pkgIdx);
                     }
 
-                    node.right.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                     int valueReg = bytecodeCompiler.lastResultReg;
                     bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                     bytecodeCompiler.emitReg(derefReg);
@@ -737,7 +725,7 @@ public class CompileAssignment {
 
             // Regular assignment: $x = value (no optimization)
             // Compile RHS first
-            node.right.accept(bytecodeCompiler);
+            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
             int valueReg = bytecodeCompiler.lastResultReg;
 
             // Assign to LHS
@@ -824,7 +812,7 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     // In scalar context, return the array size; in list context, return the array
-                    if (savedContext == RuntimeContextType.SCALAR) {
+                    if (outerContext == RuntimeContextType.SCALAR) {
                         // Convert array to scalar (returns size)
                         int sizeReg = bytecodeCompiler.allocateRegister();
                         bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
@@ -864,7 +852,7 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     // In scalar context, return the hash size; in list context, return the hash
-                    if (savedContext == RuntimeContextType.SCALAR) {
+                    if (outerContext == RuntimeContextType.SCALAR) {
                         // Convert hash to scalar (returns bucket info like "3/8")
                         int sizeReg = bytecodeCompiler.allocateRegister();
                         bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
@@ -877,7 +865,7 @@ public class CompileAssignment {
                 } else if (leftOp.operator.equals("our")) {
                     // Assignment to our variable: our $x = value or our @x = value or our %x = value
                     // Compile the our declaration first (which loads the global into a register)
-                    leftOp.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(leftOp, -1, rhsContext);
                     int targetReg = bytecodeCompiler.lastResultReg;
 
                     // Now assign the RHS value to the target register
@@ -943,7 +931,7 @@ public class CompileAssignment {
                         bytecodeCompiler.emitReg(rhsListReg);
 
                         bytecodeCompiler.lastResultReg = resultReg;
-                        bytecodeCompiler.currentCallContext = savedContext;
+                        
                         return;
                     }
 
@@ -969,7 +957,7 @@ public class CompileAssignment {
                 } else if (leftOp.operator.equals("*") && leftOp.operand instanceof BlockNode) {
                     // Symbolic typeglob assignment: *{"name"} = value (no strict refs)
                     // Evaluate the block to get the glob name as a scalar, then load glob by name
-                    leftOp.operand.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(leftOp.operand, -1, rhsContext);
                     int nameScalarReg = bytecodeCompiler.lastResultReg;
 
                     int globReg = bytecodeCompiler.allocateRegister();
@@ -989,7 +977,7 @@ public class CompileAssignment {
                     // Glob assignment where the glob comes from an expression, e.g. $ref->** = ...
                     // or 'name'->** = ...
                     // Compile the glob expression to obtain the RuntimeGlob, then store through it.
-                    leftOp.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(leftOp, -1, rhsContext);
                     int globReg = bytecodeCompiler.lastResultReg;
 
                     bytecodeCompiler.emit(Opcodes.STORE_GLOB);
@@ -1000,7 +988,7 @@ public class CompileAssignment {
                 } else if (leftOp.operator.equals("pos")) {
                     // pos($var) = value - lvalue assignment to regex position
                     // pos() returns a PosLvalueScalar that can be assigned to
-                    node.left.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.left, -1, rhsContext);
                     int lvalueReg = bytecodeCompiler.lastResultReg;
 
                     // Use SET_SCALAR to assign through the lvalue
@@ -1010,7 +998,7 @@ public class CompileAssignment {
 
                     bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("substr")) {
-                    node.left.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.left, -1, rhsContext);
                     int lvalueReg = bytecodeCompiler.lastResultReg;
 
                     bytecodeCompiler.emit(Opcodes.SET_SCALAR);
@@ -1024,7 +1012,7 @@ public class CompileAssignment {
 
                     if (derefOp.operator.equals("$")) {
                         // Compile the scalar to get the array reference
-                        derefOp.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(derefOp, -1, rhsContext);
                         int scalarRefReg = bytecodeCompiler.lastResultReg;
 
                         // Dereference to get the actual array
@@ -1047,7 +1035,7 @@ public class CompileAssignment {
                         bytecodeCompiler.emitReg(valueReg);
 
                         // In scalar context, return array size; in list context, return the array
-                        if (savedContext == RuntimeContextType.SCALAR) {
+                        if (outerContext == RuntimeContextType.SCALAR) {
                             int sizeReg = bytecodeCompiler.allocateRegister();
                             bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
                             bytecodeCompiler.emitReg(sizeReg);
@@ -1153,7 +1141,7 @@ public class CompileAssignment {
                         ArrayLiteralNode indicesNode = (ArrayLiteralNode) leftBin.right;
                         List<Integer> indexRegs = new ArrayList<>();
                         for (Node indexNode : indicesNode.elements) {
-                            indexNode.accept(bytecodeCompiler);
+                            bytecodeCompiler.compileNode(indexNode, -1, rhsContext);
                             indexRegs.add(bytecodeCompiler.lastResultReg);
                         }
 
@@ -1166,18 +1154,14 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(indexReg);
                         }
 
-                        // Compile values (RHS of assignment)
-                        node.right.accept(bytecodeCompiler);
-                        int valuesReg = bytecodeCompiler.lastResultReg;
-
-                        // Emit direct opcode ARRAY_SLICE_SET
+                        // Emit direct opcode ARRAY_SLICE_SET (use valueReg from line 729)
                         bytecodeCompiler.emit(Opcodes.ARRAY_SLICE_SET);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(indicesReg);
-                        bytecodeCompiler.emitReg(valuesReg);
+                        bytecodeCompiler.emitReg(valueReg);
 
                         bytecodeCompiler.lastResultReg = arrayReg;
-                        bytecodeCompiler.currentCallContext = savedContext;
+                        
                         return;
                     }
                 }
@@ -1223,7 +1207,7 @@ public class CompileAssignment {
                     } else if (leftBin.left instanceof BinaryOperatorNode) {
                         // Multidimensional case: $matrix[3][0] = value
                         // Compile left side (which returns a scalar containing an array reference)
-                        leftBin.left.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(leftBin.left, -1, rhsContext);
                         int scalarReg = bytecodeCompiler.lastResultReg;
 
                         // Dereference the array reference to get the actual array
@@ -1253,21 +1237,17 @@ public class CompileAssignment {
                         bytecodeCompiler.throwCompilerException("Array assignment requires index expression");
                     }
 
-                    indexNode.elements.get(0).accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, rhsContext);
                     int indexReg = bytecodeCompiler.lastResultReg;
 
-                    // Compile RHS value
-                    node.right.accept(bytecodeCompiler);
-                    int assignValueReg = bytecodeCompiler.lastResultReg;
-
-                    // Emit ARRAY_SET
+                    // Emit ARRAY_SET (use valueReg from line 729)
                     bytecodeCompiler.emit(Opcodes.ARRAY_SET);
                     bytecodeCompiler.emitReg(arrayReg);
                     bytecodeCompiler.emitReg(indexReg);
-                    bytecodeCompiler.emitReg(assignValueReg);
+                    bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = assignValueReg;
-                    bytecodeCompiler.currentCallContext = savedContext;
+                    bytecodeCompiler.lastResultReg = valueReg;
+                    
                     return;
                 } else if (leftBin.operator.equals("{")) {
                     // Hash element/slice assignment
@@ -1306,7 +1286,7 @@ public class CompileAssignment {
                                     bytecodeCompiler.emit(nameIdx);
                                 }
                             } else if (hashOp.operand instanceof OperatorNode) {
-                                hashOp.operand.accept(bytecodeCompiler);
+                                bytecodeCompiler.compileNode(hashOp.operand, -1, rhsContext);
                                 int scalarRefReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
                                 if (bytecodeCompiler.isStrictRefsEnabled()) {
@@ -1349,7 +1329,7 @@ public class CompileAssignment {
                                     keyRegs.add(keyReg);
                                 } else {
                                     // Expression key
-                                    keyElement.accept(bytecodeCompiler);
+                                    bytecodeCompiler.compileNode(keyElement, -1, rhsContext);
                                     keyRegs.add(bytecodeCompiler.lastResultReg);
                                 }
                             }
@@ -1363,18 +1343,14 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(keyReg);
                             }
 
-                            // Compile RHS values
-                            node.right.accept(bytecodeCompiler);
-                            int valuesReg = bytecodeCompiler.lastResultReg;
-
-                            // Emit direct opcode HASH_SLICE_SET
+                            // Emit direct opcode HASH_SLICE_SET (use valueReg from line 729)
                             bytecodeCompiler.emit(Opcodes.HASH_SLICE_SET);
                             bytecodeCompiler.emitReg(hashReg);
                             bytecodeCompiler.emitReg(keysListReg);
-                            bytecodeCompiler.emitReg(valuesReg);
+                            bytecodeCompiler.emitReg(valueReg);
 
-                            bytecodeCompiler.lastResultReg = valuesReg;
-                            bytecodeCompiler.currentCallContext = savedContext;
+                            bytecodeCompiler.lastResultReg = valueReg;
+                            
                             return;
                         } else if (hashOp.operator.equals("$")) {
                             // $hash{key} or $$ref{key} - dereference to get hash
@@ -1405,7 +1381,7 @@ public class CompileAssignment {
                                 }
                             } else {
                                 // $$ref{key} = value — compile the scalar ref expression and deref to hash
-                                hashOp.operand.accept(bytecodeCompiler);
+                                bytecodeCompiler.compileNode(hashOp.operand, -1, rhsContext);
                                 int scalarReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
                                 if (bytecodeCompiler.isStrictRefsEnabled()) {
@@ -1427,7 +1403,7 @@ public class CompileAssignment {
                     } else if (leftBin.left instanceof BinaryOperatorNode) {
                         // Nested: $hash{outer}{inner} = value
                         // Compile left side (returns scalar containing hash reference or autovivifies)
-                        leftBin.left.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(leftBin.left, -1, rhsContext);
                         int scalarReg = bytecodeCompiler.lastResultReg;
 
                         // Dereference to get the hash (with autovivification)
@@ -1472,22 +1448,18 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(keyIdx);
                     } else {
                         // Expression key: $hash{$var} or $hash{func()}
-                        keyElement.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(keyElement, -1, rhsContext);
                         keyReg = bytecodeCompiler.lastResultReg;
                     }
 
-                    // 3. Compile RHS value
-                    node.right.accept(bytecodeCompiler);
-                    int hashValueReg = bytecodeCompiler.lastResultReg;
-
-                    // 4. Emit HASH_SET
+                    // 3. Emit HASH_SET (use valueReg from line 729)
                     bytecodeCompiler.emit(Opcodes.HASH_SET);
                     bytecodeCompiler.emitReg(hashReg);
                     bytecodeCompiler.emitReg(keyReg);
-                    bytecodeCompiler.emitReg(hashValueReg);
+                    bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = hashValueReg;
-                    bytecodeCompiler.currentCallContext = savedContext;
+                    bytecodeCompiler.lastResultReg = valueReg;
+                    
                     return;
                 }
 
@@ -1497,7 +1469,7 @@ public class CompileAssignment {
                     Node rightSide = leftBin.right;
                     if (rightSide instanceof HashLiteralNode hashKey) {
                         // $ref->{key} = value — hash element via reference
-                        leftBin.left.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(leftBin.left, -1, rhsContext);
                         int refReg = bytecodeCompiler.lastResultReg;
 
                         // Dereference to get the hash
@@ -1526,7 +1498,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(keyReg);
                                 bytecodeCompiler.emit(keyIdx);
                             } else {
-                                keyElement.accept(bytecodeCompiler);
+                                bytecodeCompiler.compileNode(keyElement, -1, rhsContext);
                                 keyReg = bytecodeCompiler.lastResultReg;
                             }
                         } else {
@@ -1534,19 +1506,17 @@ public class CompileAssignment {
                             return;
                         }
 
-                        // Compile RHS and emit HASH_SET
-                        node.right.accept(bytecodeCompiler);
-                        int valReg = bytecodeCompiler.lastResultReg;
+                        // Emit HASH_SET (use valueReg from line 729)
                         bytecodeCompiler.emit(Opcodes.HASH_SET);
                         bytecodeCompiler.emitReg(hashReg);
                         bytecodeCompiler.emitReg(keyReg);
-                        bytecodeCompiler.emitReg(valReg);
-                        bytecodeCompiler.lastResultReg = valReg;
-                        bytecodeCompiler.currentCallContext = savedContext;
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = valueReg;
+                        
                         return;
                     } else if (rightSide instanceof ArrayLiteralNode arrayIdx) {
                         // $ref->[index] = value — array element via reference
-                        leftBin.left.accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(leftBin.left, -1, rhsContext);
                         int refReg = bytecodeCompiler.lastResultReg;
 
                         // Dereference to get the array
@@ -1568,18 +1538,16 @@ public class CompileAssignment {
                             bytecodeCompiler.throwCompilerException("Array index required for arrow assignment");
                             return;
                         }
-                        arrayIdx.elements.get(0).accept(bytecodeCompiler);
+                        bytecodeCompiler.compileNode(arrayIdx.elements.get(0), -1, rhsContext);
                         int idxReg = bytecodeCompiler.lastResultReg;
 
-                        // Compile RHS and emit ARRAY_SET
-                        node.right.accept(bytecodeCompiler);
-                        int valReg = bytecodeCompiler.lastResultReg;
+                        // Emit ARRAY_SET (use valueReg from line 729)
                         bytecodeCompiler.emit(Opcodes.ARRAY_SET);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(idxReg);
-                        bytecodeCompiler.emitReg(valReg);
-                        bytecodeCompiler.lastResultReg = valReg;
-                        bytecodeCompiler.currentCallContext = savedContext;
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = valueReg;
+                        
                         return;
                     }
                 }
@@ -1589,11 +1557,11 @@ public class CompileAssignment {
                 // that wraps a mutable reference. We can assign to it using SET_SCALAR.
                 if (leftBin.operator.equals("(")) {
                     // Call the function (which returns a RuntimeBaseProxy in lvalue context)
-                    node.left.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.left, -1, rhsContext);
                     int lvalueReg = bytecodeCompiler.lastResultReg;
 
                     // Compile RHS
-                    node.right.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                     int rhsReg = bytecodeCompiler.lastResultReg;
 
                     // Assign to the lvalue using SET_SCALAR
@@ -1602,22 +1570,22 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(rhsReg);
 
                     bytecodeCompiler.lastResultReg = rhsReg;
-                    bytecodeCompiler.currentCallContext = savedContext;
+                    
                     return;
                 }
 
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             } else if (node.left instanceof TernaryOperatorNode) {
                 LValueVisitor.getContext(node.left);
-                node.left.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.left, -1, rhsContext);
                 int lvalueReg = bytecodeCompiler.lastResultReg;
-                node.right.accept(bytecodeCompiler);
+                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                 int rhsReg = bytecodeCompiler.lastResultReg;
                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                 bytecodeCompiler.emitReg(lvalueReg);
                 bytecodeCompiler.emitReg(rhsReg);
                 bytecodeCompiler.lastResultReg = rhsReg;
-                bytecodeCompiler.currentCallContext = savedContext;
+                
             } else if (node.left instanceof ListNode listNode) {
                 // List assignment: ($a, $b) = ... or () = ...
                 // In scalar context, returns the number of elements on RHS
@@ -1709,7 +1677,7 @@ public class CompileAssignment {
                 }
 
                 int countReg = -1;
-                if (savedContext == RuntimeContextType.SCALAR) {
+                if (outerContext == RuntimeContextType.SCALAR) {
                     countReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
                     bytecodeCompiler.emitReg(countReg);
@@ -1739,15 +1707,9 @@ public class CompileAssignment {
                     bytecodeCompiler.lastResultReg = rhsListReg;
                 }
 
-                bytecodeCompiler.currentCallContext = savedContext;
             } else {
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
-
-        } finally {
-            // Always restore the calling context
-            bytecodeCompiler.currentCallContext = savedContext;
-        }
     }
 
     static int resolveArrayForDollarHash(BytecodeCompiler bytecodeCompiler, OperatorNode dollarHashOp) {
