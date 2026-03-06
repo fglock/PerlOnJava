@@ -6,6 +6,9 @@
 # Run using:
 # java -cp "h2-2.2.224.jar:target/perlonjava-3.0.0.jar" org.perlonjava.app.cli.Main examples/dbi.pl
 #
+# or using:
+# CLASSPATH=h2-2.2.224.jar ./jperl examples/dbi.pl
+#
 
 use strict;
 use warnings;
