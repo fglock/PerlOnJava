@@ -267,11 +267,14 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        RuntimeScalar target = (RuntimeScalar) registers[rd];
         RuntimeScalar result = StringOperators.stringConcat(
-                (RuntimeScalar) registers[rd],
+                target,
                 (RuntimeScalar) registers[rs]
         );
-        ((RuntimeScalar) registers[rd]).set(result);
+        target.set(result);
+        // Invalidate pos() - any string modification should reset pos to undef
+        RuntimePosLvalue.invalidatePos(target);
         return pc;
     }
 
