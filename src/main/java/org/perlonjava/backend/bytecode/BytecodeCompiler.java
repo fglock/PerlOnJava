@@ -4261,7 +4261,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Step 1: Evaluate list in list context
-        node.list.accept(this);
+        compileNode(node.list, -1, RuntimeContextType.LIST);
         int listReg = lastResultReg;
 
         int foreachRegexSaveReg = -1;
