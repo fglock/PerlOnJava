@@ -135,24 +135,74 @@ Reduce the failing test to the smallest code that demonstrates the bug:
 perl -e 'same code'
 ```
 
-### 5. Use disassembly to understand
+### 5. Use --parse to check AST
+When parsing issues are suspected, compare the parse tree:
+```bash
+./jperl --parse -e 'code'                    # Show PerlOnJava AST
+perl -MO=Deparse -e 'code'                   # Compare with Perl's interpretation
+```
+This helps identify operator precedence issues and incorrect parsing.
+
+### 6. Use disassembly to understand
 ```bash
 ./jperl --disassemble -e 'minimal code' 2>&1 | grep -i "relevant"
 ```
 
-### 6. Add debug prints (if needed)
+### 7. Add debug prints (if needed)
 In Java source, add:
 ```java
 System.err.println("DEBUG: var=" + var);
 ```
 Then rebuild with `mvn package -q -DskipTests`.
 
-### 7. Fix and verify
+### 8. Fix and verify
 ```bash
 # After fixing
 mvn package -q -DskipTests
 ./jperl -e 'test code'        # Verify fix
 mvn test                       # No regressions in unit tests
+```
+
+## Git Workflow
+
+**IMPORTANT**: Always work in a feature branch and create a PR for review.
+
+### 1. Create a branch before making changes
+```bash
+git checkout -b fix-descriptive-name
+```
+
+### 2. Make commits with clear messages
+```bash
+git add -A && git commit -m "Fix <what> by <how>
+
+<Details of the bug and fix>
+
+Generated with [Devin](https://cli.devin.ai/docs)
+
+Co-Authored-By: Devin <noreply@cognition.ai>"
+```
+
+### 3. Push branch and create PR
+```bash
+git push -u origin fix-descriptive-name
+
+# Create PR using gh CLI
+gh pr create --title "Fix: description" --body "## Summary
+- Fixed X by Y
+
+## Test Plan
+- [ ] Unit tests pass
+- [ ] Reproducer now works correctly
+
+Generated with [Devin](https://cli.devin.ai/docs)"
+```
+
+### 4. After PR is merged, clean up
+```bash
+git checkout master
+git pull
+git branch -d fix-descriptive-name
 ```
 
 ## Architecture: Two Backends
@@ -230,18 +280,6 @@ All paths relative to `src/main/java/org/perlonjava/`.
 | `perl5_t/t/uni/` | Unicode | |
 | `perl5_t/t/mro/` | Method resolution | |
 
-## Commit Message Format
-
-```
-Fix <what> by <how>
-
-<Details of the bug and fix>
-
-Generated with [Devin](https://cli.devin.ai/docs)
-
-Co-Authored-By: Devin <noreply@cognition.ai>
-```
-
 ## Quick Reference Commands
 
 ```bash
@@ -252,14 +290,25 @@ mvn package -q -DskipTests
 mvn test
 perl dev/tools/perl_test_runner.pl perl5_t/t/op/bop.t
 
-# Debug
+# Debug parsing
+./jperl --parse -e 'code'
+perl -MO=Deparse -e 'code'
+
+# Debug bytecode
 ./jperl --disassemble -e 'code'
 ./jperl --disassemble --interpreter -e 'code'
 
-# Compare
+# Compare output
 diff <(./jperl -e 'code') <(perl -e 'code')
 
 # Bisect
 git log master..HEAD --oneline
 git checkout <sha> && mvn package -q -DskipTests && ./jperl -e 'test'
+
+# Git workflow (always use branches!)
+git checkout -b fix-name
+# ... make changes ...
+git add -A && git commit -m "Fix message"
+git push -u origin fix-name
+gh pr create --title "Fix: title" --body "Description"
 ```
