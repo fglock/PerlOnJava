@@ -889,13 +889,15 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
-                } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode derefOp) {
-                    // Array dereference assignment: @$r = ...
-                    // The operand should be a scalar variable containing an array reference
+                } else if (leftOp.operator.equals("@") && (leftOp.operand instanceof OperatorNode || leftOp.operand instanceof BlockNode)) {
+                    // Array dereference assignment: @$r = ... or @{expr} = ...
+                    // The operand should evaluate to an array reference
 
-                    if (derefOp.operator.equals("$")) {
-                        // Compile the scalar to get the array reference
-                        bytecodeCompiler.compileNode(derefOp, -1, rhsContext);
+                    boolean isSimpleScalarDeref = leftOp.operand instanceof OperatorNode derefOp && derefOp.operator.equals("$");
+
+                    if (isSimpleScalarDeref || leftOp.operand instanceof BlockNode) {
+                        // Compile the operand to get the array reference
+                        bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
                         int scalarRefReg = bytecodeCompiler.lastResultReg;
 
                         // Dereference to get the actual array

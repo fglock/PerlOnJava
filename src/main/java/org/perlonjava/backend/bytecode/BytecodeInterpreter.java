@@ -794,6 +794,16 @@ public class BytecodeInterpreter {
                                 RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
                                         ? (RuntimeScalar) codeRefBase
                                         : codeRefBase.scalar();
+
+                                // Dereference symbolic code references using current package
+                                // This matches the JVM backend's call to codeDerefNonStrict()
+                                // Only call for STRING/BYTE_STRING types (symbolic references)
+                                // For CODE, REFERENCE, etc. let RuntimeCode.apply() handle errors
+                                if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
+                                    String currentPkg = InterpreterState.currentPackage.get().toString();
+                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                }
+
                                 RuntimeBase argsBase = registers[argsReg];
 
                                 RuntimeArray callArgs;
