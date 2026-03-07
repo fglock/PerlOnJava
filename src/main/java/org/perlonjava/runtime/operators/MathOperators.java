@@ -52,6 +52,17 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            int a = (int) arg1.value;
+            int b = (int) arg2.value;
+            try {
+                return getScalarInt(Math.addExact(a, b));
+            } catch (ArithmeticException ignored) {
+                return new RuntimeScalar((double) a + (double) b);
+            }
+        }
+
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -117,6 +128,17 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            int a = (int) arg1.value;
+            int b = (int) arg2.value;
+            try {
+                return getScalarInt(Math.subtractExact(a, b));
+            } catch (ArithmeticException ignored) {
+                return new RuntimeScalar((double) a - (double) b);
+            }
+        }
+
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -151,6 +173,17 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip blessedId check, getDefinedBoolean(), getNumber()
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            int a = (int) arg1.value;
+            int b = (int) arg2.value;
+            try {
+                return getScalarInt(Math.multiplyExact(a, b));
+            } catch (ArithmeticException ignored) {
+                return new RuntimeScalar((double) a * (double) b);
+            }
+        }
+
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
