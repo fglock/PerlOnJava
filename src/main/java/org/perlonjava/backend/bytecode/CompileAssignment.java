@@ -1248,8 +1248,8 @@ public class CompileAssignment {
                                     bytecodeCompiler.emit(keyIdx);
                                     keyRegs.add(keyReg);
                                 } else {
-                                    // Expression key - must be compiled in SCALAR context
-                                    bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                                    // Expression key - use default context to allow arrays to expand
+                                    keyElement.accept(bytecodeCompiler);
                                     keyRegs.add(bytecodeCompiler.lastResultReg);
                                 }
                             }

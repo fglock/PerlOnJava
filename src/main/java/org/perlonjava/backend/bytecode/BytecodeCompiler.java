@@ -1447,8 +1447,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Expression key - compile in SCALAR context
-                compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                // Expression key - use default context to allow arrays to expand
+                keyElement.accept(this);
                 keyRegs.add(lastResultReg);
             }
         }
@@ -1541,8 +1541,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Expression key - compile in SCALAR context
-                compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                // Expression key - use default context to allow arrays to expand
+                keyElement.accept(this);
                 keyRegs.add(lastResultReg);
             }
         }
