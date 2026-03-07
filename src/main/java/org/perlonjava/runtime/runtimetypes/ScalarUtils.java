@@ -137,33 +137,43 @@ public class ScalarUtils {
     }
 
     public static boolean looksLikeNumber(RuntimeScalar runtimeScalar) {
-        switch (runtimeScalar.type) {
-            case INTEGER:
-            case DOUBLE:
-                return true;
-            case STRING, BYTE_STRING, VSTRING:
-                String str = runtimeScalar.toString().trim();
-                if (str.isEmpty()) {
-                    return false;
-                }
-                // Check for Inf and NaN
-                if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
-                    return true;
-                }
-                // Check for decimal (integer or float)
-                try {
-                    Double.parseDouble(str);
-                    return true;
-                } catch (NumberFormatException e) {
-                    return false;
-                }
-            case BOOLEAN, DUALVAR:
-                return true;
-            case TIED_SCALAR:
-                return looksLikeNumber(runtimeScalar.tiedFetch());
-            default:
-                return false;
+        // Inlined fast-path for most common numeric types (helps JIT inlining)
+        int t = runtimeScalar.type;
+        if (t == INTEGER || t == DOUBLE) {
+            return true;
         }
+        return looksLikeNumberSlow(runtimeScalar, t);
+    }
+
+    // Slow path for looksLikeNumber - handles strings and other types
+    private static boolean looksLikeNumberSlow(RuntimeScalar runtimeScalar, int t) {
+        if (t == STRING || t == BYTE_STRING || t == VSTRING) {
+            String str = runtimeScalar.toString().trim();
+            if (str.isEmpty()) {
+                return false;
+            }
+            // Check for Inf and NaN
+            if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
+                return true;
+            }
+            // Fast check: if first char isn't digit, +, -, or . it's not a number
+            char first = str.charAt(0);
+            if (!((first >= '0' && first <= '9') || first == '+' || first == '-' || first == '.')) {
+                return false;
+            }
+            // Check for decimal (integer or float)
+            try {
+                Double.parseDouble(str);
+                return true;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        } else if (t == BOOLEAN || t == DUALVAR) {
+            return true;
+        } else if (t == TIED_SCALAR) {
+            return looksLikeNumber(runtimeScalar.tiedFetch());
+        }
+        return false;
     }
 
     /**
