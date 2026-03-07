@@ -400,6 +400,41 @@ public class RuntimeList extends RuntimeBase {
      * @return The original list.
      */
     public RuntimeArray setFromList(RuntimeList value) {
+        // Fast path: LHS is all simple scalars, RHS is a single RuntimeArray
+        // This handles the common case: my ($a, $b) = @_
+        if (value.elements.size() == 1 && value.elements.get(0) instanceof RuntimeArray rhsArray) {
+            boolean allSimpleScalars = true;
+            for (RuntimeBase elem : elements) {
+                if (!(elem instanceof RuntimeScalar) || elem instanceof RuntimeScalarReadOnly) {
+                    allSimpleScalars = false;
+                    break;
+                }
+            }
+            if (allSimpleScalars) {
+                List<RuntimeScalar> rhsElements = rhsArray.elements;
+                int rhsSize = rhsElements.size();
+                int lhsSize = elements.size();
+                
+                // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a))
+                RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
+                for (int i = 0; i < rhsValues.length; i++) {
+                    rhsValues[i] = new RuntimeScalar(rhsElements.get(i));
+                }
+                
+                RuntimeArray result = new RuntimeArray(lhsSize);
+                result.scalarContextSize = rhsSize;
+                for (int i = 0; i < lhsSize; i++) {
+                    RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                    if (i < rhsValues.length) {
+                        lhs.set(rhsValues[i]);
+                    } else {
+                        lhs.set(new RuntimeScalar());
+                    }
+                    result.elements.add(lhs);
+                }
+                return result;
+            }
+        }
 
         boolean hasUndefPlaceholderLhs = false;
         for (RuntimeBase elem : elements) {
