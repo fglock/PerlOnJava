@@ -73,12 +73,6 @@ perl -e 'my @a = (1,2,3); print "@a\n"'
 JPERL_INTERPRETER=1 ./jperl -e 'code'  # Interpreter backend
 ```
 
-### Disassembly comparison
-```bash
-./jperl --disassemble -e 'code'                      # JVM bytecode
-./jperl --disassemble --interpreter -e 'code'        # Interpreter bytecode
-```
-
 ## Environment Variables
 
 ### Compiler/Interpreter Control
@@ -119,6 +113,7 @@ git checkout branch && mvn package -q -DskipTests
 ```
 
 ### 2. Bisect to find the bad commit
+**IMPORTANT**: Always rebuild after switching commits!
 ```bash
 git log master..branch --oneline
 git checkout <commit> && mvn package -q -DskipTests && ./jperl -e 'test'
@@ -145,17 +140,29 @@ This helps identify operator precedence issues and incorrect parsing.
 
 ### 6. Use disassembly to understand
 ```bash
-./jperl --disassemble -e 'minimal code' 2>&1 | grep -i "relevant"
+./jperl --disassemble -e 'minimal code'                      # JVM bytecode
+./jperl --disassemble --interpreter -e 'minimal code'        # Interpreter bytecode
 ```
 
-### 7. Add debug prints (if needed)
+### 7. Profile with JFR (for performance issues)
+```bash
+# Record profile
+$JAVA_HOME/bin/java -XX:StartFlightRecording=duration=10s,filename=profile.jfr \
+  -jar target/perlonjava-3.0.0.jar script.pl
+
+# Analyze hotspots
+$JAVA_HOME/bin/jfr print --events jdk.ExecutionSample profile.jfr 2>&1 | \
+  grep -E "^\s+[a-z].*line:" | sed 's/line:.*//' | sort | uniq -c | sort -rn | head -20
+```
+
+### 8. Add debug prints (if needed)
 In Java source, add:
 ```java
 System.err.println("DEBUG: var=" + var);
 ```
 Then rebuild with `mvn package -q -DskipTests`.
 
-### 8. Fix and verify
+### 9. Fix and verify
 ```bash
 # After fixing
 mvn package -q -DskipTests
@@ -224,6 +231,7 @@ Both backends share the parser (same AST) and runtime (same operators, same Runt
 | **Binary ops (interp)** | `backend/bytecode/CompileBinaryOperator.java` | Binary operator compilation |
 | **Unary ops (interp)** | `backend/bytecode/CompileOperator.java` | Unary operator compilation |
 | **Opcodes** | `backend/bytecode/Opcodes.java` | Opcode constants |
+| **eval STRING** | `backend/bytecode/EvalStringHandler.java` | eval STRING compilation |
 | **JVM Compiler** | `backend/jvm/EmitterMethodCreator.java` | AST → JVM bytecode |
 | **JVM Subroutine** | `backend/jvm/EmitSubroutine.java` | Sub compilation (JVM) |
 | **JVM Binary ops** | `backend/jvm/EmitBinaryOperator.java` | Binary ops (JVM) |
@@ -269,6 +277,21 @@ All paths relative to `src/main/java/org/perlonjava/`.
 **Symptom**: Numeric value instead of expected string/reference.
 **Pattern**: Incorrect scalar context conversion.
 **Fix**: Remove spurious `LIST_TO_COUNT` or use proper scalar coercion.
+
+### 7. Block returns stale value when last statement has no result
+**Symptom**: Block/eval returns unexpected value (e.g., 1 instead of undef).
+**Pattern**: Last statement is `for` loop or similar that sets `lastResultReg = -1`.
+**Fix**: In `visit(BlockNode)`, initialize `outerResultReg` to undef when `lastResultReg < 0`.
+
+### 8. Loop list evaluated in wrong context
+**Symptom**: `for` loop only iterates last element when inside `eval` in scalar context.
+**Pattern**: Loop list compiled with `node.list.accept(this)` instead of explicit LIST context.
+**Fix**: Use `compileNode(node.list, -1, RuntimeContextType.LIST)` for loop lists.
+
+### 9. eval STRING context leaks into compiled code
+**Symptom**: Operations inside eval behave differently based on how eval result is used.
+**Pattern**: `currentCallContext` from eval propagates incorrectly to inner constructs.
+**Fix**: Isolate context - loops/blocks should use their own context, not inherit from eval.
 
 ## Test File Categories
 
