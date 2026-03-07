@@ -1475,8 +1475,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (code.defined()) {
-                // Cast the value to RuntimeCode and call apply()
-                return code.apply(subroutineName, a, callContext);
+                // Cast the value to RuntimeCode and call applyCompiled() - compilerSupplier already checked
+                return code.applyCompiled(subroutineName, a, callContext);
             }
 
             // Does AUTOLOAD exist?
@@ -1562,8 +1562,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (code.defined()) {
-                // Cast the value to RuntimeCode and call apply()
-                return code.apply(subroutineName, a, callContext);
+                // Cast the value to RuntimeCode and call applyCompiled() - compilerSupplier already checked
+                return code.applyCompiled(subroutineName, a, callContext);
             }
 
             // Does AUTOLOAD exist?
@@ -1784,6 +1784,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
             return result;
+        } catch (InvocationTargetException e) {
+            Throwable targetException = e.getTargetException();
+            if (!(targetException instanceof RuntimeException)) {
+                throw new RuntimeException(targetException);
+            }
+            throw (RuntimeException) targetException;
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Fast path for already-compiled code (skips compilerSupplier check)
+    public RuntimeList applyCompiled(String subroutineName, RuntimeArray a, int callContext) {
+        if (constantValue != null) {
+            return new RuntimeList(constantValue);
+        }
+        try {
+            if (this.methodHandle == null) {
+                // Fall back to full apply for AUTOLOAD handling
+                return apply(subroutineName, a, callContext);
+            }
+            if (isStatic) {
+                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+            } else {
+                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+            }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {
