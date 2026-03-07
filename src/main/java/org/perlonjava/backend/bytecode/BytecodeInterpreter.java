@@ -794,6 +794,16 @@ public class BytecodeInterpreter {
                                 RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
                                         ? (RuntimeScalar) codeRefBase
                                         : codeRefBase.scalar();
+
+                                // Dereference symbolic code references using current package
+                                // This matches the JVM backend's call to codeDerefNonStrict()
+                                // Only call for STRING/BYTE_STRING types (symbolic references)
+                                // For CODE, REFERENCE, etc. let RuntimeCode.apply() handle errors
+                                if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
+                                    String currentPkg = InterpreterState.currentPackage.get().toString();
+                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                }
+
                                 RuntimeBase argsBase = registers[argsReg];
 
                                 RuntimeArray callArgs;
@@ -1380,7 +1390,7 @@ public class BytecodeInterpreter {
                             case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.SLEEP_OP,
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
-                                 Opcodes.DEREF_SCALAR_NONSTRICT -> {
+                                 Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT -> {
                                 pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                             }
 
@@ -2094,6 +2104,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);
+            }
+            case Opcodes.CODE_DEREF_NONSTRICT -> {
+                return SlowOpcodeHandler.executeCodeDerefNonStrict(bytecode, pc, registers, code);
             }
             default -> throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }
