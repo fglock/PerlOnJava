@@ -39,6 +39,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         elements = new ArrayList<>();
     }
 
+    // Constructor with initial capacity
+    public RuntimeArray(int initialCapacity) {
+        type = PLAIN_ARRAY;
+        elements = new ArrayList<>(initialCapacity);
+    }
+
     /**
      * Constructs a RuntimeArray from a list of RuntimeScalar elements.
      *

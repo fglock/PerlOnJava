@@ -99,8 +99,9 @@ public class InheritanceResolver {
      */
     private static boolean hasIsaChanged(String className) {
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
+        
+        // Build current ISA list
         List<String> currentIsa = new ArrayList<>();
-
         for (RuntimeBase entity : isaArray.elements) {
             String parentName = entity.toString();
             if (parentName != null && !parentName.isEmpty()) {
@@ -112,10 +113,10 @@ public class InheritanceResolver {
 
         // If ISA changed, update cache and return true
         if (!currentIsa.equals(cachedIsa)) {
-            isaStateCache.put(className, new ArrayList<>(currentIsa));
+            isaStateCache.put(className, currentIsa);
             return true;
         }
-
+        
         return false;
     }
 
@@ -142,7 +143,9 @@ public class InheritanceResolver {
         methodCache.clear();
         linearizedClassesCache.clear();
         overloadContextCache.clear();
-        isaStateCache.clear(); // Clear ISA state cache too
+        isaStateCache.clear();
+        // Also clear the inline method cache in RuntimeCode
+        RuntimeCode.clearInlineMethodCache();
     }
 
     /**

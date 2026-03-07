@@ -12,6 +12,9 @@ import static org.perlonjava.backend.jvm.EmitSubroutine.handleSelfCallOperator;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 
 public class Dereference {
+    // Callsite ID counter for inline method caching (unique across all compilations)
+    private static int nextMethodCallsiteId = 0;
+    
     /**
      * Handles the postfix `[]` operator.
      */
@@ -744,6 +747,9 @@ public class Dereference {
                 }
             }
 
+            // Allocate a unique callsite ID for inline method caching
+            int callsiteId = nextMethodCallsiteId++;
+            mv.visitLdcInsn(callsiteId);
             mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
@@ -752,9 +758,9 @@ public class Dereference {
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "call",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
-                    false); // generate an .call()
+                    "callCached",
+                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false); // generate a cached .call()
 
             if (pooledArgsArray) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
