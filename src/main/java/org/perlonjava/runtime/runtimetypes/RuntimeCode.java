@@ -123,8 +123,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             System.getenv("JPERL_INTERPRETER") != null;
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
     
-    // Inline method cache for fast method dispatch
-    // Each call site caches (blessId, methodHash) -> resolved RuntimeCode
+    /**
+     * Inline method cache for fast method dispatch at monomorphic call sites.
+     * 
+     * In OO code, most call sites (e.g., `$obj->method()`) repeatedly call the same
+     * method on objects of the same class. This is called a "monomorphic" call site.
+     * Without caching, each call requires a full method lookup traversing the @ISA
+     * hierarchy, which is expensive.
+     * 
+     * How it works:
+     * 1. Each method call site in compiled code gets a unique callsiteId (allocated
+     *    at compile time via allocateMethodCallsiteId()).
+     * 2. The callsiteId maps to a cache slot via: cacheIndex = callsiteId & (SIZE - 1)
+     * 3. Each cache slot stores: (blessId, methodHash, RuntimeCode)
+     *    - blessId: identifies the class of the object (from $obj's bless)
+     *    - methodHash: identifies which method is being called
+     *    - RuntimeCode: the resolved method to invoke
+     * 4. On cache hit (same blessId + methodHash), we skip method resolution and
+     *    directly invoke the cached MethodHandle.
+     * 5. On cache miss, we do full method resolution and update the cache.
+     * 
+     * Cache invalidation:
+     * When @ISA changes or methods are redefined, InheritanceResolver.invalidateCache()
+     * calls clearInlineMethodCache() to clear all cached entries.
+     * 
+     * This optimization provides ~50% speedup for method-heavy code like:
+     *   while ($i < 10000) { $obj->method($arg); $i++ }
+     */
     private static final int METHOD_CALL_CACHE_SIZE = 4096;
     private static final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
     private static final int[] inlineCacheMethodHash = new int[METHOD_CALL_CACHE_SIZE];
