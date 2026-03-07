@@ -69,7 +69,8 @@ public class CompileExistsDelete {
                 bc.throwCompilerException("Array index required for exists");
                 return;
             }
-            indexNode.elements.get(0).accept(bc);
+            // Compile index in SCALAR context
+            bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
             int indexReg = bc.lastResultReg;
             int rd = bc.allocateOutputRegister();
             bc.emit(Opcodes.ARRAY_EXISTS);
@@ -157,7 +158,8 @@ public class CompileExistsDelete {
                 bc.emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                keyElement.accept(bc);
+                // Compile key in SCALAR context
+                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                 keyRegs.add(bc.lastResultReg);
             }
         }
@@ -207,7 +209,8 @@ public class CompileExistsDelete {
                 bc.throwCompilerException("Array index required for delete");
                 return;
             }
-            indexNode.elements.get(0).accept(bc);
+            // Compile index in SCALAR context
+            bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
             int indexReg = bc.lastResultReg;
             int rd = bc.allocateOutputRegister();
             bc.emit(Opcodes.ARRAY_DELETE);
@@ -301,11 +304,13 @@ public class CompileExistsDelete {
                 bc.emit(keyIdx);
                 return keyReg;
             } else {
-                keyElement.accept(bc);
+                // Compile in scalar context to ensure we get a RuntimeScalar
+                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                 return bc.lastResultReg;
             }
         } else {
-            keySpec.accept(bc);
+            // Compile in scalar context to ensure we get a RuntimeScalar
+            bc.compileNode(keySpec, -1, RuntimeContextType.SCALAR);
             return bc.lastResultReg;
         }
     }
@@ -345,7 +350,8 @@ public class CompileExistsDelete {
             bc.throwCompilerException("Array exists/delete requires index");
             return -1;
         }
-        indexNode.elements.get(0).accept(bc);
+        // Compile in scalar context to ensure we get a RuntimeScalar
+        bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
         return bc.lastResultReg;
     }
 }

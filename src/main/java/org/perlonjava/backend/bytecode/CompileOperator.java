@@ -55,7 +55,8 @@ public class CompileOperator {
             bc.throwCompilerException("Array exists/delete requires index");
             return -1;
         }
-        indexNode.elements.get(0).accept(bc);
+        // Compile index in SCALAR context
+        bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
         return bc.lastResultReg;
     }
 

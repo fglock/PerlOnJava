@@ -938,6 +938,41 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(arrayReg);
                     bytecodeCompiler.emitReg(valueReg);
                     bytecodeCompiler.lastResultReg = valueReg;
+                } else if (leftOp.operator.equals("%") && (leftOp.operand instanceof OperatorNode || leftOp.operand instanceof BlockNode)) {
+                    // Hash dereference assignment: %$r = ... or %{expr} = ...
+                    // The operand should evaluate to a hash reference
+
+                    boolean isSimpleScalarDeref = leftOp.operand instanceof OperatorNode derefOp && derefOp.operator.equals("$");
+
+                    if (isSimpleScalarDeref || leftOp.operand instanceof BlockNode) {
+                        // Compile the operand to get the hash reference
+                        bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
+                        int scalarRefReg = bytecodeCompiler.lastResultReg;
+
+                        // Dereference to get the actual hash
+                        int hashReg = bytecodeCompiler.allocateRegister();
+                        if (bytecodeCompiler.isStrictRefsEnabled()) {
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarRefReg);
+                        } else {
+                            int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitReg(scalarRefReg);
+                            bytecodeCompiler.emit(pkgIdx);
+                        }
+
+                        // Assign the value to the dereferenced hash
+                        bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
+                        bytecodeCompiler.emitReg(hashReg);
+                        bytecodeCompiler.emitReg(valueReg);
+
+                        // In list context, return the hash flattened; in other contexts return the hash
+                        bytecodeCompiler.lastResultReg = hashReg;
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Assignment to unsupported hash dereference");
+                    }
                 } else {
                     if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
                         bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");
@@ -1213,8 +1248,8 @@ public class CompileAssignment {
                                     bytecodeCompiler.emit(keyIdx);
                                     keyRegs.add(keyReg);
                                 } else {
-                                    // Expression key
-                                    bytecodeCompiler.compileNode(keyElement, -1, rhsContext);
+                                    // Expression key - must be compiled in SCALAR context
+                                    bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                                     keyRegs.add(bytecodeCompiler.lastResultReg);
                                 }
                             }
@@ -1332,8 +1367,8 @@ public class CompileAssignment {
                         bytecodeCompiler.emitReg(keyReg);
                         bytecodeCompiler.emit(keyIdx);
                     } else {
-                        // Expression key: $hash{$var} or $hash{func()}
-                        bytecodeCompiler.compileNode(keyElement, -1, rhsContext);
+                        // Expression key: $hash{$var} or $hash{func()} - must be compiled in SCALAR context
+                        bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                         keyReg = bytecodeCompiler.lastResultReg;
                     }
 
@@ -1383,7 +1418,8 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(keyReg);
                                 bytecodeCompiler.emit(keyIdx);
                             } else {
-                                bytecodeCompiler.compileNode(keyElement, -1, rhsContext);
+                                // Expression key - must be compiled in SCALAR context
+                                bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                                 keyReg = bytecodeCompiler.lastResultReg;
                             }
                         } else {
