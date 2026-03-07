@@ -1695,6 +1695,26 @@ public class CompileAssignment {
                 bytecodeCompiler.emit(pkgIdx);
             }
             return arrayReg;
+        } else if (dollarHashOp.operand instanceof BlockNode blockNode) {
+            // $#{BLOCK} = value - evaluate block to get array reference
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.SCALAR;
+            blockNode.accept(bytecodeCompiler);
+            bytecodeCompiler.currentCallContext = savedContext;
+            int refReg = bytecodeCompiler.lastResultReg;
+            int arrayReg = bytecodeCompiler.allocateRegister();
+            if (bytecodeCompiler.isStrictRefsEnabled()) {
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(refReg);
+            } else {
+                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, dollarHashOp.getIndex());
+                bytecodeCompiler.emitReg(arrayReg);
+                bytecodeCompiler.emitReg(refReg);
+                bytecodeCompiler.emit(pkgIdx);
+            }
+            return arrayReg;
         }
         bytecodeCompiler.throwCompilerException("$# assignment requires array variable");
         return -1;

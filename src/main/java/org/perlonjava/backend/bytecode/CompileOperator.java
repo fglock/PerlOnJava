@@ -1167,6 +1167,16 @@ public class CompileOperator {
                 int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, bc.getCurrentPackage()));
                 bc.emit(Opcodes.LOAD_GLOBAL_ARRAY); bc.emitReg(arrayReg); bc.emit(nameIdx);
             }
+        } else if (node.operand instanceof BlockNode blockNode) {
+            // $#{BLOCK} - evaluate block to get array reference, then get last index
+            int savedContext = bc.currentCallContext;
+            bc.currentCallContext = RuntimeContextType.SCALAR;
+            blockNode.accept(bc);
+            bc.currentCallContext = savedContext;
+            int refReg = bc.lastResultReg;
+            arrayReg = bc.allocateRegister();
+            if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
+            else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
         } else bc.throwCompilerException("$# requires array variable");
         int sizeReg = bc.allocateRegister(); bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(sizeReg); bc.emitReg(arrayReg);
         int oneReg = bc.allocateRegister(); bc.emit(Opcodes.LOAD_INT); bc.emitReg(oneReg); bc.emitInt(1);
