@@ -1398,6 +1398,28 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(scalarRefReg);
                 emit(pkgIdx);
             }
+        } else if (leftOp.operand instanceof BlockNode blockNode) {
+            // Hash dereference slice with block: @{$hashref}{keys}
+            // Compile the block to get the hash reference
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            blockNode.accept(this);
+            currentCallContext = savedContext;
+            int refReg = lastResultReg;
+
+            // Dereference to get the hash
+            hashReg = allocateRegister();
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(refReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                emitReg(hashReg);
+                emitReg(refReg);
+                emit(pkgIdx);
+            }
         } else {
             throwCompilerException("Hash slice requires hash variable or reference");
             return;
