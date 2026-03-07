@@ -1175,4 +1175,26 @@ public class SlowOpcodeHandler {
 
         return pc;
     }
+
+    /**
+     * CODE_DEREF_NONSTRICT: rd = value.codeDerefNonStrict(package)
+     * For &{$name} - looks up code reference from symbolic name using specified package.
+     * Format: [CODE_DEREF_NONSTRICT] [rd] [value_reg] [package_string_idx]
+     */
+    public static int executeCodeDerefNonStrict(int[] bytecode, int pc,
+                                                 RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int valueReg = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+
+        RuntimeBase valueBase = registers[valueReg];
+        RuntimeScalar value = (valueBase instanceof RuntimeScalar)
+                ? (RuntimeScalar) valueBase
+                : valueBase.scalar();
+
+        String pkg = code.stringPool[pkgIdx];
+        registers[rd] = value.codeDerefNonStrict(pkg);
+
+        return pc;
+    }
 }

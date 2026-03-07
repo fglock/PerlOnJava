@@ -55,7 +55,8 @@ public class CompileOperator {
             bc.throwCompilerException("Array exists/delete requires index");
             return -1;
         }
-        indexNode.elements.get(0).accept(bc);
+        // Compile index in SCALAR context
+        bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
         return bc.lastResultReg;
     }
 
@@ -152,8 +153,8 @@ public class CompileOperator {
                 bc.emit(nameIdx);
                 return arrayReg;
             }
-        } else if (arrayOp.operand instanceof OperatorNode) {
-            arrayOp.operand.accept(bc);
+        } else if (arrayOp.operand instanceof OperatorNode || arrayOp.operand instanceof BlockNode) {
+            bc.compileNode(arrayOp.operand, -1, RuntimeContextType.SCALAR);
             int refReg = bc.lastResultReg;
             int arrayReg = bc.allocateRegister();
             if (bc.isStrictRefsEnabled()) {
@@ -1166,6 +1167,16 @@ public class CompileOperator {
                 int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, bc.getCurrentPackage()));
                 bc.emit(Opcodes.LOAD_GLOBAL_ARRAY); bc.emitReg(arrayReg); bc.emit(nameIdx);
             }
+        } else if (node.operand instanceof BlockNode blockNode) {
+            // $#{BLOCK} - evaluate block to get array reference, then get last index
+            int savedContext = bc.currentCallContext;
+            bc.currentCallContext = RuntimeContextType.SCALAR;
+            blockNode.accept(bc);
+            bc.currentCallContext = savedContext;
+            int refReg = bc.lastResultReg;
+            arrayReg = bc.allocateRegister();
+            if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
+            else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
         } else bc.throwCompilerException("$# requires array variable");
         int sizeReg = bc.allocateRegister(); bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(sizeReg); bc.emitReg(arrayReg);
         int oneReg = bc.allocateRegister(); bc.emit(Opcodes.LOAD_INT); bc.emitReg(oneReg); bc.emitInt(1);
@@ -1201,12 +1212,22 @@ public class CompileOperator {
         if (!(node.operand instanceof ListNode)) bc.throwCompilerException("tr operator requires list operand");
         ListNode list = (ListNode) node.operand;
         if (list.elements.size() < 3) bc.throwCompilerException("tr operator requires search, replace, and modifiers");
-        list.elements.get(0).accept(bc); int searchReg = bc.lastResultReg;
-        list.elements.get(1).accept(bc); int replaceReg = bc.lastResultReg;
-        list.elements.get(2).accept(bc); int modifiersReg = bc.lastResultReg;
+        // Compile all elements in SCALAR context (matches JVM backend)
+        bc.compileNode(list.elements.get(0), -1, RuntimeContextType.SCALAR); int searchReg = bc.lastResultReg;
+        bc.compileNode(list.elements.get(1), -1, RuntimeContextType.SCALAR); int replaceReg = bc.lastResultReg;
+        bc.compileNode(list.elements.get(2), -1, RuntimeContextType.SCALAR); int modifiersReg = bc.lastResultReg;
         int targetReg;
-        if (list.elements.size() > 3 && list.elements.get(3) != null) { list.elements.get(3).accept(bc); targetReg = bc.lastResultReg; }
-        else { targetReg = bc.allocateRegister(); int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName("_", bc.getCurrentPackage())); bc.emit(Opcodes.LOAD_GLOBAL_SCALAR); bc.emitReg(targetReg); bc.emit(nameIdx); }
+        if (list.elements.size() > 3 && list.elements.get(3) != null) {
+            // Target like ($y = $x) must be compiled in SCALAR context to get the scalar lvalue, not a list
+            bc.compileNode(list.elements.get(3), -1, RuntimeContextType.SCALAR);
+            targetReg = bc.lastResultReg;
+        } else {
+            targetReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName("_", bc.getCurrentPackage()));
+            bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            bc.emitReg(targetReg);
+            bc.emit(nameIdx);
+        }
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.TR_TRANSLITERATE); bc.emitReg(rd); bc.emitReg(searchReg); bc.emitReg(replaceReg); bc.emitReg(modifiersReg); bc.emitReg(targetReg); bc.emitInt(bc.currentCallContext);
         bc.lastResultReg = rd;

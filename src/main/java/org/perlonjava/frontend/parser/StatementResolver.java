@@ -626,14 +626,16 @@ public class StatementResolver {
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
-                    yield new BinaryOperatorNode("&&", modifierExpression, expression, parser.tokenIndex);
+                    // Handle "my $x = EXPR if COND" - must declare variable even when condition is false
+                    yield handleStatementModifierWithMy(expression, modifierExpression, "&&", parser.tokenIndex);
                 }
 
                 case "unless" -> {
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
-                    yield new BinaryOperatorNode("||", modifierExpression, expression, parser.tokenIndex);
+                    // Handle "my $x = EXPR unless COND" - must declare variable even when condition is true
+                    yield handleStatementModifierWithMy(expression, modifierExpression, "||", parser.tokenIndex);
                 }
 
                 case "for", "foreach" -> {
@@ -873,5 +875,48 @@ public class StatementResolver {
         if (token.text.equals(";")) {
             consume(parser);
         }
+    }
+
+    /**
+     * Handle statement modifiers (if/unless) with my declarations.
+     * For "my $x = EXPR if COND", the variable must be declared even when condition is false.
+     * Uses comma operator to declare variable in current scope: (my $x, COND && ($x = EXPR))
+     * This avoids creating a new scope (which BlockNode would do).
+     *
+     * @param expression          The main expression (e.g., my $x = shift)
+     * @param modifierExpression  The condition expression
+     * @param operator            "&&" for if, "||" for unless
+     * @param tokenIndex          Token index for error reporting
+     * @return Transformed AST node
+     */
+    private static Node handleStatementModifierWithMy(Node expression, Node modifierExpression,
+                                                       String operator, int tokenIndex) {
+        // Check if expression is an assignment with 'my' on the left side
+        if (expression instanceof BinaryOperatorNode assignNode && assignNode.operator.equals("=")) {
+            Node left = assignNode.left;
+            // Check if left side is a 'my' declaration
+            if (left instanceof OperatorNode myNode && myNode.operator.equals("my")) {
+                // Transform: my $x = EXPR if COND
+                // Into: (my $x, COND && ($x = EXPR))
+                // The comma operator evaluates both in the current scope (no new scope created)
+                // This ensures $x is declared even when condition is false
+
+                // Extract the variable being declared
+                Node variable = myNode.operand;
+
+                // Create the assignment without 'my': $x = EXPR
+                Node plainAssignment = new BinaryOperatorNode("=", variable, assignNode.right, tokenIndex);
+
+                // Create the conditional: COND && ($x = EXPR) or COND || ($x = EXPR)
+                Node conditional = new BinaryOperatorNode(operator, modifierExpression, plainAssignment, tokenIndex);
+
+                // Use comma operator: (my $x, conditional)
+                // ListNode in statement context acts as comma operator
+                return new ListNode(List.of(left, conditional), tokenIndex);
+            }
+        }
+
+        // No 'my' declaration, use simple short-circuit
+        return new BinaryOperatorNode(operator, modifierExpression, expression, tokenIndex);
     }
 }

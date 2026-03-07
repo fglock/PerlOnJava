@@ -1256,6 +1256,12 @@ public class Disassemble {
                         nameIdx = interpretedCode.bytecode[pc++];
                         sb.append("DEREF_SCALAR_NONSTRICT r").append(rd).append(" = ${r").append(rs).append("} pkg=").append(interpretedCode.stringPool[nameIdx]).append("\n");
                         break;
+                    case Opcodes.CODE_DEREF_NONSTRICT:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        nameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("CODE_DEREF_NONSTRICT r").append(rd).append(" = &{r").append(rs).append("} pkg=").append(interpretedCode.stringPool[nameIdx]).append("\n");
+                        break;
                     case Opcodes.RETRIEVE_BEGIN_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         nameIdx = interpretedCode.bytecode[pc++];

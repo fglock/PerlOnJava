@@ -938,7 +938,8 @@ public class BytecodeCompiler implements Visitor {
         // Compile indices into a list
         List<Integer> pairRegs = new ArrayList<>();
         for (Node indexElement : indicesNode.elements) {
-            indexElement.accept(this);
+            // Compile index in SCALAR context to ensure RuntimeScalar
+            compileNode(indexElement, -1, RuntimeContextType.SCALAR);
             int indexReg = lastResultReg;
 
             int valueReg = allocateRegister();
@@ -1118,7 +1119,8 @@ public class BytecodeCompiler implements Visitor {
         // Handle single element access: $array[0]
         if (indexNode.elements.size() == 1) {
             Node indexExpr = indexNode.elements.get(0);
-            indexExpr.accept(this);
+            // Compile index in SCALAR context to ensure RuntimeScalar
+            compileNode(indexExpr, -1, RuntimeContextType.SCALAR);
             int indexReg = lastResultReg;
 
             // Emit ARRAY_GET opcode
@@ -1196,6 +1198,28 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException("Array slice requires array or array reference");
                 return;
+            }
+        } else if (leftOp.operand instanceof BlockNode blockNode) {
+            // Array dereference slice with block: @{$arrayref}[indices]
+            // Compile the block to get the array reference
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            blockNode.accept(this);
+            currentCallContext = savedContext;
+            int refReg = lastResultReg;
+
+            // Dereference to get the array
+            arrayReg = allocateRegister();
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(arrayReg);
+                emitReg(refReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                emitReg(arrayReg);
+                emitReg(refReg);
+                emit(pkgIdx);
             }
         } else {
             throwCompilerException("Array slice requires identifier or reference");
@@ -1305,8 +1329,8 @@ public class BytecodeCompiler implements Visitor {
 
                 lastResultReg = rd;
             } else {
-                // Expression key - compile it
-                keyExpr.accept(this);
+                // Expression key - compile it in SCALAR context to ensure we get RuntimeScalar
+                compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
                 int keyReg = lastResultReg;
 
                 // Emit HASH_GET opcode
@@ -1374,6 +1398,28 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(scalarRefReg);
                 emit(pkgIdx);
             }
+        } else if (leftOp.operand instanceof BlockNode blockNode) {
+            // Hash dereference slice with block: @{$hashref}{keys}
+            // Compile the block to get the hash reference
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            blockNode.accept(this);
+            currentCallContext = savedContext;
+            int refReg = lastResultReg;
+
+            // Dereference to get the hash
+            hashReg = allocateRegister();
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(refReg);
+            } else {
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                emitReg(hashReg);
+                emitReg(refReg);
+                emit(pkgIdx);
+            }
         } else {
             throwCompilerException("Hash slice requires hash variable or reference");
             return;
@@ -1401,7 +1447,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Expression key
+                // Expression key - use default context to allow arrays to expand
                 keyElement.accept(this);
                 keyRegs.add(lastResultReg);
             }
@@ -1495,6 +1541,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
+                // Expression key - use default context to allow arrays to expand
                 keyElement.accept(this);
                 keyRegs.add(lastResultReg);
             }
@@ -1644,7 +1691,8 @@ public class BytecodeCompiler implements Visitor {
         // Handle single element access
         if (indexNode.elements.size() == 1) {
             Node indexExpr = indexNode.elements.get(0);
-            indexExpr.accept(this);
+            // Compile index in SCALAR context to ensure RuntimeScalar
+            compileNode(indexExpr, -1, RuntimeContextType.SCALAR);
             int indexReg = lastResultReg;
 
             // The base might be either:
@@ -1714,8 +1762,8 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(keyReg);
                 emit(keyIdx);
             } else {
-                // Expression key - compile it
-                keyExpr.accept(this);
+                // Expression key - compile it in SCALAR context to ensure RuntimeScalar
+                compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
                 keyReg = lastResultReg;
             }
 
@@ -1805,7 +1853,7 @@ public class BytecodeCompiler implements Visitor {
             } else if (leftOp.operator.equals("@") && !(leftOp.operand instanceof IdentifierNode)) {
                 // Array dereference: @$arrayref or @{expr}
                 // Evaluate the operand expression to get the reference, then deref
-                leftOp.operand.accept(this);
+                compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
                 int refReg = lastResultReg;
 
                 // Dereference to get the array
@@ -3519,8 +3567,8 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(nameIdx);
                 lastResultReg = rd;
-            } else if (node.operand instanceof OperatorNode) {
-                node.operand.accept(this);
+            } else if (node.operand instanceof OperatorNode || node.operand instanceof BlockNode) {
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int refReg = lastResultReg;
                 int rd = allocateOutputRegister();
                 int pkgIdx = addToStringPool(getCurrentPackage());
@@ -3537,7 +3585,7 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("&")) {
-            // Code reference: &subname
+            // Code reference: &subname or &{expr}
             // Gets a reference to a named subroutine
             if (node.operand instanceof IdentifierNode idNode) {
                 String subName = idNode.name;
@@ -3554,6 +3602,21 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_GLOBAL_CODE);
                 emitReg(rd);
                 emit(nameIdx);
+
+                lastResultReg = rd;
+            } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {
+                // Dynamic code reference: &{$name} or &$name
+                // Compile the expression to get the name/value, then dereference as code
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int valueReg = lastResultReg;
+
+                // Use CODE_DEREF_NONSTRICT to look up the code reference
+                int rd = allocateOutputRegister();
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emit(Opcodes.CODE_DEREF_NONSTRICT);
+                emitReg(rd);
+                emitReg(valueReg);
+                emit(pkgIdx);
 
                 lastResultReg = rd;
             } else {
