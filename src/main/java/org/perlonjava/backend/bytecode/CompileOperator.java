@@ -152,8 +152,8 @@ public class CompileOperator {
                 bc.emit(nameIdx);
                 return arrayReg;
             }
-        } else if (arrayOp.operand instanceof OperatorNode) {
-            arrayOp.operand.accept(bc);
+        } else if (arrayOp.operand instanceof OperatorNode || arrayOp.operand instanceof BlockNode) {
+            bc.compileNode(arrayOp.operand, -1, RuntimeContextType.SCALAR);
             int refReg = bc.lastResultReg;
             int arrayReg = bc.allocateRegister();
             if (bc.isStrictRefsEnabled()) {

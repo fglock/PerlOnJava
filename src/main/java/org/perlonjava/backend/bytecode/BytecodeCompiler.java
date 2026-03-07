@@ -1805,7 +1805,7 @@ public class BytecodeCompiler implements Visitor {
             } else if (leftOp.operator.equals("@") && !(leftOp.operand instanceof IdentifierNode)) {
                 // Array dereference: @$arrayref or @{expr}
                 // Evaluate the operand expression to get the reference, then deref
-                leftOp.operand.accept(this);
+                compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
                 int refReg = lastResultReg;
 
                 // Dereference to get the array
