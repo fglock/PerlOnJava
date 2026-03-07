@@ -47,8 +47,9 @@ public class InterpreterState {
             ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
     private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
             ThreadLocal.withInitial(ArrayDeque::new);
-    private static final ThreadLocal<Deque<Integer>> pcStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    // Use ArrayList of mutable int holders for O(1) PC updates (no pop/push overhead)
+    private static final ThreadLocal<ArrayList<int[]>> pcStack =
+            ThreadLocal.withInitial(ArrayList::new);
 
     /**
      * Push a new interpreter frame onto the stack.
@@ -60,7 +61,7 @@ public class InterpreterState {
      */
     public static void push(InterpretedCode code, String packageName, String subroutineName) {
         frameStack.get().push(new InterpreterFrame(code, packageName, subroutineName));
-        pcStack.get().push(0);
+        pcStack.get().add(new int[]{0});  // Mutable holder for PC
     }
 
     /**
@@ -73,17 +74,16 @@ public class InterpreterState {
             stack.pop();
         }
 
-        Deque<Integer> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack.get();
         if (!pcs.isEmpty()) {
-            pcs.pop();
+            pcs.removeLast();
         }
     }
 
     public static void setCurrentPc(int pc) {
-        Deque<Integer> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack.get();
         if (!pcs.isEmpty()) {
-            pcs.pop();
-            pcs.push(pc);
+            pcs.getLast()[0] = pc;  // Direct mutation, no allocation
         }
     }
 
@@ -109,7 +109,12 @@ public class InterpreterState {
     }
 
     public static List<Integer> getPcStack() {
-        return new ArrayList<>(pcStack.get());
+        ArrayList<int[]> pcs = pcStack.get();
+        ArrayList<Integer> result = new ArrayList<>(pcs.size());
+        for (int[] holder : pcs) {
+            result.add(holder[0]);
+        }
+        return result;
     }
 
     /**

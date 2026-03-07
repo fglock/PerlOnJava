@@ -20,9 +20,17 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAnd(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip all checks (defined, looksLikeNumber, tied)
+        int t1 = runtimeScalar.type;
+        int t2 = arg2.type;
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            long result = ((int) runtimeScalar.value) & ((int) arg2.value);
+            return new RuntimeScalar(result);
+        }
+
         // Fetch tied scalars once to avoid redundant FETCH calls
-        RuntimeScalar val1 = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar val2 = arg2.type == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+        RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
 
         // Check for uninitialized values and generate warnings
         if (!val1.getDefinedBoolean()) {
@@ -69,9 +77,17 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOr(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip all checks (looksLikeNumber, tied)
+        int t1 = runtimeScalar.type;
+        int t2 = arg2.type;
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            long result = ((int) runtimeScalar.value) | ((int) arg2.value);
+            return new RuntimeScalar(result);
+        }
+
         // Fetch tied scalars once to avoid redundant FETCH calls
-        RuntimeScalar val1 = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar val2 = arg2.type == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+        RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
 
         // In Perl, if either operand is a reference or doesn't look like a number, use string operations
         if (!ScalarUtils.looksLikeNumber(val1) || !ScalarUtils.looksLikeNumber(val2)) {
@@ -112,9 +128,17 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip all checks (looksLikeNumber, tied)
+        int t1 = runtimeScalar.type;
+        int t2 = arg2.type;
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            long result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
+            return new RuntimeScalar(result);
+        }
+
         // Fetch tied scalars once to avoid redundant FETCH calls
-        RuntimeScalar val1 = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar val2 = arg2.type == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+        RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
 
         // Use numeric XOR only if BOTH operands look like numbers
         // For everything else (strings, blessed objects, references, etc.), use string XOR
@@ -320,6 +344,18 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fast path: both INTEGER with non-negative shift < 32
+        int t1 = runtimeScalar.type;
+        int t2 = arg2.type;
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            int shift = (int) arg2.value;
+            if (shift >= 0 && shift < 32) {
+                long unsignedValue = ((int) runtimeScalar.value) & 0xFFFFFFFFL;
+                long result = (unsignedValue << shift) & 0xFFFFFFFFL;
+                return new RuntimeScalar(result);
+            }
+        }
+
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!runtimeScalar.getDefinedBoolean()) {
@@ -390,6 +426,18 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fast path: both INTEGER with non-negative shift < 32
+        int t1 = runtimeScalar.type;
+        int t2 = arg2.type;
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            int shift = (int) arg2.value;
+            if (shift >= 0 && shift < 32) {
+                long unsignedValue = ((int) runtimeScalar.value) & 0xFFFFFFFFL;
+                long result = unsignedValue >>> shift;
+                return new RuntimeScalar(result);
+            }
+        }
+
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!runtimeScalar.getDefinedBoolean()) {
