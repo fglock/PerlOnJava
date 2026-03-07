@@ -818,6 +818,10 @@ public class BytecodeCompiler implements Visitor {
         // Save the last statement's result to the outer register BEFORE exiting scope
         if (outerResultReg >= 0 && lastResultReg >= 0) {
             emitAliasWithTarget(outerResultReg, lastResultReg);
+        } else if (outerResultReg >= 0 && lastResultReg < 0) {
+            // Last statement didn't produce a result (e.g., for loop), initialize to undef
+            emit(Opcodes.LOAD_UNDEF);
+            emitReg(outerResultReg);
         }
 
         if (regexSaveReg >= 0) {
