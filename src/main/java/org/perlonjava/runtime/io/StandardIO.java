@@ -10,9 +10,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
@@ -28,154 +25,59 @@ public class StandardIO implements IOHandle {
     public static final int STDOUT_FILENO = 1;
     public static final int STDERR_FILENO = 2;
 
-    private static final int LOCAL_BUFFER_SIZE = 1024;
+    private static final int BUFFER_SIZE = 65536;  // 64KB buffer for better throughput
 
     private final int fileno;
-    private final byte[] localBuffer = new byte[LOCAL_BUFFER_SIZE];
-    private final BlockingQueue<QueueItem> printQueue = new LinkedBlockingQueue<>();
-    private final Thread printThread;
-    private final Object flushLock = new Object();
-    private final AtomicInteger sequence = new AtomicInteger(0);
-    private final AtomicInteger lastPrinted = new AtomicInteger(-1);
-    private volatile boolean shutdownRequested = false;
+    private final Object writeLock = new Object();
 
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedOutputStream bufferedOutputStream;
     private boolean isEOF;
-    private int bufferPosition = 0;
     private CharsetDecoderHelper decoderHelper;
 
     public StandardIO(InputStream inputStream) {
         this.inputStream = inputStream;
         this.fileno = STDIN_FILENO;
-        this.printThread = null;
     }
 
     public StandardIO(OutputStream outputStream, boolean isStdout) {
         this.outputStream = outputStream;
-        this.bufferedOutputStream = new BufferedOutputStream(outputStream);
+        this.bufferedOutputStream = new BufferedOutputStream(outputStream, BUFFER_SIZE);
         this.fileno = isStdout ? STDOUT_FILENO : STDERR_FILENO;
-
-        printThread = new Thread(() -> {
-            try {
-                while (!shutdownRequested || !printQueue.isEmpty()) {
-                    QueueItem item = printQueue.take();
-                    if (item.data.length == 0) continue;
-
-                    // Wait for our turn
-                    while (item.seq != lastPrinted.get() + 1) {
-                        if (shutdownRequested) return;
-                        Thread.yield();
-                    }
-
-                    try {
-                        bufferedOutputStream.write(item.data);
-                        bufferedOutputStream.flush();
-                        lastPrinted.set(item.seq);
-
-                        synchronized (flushLock) {
-                            flushLock.notifyAll();
-                        }
-                    } catch (IOException e) {
-                        if (System.getenv("JPERL_IO_DEBUG") != null) {
-                            System.err.println("[JPERL_IO_DEBUG] StandardIO write IOException fileno=" + fileno +
-                                    " message=" + e.getMessage());
-                            System.err.flush();
-                        }
-                    }
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        printThread.setDaemon(true);
-        printThread.start();
     }
 
     @Override
     public RuntimeScalar write(String string) {
-        var data = string.getBytes(StandardCharsets.ISO_8859_1);
-        synchronized (localBuffer) {
-            int dataLength = data.length;
-            int spaceLeft = LOCAL_BUFFER_SIZE - bufferPosition;
-
-            if (dataLength > spaceLeft) {
-                if (bufferPosition > 0) {
-                    byte[] firstPart = new byte[bufferPosition];
-                    System.arraycopy(localBuffer, 0, firstPart, 0, bufferPosition);
-                    queueWrite(firstPart);
-                    bufferPosition = 0;
-                }
-
-                if (dataLength > LOCAL_BUFFER_SIZE) {
-                    queueWrite(data);
-                } else {
-                    System.arraycopy(data, 0, localBuffer, 0, dataLength);
-                    bufferPosition = dataLength;
-                }
-            } else {
-                System.arraycopy(data, 0, localBuffer, bufferPosition, dataLength);
-                bufferPosition += dataLength;
+        if (bufferedOutputStream == null) {
+            return RuntimeScalarCache.scalarFalse;
+        }
+        try {
+            synchronized (writeLock) {
+                // Write directly - let BufferedOutputStream handle buffering
+                byte[] data = string.getBytes(StandardCharsets.ISO_8859_1);
+                bufferedOutputStream.write(data);
             }
+            return RuntimeScalarCache.scalarTrue;
+        } catch (IOException e) {
+            if (System.getenv("JPERL_IO_DEBUG") != null) {
+                System.err.println("[JPERL_IO_DEBUG] StandardIO write IOException fileno=" + fileno +
+                        " message=" + e.getMessage());
+            }
+            return RuntimeScalarCache.scalarFalse;
         }
-        return RuntimeScalarCache.scalarTrue;
-    }
-
-    private void queueWrite(byte[] data) {
-        if (data.length == 0) {
-            return;
-        }
-        if (printThread == null) {
-            return;
-        }
-        int seq = sequence.getAndIncrement();
-
-        printQueue.offer(new QueueItem(data.clone(), seq));
     }
 
     @Override
     public RuntimeScalar flush() {
-        boolean debug = System.getenv("JPERL_STDIO_DEBUG") != null;
-        if (printThread == null || bufferedOutputStream == null) {
+        if (bufferedOutputStream == null) {
             return RuntimeScalarCache.scalarTrue;
         }
 
-        synchronized (localBuffer) {
-            if (bufferPosition > 0) {
-                byte[] data = new byte[bufferPosition];
-                System.arraycopy(localBuffer, 0, data, 0, bufferPosition);
-                queueWrite(data);
-                bufferPosition = 0;
-            }
-        }
-
-        int currentSeq = sequence.get() - 1;
-        if (currentSeq >= 0) {
-            synchronized (flushLock) {
-                while (lastPrinted.get() < currentSeq) {
-                    try {
-                        if (debug) {
-                            System.err.println("[JPERL_STDIO_DEBUG] flush wait: fileno=" + fileno +
-                                    " currentSeq=" + currentSeq +
-                                    " lastPrinted=" + lastPrinted.get() +
-                                    " queueSize=" + printQueue.size() +
-                                    " shutdownRequested=" + shutdownRequested);
-                            System.err.flush();
-                            flushLock.wait(1000);
-                        } else {
-                            flushLock.wait();
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-        }
-
         try {
-            bufferedOutputStream.flush();
+            synchronized (writeLock) {
+                bufferedOutputStream.flush();
+            }
         } catch (IOException e) {
             return handleIOException(e, "Flush operation failed");
         }
@@ -187,20 +89,15 @@ public class StandardIO implements IOHandle {
     public RuntimeScalar close() {
         // Don't actually close STDIN, STDOUT, or STDERR - they should remain open
         // Just return success to indicate the operation completed
-        // This prevents deadlocks when closing STDERR while debug output is being written
         if (fileno == STDIN_FILENO || fileno == STDOUT_FILENO || fileno == STDERR_FILENO) {
             flush();  // Flush any pending output
             return RuntimeScalarCache.scalarTrue;
         }
 
         flush();
-        shutdownRequested = true;
-        if (printThread != null) {
+        if (bufferedOutputStream != null) {
             try {
-                printThread.join();
                 bufferedOutputStream.close();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
             } catch (IOException e) {
                 return handleIOException(e, "Close operation failed");
             }
@@ -322,8 +219,5 @@ public class StandardIO implements IOHandle {
             }
         }
         return RuntimeIO.handleIOError("syswrite operation not supported on input stream");
-    }
-
-    private record QueueItem(byte[] data, int seq) {
     }
 }
