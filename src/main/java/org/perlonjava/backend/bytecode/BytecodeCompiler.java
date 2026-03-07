@@ -3519,8 +3519,8 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(nameIdx);
                 lastResultReg = rd;
-            } else if (node.operand instanceof OperatorNode) {
-                node.operand.accept(this);
+            } else if (node.operand instanceof OperatorNode || node.operand instanceof BlockNode) {
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int refReg = lastResultReg;
                 int rd = allocateOutputRegister();
                 int pkgIdx = addToStringPool(getCurrentPackage());
@@ -3537,7 +3537,7 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("&")) {
-            // Code reference: &subname
+            // Code reference: &subname or &{expr}
             // Gets a reference to a named subroutine
             if (node.operand instanceof IdentifierNode idNode) {
                 String subName = idNode.name;
@@ -3554,6 +3554,21 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_GLOBAL_CODE);
                 emitReg(rd);
                 emit(nameIdx);
+
+                lastResultReg = rd;
+            } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {
+                // Dynamic code reference: &{$name} or &$name
+                // Compile the expression to get the name/value, then dereference as code
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int valueReg = lastResultReg;
+
+                // Use CODE_DEREF_NONSTRICT to look up the code reference
+                int rd = allocateOutputRegister();
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emit(Opcodes.CODE_DEREF_NONSTRICT);
+                emitReg(rd);
+                emitReg(valueReg);
+                emit(pkgIdx);
 
                 lastResultReg = rd;
             } else {

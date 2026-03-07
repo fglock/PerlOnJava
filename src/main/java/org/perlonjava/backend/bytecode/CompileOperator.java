@@ -1201,12 +1201,22 @@ public class CompileOperator {
         if (!(node.operand instanceof ListNode)) bc.throwCompilerException("tr operator requires list operand");
         ListNode list = (ListNode) node.operand;
         if (list.elements.size() < 3) bc.throwCompilerException("tr operator requires search, replace, and modifiers");
-        list.elements.get(0).accept(bc); int searchReg = bc.lastResultReg;
-        list.elements.get(1).accept(bc); int replaceReg = bc.lastResultReg;
-        list.elements.get(2).accept(bc); int modifiersReg = bc.lastResultReg;
+        // Compile all elements in SCALAR context (matches JVM backend)
+        bc.compileNode(list.elements.get(0), -1, RuntimeContextType.SCALAR); int searchReg = bc.lastResultReg;
+        bc.compileNode(list.elements.get(1), -1, RuntimeContextType.SCALAR); int replaceReg = bc.lastResultReg;
+        bc.compileNode(list.elements.get(2), -1, RuntimeContextType.SCALAR); int modifiersReg = bc.lastResultReg;
         int targetReg;
-        if (list.elements.size() > 3 && list.elements.get(3) != null) { list.elements.get(3).accept(bc); targetReg = bc.lastResultReg; }
-        else { targetReg = bc.allocateRegister(); int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName("_", bc.getCurrentPackage())); bc.emit(Opcodes.LOAD_GLOBAL_SCALAR); bc.emitReg(targetReg); bc.emit(nameIdx); }
+        if (list.elements.size() > 3 && list.elements.get(3) != null) {
+            // Target like ($y = $x) must be compiled in SCALAR context to get the scalar lvalue, not a list
+            bc.compileNode(list.elements.get(3), -1, RuntimeContextType.SCALAR);
+            targetReg = bc.lastResultReg;
+        } else {
+            targetReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(NameNormalizer.normalizeVariableName("_", bc.getCurrentPackage()));
+            bc.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            bc.emitReg(targetReg);
+            bc.emit(nameIdx);
+        }
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.TR_TRANSLITERATE); bc.emitReg(rd); bc.emitReg(searchReg); bc.emitReg(replaceReg); bc.emitReg(modifiersReg); bc.emitReg(targetReg); bc.emitInt(bc.currentCallContext);
         bc.lastResultReg = rd;

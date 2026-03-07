@@ -1822,6 +1822,13 @@ public class Opcodes {
      */
     public static final short QUOTE_REGEX_O = 374;
 
+    /**
+     * Code dereference (non-strict): rd = value.codeDerefNonStrict(package)
+     * For &{$name} - looks up code reference from symbolic name using current package.
+     * Format: CODE_DEREF_NONSTRICT rd value_reg package_string_idx
+     */
+    public static final short CODE_DEREF_NONSTRICT = 375;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
