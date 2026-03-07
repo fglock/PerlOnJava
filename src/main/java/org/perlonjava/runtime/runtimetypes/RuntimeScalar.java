@@ -31,10 +31,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
-    // Pre-compiled regex patterns for numification fast-paths
-    // These are used to avoid StackOverflowError from repeated Pattern.compile() calls
-    private static final Pattern INTEGER_PATTERN = Pattern.compile("^-?\\d+$");
+    // Pre-compiled regex pattern for decimal numification fast-path
+    // INTEGER_PATTERN replaced with isIntegerString() for better performance
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$");
+
+    // Fast check if string might be a parseable integer
+    // Returns true if first char suggests it could be an integer (digit or minus)
+    // This avoids exception overhead for strings like "hello" while allowing
+    // Long.parseLong to handle edge cases like overflow
+    private static boolean mightBeInteger(String s) {
+        if (s.isEmpty()) return false;
+        char c = s.charAt(0);
+        return (c >= '0' && c <= '9') || c == '-';
+    }
 
     // Type map for scalar types to their corresponding enum
     private static final Map<Class<?>, Integer> typeMap = new HashMap<>();
@@ -327,14 +336,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 String s = (String) value;
                 if (s != null) {
                     String t = s.trim();
-                    if (!t.isEmpty() && INTEGER_PATTERN.matcher(t).matches()) {
+                    if (mightBeInteger(t)) {
                         try {
-                            // Parse as long first so we can handle values outside 32-bit range
-                            // (Perl IV is commonly 64-bit). getInt() is used for array indices
-                            // and similar contexts, which should behave like (int)getLong().
                             yield (int) Long.parseLong(t);
                         } catch (NumberFormatException ignored) {
-                            // Fall through to full numification.
+                            // Fall through to full numification (handles "1.5", overflow, etc.)
                         }
                     }
                 }
@@ -501,11 +507,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 String s = (String) value;
                 if (s != null) {
                     String t = s.trim();
-                    if (!t.isEmpty() && INTEGER_PATTERN.matcher(t).matches()) {
+                    if (mightBeInteger(t)) {
                         try {
                             yield Long.parseLong(t);
                         } catch (NumberFormatException ignored) {
-                            // Fall through to full numification.
+                            // Fall through to full numification (handles "1.5", overflow, etc.)
                         }
                     }
                 }
