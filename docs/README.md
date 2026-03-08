@@ -38,6 +38,10 @@ Project information:
 - **[Support](about/support.md)** - Get help and contribute
 - **[Resources](about/resources.md)** - External links and references
 
+## Security
+
+- **[Security Policy](../SECURITY.md)** - Reporting vulnerabilities and security considerations
+
 ## For Contributors
 
 Looking to contribute? See:
