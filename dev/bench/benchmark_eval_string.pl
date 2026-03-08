@@ -8,7 +8,7 @@ my $k = 0;
 sub loop_with_eval {
     $k++;
     my $str = ( '
-                while ( $k < 400 ) {
+                while ( $k < 40 ) {
                     $k = $k + 1;
                     $count = $count + 1;
                 }
@@ -17,6 +17,6 @@ sub loop_with_eval {
 }
 
 # Use timethis to benchmark the loop_with_eval subroutine
-timethis(100000, sub {loop_with_eval()});
+timethis(1000000, sub {loop_with_eval()});
 
 print "done\n";
