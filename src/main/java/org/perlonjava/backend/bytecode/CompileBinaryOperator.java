@@ -108,7 +108,9 @@ public class CompileBinaryOperator {
                 node.operator.equals("<<=") || node.operator.equals(">>=") ||
                 node.operator.equals("&&=") || node.operator.equals("||=") ||
                 node.operator.equals("//=") ||
-                node.operator.startsWith("binary")) {  // Handle binary&=, binary|=, binary^=
+                node.operator.equals("binary&=") ||
+                node.operator.equals("binary|=") ||
+                node.operator.equals("binary^=")) {
             bytecodeCompiler.handleCompoundAssignment(node);
             return;
         }
