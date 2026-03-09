@@ -127,6 +127,9 @@ public class SystemOperator {
             ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
             String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
+            
+            // Copy %ENV to the subprocess environment
+            copyPerlEnvToProcessBuilder(processBuilder);
 
             // CORRECT PERL BEHAVIOR: Handle streams according to Perl documentation
             // - system(): Both stdout and stderr go to terminal
@@ -215,6 +218,9 @@ public class SystemOperator {
             ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
             String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
+            
+            // Copy %ENV to the subprocess environment
+            copyPerlEnvToProcessBuilder(processBuilder);
 
             process = processBuilder.start();
 
@@ -373,6 +379,9 @@ public class SystemOperator {
         ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
         String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
+        
+        // Copy %ENV to the subprocess environment
+        copyPerlEnvToProcessBuilder(processBuilder);
 
         // For exec(), we want the command to take over completely
         processBuilder.inheritIO();
@@ -393,6 +402,9 @@ public class SystemOperator {
         ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
         String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
+        
+        // Copy %ENV to the subprocess environment
+        copyPerlEnvToProcessBuilder(processBuilder);
 
         // For exec(), we want the command to take over completely
         processBuilder.inheritIO();
@@ -421,6 +433,31 @@ public class SystemOperator {
 
         // Return undef to indicate failure
         return scalarUndef;
+    }
+    
+    /**
+     * Copies the Perl %ENV hash to the ProcessBuilder environment.
+     * This ensures that changes to %ENV in Perl are reflected in child processes.
+     *
+     * @param processBuilder The ProcessBuilder to update
+     */
+    private static void copyPerlEnvToProcessBuilder(ProcessBuilder processBuilder) {
+        try {
+            RuntimeHash envHash = GlobalVariable.getGlobalHash("main::ENV");
+            java.util.Map<String, String> pbEnv = processBuilder.environment();
+            
+            // Clear the inherited environment and replace with Perl's %ENV
+            pbEnv.clear();
+            
+            for (java.util.Map.Entry<String, RuntimeScalar> entry : envHash.elements.entrySet()) {
+                String value = entry.getValue().toString();
+                if (value != null) {
+                    pbEnv.put(entry.getKey(), value);
+                }
+            }
+        } catch (Exception e) {
+            // If we can't access %ENV, just use inherited environment (default behavior)
+        }
     }
 
     /**

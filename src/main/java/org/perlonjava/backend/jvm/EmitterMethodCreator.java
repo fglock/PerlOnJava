@@ -1519,7 +1519,9 @@ public class EmitterMethodCreator implements Opcodes {
             throw e;
         } catch (VerifyError e) {
             if (USE_INTERPRETER_FALLBACK) {
-                System.err.println("Note: JVM VerifyError (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
+                if (SHOW_FALLBACK) {
+                    System.err.println("Note: JVM VerifyError (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
+                }
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
             throw new RuntimeException(e);
