@@ -1,5 +1,9 @@
 package org.perlonjava.runtime.debugger;
 
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,15 +83,28 @@ public class DebugState {
 
     /**
      * Step-over depth tracking.
-     * When > 0, skip DEBUG calls until call depth returns to this level.
+     * When >= 0, skip DEBUG calls until call depth returns to this level.
      * Used to implement "n" (next) command - step over subroutine calls.
      */
     public static volatile int stepOverDepth = -1;
 
     /**
-     * Current call depth for step-over tracking.
+     * Step-out depth tracking.
+     * When >= 0, skip DEBUG calls until call depth is less than this level.
+     * Used to implement "r" (return) command - step out of current subroutine.
+     */
+    public static volatile int stepOutDepth = -1;
+
+    /**
+     * Current call depth for step-over/step-out tracking.
      */
     public static volatile int callDepth = 0;
+
+    /**
+     * One-time breakpoints: "file:line" strings that should be removed after being hit.
+     * Used by "c line" command to continue to a specific line once.
+     */
+    public static final Set<String> oneTimeBreakpoints = ConcurrentHashMap.newKeySet();
 
     /**
      * Flag to indicate debugger should quit.
@@ -105,9 +122,11 @@ public class DebugState {
         currentLine = 0;
         breakpoints.clear();
         breakpointConditions.clear();
+        oneTimeBreakpoints.clear();
         sourceLines.clear();
         breakableLines.clear();
         stepOverDepth = -1;
+        stepOutDepth = -1;
         callDepth = 0;
         quit = false;
     }
@@ -121,14 +140,27 @@ public class DebugState {
      * @return true if debugger should stop here
      */
     public static boolean shouldStop(String file, int line) {
+        String key = file + ":" + line;
+
+        // Check for one-time breakpoint first (and remove if hit)
+        if (oneTimeBreakpoints.remove(key)) {
+            // Also remove from regular breakpoints if it was added there
+            breakpoints.remove(key);
+            return true;
+        }
+
         // Fast path: nothing active
         if (!single && !trace && !signal) {
-            String key = file + ":" + line;
             return breakpoints.contains(key);
         }
 
         // Step-over mode: skip if we're deeper than target depth
         if (stepOverDepth >= 0 && callDepth > stepOverDepth) {
+            return false;
+        }
+
+        // Step-out mode: skip until we're shallower than target depth
+        if (stepOutDepth >= 0 && callDepth >= stepOutDepth) {
             return false;
         }
 
@@ -158,5 +190,79 @@ public class DebugState {
             return lines[line];
         }
         return "";
+    }
+
+    /**
+     * Subroutine location registry for %DB::sub.
+     * Maps "package::subname" -> "filename:startline-endline"
+     */
+    public static final Map<String, String> subLocations = new ConcurrentHashMap<>();
+
+    /**
+     * Register a subroutine's location for %DB::sub.
+     * Only registers if debugMode is enabled.
+     *
+     * @param fullName  Fully qualified subroutine name (package::subname)
+     * @param filename  Source filename
+     * @param startLine Starting line number (1-based)
+     * @param endLine   Ending line number (1-based)
+     */
+    public static void registerSubroutine(String fullName, String filename, int startLine, int endLine) {
+        if (!debugMode) {
+            return;
+        }
+        String location = filename + ":" + startLine + "-" + endLine;
+        subLocations.put(fullName, location);
+    }
+
+    /**
+     * Thread-local stack of subroutine arguments for @DB::args support.
+     * Each frame stores a copy of the @_ array when the subroutine was called.
+     */
+    public static final ThreadLocal<Deque<RuntimeArray>> argsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Push subroutine arguments onto the stack (called when entering a sub in debug mode).
+     *
+     * @param args The @_ array for this call frame
+     */
+    public static void pushArgs(RuntimeArray args) {
+        if (!debugMode) {
+            return;
+        }
+        // Make a shallow copy of the args array
+        RuntimeArray copy = new RuntimeArray();
+        copy.setFromList(args.getList());
+        argsStack.get().push(copy);
+    }
+
+    /**
+     * Pop subroutine arguments from the stack (called when exiting a sub in debug mode).
+     */
+    public static void popArgs() {
+        if (!debugMode) {
+            return;
+        }
+        Deque<RuntimeArray> stack = argsStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+
+    /**
+     * Get arguments for a specific frame (0 = current, 1 = caller, etc).
+     *
+     * @param frame Frame number (0-based)
+     * @return The args array for that frame, or null if not available
+     */
+    public static RuntimeArray getArgsForFrame(int frame) {
+        Deque<RuntimeArray> stack = argsStack.get();
+        if (frame < 0 || frame >= stack.size()) {
+            return null;
+        }
+        // Convert to array for indexed access
+        RuntimeArray[] stackArray = stack.toArray(new RuntimeArray[0]);
+        return stackArray[frame];
     }
 }

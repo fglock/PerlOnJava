@@ -158,7 +158,13 @@ jperl [options] [program | -e 'command'] [arguments]
 
 ## Debugging Options
 
-- **`--debug`** - Show debug information
+- **`-d`** - Run script under the interactive Perl debugger
+  ```bash
+  ./jperl -d script.pl
+  ```
+  See [Debugger Reference](debugger.md) for commands and usage.
+
+- **`--debug`** - Show debug information (compiler internals)
   ```bash
   ./jperl --debug -E 'say "test"'
   ```
@@ -233,7 +239,8 @@ The following standard Perl options are not yet implemented:
 - **`-t`** - Taint checks with warnings
 - **`-u`** - Dumps core after compiling
 - **`-U`** - Allows unsafe operations
-- **`-d[t][:debugger]`** - Run under debugger
+- **`-dt`** - Run under threaded debugger
+- **`-d:debugger`** - Run under custom debugger module
 - **`-D[number/list]`** - Set debugging flags
 - **`-C [number/list]`** - Control Unicode features
 

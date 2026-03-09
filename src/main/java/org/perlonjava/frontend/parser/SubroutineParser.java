@@ -10,6 +10,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -657,6 +658,14 @@ public class SubroutineParser {
         if (codeRef.value == null) {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
+        }
+
+        // Register subroutine location for %DB::sub (only in debug mode)
+        if (DebugState.debugMode && parser.ctx.errorUtil != null && block != null) {
+            int startLine = parser.ctx.errorUtil.getLineNumber(block.tokenIndex);
+            // Use current position as end for now (could track block end for accuracy)
+            int endLine = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+            DebugState.registerSubroutine(fullName, parser.ctx.compilerOptions.fileName, startLine, endLine);
         }
 
         // Initialize placeholder metadata (accessed via codeRef.value)

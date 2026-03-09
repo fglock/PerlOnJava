@@ -16,6 +16,8 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.debugger.DebugHooks;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 
@@ -1432,6 +1434,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             frame++;
         }
 
+        // Check if caller() is being called from package DB (for @DB::args support)
+        boolean calledFromDB = false;
+        if (stackTraceSize > 0) {
+            String callerPackage = stackTrace.getFirst().getFirst();
+            calledFromDB = "DB".equals(callerPackage);
+        }
+
         if (frame >= 0 && frame < stackTraceSize) {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
@@ -1458,6 +1467,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // If no subroutine name or empty, add undef
                     res.add(RuntimeScalarCache.scalarUndef);
                 }
+
+                // Populate @DB::args when caller() is called from package DB
+                if (calledFromDB && DebugState.debugMode) {
+                    RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
+                    RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
+                    if (frameArgs != null) {
+                        dbArgs.setFromList(frameArgs.getList());
+                    } else {
+                        dbArgs.setFromList(new RuntimeList());
+                    }
+                }
+
                 // TODO: Add more caller() return values:
                 // hasargs, wantarray, evaltext, is_require, hints, bitmask, hinthash
             }
@@ -1920,13 +1941,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new PerlCompilerException("Undefined subroutine called at ");
             }
 
-            RuntimeList result;
-            if (isStatic) {
-                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
-            } else {
-                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+            // Push args for @DB::args support and track call depth in debug mode
+            DebugState.pushArgs(a);
+            DebugHooks.enterSubroutine();
+            try {
+                RuntimeList result;
+                if (isStatic) {
+                    result = (RuntimeList) this.methodHandle.invoke(a, callContext);
+                } else {
+                    result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                }
+                return result;
+            } finally {
+                DebugHooks.exitSubroutine();
+                DebugState.popArgs();
             }
-            return result;
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {
@@ -1972,13 +2001,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new PerlCompilerException("Undefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called at ");
             }
 
-            RuntimeList result;
-            if (isStatic) {
-                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
-            } else {
-                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+            // Push args for @DB::args support and track call depth in debug mode
+            DebugState.pushArgs(a);
+            DebugHooks.enterSubroutine();
+            try {
+                RuntimeList result;
+                if (isStatic) {
+                    result = (RuntimeList) this.methodHandle.invoke(a, callContext);
+                } else {
+                    result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                }
+                return result;
+            } finally {
+                DebugHooks.exitSubroutine();
+                DebugState.popArgs();
             }
-            return result;
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {

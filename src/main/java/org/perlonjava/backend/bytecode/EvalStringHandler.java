@@ -338,7 +338,8 @@ public class EvalStringHandler {
             // first evalString overload above: it corrupts die/warn location baking.
             BytecodeCompiler compiler = new BytecodeCompiler(
                     sourceName + " (eval)",
-                    sourceLine
+                    sourceLine,
+                    errorUtil
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
             if (RuntimeCode.DISASSEMBLE) {

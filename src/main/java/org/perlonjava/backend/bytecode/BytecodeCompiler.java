@@ -814,7 +814,9 @@ public class BytecodeCompiler implements Visitor {
             if (DebugState.debugMode && stmtTokenIndex >= 0) {
                 boolean skipDebug = (stmt instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"));
                 if (!skipDebug) {
-                    int lineNumber = errorUtil.getLineNumber(stmtTokenIndex);
+                    // Use getLineNumberAccurate() because subroutine bodies may be compiled
+                    // lazily after the main script, making cached line numbers unreliable
+                    int lineNumber = errorUtil.getLineNumberAccurate(stmtTokenIndex);
                     int fileIdx = addToStringPool(sourceName);
                     emit(Opcodes.DEBUG);
                     emit(fileIdx);
@@ -4158,6 +4160,13 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.STORE_GLOBAL_CODE);
         emit(nameIdx);
         emitReg(codeReg);
+
+        // Step 7: Register subroutine location for %DB::sub (only in debug mode)
+        if (DebugState.debugMode && errorUtil != null) {
+            int startLine = errorUtil.getLineNumber(node.getIndex());
+            // Use start line as end line for now (accurate end would require tracking block end)
+            DebugState.registerSubroutine(fullName, sourceName, startLine, startLine);
+        }
 
         lastResultReg = -1;
     }

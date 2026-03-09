@@ -1,7 +1,14 @@
 package org.perlonjava.runtime.debugger;
 
+import org.perlonjava.backend.bytecode.EvalStringHandler;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.BufferedReader;
@@ -25,17 +32,30 @@ public class DebugHooks {
     
     // Command counter for prompt (1-indexed like Perl)
     private static int commandCounter = 1;
+    
+    // Current execution context for expression evaluation
+    private static InterpretedCode currentCode;
+    private static RuntimeBase[] currentRegisters;
 
     /**
      * Main debug hook called by DEBUG opcode.
      * Checks if we should stop and handles debugger interaction.
      *
-     * @param filename Current source filename
-     * @param line     Current line number (1-based)
+     * @param filename  Current source filename
+     * @param line      Current line number (1-based)
+     * @param code      Current InterpretedCode (for expression evaluation)
+     * @param registers Current register array (for variable access)
      */
-    public static void debug(String filename, int line) {
+    public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers) {
+        // Store context for expression evaluation
+        currentCode = code;
+        currentRegisters = registers;
+        
         // Sync from Perl $DB::single variable to DebugState
         syncFromPerlVariables();
+        
+        // Sync %DB::sub with any newly compiled subroutines
+        syncDbSub();
         
         // Update current location
         DebugState.currentFile = filename;
@@ -53,6 +73,15 @@ public class DebugHooks {
         // Check for quit flag
         if (DebugState.quit) {
             System.exit(0);
+        }
+
+        // Populate @DB::args with current frame's arguments
+        RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
+        RuntimeArray frameArgs = DebugState.getArgsForFrame(0);
+        if (frameArgs != null) {
+            dbArgs.setFromList(frameArgs.getList());
+        } else {
+            dbArgs.setFromList(new RuntimeList());
         }
 
         // Get source line for display
@@ -126,6 +155,9 @@ public class DebugHooks {
             case 's':  // step - step into
                 return handleStep(args);
 
+            case 'r':  // return - step out
+                return handleReturn(args);
+
             case 'c':  // continue
                 return handleContinue(args);
 
@@ -138,6 +170,10 @@ public class DebugHooks {
 
             case '.':  // show current line
                 handleShowCurrent();
+                return false;
+
+            case 'T':  // stack trace
+                handleStackTrace();
                 return false;
 
             case 'h':  // help
@@ -157,6 +193,14 @@ public class DebugHooks {
                 handleListBreakpoints();
                 return false;
 
+            case 'p':  // print expression
+                handlePrint(args);
+                return false;
+
+            case 'x':  // dump expression
+                handleDump(args);
+                return false;
+
             default:
                 // Unknown command - could be Perl expression to evaluate
                 // For now, just show help
@@ -173,6 +217,7 @@ public class DebugHooks {
         // Set step-over depth to current depth
         // DEBUG hook will skip while callDepth > stepOverDepth
         DebugState.stepOverDepth = DebugState.callDepth;
+        DebugState.stepOutDepth = -1;
         DebugState.single = true;
         syncToPerlVariables();
         return true;
@@ -182,7 +227,21 @@ public class DebugHooks {
      * Handle 's' (step) command - step into subroutine calls.
      */
     private static boolean handleStep(String args) {
-        // Disable step-over, enable single-step
+        // Disable step-over/step-out, enable single-step
+        DebugState.stepOverDepth = -1;
+        DebugState.stepOutDepth = -1;
+        DebugState.single = true;
+        syncToPerlVariables();
+        return true;
+    }
+
+    /**
+     * Handle 'r' (return) command - step out of current subroutine.
+     */
+    private static boolean handleReturn(String args) {
+        // Set step-out depth to current depth
+        // DEBUG hook will skip until callDepth < stepOutDepth
+        DebugState.stepOutDepth = DebugState.callDepth;
         DebugState.stepOverDepth = -1;
         DebugState.single = true;
         syncToPerlVariables();
@@ -193,17 +252,18 @@ public class DebugHooks {
      * Handle 'c' (continue) command - run until breakpoint or end.
      */
     private static boolean handleContinue(String args) {
-        // Disable single-step and step-over
+        // Disable single-step, step-over, step-out
         DebugState.single = false;
         DebugState.stepOverDepth = -1;
+        DebugState.stepOutDepth = -1;
 
         // If argument provided, it's a line number for one-time breakpoint
         if (!args.isEmpty()) {
             try {
                 int targetLine = Integer.parseInt(args);
                 String key = DebugState.currentFile + ":" + targetLine;
-                DebugState.breakpoints.add(key);
-                // TODO: Mark as one-time breakpoint to remove after hit
+                // Use one-time breakpoint so it's removed after being hit
+                DebugState.oneTimeBreakpoints.add(key);
             } catch (NumberFormatException e) {
                 System.out.println("Invalid line number: " + args);
                 return false;
@@ -377,22 +437,147 @@ public class DebugHooks {
     }
 
     /**
+     * Handle 'T' (stack trace) command - show call stack.
+     */
+    private static void handleStackTrace() {
+        Throwable t = new Throwable();
+        java.util.ArrayList<java.util.ArrayList<String>> stackTrace =
+                org.perlonjava.runtime.runtimetypes.ExceptionFormatter.formatException(t);
+
+        if (stackTrace.isEmpty()) {
+            System.out.println("(no stack trace available)");
+            return;
+        }
+
+        // Skip the first frame (handleStackTrace itself)
+        for (int i = 1; i < stackTrace.size(); i++) {
+            java.util.ArrayList<String> frame = stackTrace.get(i);
+            String pkg = frame.get(0);
+            String file = frame.get(1);
+            String line = frame.get(2);
+            String sub = (frame.size() > 3 && frame.get(3) != null) ? frame.get(3) : "(main)";
+
+            // Format: . = pkg::sub() called from file line N
+            if (i == 1) {
+                System.out.printf(". = %s::%s() called from %s line %s%n", pkg, sub, file, line);
+            } else {
+                System.out.printf("@ = %s::%s() called from %s line %s%n", pkg, sub, file, line);
+            }
+        }
+    }
+
+    /**
      * Handle 'h' (help) command.
      */
     private static void handleHelp() {
         System.out.println("Debugger commands:");
         System.out.println("  n          Next (step over) - execute until next statement");
         System.out.println("  s          Step into - step into subroutine calls");
-        System.out.println("  c [line]   Continue - run until breakpoint or end");
+        System.out.println("  r          Return - step out of current subroutine");
+        System.out.println("  c [line]   Continue - run until breakpoint or line");
         System.out.println("  q          Quit - exit the debugger");
+        System.out.println("  T          Stack trace - show call stack");
         System.out.println("  l [range]  List source (e.g., 'l 10-20' or 'l 15')");
         System.out.println("  .          Show current line");
         System.out.println("  b [line]   Set breakpoint (e.g., 'b 10' or 'b file.pl:10')");
         System.out.println("  B [line]   Delete breakpoint ('B *' deletes all)");
         System.out.println("  L          List all breakpoints");
+        System.out.println("  p expr     Print expression result");
+        System.out.println("  x expr     Dump expression (structured output)");
         System.out.println("  h or ?     Show this help");
         System.out.println("");
         System.out.println("Press Enter to repeat last command (default: n)");
+    }
+
+    /**
+     * Handle 'p' (print) command - evaluate and print expression.
+     */
+    private static void handlePrint(String expr) {
+        if (expr.isEmpty()) {
+            System.out.println("Usage: p <expression>");
+            return;
+        }
+
+        // Temporarily disable debug mode during expression evaluation
+        boolean savedDebugMode = DebugState.debugMode;
+        DebugState.debugMode = false;
+        
+        try {
+            // Evaluate the expression using eval in scalar context
+            RuntimeScalar result = EvalStringHandler.evalString(
+                    expr,
+                    currentCode,
+                    currentRegisters,
+                    DebugState.currentFile,
+                    DebugState.currentLine,
+                    RuntimeContextType.SCALAR
+            );
+            
+            // Check if eval had an error
+            RuntimeScalar evalError = GlobalVariable.getGlobalVariable("main::@");
+            if (evalError.getDefinedBoolean() && !evalError.toString().isEmpty()) {
+                System.out.println("Error: " + evalError.toString().trim());
+            } else {
+                // Print the result (like Perl's print)
+                System.out.println(result.toString());
+            }
+        } catch (Exception e) {
+            System.out.println("Error evaluating expression: " + e.getMessage());
+        } finally {
+            // Restore debug mode
+            DebugState.debugMode = savedDebugMode;
+        }
+    }
+
+    /**
+     * Handle 'x' (dump) command - evaluate and dump expression structure.
+     */
+    private static void handleDump(String expr) {
+        if (expr.isEmpty()) {
+            System.out.println("Usage: x <expression>");
+            return;
+        }
+
+        // Temporarily disable debug mode during expression evaluation
+        boolean savedDebugMode = DebugState.debugMode;
+        DebugState.debugMode = false;
+        
+        try {
+            // Wrap expression to use Data::Dumper-style output
+            // For now, use a simple approach: evaluate and show type info
+            String dumpExpr = "do { use Data::Dumper; local $Data::Dumper::Terse = 1; local $Data::Dumper::Indent = 1; Dumper(" + expr + ") }";
+            
+            RuntimeScalar result = EvalStringHandler.evalString(
+                    dumpExpr,
+                    currentCode,
+                    currentRegisters,
+                    DebugState.currentFile,
+                    DebugState.currentLine,
+                    RuntimeContextType.SCALAR
+            );
+            
+            // Check if eval had an error
+            RuntimeScalar evalError = GlobalVariable.getGlobalVariable("main::@");
+            if (evalError.getDefinedBoolean() && !evalError.toString().isEmpty()) {
+                // Data::Dumper not available, fall back to simple output
+                result = EvalStringHandler.evalString(
+                        expr,
+                        currentCode,
+                        currentRegisters,
+                        DebugState.currentFile,
+                        DebugState.currentLine,
+                        RuntimeContextType.SCALAR
+                );
+                System.out.println("0  " + result.toString());
+            } else {
+                System.out.print(result.toString());
+            }
+        } catch (Exception e) {
+            System.out.println("Error evaluating expression: " + e.getMessage());
+        } finally {
+            // Restore debug mode
+            DebugState.debugMode = savedDebugMode;
+        }
     }
 
     /**
@@ -447,5 +632,19 @@ public class DebugHooks {
         GlobalVariable.getGlobalVariable("DB::signal").set(0);
         GlobalVariable.getGlobalVariable("DB::filename").set("");
         GlobalVariable.getGlobalVariable("DB::line").set(0);
+    }
+
+    /**
+     * Sync %DB::sub from DebugState.subLocations.
+     * Called periodically to ensure Perl code can access subroutine locations.
+     */
+    public static void syncDbSub() {
+        if (!DebugState.debugMode) {
+            return;
+        }
+        RuntimeHash dbSub = GlobalVariable.getGlobalHash("DB::sub");
+        for (var entry : DebugState.subLocations.entrySet()) {
+            dbSub.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        }
     }
 }
