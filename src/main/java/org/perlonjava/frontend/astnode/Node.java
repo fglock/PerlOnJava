@@ -41,4 +41,16 @@ public interface Node {
     void setAnnotation(String key, Object value);
 
     Object getAnnotation(String key);
+
+    /**
+     * Sets the cached context type for this node.
+     * @param context RuntimeContextType value (VOID, SCALAR, LIST, or RUNTIME)
+     */
+    void setCachedContext(int context);
+
+    /**
+     * Gets the cached context type for this node.
+     * @return RuntimeContextType value, or -1 if not yet computed
+     */
+    int getCachedContext();
 }

@@ -330,10 +330,12 @@ public abstract class ASTTransformPass implements Visitor {
 
     /**
      * Convenience method to set the cached context on a node.
+     * Note: If the parser has already set a context (e.g., for prototype arguments),
+     * this will NOT overwrite it. Parser context takes precedence for prototype handling.
      */
     protected void setContext(Node node, int context) {
         AbstractNode abstractNode = asAbstractNode(node);
-        if (abstractNode != null) {
+        if (abstractNode != null && !abstractNode.hasCachedContext()) {
             abstractNode.setCachedContext(context);
         }
     }

@@ -60,33 +60,45 @@ public class EmitterVisitor implements Visitor {
         return newVisitor;
     }
 
+    // Collect context mismatches for analysis
+    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger> 
+            contextMismatches = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    static {
+        // Dump mismatches on shutdown
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (!contextMismatches.isEmpty()) {
+                System.err.println("\n=== Context Mismatches (ContextResolver needs fixing) ===");
+                contextMismatches.entrySet().stream()
+                        .sorted((a, b) -> b.getValue().get() - a.getValue().get())
+                        .forEach(e -> System.err.println(e.getKey() + " : " + e.getValue().get() + " times"));
+            }
+        }));
+    }
+    
     /**
-     * Visits a child node using cached context from ContextResolver.
+     * Visits a child node with the specified context.
      * 
-     * <p>The fallbackContext parameter is used for logging mismatches but the
-     * cached context is always preferred when available.
+     * <p>Uses fallback context (safe mode) while collecting mismatches for analysis.
+     * Once all mismatches are fixed in ContextResolver, we can switch to using cached context.
      *
      * @param child The child node to visit
-     * @param fallbackContext Expected context (for mismatch detection)
+     * @param fallbackContext Context to use for visiting
      */
     public void acceptChild(Node child, int fallbackContext) {
         if (child == null) return;
         
-        int contextToUse = fallbackContext;
-        
-        // Use cached context if available
+        // Collect mismatches for analysis (but use fallback for safety)
         if (child instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != fallbackContext) {
-                // Log mismatch for debugging
-                System.err.println("CTX_MISMATCH: " + nodeDescription(child) + 
-                        " cached=" + contextName(cached) + 
-                        " fallback=" + contextName(fallbackContext));
+                String key = nodeDescription(child) + " cached=" + contextName(cached) + " expected=" + contextName(fallbackContext);
+                contextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
             }
-            contextToUse = cached;
         }
         
-        child.accept(with(contextToUse));
+        // Use fallback context (safe mode)
+        child.accept(with(fallbackContext));
     }
     
     private String nodeDescription(Node node) {

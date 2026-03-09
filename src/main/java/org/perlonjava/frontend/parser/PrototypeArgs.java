@@ -5,6 +5,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import static org.perlonjava.frontend.parser.ListParser.consumeCommas;
 import static org.perlonjava.frontend.parser.ListParser.isComma;
@@ -360,7 +361,7 @@ public class PrototypeArgs {
                     Node filehandleNode = FileHandle.parseBarewordHandle(parser, idNode.name);
                     if (filehandleNode != null) {
                         // It's a known filehandle, use the typeglob reference
-                        filehandleNode.setAnnotation("context", "SCALAR");
+                        filehandleNode.setCachedContext(RuntimeContextType.SCALAR);
                         args.elements.add(filehandleNode);
                         return;
                     }
@@ -370,7 +371,7 @@ public class PrototypeArgs {
                 }
             }
             Node scalarArg = ParserNodeUtils.toScalarContext(arg);
-            scalarArg.setAnnotation("context", "SCALAR");
+            scalarArg.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(scalarArg);
         }
     }
@@ -398,12 +399,12 @@ public class PrototypeArgs {
         Node arg = parseArgumentWithComma(parser, true, needComma, "scalar argument");
         if (arg == null) {
             Node underscoreArg = scalarUnderscore(parser);
-            underscoreArg.setAnnotation("context", "SCALAR");
+            underscoreArg.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(underscoreArg);
             return;
         }
         Node scalarArg = ParserNodeUtils.toScalarContext(arg);
-        scalarArg.setAnnotation("context", "SCALAR");
+        scalarArg.setCachedContext(RuntimeContextType.SCALAR);
         args.elements.add(scalarArg);
     }
 
@@ -433,7 +434,7 @@ public class PrototypeArgs {
         if (expr instanceof OperatorNode opNode && opNode.operator.equals("*")) {
             // Typeglob - create a typeglob reference
             Node typeglobRef = new OperatorNode("\\", expr, expr.getIndex());
-            typeglobRef.setAnnotation("context", "SCALAR");
+            typeglobRef.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(typeglobRef);
         } else if (expr instanceof IdentifierNode idNode) {
             // Bareword - create a typeglob reference
@@ -446,7 +447,7 @@ public class PrototypeArgs {
         } else {
             // Bare scalars
             Node scalarArg = ParserNodeUtils.toScalarContext(expr);
-            scalarArg.setAnnotation("context", "SCALAR");
+            scalarArg.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(scalarArg);
         }
     }
@@ -464,7 +465,7 @@ public class PrototypeArgs {
             int saveIndex = parser.tokenIndex;
             Node filehandle = FileHandle.parseFileHandle(parser);
             if (filehandle != null) {
-                filehandle.setAnnotation("context", "SCALAR");
+                filehandle.setCachedContext(RuntimeContextType.SCALAR);
                 args.elements.add(filehandle);
 
                 // Parse any remaining arguments after the filehandle
@@ -500,7 +501,7 @@ public class PrototypeArgs {
             Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             // Code references/blocks are evaluated in SCALAR context
-            block.setAnnotation("context", "SCALAR");
+            block.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(block);
             return false;
         }
@@ -562,7 +563,7 @@ public class PrototypeArgs {
             }
 
             // Code references are evaluated in SCALAR context
-            codeRef.setAnnotation("context", "SCALAR");
+            codeRef.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(codeRef);
             return true;
         }
@@ -577,11 +578,11 @@ public class PrototypeArgs {
 
         if (arg instanceof OperatorNode opNode && (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
             Node refArg = new OperatorNode("\\", arg, arg.getIndex());
-            refArg.setAnnotation("context", "SCALAR");
+            refArg.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(refArg);
         } else {
             Node scalarArg = ParserNodeUtils.toScalarContext(arg);
-            scalarArg.setAnnotation("context", "SCALAR");
+            scalarArg.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(scalarArg);
         }
     }
@@ -715,7 +716,7 @@ public class PrototypeArgs {
 
             Node refNode = new OperatorNode("\\", referenceArg, referenceArg.getIndex());
             // References are evaluated in SCALAR context
-            refNode.setAnnotation("context", "SCALAR");
+            refNode.setCachedContext(RuntimeContextType.SCALAR);
             args.elements.add(refNode);
         }
 

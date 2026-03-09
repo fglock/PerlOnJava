@@ -99,9 +99,13 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitLogicalOp(BinaryOperatorNode node) {
-        // LHS is scalar (for boolean test), RHS inherits outer context
+        // LHS is scalar (for boolean test)
         visitInContext(node.left, RuntimeContextType.SCALAR);
-        visitInContext(node.right, currentContext);
+        // RHS: In LIST context, evaluated in LIST; otherwise SCALAR for short-circuit mechanics
+        int rhsContext = (currentContext == RuntimeContextType.LIST) 
+                ? RuntimeContextType.LIST 
+                : RuntimeContextType.SCALAR;
+        visitInContext(node.right, rhsContext);
     }
 
     private void visitBindingOp(BinaryOperatorNode node) {
@@ -197,6 +201,9 @@ public class ContextResolver extends ASTTransformPass {
             case "split" -> visitSplit(node);
             case "join" -> visitJoin(node);
             case "select", "gmtime", "localtime", "caller", "reset", "times" -> visitListOperand(node);
+            // Operators that take LIST context operands (prototype @)
+            case "pack", "mkdir", "opendir", "seekdir", "crypt", "vec", "read", "chmod",
+                 "chop", "chomp", "system", "exec", "$#", "splice", "reverse" -> visitListOperand(node);
             default -> visitOperatorDefault(node);
         }
     }

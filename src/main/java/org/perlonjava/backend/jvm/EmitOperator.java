@@ -296,12 +296,13 @@ public class EmitOperator {
             // Populate the array with arguments
             int index = 0;
             for (Node arg : operand.elements) {
-                // Generate code for argument
-                String argContext = (String) arg.getAnnotation("context");
-                if (argContext != null && argContext.equals("SCALAR")) {
-                    arg.accept(scalarVisitor);
+                // Generate code for argument using cached context from parser/ContextResolver
+                int argContext = arg.getCachedContext();
+                if (argContext == RuntimeContextType.SCALAR) {
+                    emitterVisitor.acceptChild(arg, RuntimeContextType.SCALAR);
                 } else {
-                    arg.accept(listVisitor);
+                    // Default to LIST for prototype-based operators
+                    emitterVisitor.acceptChild(arg, RuntimeContextType.LIST);
                 }
 
                 int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
