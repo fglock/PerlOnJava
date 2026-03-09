@@ -80,11 +80,11 @@ public class EmitterVisitor implements Visitor {
         if (ctx.compilerOptions != null && ctx.compilerOptions.debugEnabled) {
             if (child instanceof AbstractNode an) {
                 if (!an.hasCachedContext()) {
-                    String nodeType = child.getClass().getSimpleName();
-                    ctx.logDebug("acceptChild: No cached context for " + nodeType + ", using " + contextName(fallbackContext));
+                    String nodeInfo = nodeDescription(child);
+                    ctx.logDebug("acceptChild: No cached context for " + nodeInfo + ", using " + contextName(fallbackContext));
                 } else if (an.getCachedContext() != fallbackContext) {
-                    String nodeType = child.getClass().getSimpleName();
-                    ctx.logDebug("acceptChild: Context mismatch for " + nodeType + 
+                    String nodeInfo = nodeDescription(child);
+                    ctx.logDebug("acceptChild: Context mismatch for " + nodeInfo + 
                             " - cached=" + contextName(an.getCachedContext()) + 
                             ", fallback=" + contextName(fallbackContext) + 
                             " (using fallback)");
@@ -93,6 +93,18 @@ public class EmitterVisitor implements Visitor {
         }
         // Always use fallback for now (safe migration)
         child.accept(with(fallbackContext));
+    }
+
+    private static String nodeDescription(Node node) {
+        String type = node.getClass().getSimpleName();
+        if (node instanceof OperatorNode op) {
+            return type + "(" + op.operator + ")";
+        } else if (node instanceof BinaryOperatorNode bop) {
+            return type + "(" + bop.operator + ")";
+        } else if (node instanceof IdentifierNode id) {
+            return type + "(" + id.name + ")";
+        }
+        return type;
     }
 
     private static String contextName(int ctx) {

@@ -86,9 +86,9 @@ public class ContextResolver extends ASTTransformPass {
                 ? RuntimeContextType.LIST
                 : RuntimeContextType.SCALAR;
 
-        // LHS is always lvalue context (SCALAR for $x, LIST for @x/($a,$b))
+        // LHS context matches its lvalue type (SCALAR for $x, LIST for @x/(%h)/($a,$b))
         int saved = currentContext;
-        currentContext = RuntimeContextType.SCALAR;
+        currentContext = lhsContext;
         if (node.left != null) node.left.accept(this);
 
         currentContext = rhsContext;
@@ -210,6 +210,7 @@ public class ContextResolver extends ASTTransformPass {
             case "map", "grep", "sort" -> visitMapLike(node);
             case "split" -> visitSplit(node);
             case "join" -> visitJoin(node);
+            case "select", "gmtime", "localtime", "caller", "reset", "times" -> visitListOperand(node);
             default -> visitOperatorDefault(node);
         }
     }
@@ -299,9 +300,9 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitHashListOp(OperatorNode node) {
-        // keys/values/each: argument is scalar (the hash)
+        // keys/values/each: argument is list context (to evaluate the hash/array)
         int saved = currentContext;
-        currentContext = RuntimeContextType.SCALAR;
+        currentContext = RuntimeContextType.LIST;
         if (node.operand != null) node.operand.accept(this);
         currentContext = saved;
     }
@@ -358,6 +359,14 @@ public class ContextResolver extends ASTTransformPass {
         currentContext = saved;
     }
 
+    private void visitListOperand(OperatorNode node) {
+        // Operators that take list context operands: select, gmtime, localtime, caller, reset, times
+        int saved = currentContext;
+        currentContext = RuntimeContextType.LIST;
+        if (node.operand != null) node.operand.accept(this);
+        currentContext = saved;
+    }
+
     @Override
     public void visit(TernaryOperatorNode node) {
         setContext(node, currentContext);
@@ -393,8 +402,8 @@ public class ContextResolver extends ASTTransformPass {
         setContext(node, currentContext);
 
         int saved = currentContext;
-        // Variable is scalar
-        currentContext = RuntimeContextType.SCALAR;
+        // Variable declaration is void (side effect only)
+        currentContext = RuntimeContextType.VOID;
         if (node.variable != null) node.variable.accept(this);
 
         // List is list context
