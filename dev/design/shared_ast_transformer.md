@@ -1295,6 +1295,23 @@ The `acceptChild` method assumes the cached context is always authoritative. But
 - All Emit*.java files in `src/main/java/org/perlonjava/backend/jvm/` reverted to avoid test failures
 - `EmitterVisitor.acceptChild()` method retained for future safe migrations
 
+### Safe Migration Progress (2025-03-09)
+
+Changed `acceptChild` to always use fallback context (safe behavior) with warnings on mismatch.
+
+**Migrated Files** (10 call sites total):
+- `EmitStatement.java`: 5 call sites (conditions, loop bodies, finally blocks)
+- `EmitControlFlow.java`: 5 call sites (return operands, goto sub/args, dynamic goto)
+
+**ContextResolver Fixes**:
+- `return` operand: Changed from LIST to RUNTIME (return passes caller context)
+
+**Remaining**: ~126 call sites in other Emit*.java files
+
+**Known Mismatches to Address**:
+- EmitLogicalOperator.java: RHS of `||`/`&&` in VOID context (emitter uses SCALAR, ContextResolver uses VOID)
+- EmitOperator.java: `select` operand (emitter uses LIST, ContextResolver uses SCALAR)
+
 ### Next Steps
 
 1. **Audit emitter call sites for safe migration**
