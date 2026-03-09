@@ -1,0 +1,191 @@
+---
+name: shared-ast-transformer
+description: Debug and develop the shared AST transformer for backend parity
+argument-hint: "[context issue, ContextResolver, acceptChild]"
+triggers:
+  - user
+  - model
+---
+
+# Shared AST Transformer Development
+
+This skill covers development and debugging of the shared AST transformer that ensures parity between JVM and interpreter backends.
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/main/java/org/perlonjava/frontend/analysis/ContextResolver.java` | Propagates SCALAR/LIST/VOID context through AST |
+| `src/main/java/org/perlonjava/frontend/analysis/EmitterVisitor.java` | Contains `acceptChild()` for context-aware node visiting |
+| `src/main/java/org/perlonjava/frontend/analysis/ASTTransformPass.java` | Base class for transformer passes |
+| `src/main/java/org/perlonjava/frontend/analysis/ASTTransformer.java` | Pass orchestrator |
+| `src/main/java/org/perlonjava/frontend/astnode/AbstractNode.java` | AST node with cached context fields |
+| `dev/design/shared_ast_transformer.md` | Design document with progress tracking |
+
+## Architecture
+
+```
+Parser → Raw AST → ASTTransformer (ContextResolver pass) → Annotated AST
+                                                              ↓
+                                              ┌───────────────┴───────────────┐
+                                              ↓                               ↓
+                                        JVM Emitter                  BytecodeCompiler
+                                     (uses acceptChild)            (uses cached context)
+```
+
+## ContextResolver Pattern
+
+The `ContextResolver` uses `visitInContext()` helper to cleanly propagate context:
+
+```java
+private void visitInContext(Node node, int context) {
+    if (node == null) return;
+    int saved = currentContext;
+    currentContext = context;
+    node.accept(this);
+    currentContext = saved;
+}
+
+// Usage - clean and consistent:
+private void visitAssignment(BinaryOperatorNode node) {
+    int lhsContext = LValueVisitor.getContext(node.left);
+    int rhsContext = (lhsContext == RuntimeContextType.LIST)
+            ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
+    visitInContext(node.left, lhsContext);
+    visitInContext(node.right, rhsContext);
+}
+```
+
+## Debugging Context Issues
+
+### 1. Enable context mismatch warnings
+
+In `EmitterVisitor.acceptChild()`, add logging to identify mismatches:
+
+```java
+public void acceptChild(Node child, int fallbackContext) {
+    if (child instanceof AbstractNode an && an.hasCachedContext()) {
+        int cached = an.getCachedContext();
+        if (cached != fallbackContext) {
+            System.err.println("Context mismatch: " + nodeDescription(child) +
+                    " cached=" + contextName(cached) +
+                    " fallback=" + contextName(fallbackContext));
+        }
+    }
+    // Use fallback for safe mode, or cached for testing
+    child.accept(with(fallbackContext));
+}
+```
+
+### 2. Analyze emitter context expectations
+
+Run this script to extract all `acceptChild` calls and their expected contexts:
+
+```bash
+grep -rn "acceptChild" src/main/java/org/perlonjava/backend/jvm/*.java | \
+    perl dev/tools/analyze_context_calls.pl
+```
+
+This shows:
+- **Consistent patterns**: Always same context (e.g., `node.condition` → SCALAR)
+- **Varying patterns**: Context depends on operator (e.g., `node.left` → LIST or SCALAR)
+
+### 3. Check AST context with --parse
+
+```bash
+java -jar target/perlonjava-3.0.0.jar --parse -e 'my @a = (1,2,3); print "@a"'
+```
+
+Look for `ctx: SCALAR/LIST/VOID` annotations on nodes.
+
+## Common Context Rules
+
+| Pattern | Context | Notes |
+|---------|---------|-------|
+| Assignment LHS (`$x`, `@a`, `%h`) | Matches sigil | `$`→SCALAR, `@`/`%`→LIST |
+| Assignment RHS | Matches LHS | If LHS is LIST, RHS is LIST |
+| Condition (`if`, `while`, `?:`) | SCALAR | Boolean test |
+| Loop body | VOID | Unless used as expression |
+| Loop list (`for @list`) | LIST | Elements to iterate |
+| Subroutine args | LIST | `foo($a, $b)` |
+| Subroutine body | RUNTIME | Determined by caller |
+| `return` operand | RUNTIME | Passes caller context |
+| `print`/`die`/`warn` args | LIST | Print list of values |
+| `join` (binary) | left=SCALAR, right=LIST | Separator + list |
+| `map`/`grep`/`sort` | block=SCALAR, list=LIST | |
+| Logical `||`/`&&`/`//` | LHS=SCALAR, RHS=outer | Short-circuit |
+| Comma in list context | Both LIST | `(@a, @b)` |
+| Comma in scalar context | LHS=VOID, RHS=SCALAR | `($x, $y)` returns `$y` |
+
+## Known Issues
+
+### Stack frame errors when using cached context
+
+When `acceptChild` uses cached context instead of fallback, JVM bytecode verification fails with "Operand stack underflow" or frame mismatches.
+
+**Root cause**: The emitter generates different bytecode based on context. When cached context differs from what the emitter code path expects, the generated bytecode has inconsistent stack states.
+
+**Example**: An operator's emitter code may:
+1. Call `acceptChild(node, SCALAR)` expecting scalar result on stack
+2. But ContextResolver cached LIST context
+3. Emitter continues assuming scalar, but LIST code path left different stack
+
+**Solution approaches**:
+1. Fix ContextResolver to match emitter expectations exactly
+2. Make emitter more robust to context variations
+3. Use `acceptChild` only for nodes where context doesn't affect stack layout
+
+### String interpolation (`"@a"`)
+
+String interpolation like `"@a"` parses as:
+```
+BinaryOperatorNode: join
+  left: StringNode (separator)
+  right: ListNode
+    BinaryOperatorNode: join
+      left: OperatorNode($) → $"
+      right: OperatorNode(@) → @a   ← This needs LIST context!
+```
+
+**Fix**: Add `case "join" -> visitJoinBinary(node)` in ContextResolver for BinaryOperatorNode.
+
+## Testing
+
+```bash
+# Build
+./gradlew clean build -x test
+
+# Run single test
+java -jar target/perlonjava-3.0.0.jar src/test/resources/unit/array.t
+
+# Run all tests
+./gradlew test
+
+# Compare JVM vs interpreter
+java -jar target/perlonjava-3.0.0.jar -e 'code'           # JVM
+java -jar target/perlonjava-3.0.0.jar --int -e 'code'     # Interpreter
+```
+
+## Progress Tracking
+
+Always update `dev/design/shared_ast_transformer.md` when:
+1. Completing a phase
+2. Discovering new issues
+3. Adding ContextResolver fixes
+
+Format:
+```markdown
+**ContextResolver Fixes Applied**:
+- `join` binary: left=SCALAR (separator), right=LIST (for string interpolation)
+- etc.
+
+**Current State (YYYY-MM-DD)**:
+- All 156 gradle tests pass
+- String interpolation works correctly
+```
+
+## Next Steps (as of 2025-03-09)
+
+1. **Investigate stack frame errors** when using cached context
+2. **Consider alternative approach**: Make emitter handle context variations gracefully
+3. **Phase 2b**: Variable resolution pass
