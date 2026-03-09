@@ -20,8 +20,6 @@ public class Dereference {
      */
     static void handleArrayElementOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
         emitterVisitor.ctx.logDebug("handleArrayElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         // check if node.left is a `$` or `@` variable - it means we have a RuntimeArray instead of RuntimeScalar
         if (node.left instanceof OperatorNode sigilNode) { // $ @ %
@@ -38,7 +36,7 @@ public class Dereference {
                 OperatorNode varNode = new OperatorNode("@", identifierNode, sigilNode.tokenIndex);
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
-                varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                emitterVisitor.acceptChild(varNode, RuntimeContextType.LIST); // target - left parameter
 
                 int arraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledArray = arraySlot >= 0;
@@ -61,7 +59,7 @@ public class Dereference {
                                     arrayOperation, "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                         } catch (NumberFormatException e) {
                             // Fall back to RuntimeScalar if the number is too large
-                            elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
                             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
                             emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray",
@@ -69,7 +67,7 @@ public class Dereference {
                         }
                     } else {
                         // Single element but not an integer literal
-                        elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
                         emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray",
@@ -78,7 +76,7 @@ public class Dereference {
                 } else {
                     // emit the [0] as a RuntimeList
                     ListNode nodeRight = right.asListNode();
-                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(nodeRight, RuntimeContextType.SCALAR);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray",
@@ -107,7 +105,7 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}[] ");
 
                 // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
-                sigilNode.operand.accept(scalarVisitor);
+                emitterVisitor.acceptChild(sigilNode.operand, RuntimeContextType.SCALAR);
 
                 int baseSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledBase = baseSlot >= 0;
@@ -120,7 +118,7 @@ public class Dereference {
                 ArrayLiteralNode right = (ArrayLiteralNode) node.right;
                 if (right.elements.size() == 1) {
                     Node elem = right.elements.getFirst();
-                    elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, baseSlot);
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -128,7 +126,7 @@ public class Dereference {
                 } else {
                     // Multiple indices - use slice
                     ListNode nodeRight = right.asListNode();
-                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, baseSlot);
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -160,7 +158,7 @@ public class Dereference {
                  *      NumberNode: 20
                  */
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var[] ");
-                sigilNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                emitterVisitor.acceptChild(sigilNode, RuntimeContextType.LIST); // target - left parameter
 
                 int arraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledArray = arraySlot >= 0;
@@ -171,7 +169,7 @@ public class Dereference {
 
                 // emit the [10, 20] as a RuntimeList
                 ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
-                nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
 
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
@@ -211,7 +209,7 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %var[] ");
 
                 // Evaluate base as scalar (array reference)
-                sigilNode.operand.accept(scalarVisitor);
+                emitterVisitor.acceptChild(sigilNode.operand, RuntimeContextType.SCALAR);
 
                 int baseSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledBase = baseSlot >= 0;
@@ -243,7 +241,7 @@ public class Dereference {
 
                 for (Node elem : right.elements) {
                     // Evaluate index scalar
-                    elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, idxSlot);
 
                     // out.add(index)
@@ -313,8 +311,6 @@ public class Dereference {
      */
     public static void handleHashElementOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
         emitterVisitor.ctx.logDebug("handleHashElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         // check if node.left is a `$` or `@` variable
         if (node.left instanceof OperatorNode sigilNode) { // $ @ %
@@ -332,7 +328,7 @@ public class Dereference {
                 OperatorNode varNode = new OperatorNode("%", identifierNode, sigilNode.tokenIndex);
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{} ");
-                varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                emitterVisitor.acceptChild(varNode, RuntimeContextType.LIST); // target - left parameter
 
                 int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledLeft = leftSlot >= 0;
@@ -363,7 +359,7 @@ public class Dereference {
                 } else if (nodeRight.elements.size() == 1) {
                     // Single element but not a string literal
                     Node elem = nodeRight.elements.getFirst();
-                    elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
 
                     int keySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                     boolean pooledKey = keySlot >= 0;
@@ -395,7 +391,7 @@ public class Dereference {
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, sepSlot);
 
                     // Emit the list of elements
-                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, sepSlot);
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     // Call join(separator, list)
@@ -434,7 +430,7 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}{} ");
 
                 // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
-                sigilNode.operand.accept(scalarVisitor);
+                emitterVisitor.acceptChild(sigilNode.operand, RuntimeContextType.SCALAR);
 
                 // Now apply the subscript using hashDerefGet method
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
@@ -450,7 +446,7 @@ public class Dereference {
                 if (nodeRight.elements.size() == 1) {
                     // Single element
                     Node elem = nodeRight.elements.getFirst();
-                    elem.accept(scalarVisitor);
+                    emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
                     if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                                 "hashDerefGet", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
@@ -465,7 +461,7 @@ public class Dereference {
                     emitterVisitor.ctx.mv.visitLdcInsn("main::;");
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/GlobalVariable",
                             "getGlobalVariable", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/StringOperators",
                             "join", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
@@ -494,7 +490,7 @@ public class Dereference {
                 OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
-                varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                emitterVisitor.acceptChild(varNode, RuntimeContextType.LIST); // target - left parameter
 
                 int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledLeft = leftSlot >= 0;
@@ -516,7 +512,7 @@ public class Dereference {
                 }
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
-                nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
 
                 int keyListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledKeyList = keyListSlot >= 0;
@@ -562,7 +558,7 @@ public class Dereference {
                 OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
-                varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                emitterVisitor.acceptChild(varNode, RuntimeContextType.LIST); // target - left parameter
 
                 int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledLeft = leftSlot >= 0;
@@ -584,7 +580,7 @@ public class Dereference {
                 }
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
-                nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
 
                 int keyListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledKeyList = keyListSlot >= 0;
@@ -629,8 +625,6 @@ public class Dereference {
     static void handleArrowOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         emitterVisitor.ctx.logDebug("handleArrowOperator " + node + " in context " + emitterVisitor.ctx.contextType);
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         if (node.right instanceof ListNode) { // ->()
 
@@ -670,8 +664,8 @@ public class Dereference {
                 method = new StringNode(((IdentifierNode) method).name, ((IdentifierNode) method).tokenIndex);
             }
 
-            object.accept(scalarVisitor);
-            method.accept(scalarVisitor);
+            emitterVisitor.acceptChild(object, RuntimeContextType.SCALAR);
+            emitterVisitor.acceptChild(method, RuntimeContextType.SCALAR);
 
             // Push __SUB__
             handleSelfCallOperator(emitterVisitor.with(RuntimeContextType.SCALAR), null);
@@ -720,7 +714,6 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
             // Populate the array with arguments
-            EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
             for (int index = 0; index < argCount; index++) {
                 int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledArg = argSlot >= 0;
@@ -728,7 +721,7 @@ public class Dereference {
                     argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
                 }
 
-                paramList.elements.get(index).accept(listVisitor);
+                emitterVisitor.acceptChild(paramList.elements.get(index), RuntimeContextType.LIST);
                 mv.visitVarInsn(Opcodes.ASTORE, argSlot);
 
                 mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
@@ -786,10 +779,8 @@ public class Dereference {
 
     public static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
         emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        node.left.accept(scalarVisitor); // target - left parameter
+        emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR); // target - left parameter
 
         int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledLeft = leftSlot >= 0;
@@ -807,7 +798,7 @@ public class Dereference {
         if (right.elements.size() == 1 && !isSingleRange) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
-            elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            emitterVisitor.acceptChild(elem, RuntimeContextType.SCALAR);
 
             int indexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledIndex = indexSlot >= 0;
@@ -857,7 +848,7 @@ public class Dereference {
 
             // Emit the indices as a RuntimeList
             ListNode nodeRight = right.asListNode();
-            nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.acceptChild(nodeRight, RuntimeContextType.LIST);
 
             int indexListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledIndexList = indexListSlot >= 0;
@@ -895,10 +886,8 @@ public class Dereference {
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
         emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->{} " + node);
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        node.left.accept(scalarVisitor); // target - left parameter
+        emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR); // target - left parameter
 
         int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledLeft = leftSlot >= 0;
@@ -919,7 +908,7 @@ public class Dereference {
         }
 
         emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
-        nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(nodeRight, RuntimeContextType.SCALAR);
 
         int keySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledKey = keySlot >= 0;
