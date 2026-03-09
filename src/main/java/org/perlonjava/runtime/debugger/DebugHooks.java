@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.debugger;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -18,6 +20,9 @@ import java.io.InputStreamReader;
 public class DebugHooks {
 
     private static final BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+    
+    // Command counter for prompt (1-indexed like Perl)
+    private static int commandCounter = 1;
 
     /**
      * Main debug hook called by DEBUG opcode.
@@ -43,13 +48,13 @@ public class DebugHooks {
 
         // Get source line for display
         String sourceLine = DebugState.getSourceLine(filename, line);
+        
+        // Get current package name
+        String packageName = InterpreterState.currentPackage.get().toString();
 
-        // Display current location
-        System.out.printf("  DB<%d> %s:%d:\t%s%n",
-                DebugState.callDepth,
-                filename,
-                line,
-                sourceLine.trim());
+        // Display current location (format matches Perl: "package::(file:line):\nline:  code")
+        System.out.printf("%s::(%s:%d):%n", packageName, filename, line);
+        System.out.printf("%d:  %s%n", line, sourceLine.trim());
 
         // Enter command loop
         commandLoop();
@@ -61,7 +66,7 @@ public class DebugHooks {
      */
     private static void commandLoop() {
         while (true) {
-            System.out.print("  DB> ");
+            System.out.printf("  DB<%d> ", commandCounter);
             System.out.flush();
 
             String input;
@@ -88,6 +93,7 @@ public class DebugHooks {
 
             // Parse and execute command
             if (executeCommand(input)) {
+                commandCounter++;  // Increment after command that resumes execution
                 return;  // Command indicates we should resume execution
             }
         }
