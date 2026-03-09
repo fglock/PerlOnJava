@@ -129,7 +129,7 @@ The built-in Perl debugger (`perl -d`) provides interactive debugging. See [Debu
 
 ---
 
-### Command line switches
+## Command Line Switches
 
 - ✅  Accept input program in several ways:
     1. **Piped input**: `echo 'print "Hello\n"' | ./jperl` - reads from pipe and executes immediately
