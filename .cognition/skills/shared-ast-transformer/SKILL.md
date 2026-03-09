@@ -308,13 +308,210 @@ Format:
 - String interpolation works correctly
 ```
 
-## Next Steps (as of 2025-03-09)
+## Making ContextResolver 100% Accurate (for interpreter migration)
 
-1. **Fix the 707 ListNode mismatches**: The `OperatorNode(@) cached=SCALAR` cases are **expected** behavior when `@array` is wrapped with `scalar()` by the parser for `$` prototype slots. The true issue is operators going through `visitOperatorDefault()` that should use LIST context for their ListNode operands.
+### Current State (2026-03-09)
 
-2. **Approach**: Rather than changing `visitOperatorDefault()` globally (which broke 2695+ cases), identify specific operators that:
-   - Fall through to `default` in both ContextResolver and EmitOperatorNode
-   - Have `@` prototype slots expecting LIST context
-   - Add them explicitly to the switch statement with `visitListOperand(node)`
+The JVM emitter uses `acceptChild()` with fallback context (safe mode). The interpreter uses `compileNode()` with explicit context. To migrate the interpreter to use cached context:
 
-3. **Phase 2b**: Variable resolution pass
+### Key Insight: Two Different Context Expectations
+
+The **JVM emitter** and **BytecodeCompiler (interpreter)** have different context expectations:
+
+| Backend | Context Source | Current Behavior |
+|---------|---------------|------------------|
+| JVM Emitter | `acceptChild(node, fallback)` | Uses fallback, logs mismatch if cached differs |
+| Interpreter | `compileNode(node, reg, context)` | Uses explicit context parameter |
+
+When we tried making the interpreter use cached context:
+```java
+void compileNode(Node node, int targetReg, int fallbackContext) {
+    if (node instanceof AbstractNode an && an.hasCachedContext()) {
+        currentCallContext = an.getCachedContext();  // ← This broke things!
+    } else {
+        currentCallContext = fallbackContext;
+    }
+}
+```
+
+It caused `unpack: unsupported format character` errors in ExifTool because:
+1. ContextResolver sets context based on JVM emitter expectations
+2. Interpreter has different expectations in some places
+3. Cached context didn't match what interpreter code expected
+
+### Step-by-Step Guide to Fix All Mismatches
+
+#### Step 1: Identify All Mismatches
+
+Add mismatch tracking to EmitterVisitor.acceptChild() (already done):
+```java
+private static final ConcurrentHashMap<String, AtomicInteger> contextMismatches = new ConcurrentHashMap<>();
+
+static {
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        if (!contextMismatches.isEmpty()) {
+            System.err.println("\n=== Context Mismatches ===");
+            contextMismatches.entrySet().stream()
+                .sorted((a, b) -> b.getValue().get() - a.getValue().get())
+                .forEach(e -> System.err.println(e.getKey() + " : " + e.getValue().get() + " times"));
+        }
+    }));
+}
+
+public void acceptChild(Node child, int fallbackContext) {
+    if (child instanceof AbstractNode an && an.hasCachedContext()) {
+        if (an.getCachedContext() != fallbackContext) {
+            String key = nodeDescription(child) + " cached=" + contextName(an.getCachedContext()) + 
+                        " expected=" + contextName(fallbackContext);
+            contextMismatches.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
+        }
+    }
+    child.accept(with(fallbackContext));  // Safe mode: use fallback
+}
+```
+
+Run tests to collect mismatches:
+```bash
+mvn test 2>&1 | grep -A50 "Context Mismatches"
+```
+
+#### Step 2: Fix Each Mismatch Category
+
+**Mismatch: `BinaryOperatorNode({) cached=LIST expected=SCALAR`**
+
+**Root cause**: `visitSubscript()` didn't call `setContext()` on the node itself.
+
+**Fix**: Set context based on slice vs single element:
+```java
+private void visitSubscript(BinaryOperatorNode node) {
+    boolean isSlice = node.left instanceof OperatorNode opNode &&
+            ("@".equals(opNode.operator) || "%".equals(opNode.operator));
+    
+    // THIS WAS MISSING! Set node context: slice→LIST, single element→SCALAR
+    setContext(node, isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR);
+    
+    visitInContext(node.left, currentContext);
+    visitInContext(node.right, isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR);
+}
+```
+
+**Mismatch: `OperatorNode(unaryMinus) cached=LIST expected=SCALAR`**
+
+**Root cause**: Numeric operators inherit `currentContext` but always produce SCALAR.
+
+**Fix**: Set SCALAR context for scalar-producing operators:
+```java
+public void visit(OperatorNode node) {
+    switch (node.operator) {
+        // Numeric/string operators always produce SCALAR
+        case "unaryMinus", "unaryPlus", "~", "!", "not",
+             "abs", "int", "sqrt", "sin", "cos", "exp", "log", "rand",
+             "length", "defined", "exists", "ref",
+             "ord", "chr", "hex", "oct",
+             "lc", "uc", "lcfirst", "ucfirst", "quotemeta",
+             "++", "--", "++postfix", "--postfix" -> { 
+            setContext(node, RuntimeContextType.SCALAR); 
+            visitOperatorDefault(node); 
+        }
+        // ... other cases
+        default -> { setContext(node, currentContext); visitOperatorDefault(node); }
+    }
+}
+```
+
+**Mismatch: `NumberNode cached=LIST expected=SCALAR`**
+
+**Root cause**: Numbers always produce scalars but inherited `currentContext`.
+
+**Fix**:
+```java
+public void visit(NumberNode node) {
+    setContext(node, RuntimeContextType.SCALAR);  // Numbers are always scalar
+}
+
+public void visit(StringNode node) {
+    setContext(node, RuntimeContextType.SCALAR);  // Strings are always scalar
+}
+```
+
+**Mismatch: `OperatorNode(@) cached=SCALAR expected=LIST`**
+
+**Root cause**: `@` operator in SCALAR context (e.g., inside `$` prototype argument) but emitter passes LIST.
+
+**Analysis**: This is complex because:
+1. `@array` in scalar context should return count (SCALAR)
+2. `@array` as list should return elements (LIST)
+3. The emitter sometimes needs the array object (LIST) to then convert to scalar
+
+**Status**: These mismatches may be acceptable. The emitter code handles both contexts.
+
+#### Step 3: Verify Remaining Mismatches Are Safe
+
+After fixes, run tests and check remaining mismatches:
+```bash
+mvn test 2>&1 | tail -20
+```
+
+Safe mismatches (don't break functionality):
+- `StringNode cached=SCALAR expected=LIST` - String in list context still works
+- `NumberNode cached=SCALAR expected=LIST` - Number in list context still works
+- `OperatorNode(@) cached=SCALAR expected=LIST` - Array access handles both contexts
+
+#### Step 4: Migrate Interpreter to Use Cached Context
+
+Once all breaking mismatches are fixed, update `BytecodeCompiler.compileNode()`:
+
+```java
+void compileNode(Node node, int targetReg, int fallbackContext) {
+    int savedTarget = targetOutputReg;
+    int savedContext = currentCallContext;
+    targetOutputReg = targetReg;
+    
+    // Use cached context from ContextResolver if available
+    if (node instanceof AbstractNode an && an.hasCachedContext()) {
+        currentCallContext = an.getCachedContext();
+    } else {
+        currentCallContext = fallbackContext;
+    }
+    
+    node.accept(this);
+    targetOutputReg = savedTarget;
+    currentCallContext = savedContext;
+}
+```
+
+**WARNING**: Only do this after ALL mismatches that cause functional issues are fixed!
+
+### Testing the Migration
+
+1. Run unit tests: `mvn test`
+2. Run ExifTool tests (uses interpreter fallback):
+   ```bash
+   cd Image-ExifTool-13.44
+   timeout 180 java -jar ../target/perlonjava-3.0.0.jar -Ilib t/Writer.t
+   ```
+3. Check for `unpack:` or other runtime errors
+
+### Checklist for 100% Accuracy
+
+- [ ] All nodes have `setContext()` called (not just operands)
+- [ ] Subscript nodes (`[`, `{`) set SCALAR or LIST based on slice vs element
+- [ ] Scalar-producing operators set SCALAR context on themselves
+- [ ] Terminal nodes (NumberNode, StringNode) have SCALAR context
+- [ ] Arrow operator (`->`) handles RHS context correctly
+- [ ] All visit methods call `setContext(node, ...)` before visiting children
+- [ ] Remaining mismatches are verified to be safe (don't affect functionality)
+
+### Files Changed for Context Fixes
+
+| File | Changes |
+|------|---------|
+| `ContextResolver.java` | Added setContext() for subscripts, scalar operators |
+| `EmitterVisitor.java` | Mismatch tracking in acceptChild() |
+| `BytecodeCompiler.java` | (Future) Use cached context in compileNode() |
+
+## Next Steps (as of 2026-03-09)
+
+1. **Complete interpreter migration**: Fix remaining mismatches that cause functional issues
+2. **Phase 2b**: Variable resolution pass
+3. **Phase 3**: Unify both backends to use identical context handling
