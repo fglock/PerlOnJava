@@ -1333,6 +1333,25 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 - Root cause: Some emitter code paths call `acceptChild` but don't trigger the context-sensitive codepaths that show warnings in the current fallback mode
 - Decision: Keep `acceptChild` in warning mode until all mismatches are identified and fixed
 
+**Unified Context Annotation System (2025-03-09)**:
+- **Problem**: Had two context annotation systems:
+  - Parser set `"context"` string annotation for prototype args
+  - ContextResolver set `cachedContext` integer field independently
+- **Solution**: Unified to single `cachedContext` field:
+  - Changed `PrototypeArgs.java` to use `setCachedContext(RuntimeContextType.SCALAR)` 
+  - Added `setCachedContext()`/`getCachedContext()` to `Node` interface
+  - Updated `EmitOperator.handleOperator()` to read `getCachedContext()`
+  - Modified `setContext()` in `ASTTransformPass` to NOT overwrite parser-set context
+- **Fixed logical operators**: RHS uses SCALAR for short-circuit in VOID/SCALAR context
+- **Added `reverse` operator** to LIST operand operators
+- **Result**: All 156 tests pass
+
+**Remaining Context Mismatches (2025-03-09)**:
+- `ListNode cached=SCALAR expected=LIST`: 707 times
+- `OperatorNode(@) cached=SCALAR expected=LIST`: 698 times
+- `BlockNode cached=LIST expected=SCALAR`: 5 times
+- These are from prototype `@` operators going through `handleOperator` - they need LIST context but ContextResolver defaults to SCALAR for unknown operators
+
 ### Next Steps
 
 1. **Investigate remaining context mismatches** (BLOCKED - needs debugging)
@@ -1371,15 +1390,18 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 |------|--------|---------|
 | `AbstractNode.java` | ✅ Done | Added context/lvalue cached fields, transformed flag |
 | `ASTAnnotation.java` | ✅ New | Full annotation structure |
-| `ASTTransformPass.java` | ✅ New | Base class for passes |
+| `ASTTransformPass.java` | ✅ Done | Base class for passes; `setContext()` preserves parser context |
 | `ASTTransformer.java` | ✅ New | Pass orchestrator with idempotency |
-| `ContextResolver.java` | ✅ New | Propagates SCALAR/LIST/VOID context through AST |
+| `ContextResolver.java` | ✅ Done | Propagates SCALAR/LIST/VOID context through AST |
+| `Node.java` | ✅ Done | Added `setCachedContext()`/`getCachedContext()` to interface |
+| `PrototypeArgs.java` | ✅ Done | Uses `setCachedContext()` instead of string annotation |
+| `EmitOperator.java` | ✅ Done | `handleOperator()` reads `getCachedContext()` |
+| `EmitterVisitor.java` | ✅ Done | Added `acceptChild()` with mismatch tracking |
 | `PerlLanguageProvider.java` | ✅ Done | Wired transformer into compilation pipeline |
 | `PrintVisitor.java` | ✅ Done | Shows `ctx:` annotations in `--parse` output |
 | `BytecodeCompiler.java` | ✅ Done | `compileNode()` reads cached context |
-| `EmitterVisitor.java` | ✅ Done | Added `withNode()` method for cached context |
-| `EmitVariable.java` | Pending | Migrate ~30 call sites to use `withNode()` |
-| `EmitSubroutine.java` | Pending | Migrate call sites to use `withNode()` |
+| `EmitVariable.java` | Pending | Migrate ~30 call sites to use `acceptChild()` |
+| `EmitSubroutine.java` | Pending | Migrate call sites to use `acceptChild()` |
 | `CompileAssignment.java` | Pending | Read lvalue annotations |
 
 ### Dependencies
