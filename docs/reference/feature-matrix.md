@@ -68,20 +68,66 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ✅  **Environment**: Support for `PERL5LIB`, `PERL5OPT` environment variables.
-- 🚧  **Perl debugger**: The built-in Perl debugger (`perl -d`) is work in progress.
-  - ✅  Execution: `n` (next), `s` (step into), `r` (return/step out), `c` (continue), `q` (quit)
-  - ✅  Breakpoints: `b` (set), `B` (delete), `L` (list), one-time breakpoints via `c line`
-  - ✅  Source: `l` (list), `.` (current), `T` (stack trace)
-  - ✅  Expression evaluation: `p expr` (print), `x expr` (dump with Data::Dumper)
-  - ✅  Debug variables: `$DB::single`, `$DB::trace`, `$DB::signal`, `$DB::filename`, `$DB::line`
-  - ✅  Subroutine tracking: `%DB::sub` (location), `@DB::args` (arguments)
-  - ❌  Watchpoints (`w` command)
-  - ❌  Actions (`a` command)
-  - ❌  Conditional breakpoints (`b line condition`)
-  - ❌  `-d:MOD` for Devel modules (e.g., `-d:NYTProf`)
-  - ❌  `perl5db.pl` compatibility
 - 🚧  **Perl-like warnings**: Warnings is work in progress. Some warnings need to be formatted to resemble Perl's output.
 
+---
+
+## Perl Debugger
+
+The built-in Perl debugger (`perl -d`) provides interactive debugging. See [Debugger Reference](debugger.md) for full documentation.
+
+### Execution Commands
+| Command | Status | Description |
+|---------|--------|-------------|
+| `s` | ✅ | Step into - execute one statement, entering subroutines |
+| `n` | ✅ | Next - execute one statement, stepping over subroutines |
+| `r` | ✅ | Return - execute until current subroutine returns |
+| `c [line]` | ✅ | Continue - run until breakpoint or specified line |
+| `q` | ✅ | Quit - exit the debugger |
+
+### Breakpoints
+| Command | Status | Description |
+|---------|--------|-------------|
+| `b [line]` | ✅ | Set breakpoint at line |
+| `b file:line` | ✅ | Set breakpoint at line in file |
+| `B [line]` | ✅ | Delete breakpoint |
+| `B *` | ✅ | Delete all breakpoints |
+| `L` | ✅ | List all breakpoints |
+| `b line condition` | ❌ | Conditional breakpoints |
+
+### Source and Stack
+| Command | Status | Description |
+|---------|--------|-------------|
+| `l [range]` | ✅ | List source code |
+| `.` | ✅ | Show current line |
+| `T` | ✅ | Stack trace |
+| `w expr` | ❌ | Watch expression |
+| `a line command` | ❌ | Set action at line |
+
+### Expression Evaluation
+| Command | Status | Description |
+|---------|--------|-------------|
+| `p expr` | ✅ | Print expression result |
+| `x expr` | ✅ | Dump expression with Data::Dumper |
+
+### Debug Variables
+| Variable | Status | Description |
+|----------|--------|-------------|
+| `$DB::single` | ✅ | Single-step mode flag |
+| `$DB::trace` | ✅ | Trace mode flag |
+| `$DB::signal` | ✅ | Signal flag |
+| `$DB::filename` | ✅ | Current filename |
+| `$DB::line` | ✅ | Current line number |
+| `%DB::sub` | ✅ | Subroutine locations (name → file:start-end) |
+| `@DB::args` | ✅ | Current subroutine arguments |
+
+### Not Implemented
+- ❌  `-d:Module` - Custom debugger modules (e.g., `-d:NYTProf`)
+- ❌  `perl5db.pl` compatibility
+- ❌  `R` - Restart program
+- ❌  History and command editing
+
+---
 
 ### Command line switches
 
