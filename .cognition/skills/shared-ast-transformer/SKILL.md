@@ -314,9 +314,23 @@ Format:
 
 The JVM emitter uses `acceptChild()` with fallback context (safe mode). The interpreter uses `compileNode()` with explicit context. To migrate the interpreter to use cached context:
 
-### Key Insight: Two Different Context Expectations
+### CRITICAL REQUIREMENT: Context Must Be 100% Identical
 
-The **JVM emitter** and **BytecodeCompiler (interpreter)** have different context expectations:
+**The context for both backends (JVM emitter and BytecodeCompiler/interpreter) must be EXACTLY the same. No exceptions are allowed.**
+
+If the JVM emitter's `acceptChild()` passes SCALAR, ContextResolver must set SCALAR.
+If the interpreter's `compileNode()` passes LIST, ContextResolver must set LIST.
+If they disagree, **one of the backends must be fixed** to match the other.
+
+You cannot have "safe mismatches" or "acceptable differences". Every single mismatch must be resolved by either:
+1. Fixing ContextResolver to set the correct context
+2. Fixing the backend that has the wrong expectation
+
+The current mismatch tracking exists to find these bugs. The goal is ZERO mismatches.
+
+### Current State: Two Different Context Expectations
+
+The **JVM emitter** and **BytecodeCompiler (interpreter)** currently have different context expectations:
 
 | Backend | Context Source | Current Behavior |
 |---------|---------------|------------------|
@@ -438,24 +452,26 @@ public void visit(StringNode node) {
 
 **Root cause**: `@` operator in SCALAR context (e.g., inside `$` prototype argument) but emitter passes LIST.
 
-**Analysis**: This is complex because:
+**Analysis**: This requires investigation:
 1. `@array` in scalar context should return count (SCALAR)
 2. `@array` as list should return elements (LIST)
 3. The emitter sometimes needs the array object (LIST) to then convert to scalar
 
-**Status**: These mismatches may be acceptable. The emitter code handles both contexts.
+**Status**: Must be fixed. Determine which backend has the wrong expectation and fix it.
 
-#### Step 3: Verify Remaining Mismatches Are Safe
+#### Step 3: Fix ALL Remaining Mismatches
 
-After fixes, run tests and check remaining mismatches:
+After initial fixes, run tests and check remaining mismatches:
 ```bash
 mvn test 2>&1 | tail -20
 ```
 
-Safe mismatches (don't break functionality):
-- `StringNode cached=SCALAR expected=LIST` - String in list context still works
-- `NumberNode cached=SCALAR expected=LIST` - Number in list context still works
-- `OperatorNode(@) cached=SCALAR expected=LIST` - Array access handles both contexts
+**There are NO safe mismatches.** Every mismatch must be fixed:
+- `StringNode cached=SCALAR expected=LIST` → Fix the backend passing LIST for a string
+- `NumberNode cached=SCALAR expected=LIST` → Fix the backend passing LIST for a number
+- `OperatorNode(@) cached=SCALAR expected=LIST` → Determine correct context and fix mismatch
+
+If a backend passes the "wrong" context but code still works, **the backend has a bug** that masks the context issue. Fix the backend.
 
 #### Step 4: Migrate Interpreter to Use Cached Context
 
@@ -494,13 +510,15 @@ void compileNode(Node node, int targetReg, int fallbackContext) {
 
 ### Checklist for 100% Accuracy
 
+- [ ] **ZERO context mismatches** when running tests (check shutdown log)
 - [ ] All nodes have `setContext()` called (not just operands)
 - [ ] Subscript nodes (`[`, `{`) set SCALAR or LIST based on slice vs element
 - [ ] Scalar-producing operators set SCALAR context on themselves
 - [ ] Terminal nodes (NumberNode, StringNode) have SCALAR context
 - [ ] Arrow operator (`->`) handles RHS context correctly
 - [ ] All visit methods call `setContext(node, ...)` before visiting children
-- [ ] Remaining mismatches are verified to be safe (don't affect functionality)
+- [ ] Both backends pass identical context for every node (verify with mismatch tracking)
+- [ ] Interpreter migration tested with ExifTool Writer.t and QuickTime.t
 
 ### Files Changed for Context Fixes
 
