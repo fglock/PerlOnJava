@@ -83,15 +83,28 @@ public class DebugState {
 
     /**
      * Step-over depth tracking.
-     * When > 0, skip DEBUG calls until call depth returns to this level.
+     * When >= 0, skip DEBUG calls until call depth returns to this level.
      * Used to implement "n" (next) command - step over subroutine calls.
      */
     public static volatile int stepOverDepth = -1;
 
     /**
-     * Current call depth for step-over tracking.
+     * Step-out depth tracking.
+     * When >= 0, skip DEBUG calls until call depth is less than this level.
+     * Used to implement "r" (return) command - step out of current subroutine.
+     */
+    public static volatile int stepOutDepth = -1;
+
+    /**
+     * Current call depth for step-over/step-out tracking.
      */
     public static volatile int callDepth = 0;
+
+    /**
+     * One-time breakpoints: "file:line" strings that should be removed after being hit.
+     * Used by "c line" command to continue to a specific line once.
+     */
+    public static final Set<String> oneTimeBreakpoints = ConcurrentHashMap.newKeySet();
 
     /**
      * Flag to indicate debugger should quit.
@@ -109,9 +122,11 @@ public class DebugState {
         currentLine = 0;
         breakpoints.clear();
         breakpointConditions.clear();
+        oneTimeBreakpoints.clear();
         sourceLines.clear();
         breakableLines.clear();
         stepOverDepth = -1;
+        stepOutDepth = -1;
         callDepth = 0;
         quit = false;
     }
@@ -125,14 +140,27 @@ public class DebugState {
      * @return true if debugger should stop here
      */
     public static boolean shouldStop(String file, int line) {
+        String key = file + ":" + line;
+
+        // Check for one-time breakpoint first (and remove if hit)
+        if (oneTimeBreakpoints.remove(key)) {
+            // Also remove from regular breakpoints if it was added there
+            breakpoints.remove(key);
+            return true;
+        }
+
         // Fast path: nothing active
         if (!single && !trace && !signal) {
-            String key = file + ":" + line;
             return breakpoints.contains(key);
         }
 
         // Step-over mode: skip if we're deeper than target depth
         if (stepOverDepth >= 0 && callDepth > stepOverDepth) {
+            return false;
+        }
+
+        // Step-out mode: skip until we're shallower than target depth
+        if (stepOutDepth >= 0 && callDepth >= stepOutDepth) {
             return false;
         }
 

@@ -24,7 +24,8 @@ main::(script.pl:5):
 |---------|-------------|
 | `s` | **Step into** - Execute one statement, stepping into subroutine calls |
 | `n` | **Next** - Execute one statement, stepping over subroutine calls |
-| `c [line]` | **Continue** - Run until breakpoint, end, or specified line |
+| `r` | **Return** - Execute until current subroutine returns |
+| `c [line]` | **Continue** - Run until breakpoint, end, or specified line (one-time) |
 | `q` | **Quit** - Exit the debugger and program |
 
 Press **Enter** to repeat the last command (default: `n`).
@@ -45,6 +46,7 @@ Press **Enter** to repeat the last command (default: `n`).
 |---------|-------------|
 | `l [range]` | List source code (e.g., `l 10-20`, `l 15`) |
 | `.` | Show current line |
+| `T` | Show stack trace (call stack) |
 
 ### Expression Evaluation
 
@@ -135,7 +137,6 @@ $VAR1 = {
 
 The following Perl debugger features are not yet implemented:
 
-- Stack trace (`T` command)
 - Watchpoints (`w` command)
 - Actions (`a` command)
 - Conditional breakpoints (`b line condition`)

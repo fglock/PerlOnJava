@@ -155,6 +155,9 @@ public class DebugHooks {
             case 's':  // step - step into
                 return handleStep(args);
 
+            case 'r':  // return - step out
+                return handleReturn(args);
+
             case 'c':  // continue
                 return handleContinue(args);
 
@@ -167,6 +170,10 @@ public class DebugHooks {
 
             case '.':  // show current line
                 handleShowCurrent();
+                return false;
+
+            case 'T':  // stack trace
+                handleStackTrace();
                 return false;
 
             case 'h':  // help
@@ -210,6 +217,7 @@ public class DebugHooks {
         // Set step-over depth to current depth
         // DEBUG hook will skip while callDepth > stepOverDepth
         DebugState.stepOverDepth = DebugState.callDepth;
+        DebugState.stepOutDepth = -1;
         DebugState.single = true;
         syncToPerlVariables();
         return true;
@@ -219,7 +227,21 @@ public class DebugHooks {
      * Handle 's' (step) command - step into subroutine calls.
      */
     private static boolean handleStep(String args) {
-        // Disable step-over, enable single-step
+        // Disable step-over/step-out, enable single-step
+        DebugState.stepOverDepth = -1;
+        DebugState.stepOutDepth = -1;
+        DebugState.single = true;
+        syncToPerlVariables();
+        return true;
+    }
+
+    /**
+     * Handle 'r' (return) command - step out of current subroutine.
+     */
+    private static boolean handleReturn(String args) {
+        // Set step-out depth to current depth
+        // DEBUG hook will skip until callDepth < stepOutDepth
+        DebugState.stepOutDepth = DebugState.callDepth;
         DebugState.stepOverDepth = -1;
         DebugState.single = true;
         syncToPerlVariables();
@@ -230,17 +252,18 @@ public class DebugHooks {
      * Handle 'c' (continue) command - run until breakpoint or end.
      */
     private static boolean handleContinue(String args) {
-        // Disable single-step and step-over
+        // Disable single-step, step-over, step-out
         DebugState.single = false;
         DebugState.stepOverDepth = -1;
+        DebugState.stepOutDepth = -1;
 
         // If argument provided, it's a line number for one-time breakpoint
         if (!args.isEmpty()) {
             try {
                 int targetLine = Integer.parseInt(args);
                 String key = DebugState.currentFile + ":" + targetLine;
-                DebugState.breakpoints.add(key);
-                // TODO: Mark as one-time breakpoint to remove after hit
+                // Use one-time breakpoint so it's removed after being hit
+                DebugState.oneTimeBreakpoints.add(key);
             } catch (NumberFormatException e) {
                 System.out.println("Invalid line number: " + args);
                 return false;
@@ -414,14 +437,46 @@ public class DebugHooks {
     }
 
     /**
+     * Handle 'T' (stack trace) command - show call stack.
+     */
+    private static void handleStackTrace() {
+        Throwable t = new Throwable();
+        java.util.ArrayList<java.util.ArrayList<String>> stackTrace =
+                org.perlonjava.runtime.runtimetypes.ExceptionFormatter.formatException(t);
+
+        if (stackTrace.isEmpty()) {
+            System.out.println("(no stack trace available)");
+            return;
+        }
+
+        // Skip the first frame (handleStackTrace itself)
+        for (int i = 1; i < stackTrace.size(); i++) {
+            java.util.ArrayList<String> frame = stackTrace.get(i);
+            String pkg = frame.get(0);
+            String file = frame.get(1);
+            String line = frame.get(2);
+            String sub = (frame.size() > 3 && frame.get(3) != null) ? frame.get(3) : "(main)";
+
+            // Format: . = pkg::sub() called from file line N
+            if (i == 1) {
+                System.out.printf(". = %s::%s() called from %s line %s%n", pkg, sub, file, line);
+            } else {
+                System.out.printf("@ = %s::%s() called from %s line %s%n", pkg, sub, file, line);
+            }
+        }
+    }
+
+    /**
      * Handle 'h' (help) command.
      */
     private static void handleHelp() {
         System.out.println("Debugger commands:");
         System.out.println("  n          Next (step over) - execute until next statement");
         System.out.println("  s          Step into - step into subroutine calls");
-        System.out.println("  c [line]   Continue - run until breakpoint or end");
+        System.out.println("  r          Return - step out of current subroutine");
+        System.out.println("  c [line]   Continue - run until breakpoint or line");
         System.out.println("  q          Quit - exit the debugger");
+        System.out.println("  T          Stack trace - show call stack");
         System.out.println("  l [range]  List source (e.g., 'l 10-20' or 'l 15')");
         System.out.println("  .          Show current line");
         System.out.println("  b [line]   Set breakpoint (e.g., 'b 10' or 'b file.pl:10')");

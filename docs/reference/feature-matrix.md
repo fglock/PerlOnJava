@@ -69,14 +69,15 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ✅  **Environment**: Support for `PERL5LIB`, `PERL5OPT` environment variables.
 - 🚧  **Perl debugger**: The built-in Perl debugger (`perl -d`) is work in progress.
-  - ✅  Basic commands: `n` (next), `s` (step into), `c` (continue), `q` (quit), `l` (list), `b` (breakpoint), `B` (delete breakpoint), `L` (list breakpoints), `h` (help)
+  - ✅  Execution: `n` (next), `s` (step into), `r` (return/step out), `c` (continue), `q` (quit)
+  - ✅  Breakpoints: `b` (set), `B` (delete), `L` (list), one-time breakpoints via `c line`
+  - ✅  Source: `l` (list), `.` (current), `T` (stack trace)
   - ✅  Expression evaluation: `p expr` (print), `x expr` (dump with Data::Dumper)
   - ✅  Debug variables: `$DB::single`, `$DB::trace`, `$DB::signal`, `$DB::filename`, `$DB::line`
   - ✅  Subroutine tracking: `%DB::sub` (location), `@DB::args` (arguments)
-  - ❌  Stack trace (`T` command)
   - ❌  Watchpoints (`w` command)
   - ❌  Actions (`a` command)
-  - ❌  Conditional breakpoints
+  - ❌  Conditional breakpoints (`b line condition`)
   - ❌  `-d:MOD` for Devel modules (e.g., `-d:NYTProf`)
   - ❌  `perl5db.pl` compatibility
 - 🚧  **Perl-like warnings**: Warnings is work in progress. Some warnings need to be formatted to resemble Perl's output.
