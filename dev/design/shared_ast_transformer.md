@@ -1365,6 +1365,14 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 - `BlockNode cached=LIST expected=SCALAR`: 5 times
 - The `OperatorNode(@)` mismatches are **expected** when `@array` is used with `$` prototype slot (parser wraps with `scalar()`)
 
+**ContextResolver Push/Undef Fixes (2025-03-09)**:
+- Added `undef` operator handler with RUNTIME context (matches emitter's `handleUndefOperator`)
+- Added `push`, `unshift` as BinaryOperatorNode handlers with LIST context for both operands
+- Fixed `visitPushLike` to set ListNode's own context to LIST (not just elements)
+- **Result**: ListNode mismatches reduced from 231 to 7
+- ExifTool tests: Only expected `OperatorNode(@)` mismatches remain (60 times)
+- Full test suite: 474 `OperatorNode(@)`, 7 `ListNode`, 5 `BlockNode`, 1 `OperatorNode($)`
+
 ### Next Steps
 
 1. **Continue reducing ListNode mismatches**

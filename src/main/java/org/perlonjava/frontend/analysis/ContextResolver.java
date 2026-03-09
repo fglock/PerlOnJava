@@ -81,6 +81,7 @@ public class ContextResolver extends ASTTransformPass {
             case "->" -> visitArrow(node);
             case "(" -> visitCall(node);
             case "print", "say", "printf", "warn", "die" -> visitPrintBinary(node);
+            case "push", "unshift" -> visitPushBinary(node);
             case "map", "grep", "sort", "all", "any" -> visitMapBinary(node);
             case "join", "sprintf", "split", "binmode", "seek" -> visitJoinBinary(node);
             case "x" -> visitRepeat(node);
@@ -181,6 +182,12 @@ public class ContextResolver extends ASTTransformPass {
         visitInContext(node.right, RuntimeContextType.SCALAR);
     }
 
+    private void visitPushBinary(BinaryOperatorNode node) {
+        // push/unshift as BinaryOperatorNode: left=array (LIST), right=values (LIST)
+        visitInContext(node.left, RuntimeContextType.LIST);
+        visitInContext(node.right, RuntimeContextType.LIST);
+    }
+
     private void visitMapBinary(BinaryOperatorNode node) {
         // map/grep/sort: left is block (scalar context per iteration), right is list (LIST context)
         visitInContext(node.left, RuntimeContextType.SCALAR);
@@ -204,6 +211,7 @@ public class ContextResolver extends ASTTransformPass {
             case "\\" -> visitReference(node);
             case "my", "our", "local", "state" -> visitDeclaration(node);
             case "return" -> visitReturn(node);
+            case "undef" -> visitUndef(node);
             case "scalar" -> visitScalarForce(node);
             case "wantarray" -> visitWantarray(node);
             case "print", "say", "printf", "warn", "die" -> visitPrintLike(node);
@@ -253,6 +261,11 @@ public class ContextResolver extends ASTTransformPass {
         visitInContext(node.operand, RuntimeContextType.RUNTIME);
     }
 
+    private void visitUndef(OperatorNode node) {
+        // undef: operand is evaluated in RUNTIME context (to handle list assignment)
+        visitInContext(node.operand, RuntimeContextType.RUNTIME);
+    }
+
     private void visitScalarForce(OperatorNode node) {
         // scalar() forces scalar context
         visitInContext(node.operand, RuntimeContextType.SCALAR);
@@ -270,8 +283,10 @@ public class ContextResolver extends ASTTransformPass {
 
     private void visitPushLike(OperatorNode node) {
         // push/unshift: first arg is scalar (array), rest is list
-        // The operand is typically a ListNode
+        // The operand is typically a ListNode which the emitter visits in LIST context
         if (node.operand instanceof ListNode list && list.elements.size() > 0) {
+            // The ListNode itself is visited in LIST context by the emitter
+            setContext(list, RuntimeContextType.LIST);
             visitInContext(list.elements.get(0), RuntimeContextType.SCALAR);
             for (int i = 1; i < list.elements.size(); i++) {
                 visitInContext(list.elements.get(i), RuntimeContextType.LIST);
