@@ -1152,13 +1152,15 @@ public class CompileAssignment {
                     bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, rhsContext);
                     int indexReg = bytecodeCompiler.lastResultReg;
 
-                    // Emit ARRAY_SET (use valueReg from line 729)
+                    // Emit ARRAY_SET which returns the lvalue (element) in rd
+                    // This is critical for operations like: ($a[0] = $val) =~ s/pattern//
+                    int resultReg = bytecodeCompiler.allocateOutputRegister();
                     bytecodeCompiler.emit(Opcodes.ARRAY_SET);
+                    bytecodeCompiler.emitReg(resultReg);
                     bytecodeCompiler.emitReg(arrayReg);
                     bytecodeCompiler.emitReg(indexReg);
                     bytecodeCompiler.emitReg(valueReg);
-
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    bytecodeCompiler.lastResultReg = resultReg;
                     
                     return;
                 } else if (leftBin.operator.equals("{")) {
@@ -1364,13 +1366,15 @@ public class CompileAssignment {
                         keyReg = bytecodeCompiler.lastResultReg;
                     }
 
-                    // 3. Emit HASH_SET (use valueReg from line 729)
+                    // 3. Emit HASH_SET which returns the lvalue (element) in rd
+                    // This is critical for operations like: ($h{key} = $val) =~ s/pattern//
+                    int resultReg = bytecodeCompiler.allocateOutputRegister();
                     bytecodeCompiler.emit(Opcodes.HASH_SET);
+                    bytecodeCompiler.emitReg(resultReg);
                     bytecodeCompiler.emitReg(hashReg);
                     bytecodeCompiler.emitReg(keyReg);
                     bytecodeCompiler.emitReg(valueReg);
-
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    bytecodeCompiler.lastResultReg = resultReg;
                     
                     return;
                 }
@@ -1419,12 +1423,14 @@ public class CompileAssignment {
                             return;
                         }
 
-                        // Emit HASH_SET (use valueReg from line 729)
+                        // Emit HASH_SET which returns the lvalue (element) in rd
+                        int resultReg = bytecodeCompiler.allocateOutputRegister();
                         bytecodeCompiler.emit(Opcodes.HASH_SET);
+                        bytecodeCompiler.emitReg(resultReg);
                         bytecodeCompiler.emitReg(hashReg);
                         bytecodeCompiler.emitReg(keyReg);
                         bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.lastResultReg = valueReg;
+                        bytecodeCompiler.lastResultReg = resultReg;
                         
                         return;
                     } else if (rightSide instanceof ArrayLiteralNode arrayIdx) {
@@ -1454,12 +1460,14 @@ public class CompileAssignment {
                         bytecodeCompiler.compileNode(arrayIdx.elements.get(0), -1, rhsContext);
                         int idxReg = bytecodeCompiler.lastResultReg;
 
-                        // Emit ARRAY_SET (use valueReg from line 729)
+                        // Emit ARRAY_SET which returns the lvalue (element) in rd
+                        int resultReg = bytecodeCompiler.allocateOutputRegister();
                         bytecodeCompiler.emit(Opcodes.ARRAY_SET);
+                        bytecodeCompiler.emitReg(resultReg);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(idxReg);
                         bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.lastResultReg = valueReg;
+                        bytecodeCompiler.lastResultReg = resultReg;
                         
                         return;
                     }

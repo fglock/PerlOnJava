@@ -277,7 +277,9 @@ public class Opcodes {
     public static final short ARRAY_GET = 42;
 
     /**
-     * Array element store: array_reg.set(index_reg, value_reg)
+     * Array element store with lvalue return: rd = array_reg[index_reg] = value_reg
+     * Format: ARRAY_SET rd arrayReg indexReg valueReg
+     * Returns the lvalue (array element) in rd for chained operations.
      */
     public static final short ARRAY_SET = 43;
 
@@ -321,7 +323,9 @@ public class Opcodes {
     public static final short HASH_GET = 50;
 
     /**
-     * Hash element store: hash_reg.put(key_reg, value_reg)
+     * Hash element store with lvalue return: rd = hash_reg{key_reg} = value_reg
+     * Format: HASH_SET rd hashReg keyReg valueReg
+     * Returns the lvalue (hash element) in rd for chained operations.
      */
     public static final short HASH_SET = 51;
 

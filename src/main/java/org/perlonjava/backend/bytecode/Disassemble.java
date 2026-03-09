@@ -767,10 +767,11 @@ public class Disassemble {
                         sb.append("ARRAY_GET r").append(rd).append(" = r").append(arrayReg).append("[r").append(indexReg).append("]\n");
                         break;
                     case Opcodes.ARRAY_SET:
+                        rd = interpretedCode.bytecode[pc++];
                         arrayReg = interpretedCode.bytecode[pc++];
                         indexReg = interpretedCode.bytecode[pc++];
                         int arraySetValueReg = interpretedCode.bytecode[pc++];
-                        sb.append("ARRAY_SET r").append(arrayReg).append("[r").append(indexReg).append("] = r").append(arraySetValueReg).append("\n");
+                        sb.append("ARRAY_SET r").append(rd).append(" = r").append(arrayReg).append("[r").append(indexReg).append("] = r").append(arraySetValueReg).append("\n");
                         break;
                     case Opcodes.ARRAY_PUSH:
                         arrayReg = interpretedCode.bytecode[pc++];
@@ -809,10 +810,11 @@ public class Disassemble {
                         sb.append("HASH_GET r").append(rd).append(" = r").append(hashGetReg).append("{r").append(keyGetReg).append("}\n");
                         break;
                     case Opcodes.HASH_SET:
+                        rd = interpretedCode.bytecode[pc++];
                         int hashSetReg = interpretedCode.bytecode[pc++];
                         int keySetReg = interpretedCode.bytecode[pc++];
                         int valueSetReg = interpretedCode.bytecode[pc++];
-                        sb.append("HASH_SET r").append(hashSetReg).append("{r").append(keySetReg).append("} = r").append(valueSetReg).append("\n");
+                        sb.append("HASH_SET r").append(rd).append(" = r").append(hashSetReg).append("{r").append(keySetReg).append("} = r").append(valueSetReg).append("\n");
                         break;
                     case Opcodes.HASH_EXISTS:
                         rd = interpretedCode.bytecode[pc++];
