@@ -89,6 +89,56 @@ These bugs share a root cause: the bytecode compiler (`CompileAssignment.java`, 
 
 ## AST Annotation Structure
 
+### Existing Infrastructure in AbstractNode
+
+The `AbstractNode` class already provides annotation infrastructure:
+
+```java
+// src/main/java/org/perlonjava/frontend/astnode/AbstractNode.java
+public abstract class AbstractNode implements Node {
+    // Token position for error messages
+    public int tokenIndex;
+    
+    // Generic annotation map (lazy initialized)
+    public Map<String, Object> annotations;
+    
+    // Bit flags for common boolean annotations (memory efficient)
+    private int internalAnnotationFlags;
+    private static final int FLAG_BLOCK_ALREADY_REFACTORED = 1;
+    private static final int FLAG_QUEUED_FOR_REFACTOR = 2;
+    private static final int FLAG_CHUNK_ALREADY_REFACTORED = 4;
+    
+    // Cached analysis results (avoid repeated traversal)
+    private int cachedBytecodeSize = Integer.MIN_VALUE;      // JVM-specific
+    private byte cachedHasAnyControlFlow = -1;               // Tri-state: -1=unset, 0=false, 1=true
+    
+    // API methods
+    public void setAnnotation(String key, Object value);
+    public Object getAnnotation(String key);
+    public boolean getBooleanAnnotation(String key);
+}
+```
+
+### Extending for Shared Transformer
+
+**Option A: Add typed fields** (memory efficient, compile-time type checking)
+```java
+// Add to AbstractNode
+private byte cachedContext = -1;        // RuntimeContextType as byte
+private byte cachedLvalueType = -1;     // SCALAR, LIST, or VOID
+private boolean isLvalue;
+```
+
+**Option B: Use annotation map** (flexible, no schema changes)
+```java
+node.setAnnotation("context", RuntimeContextType.SCALAR);
+node.setAnnotation("isLvalue", true);
+```
+
+**Recommendation**: Use Option A for frequently-accessed annotations (context, lvalue). These are read by every emit operation, so field access is significantly faster than map lookup.
+
+### Proposed ASTAnnotation Class
+
 ```java
 public class ASTAnnotation {
     // Context resolution
@@ -1038,9 +1088,93 @@ BlockNode {
 
 These visitors already exist and should be integrated into the transformer:
 
+### Core Semantic Analysis (required for parity)
+
 - `src/main/java/org/perlonjava/frontend/analysis/ConstantFoldingVisitor.java` - Constant folding optimization
 - `src/main/java/org/perlonjava/frontend/analysis/FindDeclarationVisitor.java` - Locates `local`/`my` declarations
 - `src/main/java/org/perlonjava/frontend/analysis/RegexUsageDetector.java` - Detects regex operations in blocks
+
+### Lvalue Analysis (relevant to LvalueResolver)
+
+- `src/main/java/org/perlonjava/frontend/analysis/LValueVisitor.java` - Determines if a node is assignable (lvalue) and its type:
+  - Returns `SCALAR` - scalar lvalue ($a, $a[0], $$ref, pos(), substr(), etc.)
+  - Returns `LIST` - list lvalue (@a, %h, ($a, $b))
+  - Returns `VOID` - not an lvalue (literals, most operators)
+  
+  **Integration**: This visitor implements the core logic for `LvalueResolver` phase. Can be used directly or its logic integrated into the transformer.
+
+### Return Type Analysis (for JVM optimization)
+
+- `src/main/java/org/perlonjava/frontend/analysis/ReturnTypeVisitor.java` - Determines JVM return type descriptor:
+  - `RuntimeScalar` for scalar operations ($, numbers, strings)
+  - `RuntimeArray` for @ dereference
+  - `RuntimeHash` for % dereference  
+  - `RuntimeList` for list operations, subroutine calls
+  - `null` if type cannot be determined statically
+
+  **Note**: Currently JVM-specific (returns JVM descriptors). For shared transformer, could be generalized to semantic types.
+
+### Temp Local Count (JVM-specific)
+
+- `src/main/java/org/perlonjava/frontend/analysis/TempLocalCountVisitor.java` - Counts temporary locals needed for JVM bytecode. Not needed for interpreter.
+
+### Value Extraction (for compile-time evaluation)
+
+- `src/main/java/org/perlonjava/frontend/analysis/ExtractValueVisitor.java` - Extracts literal values (strings, numbers) from an AST into a RuntimeList. Useful for compile-time constant evaluation, `use VERSION` checks, etc.
+
+### Large Literal Refactoring (OBSOLETE)
+
+- `src/main/java/org/perlonjava/frontend/analysis/DepthFirstLiteralRefactorVisitor.java` - **OBSOLETE**: The compiler now falls back to interpreter for large literals instead of refactoring them. This visitor is no longer used.
+
+### Utility Visitors
+
+- `src/main/java/org/perlonjava/frontend/analysis/PrintVisitor.java` - Prints AST as indented string for debugging. Could be extended to print annotations.
+
+- `src/main/java/org/perlonjava/frontend/analysis/EmitterVisitor.java` - JVM bytecode generation visitor. Backend-specific, not for shared transformer.
+
+### Summary: Shared vs Backend-Specific
+
+| Visitor | Shared Transformer? | Notes |
+|---------|---------------------|-------|
+| ConstantFoldingVisitor | YES | Integrate into transformer |
+| FindDeclarationVisitor | YES | Integrate into transformer |
+| RegexUsageDetector | YES | Integrate into transformer |
+| LValueVisitor | YES | Core of LvalueResolver phase |
+| ExtractValueVisitor | YES | Compile-time evaluation |
+| ControlFlowDetectorVisitor | Optional | Optimization hints |
+| ControlFlowFinder | Optional | Optimization hints |
+| ReturnTypeVisitor | Generalize | JVM-specific types → semantic types |
+| TempLocalCountVisitor | NO | JVM-specific |
+| DepthFirstLiteralRefactorVisitor | NO | OBSOLETE (compiler falls back to interpreter) |
+| EmitterVisitor | NO | JVM backend |
+| PrintVisitor | Utility | Debug only |
+
+### Control Flow Analysis (for optimizations)
+
+- `src/main/java/org/perlonjava/frontend/analysis/ControlFlowDetectorVisitor.java` - Detects "unsafe" control flow that could jump outside a block:
+  - `return` - always unsafe for block extraction
+  - `goto LABEL` - unsafe unless label is within allowed set
+  - `next`/`last`/`redo` with label - unsafe (jumps to outer loop)
+  - `next`/`last`/`redo` without label but outside loop - unsafe
+  
+- `src/main/java/org/perlonjava/frontend/analysis/ControlFlowFinder.java` - Simple check for ANY control flow (`next`/`last`/`redo`/`goto`), ignoring loop depth. Results cached on `AbstractNode.cachedHasAnyControlFlow`.
+
+**Current usage**: These are used by `LargeBlockRefactorer.java` for the JVM backend to split large blocks that would exceed JVM's 64KB method limit. The interpreter doesn't have this limit, but the annotations could still be useful for:
+
+1. **Optimization hints** - Blocks without control flow can use simpler codegen
+2. **Inlining decisions** - Safe to inline blocks without non-local control flow
+3. **Caching** - Results are cached on AST nodes to avoid repeated scans
+
+**Recommended annotation**:
+```java
+public class ASTAnnotation {
+    // ... existing fields ...
+    
+    // Control flow analysis (optional, for optimization)
+    public Boolean hasAnyControlFlow;      // Cached: contains next/last/redo/goto
+    public Boolean hasUnsafeControlFlow;   // Cached: control flow escapes block
+}
+```
 
 ## Devin Skills
 
@@ -1074,3 +1208,62 @@ Performance profiling. Use to verify transformer passes don't introduce performa
 ```
 
 Or mention the skill name in conversation to auto-invoke.
+
+---
+
+## Progress Tracking
+
+### Current Status: Design Phase Complete
+
+The design document is complete. Implementation has not started.
+
+### Completed Phases
+
+- [x] **Design Document Creation** (2024-03-09)
+  - Problem statement and architecture diagrams
+  - AST annotation structure with existing infrastructure analysis
+  - 8 transformer phases detailed (PragmaResolver through WarningEmitter)
+  - 12-milestone implementation plan
+  - Differential testing infrastructure spec
+  - Inventory of existing visitors (12 total, categorized as shared vs JVM-specific)
+  - Files: `dev/design/shared_ast_transformer.md` (1210+ lines)
+
+### Next Steps
+
+1. **Start Milestone 1: Infrastructure**
+   - Create `ASTAnnotation` class in `src/main/java/org/perlonjava/frontend/analysis/`
+   - Add typed fields to `AbstractNode` for context and lvalue caching
+   - Create `ASTTransformer` base class with phase orchestration
+
+2. **Set up differential testing**
+   - Create test harness that runs same code on both backends
+   - Add to CI pipeline
+
+3. **Review existing visitors for integration**
+   - `LValueVisitor` - can be directly integrated into LvalueResolver
+   - `ConstantFoldingVisitor` - integrate into ConstantFolder phase
+   - `FindDeclarationVisitor` - integrate into VariableResolver
+
+### Open Questions
+
+1. Should we use Option A (typed fields) or Option B (annotation map) for frequently-accessed annotations? **Recommendation: Option A for performance**
+
+2. Should control flow analysis (`ControlFlowDetectorVisitor`) be included in shared transformer or remain JVM-specific optimization?
+
+3. How to handle the transition period where both old and new code paths exist?
+
+### Key Files to Modify
+
+| File | Changes Needed |
+|------|----------------|
+| `AbstractNode.java` | Add context/lvalue cached fields |
+| `EmitterVisitor.java` | Read annotations instead of computing |
+| `CompileAssignment.java` | Read lvalue annotations |
+| `CompileContext.java` | Read context annotations |
+| `Compile*.java` (interpreter) | Read same annotations |
+
+### Dependencies
+
+- No external dependencies needed
+- Builds on existing visitor infrastructure
+- Compatible with current AST node hierarchy
