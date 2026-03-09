@@ -1421,20 +1421,28 @@ Fixed the remaining context mismatches:
 - All 156 gradle tests pass
 - Ready to test switching `acceptChild` to use cached context
 
-### Phase 2a Complete
+### Phase 2a Complete (2025-03-09)
 
-Phase 2a (ContextResolver for JVM parity) is now essentially complete:
+Phase 2a (ContextResolver for JVM parity) is now complete:
 - All major operator cases handled
 - All context mismatches fixed (from 1400+ to 0)
 - All 156 gradle tests pass
 - ExifTool tests work correctly
+- Debug code cleaned up from EmitterVisitor.java
+- **`acceptChild` now uses pre-computed context** from ContextResolver
+
+Key fixes:
+- Logical operators (`||`, `&&`, `//`, `or`, `and`) force-set LIST context on RHS when in LIST context
+- ArrayLiteralNode elements use LIST context for array literals, SCALAR for subscripts
+- Added `visitSubscriptLiteral()` helper to handle subscript vs array literal distinction
+
+The `acceptChild(node, fallbackContext)` method now:
+1. Uses cached context from ContextResolver when available
+2. Falls back to provided context for dynamically created nodes (e.g., `new OperatorNode(...)`)
 
 ### Next Steps
 
-1. **Test switching to cached context** (Ready to test)
-   - Switch `acceptChild` from fallback mode to using cached context
-   - With zero mismatches, this should work without issues
-   - This will validate the ContextResolver is fully correct
+1. ~~**Test switching to cached context**~~ **Done** - `acceptChild` uses cached context
 
 2. **Phase 2b: Variable Resolution** (Next major phase)
    - Implement `VariableResolver` pass to link variable uses to declarations
