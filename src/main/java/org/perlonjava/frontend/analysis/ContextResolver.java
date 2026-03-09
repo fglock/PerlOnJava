@@ -421,18 +421,26 @@ public class ContextResolver extends ASTTransformPass {
     @Override
     public void visit(HashLiteralNode node) {
         setContext(node, currentContext);
-        // Hash literal elements are always in LIST context
+        // When used as subscript (SCALAR context), elements should be SCALAR
+        // When used as hash literal (LIST context), elements are LIST
+        int elemContext = (currentContext == RuntimeContextType.SCALAR)
+                ? RuntimeContextType.SCALAR
+                : RuntimeContextType.LIST;
         for (Node element : node.elements) {
-            visitInContext(element, RuntimeContextType.LIST);
+            visitInContext(element, elemContext);
         }
     }
 
     @Override
     public void visit(ArrayLiteralNode node) {
         setContext(node, currentContext);
-        // Array literal elements are always in LIST context
+        // When used as subscript (SCALAR context), elements should be SCALAR
+        // When used as array literal (LIST context), elements are LIST
+        int elemContext = (currentContext == RuntimeContextType.SCALAR)
+                ? RuntimeContextType.SCALAR
+                : RuntimeContextType.LIST;
         for (Node element : node.elements) {
-            visitInContext(element, RuntimeContextType.LIST);
+            visitInContext(element, elemContext);
         }
     }
 
