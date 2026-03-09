@@ -142,10 +142,14 @@ public class ContextResolver extends ASTTransformPass {
 
     private void visitSubscript(BinaryOperatorNode node) {
         // $a[idx] or $a{key}: index/key is scalar, container depends on sigil
+        // @a[list] or @a{list}: slice - subscript is list context
         int saved = currentContext;
         if (node.left != null) node.left.accept(this);
 
-        currentContext = RuntimeContextType.SCALAR;
+        // Check if this is a slice operation (@ or % sigil means list context for subscript)
+        boolean isSlice = node.left instanceof OperatorNode opNode &&
+                ("@".equals(opNode.operator) || "%".equals(opNode.operator));
+        currentContext = isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
         if (node.right != null) node.right.accept(this);
         currentContext = saved;
     }
