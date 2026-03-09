@@ -1,6 +1,7 @@
 package org.perlonjava.app.cli;
 
 import org.perlonjava.core.Configuration;
+import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -346,6 +347,7 @@ public class ArgumentParser {
                     parsedArgs.useInterpreter = true;  // Force interpreter mode for debugging
                     DebugState.debugMode = true;       // Enable debug opcode emission
                     DebugState.single = true;          // Start in single-step mode
+                    DebugHooks.initializeDebugVariables();  // Initialize $DB::single etc.
                     break;
                 case 't':
                     // Enable taint warnings

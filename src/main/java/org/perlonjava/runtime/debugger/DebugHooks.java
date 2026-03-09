@@ -1,6 +1,8 @@
 package org.perlonjava.runtime.debugger;
 
 import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -32,9 +34,16 @@ public class DebugHooks {
      * @param line     Current line number (1-based)
      */
     public static void debug(String filename, int line) {
+        // Sync from Perl $DB::single variable to DebugState
+        syncFromPerlVariables();
+        
         // Update current location
         DebugState.currentFile = filename;
         DebugState.currentLine = line;
+        
+        // Update Perl debug variables
+        GlobalVariable.getGlobalVariable("DB::filename").set(filename);
+        GlobalVariable.getGlobalVariable("DB::line").set(line);
 
         // Check if we should stop
         if (!DebugState.shouldStop(filename, line)) {
@@ -165,6 +174,7 @@ public class DebugHooks {
         // DEBUG hook will skip while callDepth > stepOverDepth
         DebugState.stepOverDepth = DebugState.callDepth;
         DebugState.single = true;
+        syncToPerlVariables();
         return true;
     }
 
@@ -175,6 +185,7 @@ public class DebugHooks {
         // Disable step-over, enable single-step
         DebugState.stepOverDepth = -1;
         DebugState.single = true;
+        syncToPerlVariables();
         return true;
     }
 
@@ -199,6 +210,7 @@ public class DebugHooks {
             }
         }
 
+        syncToPerlVariables();
         return true;
     }
 
@@ -398,5 +410,42 @@ public class DebugHooks {
         if (DebugState.callDepth < 0) {
             DebugState.callDepth = 0;
         }
+    }
+    
+    /**
+     * Sync debug state from Perl variables ($DB::single, $DB::trace, $DB::signal).
+     * Called at each DEBUG opcode to pick up changes made by Perl code.
+     */
+    private static void syncFromPerlVariables() {
+        RuntimeScalar single = GlobalVariable.getGlobalVariable("DB::single");
+        RuntimeScalar trace = GlobalVariable.getGlobalVariable("DB::trace");
+        RuntimeScalar signal = GlobalVariable.getGlobalVariable("DB::signal");
+        
+        DebugState.single = single.getBoolean();
+        DebugState.trace = trace.getBoolean();
+        DebugState.signal = signal.getBoolean();
+    }
+    
+    /**
+     * Sync debug state to Perl variables.
+     * Called after debugger commands that change stepping state.
+     */
+    private static void syncToPerlVariables() {
+        GlobalVariable.getGlobalVariable("DB::single").set(DebugState.single ? 1 : 0);
+        GlobalVariable.getGlobalVariable("DB::trace").set(DebugState.trace ? 1 : 0);
+        GlobalVariable.getGlobalVariable("DB::signal").set(DebugState.signal ? 1 : 0);
+    }
+    
+    /**
+     * Initialize debug variables at startup.
+     * Called when -d flag is used.
+     */
+    public static void initializeDebugVariables() {
+        // Initialize $DB::single to 1 to start in single-step mode
+        GlobalVariable.getGlobalVariable("DB::single").set(1);
+        GlobalVariable.getGlobalVariable("DB::trace").set(0);
+        GlobalVariable.getGlobalVariable("DB::signal").set(0);
+        GlobalVariable.getGlobalVariable("DB::filename").set("");
+        GlobalVariable.getGlobalVariable("DB::line").set(0);
     }
 }
