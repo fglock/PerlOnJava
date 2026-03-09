@@ -61,10 +61,11 @@ These bugs share a root cause: the bytecode compiler (`CompileAssignment.java`, 
               │  │ 1. PragmaResolver       │  │  ◄── strict, warnings, features
               │  │ 2. VariableResolver     │  │  ◄── variable identity, closures
               │  │ 3. LabelCollector       │  │  ◄── goto/next/last/redo targets
-              │  │ 4. ContextResolver      │  │  ◄── scalar/list/void context
-              │  │ 5. LvalueResolver       │  │  ◄── lvalue annotations
-              │  │ 6. ConstantFolder       │  │  ◄── existing optimization
-              │  │ 7. WarningEmitter       │  │  ◄── compile-time warnings
+              │  │ 4. BlockAnalyzer        │  │  ◄── local, regex detection
+              │  │ 5. ContextResolver      │  │  ◄── scalar/list/void context
+              │  │ 6. LvalueResolver       │  │  ◄── lvalue annotations
+              │  │ 7. ConstantFolder       │  │  ◄── existing optimization
+              │  │ 8. WarningEmitter       │  │  ◄── compile-time warnings
               │  └─────────────────────────┘  │
               └───────────────┬───────────────┘
                               │
@@ -103,6 +104,12 @@ public class ASTAnnotation {
     public VariableBinding binding;         // Links to declaration
     public boolean isCaptured;              // Used by inner closure
     public int closureDepth;                // Nesting level for captures
+    public List<VariableBinding> capturedVariables;  // For subroutines: captured vars
+    
+    // Block analysis (for save/restore optimization)
+    public boolean containsLocal;           // Block has 'local' declarations
+    public List<LocalDeclaration> localDeclarations;  // Details of each local
+    public boolean containsRegex;           // Block uses regex (needs RegexState save)
     
     // Pragma tracking
     public PragmaState pragmas;             // strict, warnings, features
@@ -290,6 +297,113 @@ public class LabelCollector extends ASTTransformPass {
     }
 }
 ```
+
+### Phase 3.5: BlockAnalyzer
+
+Analyze blocks for `local` declarations and regex usage. Integrates with existing visitors:
+- `FindDeclarationVisitor` - Locates `local`/`my` declarations for dynamic scoping
+- `RegexUsageDetector` - Detects regex operations for state save/restore optimization
+
+```java
+public class BlockAnalyzer extends ASTTransformPass {
+    
+    @Override
+    public void visit(BlockNode node) {
+        // Detect if block contains 'local' declarations
+        // Used by backends to emit dynamic variable save/restore
+        OperatorNode localOp = FindDeclarationVisitor.findOperator(node, "local");
+        if (localOp != null) {
+            node.annotation.containsLocal = true;
+            node.annotation.localDeclarations = collectLocalDeclarations(node);
+        }
+        
+        // Detect if block contains regex operations
+        // Used by backends to emit regex state save/restore only when needed
+        // (optimization: avoid unnecessary RegexState snapshots)
+        node.annotation.containsRegex = RegexUsageDetector.containsRegexOperation(node);
+        
+        visitChildren(node);
+    }
+    
+    @Override
+    public void visit(SubroutineNode node) {
+        // Subroutines have their own regex state scope
+        // Don't propagate containsRegex from nested subs to outer blocks
+        node.annotation.containsRegex = RegexUsageDetector.containsRegexOperation(node.block);
+        
+        // Collect local declarations for the subroutine body
+        OperatorNode localOp = FindDeclarationVisitor.findOperator(node.block, "local");
+        if (localOp != null) {
+            node.annotation.containsLocal = true;
+            node.annotation.localDeclarations = collectLocalDeclarations(node.block);
+        }
+        
+        visitChildren(node);
+    }
+    
+    @Override
+    public void visit(For1Node node) {
+        // For loops may have implicit local ($_ in for(@list))
+        // and explicit local declarations in body
+        analyzeLoopBlock(node, node.body);
+        visitChildren(node);
+    }
+    
+    @Override
+    public void visit(TryNode node) {
+        // try/catch/finally blocks each have their own scope
+        if (node.tryBlock != null) {
+            node.tryBlock.annotation.containsRegex = 
+                RegexUsageDetector.containsRegexOperation(node.tryBlock);
+        }
+        if (node.catchBlock != null) {
+            node.catchBlock.annotation.containsRegex = 
+                RegexUsageDetector.containsRegexOperation(node.catchBlock);
+        }
+        visitChildren(node);
+    }
+    
+    private List<LocalDeclaration> collectLocalDeclarations(Node block) {
+        List<LocalDeclaration> locals = new ArrayList<>();
+        // Walk block to find all 'local' operators
+        // Record: variable name, original value location, scope end point
+        collectLocalsRecursive(block, locals);
+        return locals;
+    }
+    
+    private void analyzeLoopBlock(Node loop, Node body) {
+        body.annotation.containsRegex = RegexUsageDetector.containsRegexOperation(body);
+        OperatorNode localOp = FindDeclarationVisitor.findOperator(body, "local");
+        if (localOp != null) {
+            body.annotation.containsLocal = true;
+        }
+    }
+}
+
+public class LocalDeclaration {
+    public String variableName;         // e.g., "$foo", "@bar", "%baz"
+    public VariableBinding binding;     // Links to the package/global variable
+    public Node declarationNode;        // The 'local' operator node
+    public boolean needsRestore;        // True if value must be restored at scope end
+}
+```
+
+**Why this matters:**
+
+1. **`local` operator tracking** enables correct dynamic scoping:
+   - Save original value at block entry
+   - Restore at block exit (including non-local exits via die/next/last)
+   - Both backends must emit identical save/restore logic
+
+2. **Regex usage detection** enables optimization:
+   - Only emit `RegexState.save()`/`restore()` for blocks that use regex
+   - Avoids unnecessary snapshots of `$1`, `$2`, `@+`, `@-`, etc.
+   - Subroutine boundaries reset the optimization (each sub has own scope)
+
+3. **Integration with existing visitors** ensures consistency:
+   - `FindDeclarationVisitor` already handles the AST traversal
+   - `RegexUsageDetector` already handles subroutine boundary detection
+   - Transformer just annotates; backends read annotations
 
 ### Phase 4: ContextResolver
 
@@ -919,7 +1033,14 @@ BlockNode {
 - `dev/design/interpreter.md` - Interpreter architecture
 - `dev/design/logical_or_list_context.md` - Context propagation challenges
 - `dev/custom_bytecode/BYTECODE_DOCUMENTATION.md` - Bytecode format
-- `src/main/java/org/perlonjava/frontend/analysis/ConstantFoldingVisitor.java` - Existing constant folding
+
+## Existing Analysis Visitors (to integrate)
+
+These visitors already exist and should be integrated into the transformer:
+
+- `src/main/java/org/perlonjava/frontend/analysis/ConstantFoldingVisitor.java` - Constant folding optimization
+- `src/main/java/org/perlonjava/frontend/analysis/FindDeclarationVisitor.java` - Locates `local`/`my` declarations
+- `src/main/java/org/perlonjava/frontend/analysis/RegexUsageDetector.java` - Detects regex operations in blocks
 
 ## Devin Skills
 
