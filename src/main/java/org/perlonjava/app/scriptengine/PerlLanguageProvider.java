@@ -8,6 +8,7 @@ import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.analysis.ASTTransformer;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -164,6 +165,10 @@ public class PerlLanguageProvider {
         }
 
         // ast = ConstantFoldingVisitor.foldConstants(ast);
+
+        // Run shared AST transformer to compute context annotations
+        // (idempotent - skips if already transformed)
+        ASTTransformer.createDefault().transform(ast);
 
         if (ctx.compilerOptions.parseOnly) {
             // Printing the ast

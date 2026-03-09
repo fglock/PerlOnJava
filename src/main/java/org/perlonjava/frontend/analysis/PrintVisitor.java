@@ -433,6 +433,21 @@ public class PrintVisitor implements Visitor {
     }
 
     private void printAnnotations(AbstractNode node) {
+        // Print cached context if set
+        if (node.hasCachedContext()) {
+            indentLevel++;
+            appendIndent();
+            sb.append("ctx: ").append(contextToString(node.getCachedContext())).append("\n");
+            indentLevel--;
+        }
+        // Print cached lvalue if set
+        Boolean isLvalue = node.getCachedIsLvalue();
+        if (isLvalue != null && isLvalue) {
+            indentLevel++;
+            appendIndent();
+            sb.append("lvalue: true\n");
+            indentLevel--;
+        }
         // Print annotations if present
         if (node.annotations != null && !node.annotations.isEmpty()) {
             indentLevel++;
@@ -447,6 +462,16 @@ public class PrintVisitor implements Visitor {
             indentLevel--;
             indentLevel--;
         }
+    }
+
+    private String contextToString(int ctx) {
+        return switch (ctx) {
+            case 0 -> "VOID";
+            case 1 -> "SCALAR";
+            case 2 -> "LIST";
+            case 3 -> "RUNTIME";
+            default -> "UNKNOWN(" + ctx + ")";
+        };
     }
 }
 
