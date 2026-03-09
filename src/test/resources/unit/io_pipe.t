@@ -9,12 +9,17 @@ BEGIN {
 }
 
 use Test::More;
+use File::Spec;
+use File::Temp qw(tempdir);
 
 my $test_counter = 0;
 
-# Helper function to create unique test filenames
+# Create a temp directory for all test files (more robust than current dir)
+my $temp_dir = tempdir(CLEANUP => 1);
+
+# Helper function to create unique test filenames in temp dir
 sub get_test_filename {
-    return "test_io_pipe_" . (++$test_counter) . "_" . $$ . ".tmp";
+    return File::Spec->catfile($temp_dir, "test_io_pipe_" . (++$test_counter) . "_" . $$ . ".tmp");
 }
 
 # Helper function to cleanup test files
@@ -95,6 +100,11 @@ subtest 'Output pipe tests (writing to external commands)' => sub {
             return;
         };
 
+        # Enable autoflush for more reliable pipe behavior
+        my $old_fh = select($pipe);
+        $| = 1;
+        select($old_fh);
+
         print $pipe $test_data;
         my $close_result = close $pipe;
         my $exit_status = $? >> 8;
@@ -121,10 +131,18 @@ subtest 'Output pipe tests (writing to external commands)' => sub {
             return;
         };
 
+        # Enable autoflush for more reliable pipe behavior
+        my $old_fh = select($pipe);
+        $| = 1;
+        select($old_fh);
+
         print $pipe @lines;
         my $close_result = close $pipe;
 
         ok($close_result, 'Sort pipe closed successfully');
+
+        # Small delay to ensure file is fully written on some systems
+        select(undef, undef, undef, 0.1);
 
         # Read back the sorted result
         open my $result_fh, '<', $temp_file or do {
@@ -236,6 +254,10 @@ subtest 'Bidirectional pipe tests' => sub {
                 ok($pipe_success, "Pipe opened successfully: $test->{name}");
 
                 if ($test->{type} eq 'output') {
+                    # Enable autoflush for more reliable pipe behavior
+                    my $old_fh = select($pipe);
+                    $| = 1;
+                    select($old_fh);
                     print $pipe $test->{data};
                 } elsif ($test->{type} eq 'input') {
                     my $result = <$pipe>;
@@ -260,6 +282,10 @@ subtest 'Error handling and edge cases' => sub {
         my $output_pipe_opened = open my $out_pipe, "| $invalid_cmd 2>$devnull";
 
         if ($output_pipe_opened) {
+            # Enable autoflush for more reliable pipe behavior
+            my $old_fh = select($out_pipe);
+            $| = 1;
+            select($old_fh);
             print $out_pipe "test\n";
             my $close_result = close $out_pipe;
             my $exit_status = $? >> 8;
@@ -338,10 +364,18 @@ subtest 'UTF-8 handling through pipes' => sub {
         };
 
         binmode $pipe, ':utf8';
+        # Enable autoflush for more reliable pipe behavior
+        my $old_fh = select($pipe);
+        $| = 1;
+        select($old_fh);
+
         print $pipe $utf8_text;
         my $close_result = close $pipe;
 
         ok($close_result, 'UTF-8 output pipe closed successfully');
+
+        # Small delay to ensure file is fully written on some systems
+        select(undef, undef, undef, 0.1);
 
         # Read back the result
         open my $result_fh, '<:utf8', $temp_file or do {

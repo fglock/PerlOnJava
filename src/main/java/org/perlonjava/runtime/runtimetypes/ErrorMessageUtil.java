@@ -355,5 +355,39 @@ public class ErrorMessageUtil {
 
     public record SourceLocation(String fileName, int lineNumber) {
     }
+
+    /**
+     * Extract source lines from tokens.
+     * Reconstructs source code by concatenating token texts, splitting on NEWLINE tokens.
+     *
+     * @return Array of source lines (1-based indexing, index 0 is empty)
+     */
+    public String[] extractSourceLines() {
+        if (tokens == null || tokens.isEmpty()) {
+            return new String[0];
+        }
+
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        lines.add("");  // Index 0 unused (1-based line numbers)
+
+        StringBuilder currentLine = new StringBuilder();
+        for (LexerToken tok : tokens) {
+            if (tok.type == LexerTokenType.EOF) {
+                break;
+            }
+            if (tok.type == LexerTokenType.NEWLINE) {
+                lines.add(currentLine.toString());
+                currentLine.setLength(0);
+            } else {
+                currentLine.append(tok.text);
+            }
+        }
+        // Add last line if not empty
+        if (currentLine.length() > 0) {
+            lines.add(currentLine.toString());
+        }
+
+        return lines.toArray(new String[0]);
+    }
 }
 

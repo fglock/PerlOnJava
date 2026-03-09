@@ -68,8 +68,13 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ✅  **Environment**: Support for `PERL5LIB`, `PERL5OPT` environment variables.
+- 🚧  **Perl debugger**: The built-in Perl debugger (`perl -d`) is work in progress.
+  - ✅  Basic commands: `n` (next), `s` (step), `c` (continue), `q` (quit), `l` (list), `b` (breakpoint), `B` (delete breakpoint), `L` (list breakpoints), `h` (help)
+  - ✅  Debug variables: `$DB::single`, `$DB::trace`, `$DB::signal`, `$DB::filename`, `$DB::line`
+  - ❌  `-d:MOD` for Devel modules (e.g., `-d:NYTProf`)
+  - ❌  `perl5db.pl` compatibility
+  - ❌  Expression evaluation commands (`p`, `x`)
 - 🚧  **Perl-like warnings**: Warnings is work in progress. Some warnings need to be formatted to resemble Perl's output.
-- ❌  **Perl debugger**: The built-in Perl debugger (`perl -d`) is not implemented.
 
 
 ### Command line switches
@@ -82,13 +87,12 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  UTF-16 is accepted in source code.
 
 - ✅  Accept command line switches from the shebang line.
-- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
+- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-d`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
 - ❌  Missing command line switches include:
   - `-T`: Taint checks.
   - `-t`: Taint checks with warnings.
   - `-u`: Dumps core after compiling.
   - `-U`: Allows unsafe operations.
-  - `-d[t][:debugger]`: Runs the program under the debugger.
   - `-D[number/list]`: Sets debugging flags.
   - `-C [number/list]`: Controls Unicode features.
 

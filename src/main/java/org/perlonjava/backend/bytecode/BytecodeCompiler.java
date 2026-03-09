@@ -9,6 +9,7 @@ import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -550,6 +551,14 @@ public class BytecodeCompiler implements Visitor {
             warningFlags = (BitSet) emitterContext.symbolTable.warningFlagsStack.peek().clone();
         }
 
+        // Populate debug source lines if in debug mode
+        if (DebugState.debugMode && errorUtil != null && sourceName != null) {
+            String[] lines = errorUtil.extractSourceLines();
+            if (lines.length > 0) {
+                DebugState.storeSourceLines(sourceName, lines);
+            }
+        }
+
         // Build InterpretedCode
         return new InterpretedCode(
                 toShortArray(),
@@ -793,10 +802,24 @@ public class BytecodeCompiler implements Visitor {
             if (stmt instanceof AbstractNode an && an.getBooleanAnnotation("compileTimeOnly")) continue;
 
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
+            int stmtTokenIndex = -1;
             if (stmt != null) {
-                int tokenIndex = stmt.getIndex();
+                stmtTokenIndex = stmt.getIndex();
                 int pc = bytecode.size();
-                pcToTokenIndex.put(pc, tokenIndex);
+                pcToTokenIndex.put(pc, stmtTokenIndex);
+            }
+
+            // Emit DEBUG opcode for debugger support (only when -d flag is active)
+            // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
+            if (DebugState.debugMode && stmtTokenIndex >= 0) {
+                boolean skipDebug = (stmt instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"));
+                if (!skipDebug) {
+                    int lineNumber = errorUtil.getLineNumber(stmtTokenIndex);
+                    int fileIdx = addToStringPool(sourceName);
+                    emit(Opcodes.DEBUG);
+                    emit(fileIdx);
+                    emit(lineNumber);
+                }
             }
 
             boolean isLastStatement = (i == lastMeaningfulIndex);

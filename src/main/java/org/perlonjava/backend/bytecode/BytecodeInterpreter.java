@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -1528,6 +1529,19 @@ public class BytecodeInterpreter {
 
                             case Opcodes.DO_FILE -> {
                                 pc = InlineOpcodeHandler.executeDoFile(bytecode, pc, registers);
+                            }
+
+                            // =================================================================
+                            // DEBUGGER SUPPORT
+                            // =================================================================
+
+                            case Opcodes.DEBUG -> {
+                                // Debug hook at statement boundary
+                                // Format: DEBUG file_string_idx line_number
+                                int fileIdx = bytecode[pc++];
+                                int line = bytecode[pc++];
+                                String file = code.stringPool[fileIdx];
+                                DebugHooks.debug(file, line);
                             }
 
                             default -> {
