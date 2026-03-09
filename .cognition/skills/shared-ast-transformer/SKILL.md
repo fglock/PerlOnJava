@@ -310,6 +310,15 @@ Format:
 
 ## Making ContextResolver 100% Accurate (for interpreter migration)
 
+### WHY THIS MATTERS
+
+Without 100% accurate context annotation, **we cannot use the AST pre-processor**. The pre-processor relies on cached context to:
+1. Optimize code based on known context
+2. Enable backend-agnostic transformations
+3. Allow the interpreter to share the same annotated AST as the JVM emitter
+
+If context is wrong, the pre-processor will generate incorrect code.
+
 ### Current State (2026-03-09)
 
 The JVM emitter uses `acceptChild()` with fallback context (safe mode). The interpreter uses `compileNode()` with explicit context. To migrate the interpreter to use cached context:
@@ -327,6 +336,126 @@ You cannot have "safe mismatches" or "acceptable differences". Every single mism
 2. Fixing the backend that has the wrong expectation
 
 The current mismatch tracking exists to find these bugs. The goal is ZERO mismatches.
+
+### METHODOLOGY: How to Achieve 100% Accuracy
+
+#### Step A: Add Mismatch Tracking to BOTH Backends
+
+**JVM Emitter** - in `EmitterVisitor.acceptChild()`:
+```java
+public void acceptChild(Node child, int fallbackContext) {
+    if (child instanceof AbstractNode an && an.hasCachedContext()) {
+        if (an.getCachedContext() != fallbackContext) {
+            logMismatch("JVM", child, an.getCachedContext(), fallbackContext);
+        }
+    }
+    child.accept(with(fallbackContext));
+}
+```
+
+**Interpreter** - in `BytecodeCompiler.compileNode()`:
+```java
+void compileNode(Node node, int targetReg, int fallbackContext) {
+    if (node instanceof AbstractNode an && an.hasCachedContext()) {
+        if (an.getCachedContext() != fallbackContext) {
+            logMismatch("INTERP", node, an.getCachedContext(), fallbackContext);
+        }
+    }
+    // ... rest of method
+}
+```
+
+#### Step B: For Each Mismatch, Trace the Source
+
+When you see a mismatch like:
+```
+JVM: BinaryOperatorNode({) cached=LIST expected=SCALAR
+```
+
+1. **Find where the emitter sets this context**:
+   ```bash
+   grep -rn "acceptChild.*SCALAR" src/main/java/org/perlonjava/backend/jvm/
+   ```
+   Look for the code that visits `BinaryOperatorNode` with operator `{`.
+
+2. **Find where the interpreter sets this context**:
+   ```bash
+   grep -rn "compileNode.*SCALAR" src/main/java/org/perlonjava/backend/bytecode/
+   ```
+   Look for the code that compiles subscript operations.
+
+3. **Find where ContextResolver sets this context**:
+   ```bash
+   grep -n "visitSubscript\|case \"{\"" src/main/java/org/perlonjava/frontend/analysis/ContextResolver.java
+   ```
+
+#### Step C: Determine the CORRECT Context
+
+For each node type, determine what context is semantically correct:
+
+| Node | Correct Context | Reasoning |
+|------|-----------------|-----------|
+| `$hash{key}` | SCALAR | Single element access returns scalar |
+| `@hash{@keys}` | LIST | Slice returns list |
+| `$x + $y` | SCALAR | Arithmetic produces scalar |
+| `@array` in `print @array` | LIST | Print consumes list |
+| `@array` in `$n = @array` | SCALAR | Assignment to scalar wants count |
+
+#### Step D: Fix the Mismatch
+
+**Option 1: Fix ContextResolver** (preferred if it's wrong)
+```java
+// In ContextResolver.java
+private void visitSubscript(BinaryOperatorNode node) {
+    boolean isSlice = isSliceAccess(node.left);
+    setContext(node, isSlice ? LIST : SCALAR);  // Match what backends expect
+    // ...
+}
+```
+
+**Option 2: Fix the Backend** (if backend has wrong expectation)
+```java
+// In EmitSubscript.java - if it was passing wrong context
+// Change from:
+emitterVisitor.acceptChild(node, RuntimeContextType.LIST);
+// To:
+emitterVisitor.acceptChild(node, RuntimeContextType.SCALAR);
+```
+
+#### Step E: Verify BOTH Backends Now Match
+
+After each fix:
+1. Run `./gradlew test` - check mismatch log at end
+2. Verify the specific mismatch is gone from BOTH backends
+3. Ensure no new mismatches were introduced
+
+### KEY FILES FOR CONTEXT TRACING
+
+When fixing mismatches, you need to examine these files:
+
+**ContextResolver** (what it currently sets):
+- `src/main/java/org/perlonjava/frontend/analysis/ContextResolver.java`
+
+**JVM Emitter** (what it expects):
+- `src/main/java/org/perlonjava/backend/jvm/EmitterVisitor.java` - `acceptChild()` calls
+- `src/main/java/org/perlonjava/backend/jvm/EmitOperator.java` - operator handling
+- `src/main/java/org/perlonjava/backend/jvm/EmitOperatorNode.java` - OperatorNode dispatch
+- `src/main/java/org/perlonjava/backend/jvm/EmitBinaryOperator.java` - binary operators
+- `src/main/java/org/perlonjava/backend/jvm/EmitSubscript.java` - subscript operations
+- `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` - variable access
+
+**Interpreter/BytecodeCompiler** (what it expects):
+- `src/main/java/org/perlonjava/backend/bytecode/BytecodeCompiler.java` - `compileNode()` calls
+- Search for `compileNode(` to find all context expectations
+
+**To find all context expectations for a node type**:
+```bash
+# Find where JVM emitter visits BinaryOperatorNode
+grep -rn "BinaryOperatorNode\|acceptChild" src/main/java/org/perlonjava/backend/jvm/*.java | grep -i subscript
+
+# Find where interpreter compiles subscripts
+grep -rn "compileNode\|visit.*BinaryOp" src/main/java/org/perlonjava/backend/bytecode/*.java
+```
 
 ### Current State: Two Different Context Expectations
 
