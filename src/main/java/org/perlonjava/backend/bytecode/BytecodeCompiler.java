@@ -322,8 +322,9 @@ public class BytecodeCompiler implements Visitor {
             return false;
         }
         char c = name.charAt(0);
-        // Allow if character > 127 (Latin-1) and 'use utf8' is NOT enabled
-        return c > 127 && emitterContext != null && emitterContext.symbolTable != null
+        // Allow if character is in Latin-1 extended range (128-255) and 'use utf8' is NOT enabled
+        // Unicode characters above 255 (like Greek α = 945) should NOT be exempt
+        return c > 127 && c <= 255 && emitterContext != null && emitterContext.symbolTable != null
                 && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
     }
 
