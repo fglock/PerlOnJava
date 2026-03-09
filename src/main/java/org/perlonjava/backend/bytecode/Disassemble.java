@@ -2080,6 +2080,14 @@ public class Disassemble {
                         break;
                     }
 
+                    case Opcodes.DEBUG: {
+                        int fileIdx = interpretedCode.bytecode[pc++];
+                        int line = interpretedCode.bytecode[pc++];
+                        sb.append("DEBUG file=\"").append(interpretedCode.stringPool[fileIdx])
+                                .append("\" line=").append(line).append("\n");
+                        break;
+                    }
+
                     default:
                         sb.append("UNKNOWN(").append(opcode).append(")\n");
                         break;

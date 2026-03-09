@@ -1,5 +1,9 @@
 package org.perlonjava.runtime.debugger;
 
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -158,5 +162,79 @@ public class DebugState {
             return lines[line];
         }
         return "";
+    }
+
+    /**
+     * Subroutine location registry for %DB::sub.
+     * Maps "package::subname" -> "filename:startline-endline"
+     */
+    public static final Map<String, String> subLocations = new ConcurrentHashMap<>();
+
+    /**
+     * Register a subroutine's location for %DB::sub.
+     * Only registers if debugMode is enabled.
+     *
+     * @param fullName  Fully qualified subroutine name (package::subname)
+     * @param filename  Source filename
+     * @param startLine Starting line number (1-based)
+     * @param endLine   Ending line number (1-based)
+     */
+    public static void registerSubroutine(String fullName, String filename, int startLine, int endLine) {
+        if (!debugMode) {
+            return;
+        }
+        String location = filename + ":" + startLine + "-" + endLine;
+        subLocations.put(fullName, location);
+    }
+
+    /**
+     * Thread-local stack of subroutine arguments for @DB::args support.
+     * Each frame stores a copy of the @_ array when the subroutine was called.
+     */
+    public static final ThreadLocal<Deque<RuntimeArray>> argsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Push subroutine arguments onto the stack (called when entering a sub in debug mode).
+     *
+     * @param args The @_ array for this call frame
+     */
+    public static void pushArgs(RuntimeArray args) {
+        if (!debugMode) {
+            return;
+        }
+        // Make a shallow copy of the args array
+        RuntimeArray copy = new RuntimeArray();
+        copy.setFromList(args.getList());
+        argsStack.get().push(copy);
+    }
+
+    /**
+     * Pop subroutine arguments from the stack (called when exiting a sub in debug mode).
+     */
+    public static void popArgs() {
+        if (!debugMode) {
+            return;
+        }
+        Deque<RuntimeArray> stack = argsStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+
+    /**
+     * Get arguments for a specific frame (0 = current, 1 = caller, etc).
+     *
+     * @param frame Frame number (0-based)
+     * @return The args array for that frame, or null if not available
+     */
+    public static RuntimeArray getArgsForFrame(int frame) {
+        Deque<RuntimeArray> stack = argsStack.get();
+        if (frame < 0 || frame >= stack.size()) {
+            return null;
+        }
+        // Convert to array for indexed access
+        RuntimeArray[] stackArray = stack.toArray(new RuntimeArray[0]);
+        return stackArray[frame];
     }
 }

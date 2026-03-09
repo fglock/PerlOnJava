@@ -4,8 +4,11 @@ import org.perlonjava.backend.bytecode.EvalStringHandler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.BufferedReader;
@@ -51,6 +54,9 @@ public class DebugHooks {
         // Sync from Perl $DB::single variable to DebugState
         syncFromPerlVariables();
         
+        // Sync %DB::sub with any newly compiled subroutines
+        syncDbSub();
+        
         // Update current location
         DebugState.currentFile = filename;
         DebugState.currentLine = line;
@@ -67,6 +73,15 @@ public class DebugHooks {
         // Check for quit flag
         if (DebugState.quit) {
             System.exit(0);
+        }
+
+        // Populate @DB::args with current frame's arguments
+        RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
+        RuntimeArray frameArgs = DebugState.getArgsForFrame(0);
+        if (frameArgs != null) {
+            dbArgs.setFromList(frameArgs.getList());
+        } else {
+            dbArgs.setFromList(new RuntimeList());
         }
 
         // Get source line for display
@@ -562,5 +577,19 @@ public class DebugHooks {
         GlobalVariable.getGlobalVariable("DB::signal").set(0);
         GlobalVariable.getGlobalVariable("DB::filename").set("");
         GlobalVariable.getGlobalVariable("DB::line").set(0);
+    }
+
+    /**
+     * Sync %DB::sub from DebugState.subLocations.
+     * Called periodically to ensure Perl code can access subroutine locations.
+     */
+    public static void syncDbSub() {
+        if (!DebugState.debugMode) {
+            return;
+        }
+        RuntimeHash dbSub = GlobalVariable.getGlobalHash("DB::sub");
+        for (var entry : DebugState.subLocations.entrySet()) {
+            dbSub.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        }
     }
 }
