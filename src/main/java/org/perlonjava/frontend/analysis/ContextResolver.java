@@ -81,8 +81,8 @@ public class ContextResolver extends ASTTransformPass {
             case "->" -> visitArrow(node);
             case "(" -> visitCall(node);
             case "print", "say", "printf", "warn", "die" -> visitPrintBinary(node);
-            case "map", "grep", "sort" -> visitMapBinary(node);
-            case "join" -> visitJoinBinary(node);
+            case "map", "grep", "sort", "all", "any" -> visitMapBinary(node);
+            case "join", "sprintf" -> visitJoinBinary(node);
             default -> visitBinaryDefault(node);
         }
     }
@@ -163,7 +163,7 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitJoinBinary(BinaryOperatorNode node) {
-        // join: left (separator) is SCALAR, right (list to join) is LIST
+        // join/sprintf: left (separator/format) is SCALAR, right (list to join/args) is LIST
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.LIST);
     }
@@ -203,7 +203,8 @@ public class ContextResolver extends ASTTransformPass {
             case "select", "gmtime", "localtime", "caller", "reset", "times" -> visitListOperand(node);
             // Operators that take LIST context operands (prototype @)
             case "pack", "mkdir", "opendir", "seekdir", "crypt", "vec", "read", "chmod",
-                 "chop", "chomp", "system", "exec", "$#", "splice", "reverse" -> visitListOperand(node);
+                 "chop", "chomp", "system", "exec", "$#", "splice", "reverse",
+                 "chown", "kill", "unlink", "utime" -> visitListOperand(node);
             default -> visitOperatorDefault(node);
         }
     }

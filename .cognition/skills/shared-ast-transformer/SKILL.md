@@ -17,9 +17,12 @@ This skill covers development and debugging of the shared AST transformer that e
 |------|---------|
 | `src/main/java/org/perlonjava/frontend/analysis/ContextResolver.java` | Propagates SCALAR/LIST/VOID context through AST |
 | `src/main/java/org/perlonjava/frontend/analysis/EmitterVisitor.java` | Contains `acceptChild()` for context-aware node visiting |
-| `src/main/java/org/perlonjava/frontend/analysis/ASTTransformPass.java` | Base class for transformer passes |
+| `src/main/java/org/perlonjava/frontend/analysis/ASTTransformPass.java` | Base class for transformer passes; `setContext()` preserves parser context |
 | `src/main/java/org/perlonjava/frontend/analysis/ASTTransformer.java` | Pass orchestrator |
 | `src/main/java/org/perlonjava/frontend/astnode/AbstractNode.java` | AST node with cached context fields |
+| `src/main/java/org/perlonjava/frontend/astnode/Node.java` | Interface with `setCachedContext()`/`getCachedContext()` |
+| `src/main/java/org/perlonjava/frontend/parser/PrototypeArgs.java` | Sets `cachedContext` for prototype arguments |
+| `src/main/java/org/perlonjava/backend/jvm/EmitOperator.java` | `handleOperator()` reads `getCachedContext()` |
 | `dev/design/shared_ast_transformer.md` | Design document with progress tracking |
 
 ## Architecture
@@ -93,10 +96,34 @@ This shows:
 ### 3. Check AST context with --parse
 
 ```bash
-java -jar target/perlonjava-3.0.0.jar --parse -e 'my @a = (1,2,3); print "@a"'
+./jperl --parse -e 'my @a = (1,2,3); print "@a"'
 ```
 
 Look for `ctx: SCALAR/LIST/VOID` annotations on nodes.
+
+**Example**: Analyzing `substr($x, @array)` shows the parser wrapping `@array` with `scalar()`:
+
+```bash
+$ ./jperl --parse -e 'substr($x, @array)'
+BlockNode:
+  ctx: VOID
+  OperatorNode: substr  pos:1
+    ctx: VOID
+    ListNode:
+      ctx: SCALAR
+      OperatorNode: $  pos:4
+        ctx: SCALAR
+        IdentifierNode: 'x'
+          ctx: SCALAR
+      OperatorNode: scalar  pos:8       # ← Parser wrapped @array with scalar()
+        ctx: SCALAR
+        OperatorNode: @  pos:8          # ← Inner @ node gets SCALAR from parent
+          ctx: SCALAR
+          IdentifierNode: 'array'
+            ctx: SCALAR
+```
+
+This shows that `substr` has `$$` prototype, so `@array` is wrapped with `scalar()` by `ParserNodeUtils.toScalarContext()`.
 
 ## Common Context Rules
 
@@ -113,11 +140,85 @@ Look for `ctx: SCALAR/LIST/VOID` annotations on nodes.
 | `print`/`die`/`warn` args | LIST | Print list of values |
 | `join` (binary) | left=SCALAR, right=LIST | Separator + list |
 | `map`/`grep`/`sort` | block=SCALAR, list=LIST | |
-| Logical `||`/`&&`/`//` | LHS=SCALAR, RHS=outer | Short-circuit |
+| Logical `||`/`&&`/`//` | LHS=SCALAR, RHS=SCALAR or LIST | SCALAR in VOID/SCALAR context, LIST in LIST context |
 | Comma in list context | Both LIST | `(@a, @b)` |
 | Comma in scalar context | LHS=VOID, RHS=SCALAR | `($x, $y)` returns `$y` |
 
+## Unified Context Annotation System
+
+**Important**: There is a single source of truth for context: `cachedContext` field on nodes.
+
+### How It Works
+
+1. **Parser** sets `cachedContext` for prototype arguments via `PrototypeArgs.java`:
+   - `$` prototype → `setCachedContext(RuntimeContextType.SCALAR)`
+   - `@`/`%` prototype → no context set (defaults to LIST in emitter)
+
+2. **ContextResolver** sets `cachedContext` for all other nodes:
+   - Uses `setContext()` which does NOT overwrite parser-set context
+   - This preserves prototype semantics
+
+3. **Emitter** reads `getCachedContext()` in `handleOperator()`:
+   - If SCALAR, use SCALAR context
+   - Otherwise (including unset/-1), default to LIST
+
+### Key Rule: Parser Context Takes Precedence
+
+In `ASTTransformPass.setContext()`:
+```java
+protected void setContext(Node node, int context) {
+    AbstractNode abstractNode = asAbstractNode(node);
+    if (abstractNode != null && !abstractNode.hasCachedContext()) {
+        abstractNode.setCachedContext(context);  // Only if not already set
+    }
+}
+```
+
+### Prototype Operators Needing LIST Context
+
+Operators with `@` prototype need LIST context for operands. Add them to ContextResolver:
+
+```java
+// In visit(OperatorNode) switch:
+case "pack", "mkdir", "opendir", "seekdir", "crypt", "vec", "read", "chmod",
+     "chop", "chomp", "system", "exec", "$#", "splice", "reverse" -> visitListOperand(node);
+```
+
 ## Known Issues
+
+### ListNode/OperatorNode(@) context mismatches (707 occurrences)
+
+**Symptom**: Mismatch log shows:
+```
+ListNode cached=SCALAR expected=LIST : 707 times
+OperatorNode(@) cached=SCALAR expected=LIST : 698 times
+```
+
+**Root cause**: The `visitOperatorDefault()` method sets SCALAR context on all operands, but some operators going through `handleOperator()` in the emitter expect LIST context for their ListNode operands.
+
+The operators that fall through to `default -> visitOperatorDefault(node)` in ContextResolver and `default -> EmitOperator.handleOperator()` in EmitOperatorNode are prototype-based operators. The emitter's `handleOperator()` expects:
+- ListNode operand: LIST context
+- Individual elements: SCALAR if parser set it ($ prototype), otherwise LIST (@ prototype)
+
+**Why OperatorNode(@) gets SCALAR**: When `@array` is used as an argument to a `$` prototype slot, `ParserNodeUtils.toScalarContext()` wraps it with `scalar()` operator. The ContextResolver then propagates SCALAR to the inner `@` node.
+
+**Fix approach**: Update `visitOperatorDefault()` to use LIST context for ListNode operands, matching `handleOperator()` behavior:
+```java
+private void visitOperatorDefault(OperatorNode node) {
+    if (node.operand instanceof ListNode list) {
+        setContext(list, RuntimeContextType.LIST);
+        for (Node element : list.elements) {
+            if (element instanceof AbstractNode an && an.hasCachedContext()) {
+                visitInContext(element, an.getCachedContext());
+            } else {
+                visitInContext(element, RuntimeContextType.LIST);
+            }
+        }
+    } else if (node.operand != null) {
+        visitInContext(node.operand, RuntimeContextType.SCALAR);
+    }
+}
+```
 
 ### Stack frame errors when using cached context
 
@@ -149,21 +250,44 @@ BinaryOperatorNode: join
 
 **Fix**: Add `case "join" -> visitJoinBinary(node)` in ContextResolver for BinaryOperatorNode.
 
-## Testing
+## Building and Testing
+
+### Jar File Locations
+
+**IMPORTANT**: The `jperl` script uses `target/perlonjava-3.0.0.jar` (fat jar with dependencies).
+
+| Location | Type | Created By |
+|----------|------|------------|
+| `target/perlonjava-3.0.0.jar` | Fat jar (~26MB) | `./gradlew shadowJar` or `./gradlew build` |
+| `build/libs/perlonjava-3.0.0.jar` | Thin jar (~2.7MB) | `./gradlew jar` |
+
+The thin jar in `build/libs/` is missing ASM dependencies and will fail with ClassNotFound errors.
+
+### Build Commands
 
 ```bash
-# Build
-./gradlew clean build -x test
+# Full build with fat jar (updates target/perlonjava-3.0.0.jar)
+./gradlew build
 
-# Run single test
-java -jar target/perlonjava-3.0.0.jar src/test/resources/unit/array.t
+# Just rebuild the fat jar (faster, skips tests)
+./gradlew shadowJar
 
+# Thin jar only (don't use with jperl!)
+./gradlew jar
+```
+
+### Running Tests
+
+```bash
 # Run all tests
 ./gradlew test
 
+# Run single test file
+./jperl src/test/resources/unit/array.t
+
 # Compare JVM vs interpreter
-java -jar target/perlonjava-3.0.0.jar -e 'code'           # JVM
-java -jar target/perlonjava-3.0.0.jar --int -e 'code'     # Interpreter
+./jperl -e 'code'           # JVM backend
+./jperl --int -e 'code'     # Interpreter backend
 ```
 
 ## Progress Tracking
@@ -186,6 +310,11 @@ Format:
 
 ## Next Steps (as of 2025-03-09)
 
-1. **Investigate stack frame errors** when using cached context
-2. **Consider alternative approach**: Make emitter handle context variations gracefully
+1. **Fix the 707 ListNode mismatches**: The `OperatorNode(@) cached=SCALAR` cases are **expected** behavior when `@array` is wrapped with `scalar()` by the parser for `$` prototype slots. The true issue is operators going through `visitOperatorDefault()` that should use LIST context for their ListNode operands.
+
+2. **Approach**: Rather than changing `visitOperatorDefault()` globally (which broke 2695+ cases), identify specific operators that:
+   - Fall through to `default` in both ContextResolver and EmitOperatorNode
+   - Have `@` prototype slots expecting LIST context
+   - Add them explicitly to the switch statement with `visitListOperand(node)`
+
 3. **Phase 2b**: Variable resolution pass

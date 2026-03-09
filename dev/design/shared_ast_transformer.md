@@ -1352,24 +1352,37 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 - `BlockNode cached=LIST expected=SCALAR`: 5 times
 - These are from prototype `@` operators going through `handleOperator` - they need LIST context but ContextResolver defaults to SCALAR for unknown operators
 
+**ContextResolver BinaryOperatorNode Fixes (2025-03-09)**:
+- Added `sprintf` to `visitJoinBinary` case (same pattern as `join`: left=SCALAR format, right=LIST args)
+- Added `all`, `any` to `visitMapBinary` case (same pattern as `map/grep/sort`: block=SCALAR, list=LIST)
+- **Result**: ListNode mismatches reduced from 707 to 530 (177 fewer)
+
+**Remaining Context Mismatches (2025-03-09, after BinaryOperatorNode fixes)**:
+- `OperatorNode(@) cached=SCALAR expected=LIST`: 698 times
+- `ListNode cached=SCALAR expected=LIST`: 530 times
+- `BlockNode cached=LIST expected=SCALAR`: 5 times
+- The `OperatorNode(@)` mismatches are **expected** when `@array` is used with `$` prototype slot (parser wraps with `scalar()`)
+
 ### Next Steps
 
-1. **Investigate remaining context mismatches** (BLOCKED - needs debugging)
-   - When `acceptChild` uses cached context, 154/156 tests fail
-   - Need to identify which code paths have incorrect cached context
-   - May require adding more instrumentation or test cases
+1. **Continue reducing ListNode mismatches**
+   - Identify more BinaryOperatorNode operators that need LIST context for right operand
+   - Check `split` and other operators going through `visitBinaryDefault`
 
-2. **Test parity between JVM and interpreter backends**
+2. **Investigate BlockNode mismatches** (5 occurrences)
+   - Blocks with LIST cached but SCALAR expected
+
+3. **Test parity between JVM and interpreter backends**
    - Create test cases that exercise context-sensitive code
    - Run same code with `--int` flag and without, compare results
    - Focus on areas where context affects behavior (wantarray, etc.)
 
-3. **Phase 2b: Variable Resolution**
+4. **Phase 2b: Variable Resolution**
    - Implement `VariableResolver` pass to link variable uses to declarations
    - Detect closure captures
    - Integrate with existing symbol table
 
-4. **Review existing visitors for integration**
+5. **Review existing visitors for integration**
    - `LValueVisitor` - can be directly integrated into LvalueResolver
    - `ConstantFoldingVisitor` - integrate into ConstantFolder phase
    - `FindDeclarationVisitor` - integrate into VariableResolver
