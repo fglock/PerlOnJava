@@ -1311,34 +1311,34 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 
 **ContextResolver Fixes Applied**:
 - `return` operand: Changed from LIST to RUNTIME (return passes caller context)
+- `keys/values/each` operand: LIST context (hash evaluated in LIST context)
+- `map/grep/sort` binary: block=SCALAR, list=LIST
+- Reference operator `\`: operand uses LIST context (fixes `%$hashRef` patterns)
+- Slice subscripts `@a[list]`, `%h{keys}`: subscript uses LIST context
 
-**Current State**:
-- `acceptChild()` uses fallback context (preserves old behavior)
-- Warnings in debug mode identify ContextResolver gaps
-- All tests pass
+**Current State (2024-03-09)**:
+- All context mismatches fixed (0 warnings on ExifTool test suite)
+- All 156 gradle tests pass
+- ExifTool: 23/35 tests pass (failures unrelated to context - PrintConv issues)
 
-**Known Mismatches (for future optimization)**:
-- EmitLogicalOperator.java: RHS of `||`/`&&` in VOID context (emitter uses SCALAR, ContextResolver uses VOID)
-- EmitOperator.java: `select` operand (emitter uses LIST, ContextResolver uses SCALAR)
+**Known Issues (not context-related)**:
+- ComponentsConfiguration PrintConv returns wrong format (separate issue)
 
-**Next Phase**: Fix ContextResolver mismatches, then switch `acceptChild` to use cached context
+**Next Phase**: Switch `acceptChild` to use cached context instead of fallback (remove warnings)
 
 ### Next Steps
 
-1. **Audit emitter call sites for safe migration**
-   - Identify call sites where context is "pass-through" (safe to use acceptChild)
-   - Document call sites where context is "forced" (must keep using `.with()`)
+1. **Switch `acceptChild` to use cached context**
+   - Remove fallback behavior and mismatch warnings
+   - Verify tests still pass with cached context only
+   - This will enable the transformer to control context propagation
 
-2. **Extend ContextResolver for operator-specific contexts**
-   - Add handling for operators like `select`, `gmtime`, etc. that have specific operand contexts
-   - Goal: Make ContextResolver's decisions match what the emitter expects
-
-3. **Test parity between JVM and interpreter backends**
+2. **Test parity between JVM and interpreter backends**
    - Create test cases that exercise context-sensitive code
    - Run same code with `--int` flag and without, compare results
    - Focus on areas where context affects behavior (wantarray, etc.)
 
-4. **Phase 2b: Variable Resolution**
+3. **Phase 2b: Variable Resolution**
    - Implement `VariableResolver` pass to link variable uses to declarations
    - Detect closure captures
    - Integrate with existing symbol table
