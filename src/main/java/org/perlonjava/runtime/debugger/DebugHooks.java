@@ -6,6 +6,7 @@ import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -36,6 +37,12 @@ public class DebugHooks {
     // Current execution context for expression evaluation
     private static InterpretedCode currentCode;
     private static RuntimeBase[] currentRegisters;
+    
+    // Flag to track if PERL5DB was set (user wants custom debugger)
+    private static boolean hasCustomDebugger = false;
+    
+    // Flag to track if we've already tried to execute PERL5DB
+    private static boolean perl5dbExecuted = false;
 
     /**
      * Main debug hook called by DEBUG opcode.
@@ -47,6 +54,12 @@ public class DebugHooks {
      * @param registers Current register array (for variable access)
      */
     public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers) {
+        // Execute PERL5DB on first call (defines user's DB::DB if set)
+        if (!perl5dbExecuted) {
+            perl5dbExecuted = true;
+            executePERL5DB();
+        }
+        
         // Store context for expression evaluation
         currentCode = code;
         currentRegisters = registers;
@@ -84,6 +97,12 @@ public class DebugHooks {
             dbArgs.setFromList(new RuntimeList());
         }
 
+        // If user has defined custom DB::DB, call it instead of our interactive debugger
+        if (hasCustomDebugger) {
+            callUserDbDb();
+            return;
+        }
+
         // Get source line for display
         String sourceLine = DebugState.getSourceLine(filename, line);
         
@@ -96,6 +115,50 @@ public class DebugHooks {
 
         // Enter command loop
         commandLoop();
+    }
+    
+    /**
+     * Execute PERL5DB environment variable if set.
+     * This allows users to define custom DB::DB subroutines.
+     */
+    private static void executePERL5DB() {
+        String perl5db = System.getenv("PERL5DB");
+        if (perl5db == null || perl5db.isEmpty()) {
+            return;
+        }
+        
+        hasCustomDebugger = true;
+        
+        // Execute PERL5DB code in DB package context
+        try {
+            // Temporarily disable debug mode to avoid infinite recursion
+            boolean savedDebugMode = DebugState.debugMode;
+            DebugState.debugMode = false;
+            
+            // Wrap in package DB to ensure subs are defined there
+            String wrappedCode = "package DB; " + perl5db;
+            EvalStringHandler.evalString(wrappedCode, new RuntimeBase[0], "<DB>", 1);
+            
+            DebugState.debugMode = savedDebugMode;
+        } catch (Exception e) {
+            // If PERL5DB execution fails, fall back to interactive debugger
+            hasCustomDebugger = false;
+            System.err.println("Warning: Error executing PERL5DB: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Call user-defined DB::DB subroutine.
+     */
+    private static void callUserDbDb() {
+        try {
+            RuntimeScalar dbDb = GlobalVariable.getGlobalCodeRef("DB::DB");
+            if (dbDb.getDefinedBoolean()) {
+                RuntimeCode.apply(dbDb, new RuntimeArray(), RuntimeContextType.VOID);
+            }
+        } catch (Exception e) {
+            // Ignore errors in user's DB::DB - Perl does this too
+        }
     }
 
     /**
