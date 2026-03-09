@@ -80,7 +80,7 @@ public class ContextResolver extends ASTTransformPass {
             case "[", "{" -> visitSubscript(node);
             case "->" -> visitArrow(node);
             case "(" -> visitCall(node);
-            case "print", "say", "printf", "warn", "die" -> visitPrintBinary(node);
+            case "print", "say", "printf", "warn", "die", "eof" -> visitPrintBinary(node);
             case "push", "unshift" -> visitPushBinary(node);
             case "map", "grep", "sort", "all", "any" -> visitMapBinary(node);
             case "join", "sprintf", "split", "binmode", "seek" -> visitJoinBinary(node);
@@ -137,7 +137,16 @@ public class ContextResolver extends ASTTransformPass {
     private void visitSubscript(BinaryOperatorNode node) {
         // $a[idx] or $a{key}: index/key is scalar, container depends on sigil
         // @a[list] or @a{list}: slice - subscript is list context
-        visitInContext(node.left, currentContext);
+        // The left side (container) should be SCALAR when it's a chained subscript like $a[1][0]
+        // because we need the scalar value, not the container itself
+        int leftContext = RuntimeContextType.SCALAR;
+        if (node.left instanceof OperatorNode opNode) {
+            // For slice operations (@a[list] or %h{list}), keep the @ or % operator's context
+            if ("@".equals(opNode.operator) || "%".equals(opNode.operator)) {
+                leftContext = RuntimeContextType.LIST;
+            }
+        }
+        visitInContext(node.left, leftContext);
 
         // Check if this is a slice operation (@ or % sigil means list context for subscript)
         boolean isSlice = node.left instanceof OperatorNode opNode &&
@@ -148,8 +157,14 @@ public class ContextResolver extends ASTTransformPass {
     private void visitArrow(BinaryOperatorNode node) {
         // ->[] ->{} ->() : LHS is scalar (the reference)
         visitInContext(node.left, RuntimeContextType.SCALAR);
-        // RHS depends on what follows the arrow
-        visitInContext(node.right, currentContext);
+        // RHS depends on what follows the arrow:
+        // - ->[] and ->{} subscripts: elements are SCALAR (single element access)
+        // - ->() method calls: arguments are LIST
+        if (node.right instanceof ArrayLiteralNode || node.right instanceof HashLiteralNode) {
+            visitInContext(node.right, RuntimeContextType.SCALAR);
+        } else {
+            visitInContext(node.right, RuntimeContextType.LIST);
+        }
     }
 
     private void visitCall(BinaryOperatorNode node) {
@@ -222,9 +237,10 @@ public class ContextResolver extends ASTTransformPass {
             case "split" -> visitSplit(node);
             case "join" -> visitJoin(node);
             case "select", "gmtime", "localtime", "caller", "reset", "times" -> visitListOperand(node);
+            case "$#" -> visitScalarDeref(node);  // $#array or $#{expr} - expr is SCALAR (array ref)
             // Operators that take LIST context operands (prototype @)
             case "pack", "mkdir", "opendir", "seekdir", "crypt", "vec", "read", "chmod",
-                 "chop", "chomp", "system", "exec", "$#", "splice", "reverse",
+                 "chop", "chomp", "system", "exec", "splice", "reverse",
                  "chown", "kill", "unlink", "utime" -> visitListOperand(node);
             default -> visitOperatorDefault(node);
         }
@@ -297,8 +313,8 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitPopLike(OperatorNode node) {
-        // pop/shift: argument is scalar (the array)
-        visitInContext(node.operand, RuntimeContextType.SCALAR);
+        // pop/shift: argument needs LIST context to return the array object (not scalar count)
+        visitInContext(node.operand, RuntimeContextType.LIST);
     }
 
     private void visitHashListOp(OperatorNode node) {

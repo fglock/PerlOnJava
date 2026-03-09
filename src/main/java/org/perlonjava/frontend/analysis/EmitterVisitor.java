@@ -94,6 +94,7 @@ public class EmitterVisitor implements Visitor {
             if (cached != fallbackContext) {
                 String key = nodeDescription(child) + " cached=" + contextName(cached) + " expected=" + contextName(fallbackContext);
                 contextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+
             }
         }
         

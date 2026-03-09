@@ -1402,20 +1402,39 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 
 **Remaining `.with()` calls to migrate**: ~35 in other backend files
 
+### Context Mismatch Fixes (2025-03-09)
+
+Fixed the remaining context mismatches:
+
+1. **`pop`/`shift` operand context** (5 mismatches fixed):
+   - Changed `visitPopLike()` from SCALAR to LIST context
+   - The emitter's `handleArrayUnaryBuiltin` needs the array object, not scalar count
+   - Root cause: `pop @array` needs `@array` to return RuntimeArray, not its count
+
+2. **`eof` binary operator** (7 mismatches fixed):
+   - Added `eof` to `visitPrintBinary` case in BinaryOperatorNode switch
+   - `eof` was falling through to `visitBinaryDefault` which sets SCALAR on right operand
+   - But `handleSayOperator` (which handles eof) expects LIST context for the operand
+
+**Current State (2025-03-09)**:
+- **Zero context mismatches** in unit tests and gradle test suite
+- All 156 gradle tests pass
+- Ready to test switching `acceptChild` to use cached context
+
 ### Phase 2a Complete
 
 Phase 2a (ContextResolver for JVM parity) is now essentially complete:
 - All major operator cases handled
-- Mismatches reduced by >95% (from 1400+ to ~15 non-expected)
+- All context mismatches fixed (from 1400+ to 0)
 - All 156 gradle tests pass
 - ExifTool tests work correctly
 
 ### Next Steps
 
-1. **Test switching to cached context** (Optional)
-   - Try switching `acceptChild` from fallback mode to using cached context
-   - May reveal additional edge cases not caught by mismatch tracking
-   - Expected: Most tests should pass since mismatches are minimal
+1. **Test switching to cached context** (Ready to test)
+   - Switch `acceptChild` from fallback mode to using cached context
+   - With zero mismatches, this should work without issues
+   - This will validate the ContextResolver is fully correct
 
 2. **Phase 2b: Variable Resolution** (Next major phase)
    - Implement `VariableResolver` pass to link variable uses to declarations
@@ -1426,10 +1445,6 @@ Phase 2a (ContextResolver for JVM parity) is now essentially complete:
    - `LValueVisitor` - can be directly integrated into LvalueResolver
    - `ConstantFoldingVisitor` - integrate into ConstantFolder phase
    - `FindDeclarationVisitor` - integrate into VariableResolver
-
-4. **Address remaining minor mismatches** (Low priority)
-   - Investigate the 7 ListNode, 5 BlockNode, 1 OperatorNode($) mismatches
-   - These may require understanding specific emitter code paths
 
 ### Open Questions
 
