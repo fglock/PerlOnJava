@@ -810,12 +810,16 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
+            // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
             if (DebugState.debugMode && stmtTokenIndex >= 0) {
-                int lineNumber = errorUtil.getLineNumber(stmtTokenIndex);
-                int fileIdx = addToStringPool(sourceName);
-                emit(Opcodes.DEBUG);
-                emit(fileIdx);
-                emit(lineNumber);
+                boolean skipDebug = (stmt instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"));
+                if (!skipDebug) {
+                    int lineNumber = errorUtil.getLineNumber(stmtTokenIndex);
+                    int fileIdx = addToStringPool(sourceName);
+                    emit(Opcodes.DEBUG);
+                    emit(fileIdx);
+                    emit(lineNumber);
+                }
             }
 
             boolean isLastStatement = (i == lastMeaningfulIndex);

@@ -239,6 +239,13 @@ public class SpecialBlockParser {
         RuntimeList result;
         try {
             setCurrentScope(parser.ctx.symbolTable);
+            // Mark all wrapper nodes to skip DEBUG opcodes
+            // These are infrastructure nodes, not user-debuggable code
+            for (Node n : nodes) {
+                if (n instanceof AbstractNode an) {
+                    an.setAnnotation("skipDebug", true);
+                }
+            }
             result = PerlLanguageProvider.executePerlAST(
                     new BlockNode(nodes, tokenIndex),
                     parser.tokens,

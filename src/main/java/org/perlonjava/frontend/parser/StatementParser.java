@@ -619,12 +619,14 @@ public class StatementParser {
             }
         }
 
-        // return the current compiler flags
-        return new CompilerFlagNode(
+        // return the current compiler flags (marked as compile-time only to skip DEBUG opcodes)
+        CompilerFlagNode result = new CompilerFlagNode(
                 (java.util.BitSet) ctx.symbolTable.warningFlagsStack.getLast().clone(),
                 ctx.symbolTable.featureFlagsStack.getLast(),
                 ctx.symbolTable.strictOptionsStack.getLast(),
                 parser.tokenIndex);
+        result.setAnnotation("compileTimeOnly", true);
+        return result;
     }
 
     /**
