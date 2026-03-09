@@ -14,4 +14,9 @@ rem Set environment variable for PerlOnJava to use as $^X
 set PERLONJAVA_EXECUTABLE=%JPERL_PATH%
 
 rem Launch Java
-java --enable-native-access=ALL-UNNAMED %JPERL_OPTS% -cp "%CLASSPATH%;%SCRIPT_DIR%target\perlonjava-3.0.0.jar" org.perlonjava.app.cli.Main %*
+rem JVM options explained:
+rem   --enable-native-access=ALL-UNNAMED: Required by JNR-POSIX library for native system calls
+rem     (file operations, process management). Can be removed if JNR-POSIX is replaced.
+rem   --sun-misc-unsafe-memory-access=allow: Suppresses deprecation warnings from JFFI library
+rem     (used by JNR). Can be removed when JFFI updates to use MemorySegment API (Java 22+).
+java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow %JPERL_OPTS% -cp "%CLASSPATH%;%SCRIPT_DIR%target\perlonjava-3.0.0.jar" org.perlonjava.app.cli.Main %*
