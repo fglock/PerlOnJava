@@ -85,7 +85,9 @@ public class EmitVariable {
             return false;
         }
         char c = name.charAt(0);
-        return c > 127 && !ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
+        // Allow if character is in Latin-1 extended range (128-255) and 'use utf8' is NOT enabled
+        // Unicode characters above 255 (like Greek α = 945) should NOT be exempt
+        return c > 127 && c <= 255 && !ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
     }
 
     private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
