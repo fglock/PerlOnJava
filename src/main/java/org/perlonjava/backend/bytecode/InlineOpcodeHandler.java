@@ -407,10 +407,11 @@ public class InlineOpcodeHandler {
     }
 
     /**
-     * Array element store: array[index] = value
-     * Format: ARRAY_SET arrayReg indexReg valueReg
+     * Array element store: array[index] = value, returns the lvalue (element)
+     * Format: ARRAY_SET rd arrayReg indexReg valueReg
      */
     public static int executeArraySet(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
         int arrayReg = bytecode[pc++];
         int indexReg = bytecode[pc++];
         int valueReg = bytecode[pc++];
@@ -419,7 +420,9 @@ public class InlineOpcodeHandler {
         RuntimeBase valueBase = registers[valueReg];
         RuntimeScalar val = (valueBase instanceof RuntimeScalar)
                 ? (RuntimeScalar) valueBase : valueBase.scalar();
-        arr.get(idx.getInt()).set(val);
+        RuntimeScalar element = arr.get(idx.getInt());
+        element.set(val);
+        registers[rd] = element;
         return pc;
     }
 
@@ -543,12 +546,13 @@ public class InlineOpcodeHandler {
     }
 
     /**
-     * Hash element store: hash{key} = value
+     * Hash element store: hash{key} = value, returns the lvalue (element)
      * Creates a fresh copy to prevent aliasing bugs.
      * Uses addToScalar to resolve special variables ($1, $2, etc.)
-     * Format: HASH_SET hashReg keyReg valueReg
+     * Format: HASH_SET rd hashReg keyReg valueReg
      */
     public static int executeHashSet(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         int keyReg = bytecode[pc++];
         int valueReg = bytecode[pc++];
@@ -559,6 +563,7 @@ public class InlineOpcodeHandler {
         RuntimeScalar copy = new RuntimeScalar();
         val.addToScalar(copy);
         hash.put(key.toString(), copy);
+        registers[rd] = copy;
         return pc;
     }
 

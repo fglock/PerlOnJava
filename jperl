@@ -24,5 +24,10 @@ else
 fi
 
 # Launch Java
-java --enable-native-access=ALL-UNNAMED ${JPERL_OPTS} -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.app.cli.Main "$@"
+# JVM options explained:
+#   --enable-native-access=ALL-UNNAMED: Required by JNR-POSIX library for native system calls
+#     (file operations, process management). Can be removed if JNR-POSIX is replaced.
+#   --sun-misc-unsafe-memory-access=allow: Suppresses deprecation warnings from JFFI library
+#     (used by JNR). Can be removed when JFFI updates to use MemorySegment API (Java 22+).
+java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow ${JPERL_OPTS} -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.app.cli.Main "$@"
 

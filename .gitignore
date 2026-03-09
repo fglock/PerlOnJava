@@ -69,6 +69,7 @@ dev/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
 !README.md
 !QUICKSTART.md
 !CONTRIBUTING.md
+!AGENTS.md
 test_*.log
 test_*.json
 

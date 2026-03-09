@@ -3998,10 +3998,12 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // General case: evaluate all elements
+        // General case: evaluate all elements in LIST context
+        // Arrays like @list must be compiled in LIST context to get their elements,
+        // not SCALAR context which would return the count
         int[] elementRegs = new int[node.elements.size()];
         for (int i = 0; i < node.elements.size(); i++) {
-            node.elements.get(i).accept(this);
+            compileNode(node.elements.get(i), -1, RuntimeContextType.LIST);
             elementRegs[i] = lastResultReg;
         }
 

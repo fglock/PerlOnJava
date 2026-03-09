@@ -232,20 +232,12 @@ public class CompileAssignment {
      */
     public static void compileAssignmentOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         // Determine the calling context for the RHS based on LHS type
-        int rhsContext = RuntimeContextType.LIST; // Default
-
-        // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
-        if (node.left instanceof OperatorNode leftOp) {
-            if ((leftOp.operator.equals("my") || leftOp.operator.equals("state") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode sigilOp) {
-                if (sigilOp.operator.equals("$")) {
-                    // Scalar assignment: use SCALAR context for RHS
-                    rhsContext = RuntimeContextType.SCALAR;
-                }
-            } else if (leftOp.operator.equals("$")) {
-                rhsContext = RuntimeContextType.SCALAR;
-            } else if (leftOp.operator.equals("*")) {
-                rhsContext = RuntimeContextType.SCALAR;
-            }
+        // Use LValueVisitor to properly determine context for all LHS patterns
+        // including $array[index], $hash{key}, etc.
+        int rhsContext = LValueVisitor.getContext(node);
+        if (rhsContext == RuntimeContextType.VOID) {
+            // VOID means not a valid L-value, but we still compile it - default to LIST
+            rhsContext = RuntimeContextType.LIST;
         }
 
         // Set the context for subroutine calls in RHS
@@ -1160,13 +1152,15 @@ public class CompileAssignment {
                     bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, rhsContext);
                     int indexReg = bytecodeCompiler.lastResultReg;
 
-                    // Emit ARRAY_SET (use valueReg from line 729)
+                    // Emit ARRAY_SET which returns the lvalue (element) in rd
+                    // This is critical for operations like: ($a[0] = $val) =~ s/pattern//
+                    int resultReg = bytecodeCompiler.allocateOutputRegister();
                     bytecodeCompiler.emit(Opcodes.ARRAY_SET);
+                    bytecodeCompiler.emitReg(resultReg);
                     bytecodeCompiler.emitReg(arrayReg);
                     bytecodeCompiler.emitReg(indexReg);
                     bytecodeCompiler.emitReg(valueReg);
-
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    bytecodeCompiler.lastResultReg = resultReg;
                     
                     return;
                 } else if (leftBin.operator.equals("{")) {
@@ -1372,13 +1366,15 @@ public class CompileAssignment {
                         keyReg = bytecodeCompiler.lastResultReg;
                     }
 
-                    // 3. Emit HASH_SET (use valueReg from line 729)
+                    // 3. Emit HASH_SET which returns the lvalue (element) in rd
+                    // This is critical for operations like: ($h{key} = $val) =~ s/pattern//
+                    int resultReg = bytecodeCompiler.allocateOutputRegister();
                     bytecodeCompiler.emit(Opcodes.HASH_SET);
+                    bytecodeCompiler.emitReg(resultReg);
                     bytecodeCompiler.emitReg(hashReg);
                     bytecodeCompiler.emitReg(keyReg);
                     bytecodeCompiler.emitReg(valueReg);
-
-                    bytecodeCompiler.lastResultReg = valueReg;
+                    bytecodeCompiler.lastResultReg = resultReg;
                     
                     return;
                 }
@@ -1427,12 +1423,14 @@ public class CompileAssignment {
                             return;
                         }
 
-                        // Emit HASH_SET (use valueReg from line 729)
+                        // Emit HASH_SET which returns the lvalue (element) in rd
+                        int resultReg = bytecodeCompiler.allocateOutputRegister();
                         bytecodeCompiler.emit(Opcodes.HASH_SET);
+                        bytecodeCompiler.emitReg(resultReg);
                         bytecodeCompiler.emitReg(hashReg);
                         bytecodeCompiler.emitReg(keyReg);
                         bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.lastResultReg = valueReg;
+                        bytecodeCompiler.lastResultReg = resultReg;
                         
                         return;
                     } else if (rightSide instanceof ArrayLiteralNode arrayIdx) {
@@ -1462,12 +1460,14 @@ public class CompileAssignment {
                         bytecodeCompiler.compileNode(arrayIdx.elements.get(0), -1, rhsContext);
                         int idxReg = bytecodeCompiler.lastResultReg;
 
-                        // Emit ARRAY_SET (use valueReg from line 729)
+                        // Emit ARRAY_SET which returns the lvalue (element) in rd
+                        int resultReg = bytecodeCompiler.allocateOutputRegister();
                         bytecodeCompiler.emit(Opcodes.ARRAY_SET);
+                        bytecodeCompiler.emitReg(resultReg);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(idxReg);
                         bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.lastResultReg = valueReg;
+                        bytecodeCompiler.lastResultReg = resultReg;
                         
                         return;
                     }
