@@ -1355,11 +1355,13 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 **ContextResolver BinaryOperatorNode Fixes (2025-03-09)**:
 - Added `sprintf` to `visitJoinBinary` case (same pattern as `join`: left=SCALAR format, right=LIST args)
 - Added `all`, `any` to `visitMapBinary` case (same pattern as `map/grep/sort`: block=SCALAR, list=LIST)
-- **Result**: ListNode mismatches reduced from 707 to 530 (177 fewer)
+- Added `split`, `binmode`, `seek` to `visitJoinBinary` case (left=SCALAR, right=LIST)
+- Added `x` (repeat) operator with context-dependent left operand (LIST for ListNode in list context)
+- **Result**: ListNode mismatches reduced from 707 to 231 (476 fewer, ~67% reduction)
 
 **Remaining Context Mismatches (2025-03-09, after BinaryOperatorNode fixes)**:
 - `OperatorNode(@) cached=SCALAR expected=LIST`: 698 times
-- `ListNode cached=SCALAR expected=LIST`: 530 times
+- `ListNode cached=SCALAR expected=LIST`: 231 times
 - `BlockNode cached=LIST expected=SCALAR`: 5 times
 - The `OperatorNode(@)` mismatches are **expected** when `@array` is used with `$` prototype slot (parser wraps with `scalar()`)
 
