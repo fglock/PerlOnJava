@@ -1299,18 +1299,29 @@ The `acceptChild` method assumes the cached context is always authoritative. But
 
 Changed `acceptChild` to always use fallback context (safe behavior) with warnings on mismatch.
 
-**Migrated Files** (10 call sites total):
-- `EmitStatement.java`: 5 call sites (conditions, loop bodies, finally blocks)
-- `EmitControlFlow.java`: 5 call sites (return operands, goto sub/args, dynamic goto)
+**Phase 2a Complete**: All 136 call sites migrated to `acceptChild()`
 
-**ContextResolver Fixes**:
+**Migrated Files**:
+- `EmitStatement.java`: conditions, loop bodies, finally blocks
+- `EmitControlFlow.java`: return operands, goto sub/args, dynamic goto
+- `EmitBlock.java`, `EmitEval.java`, `EmitForeach.java`, `EmitLiteral.java`
+- `EmitLogicalOperator.java`, `EmitOperator.java`, `EmitOperatorDeleteExists.java`
+- `EmitOperatorFileTest.java`, `EmitOperatorLocal.java`, `EmitSubroutine.java`
+- `EmitVariable.java`
+
+**ContextResolver Fixes Applied**:
 - `return` operand: Changed from LIST to RUNTIME (return passes caller context)
 
-**Remaining**: ~126 call sites in other Emit*.java files
+**Current State**:
+- `acceptChild()` uses fallback context (preserves old behavior)
+- Warnings in debug mode identify ContextResolver gaps
+- All tests pass
 
-**Known Mismatches to Address**:
+**Known Mismatches (for future optimization)**:
 - EmitLogicalOperator.java: RHS of `||`/`&&` in VOID context (emitter uses SCALAR, ContextResolver uses VOID)
 - EmitOperator.java: `select` operand (emitter uses LIST, ContextResolver uses SCALAR)
+
+**Next Phase**: Fix ContextResolver mismatches, then switch `acceptChild` to use cached context
 
 ### Next Steps
 
