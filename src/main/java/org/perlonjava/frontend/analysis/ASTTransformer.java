@@ -146,12 +146,12 @@ public class ASTTransformer {
      */
     public static ASTTransformer createDefault() {
         ASTTransformer transformer = new ASTTransformer();
-        // TODO: Add passes as they are implemented
+        // Add passes in order
         // transformer.addPass(new PragmaResolver());
         // transformer.addPass(new VariableResolver());
         // transformer.addPass(new LabelCollector());
         // transformer.addPass(new BlockAnalyzer());
-        // transformer.addPass(new ContextResolver());
+        transformer.addPass(new ContextResolver());  // Context propagation (scalar/list/void)
         // transformer.addPass(new LvalueResolver());
         // transformer.addPass(new ConstantFolderPass());
         // transformer.addPass(new WarningEmitter());
