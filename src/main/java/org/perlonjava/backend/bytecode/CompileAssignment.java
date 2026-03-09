@@ -232,20 +232,12 @@ public class CompileAssignment {
      */
     public static void compileAssignmentOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         // Determine the calling context for the RHS based on LHS type
-        int rhsContext = RuntimeContextType.LIST; // Default
-
-        // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
-        if (node.left instanceof OperatorNode leftOp) {
-            if ((leftOp.operator.equals("my") || leftOp.operator.equals("state") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode sigilOp) {
-                if (sigilOp.operator.equals("$")) {
-                    // Scalar assignment: use SCALAR context for RHS
-                    rhsContext = RuntimeContextType.SCALAR;
-                }
-            } else if (leftOp.operator.equals("$")) {
-                rhsContext = RuntimeContextType.SCALAR;
-            } else if (leftOp.operator.equals("*")) {
-                rhsContext = RuntimeContextType.SCALAR;
-            }
+        // Use LValueVisitor to properly determine context for all LHS patterns
+        // including $array[index], $hash{key}, etc.
+        int rhsContext = LValueVisitor.getContext(node);
+        if (rhsContext == RuntimeContextType.VOID) {
+            // VOID means not a valid L-value, but we still compile it - default to LIST
+            rhsContext = RuntimeContextType.LIST;
         }
 
         // Set the context for subroutine calls in RHS
