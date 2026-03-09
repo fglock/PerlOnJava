@@ -11,7 +11,6 @@ import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
-import org.perlonjava.frontend.analysis.ASTTransformer;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
@@ -1495,9 +1494,8 @@ public class EmitterMethodCreator implements Opcodes {
      */
     public static RuntimeCode createRuntimeCode(
             EmitterContext ctx, Node ast, boolean useTryCatch) {
-        // Run shared AST transformer (idempotent - skips if already transformed)
-        // This computes context, lvalue, and other annotations used by both backends
-        ASTTransformer.createDefault().transform(ast);
+        // Note: AST transformer is called in PerlLanguageProvider before backend selection.
+        // It's idempotent so safe if called again, but we skip it here for efficiency.
 
         // Ensure block-level regex save/restore is skipped for the outermost block of a sub/method.
         // For anonymous subs this is set by SubroutineNode constructor, but for named subs the block
