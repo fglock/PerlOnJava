@@ -1213,9 +1213,9 @@ Or mention the skill name in conversation to auto-invoke.
 
 ## Progress Tracking
 
-### Current Status: Design Phase Complete
+### Current Status: Phase 1 (Infrastructure) Complete
 
-The design document is complete. Implementation has not started.
+The infrastructure for the shared AST transformer is in place. No behavioral changes yet - passes will be implemented incrementally.
 
 ### Completed Phases
 
@@ -1228,39 +1228,66 @@ The design document is complete. Implementation has not started.
   - Inventory of existing visitors (12 total, categorized as shared vs JVM-specific)
   - Files: `dev/design/shared_ast_transformer.md` (1210+ lines)
 
+- [x] **Phase 1: Infrastructure** (2025-03-09)
+  - Created `ASTAnnotation` class with all annotation fields (context, lvalue, variable binding, pragmas, labels, etc.)
+  - Added typed fields to `AbstractNode` for frequently-accessed annotations:
+    - `cachedContext` (byte) - RuntimeContextType value
+    - `cachedIsLvalue` (byte) - tri-state boolean
+    - `FLAG_AST_TRANSFORMED` - idempotency flag for JVM→interpreter fallback
+    - `astAnnotation` - lazy-initialized full annotation object
+  - Created `ASTTransformPass` base class implementing Visitor with default child traversal
+  - Created `ASTTransformer` orchestrator with idempotency check
+  - **Key design decision**: Used Option A (typed fields) for context/lvalue for performance
+  - **Key design decision**: Added `isAstTransformed()` flag so transformer skips when JVM falls back to interpreter (AST is reused)
+  - Files changed/added:
+    - `src/main/java/org/perlonjava/frontend/analysis/ASTAnnotation.java` (new)
+    - `src/main/java/org/perlonjava/frontend/analysis/ASTTransformPass.java` (new)
+    - `src/main/java/org/perlonjava/frontend/analysis/ASTTransformer.java` (new)
+    - `src/main/java/org/perlonjava/frontend/astnode/AbstractNode.java` (modified)
+  - All tests pass - no behavioral change (transformer not yet wired in)
+
 ### Next Steps
 
-1. **Start Milestone 1: Infrastructure**
-   - Create `ASTAnnotation` class in `src/main/java/org/perlonjava/frontend/analysis/`
-   - Add typed fields to `AbstractNode` for context and lvalue caching
-   - Create `ASTTransformer` base class with phase orchestration
+1. **Phase 2: Variable Resolution**
+   - Implement `VariableResolver` pass to link variable uses to declarations
+   - Detect closure captures
+   - Integrate with existing symbol table
 
 2. **Set up differential testing**
    - Create test harness that runs same code on both backends
    - Add to CI pipeline
 
-3. **Review existing visitors for integration**
+3. **Wire transformer into compilation pipeline**
+   - Call `ASTTransformer.transform()` after parsing, before backend selection
+   - Verify idempotency works with JVM→interpreter fallback
+
+4. **Review existing visitors for integration**
    - `LValueVisitor` - can be directly integrated into LvalueResolver
    - `ConstantFoldingVisitor` - integrate into ConstantFolder phase
    - `FindDeclarationVisitor` - integrate into VariableResolver
 
 ### Open Questions
 
-1. Should we use Option A (typed fields) or Option B (annotation map) for frequently-accessed annotations? **Recommendation: Option A for performance**
+1. ~~Should we use Option A (typed fields) or Option B (annotation map)?~~ **Resolved: Option A for performance**
 
 2. Should control flow analysis (`ControlFlowDetectorVisitor`) be included in shared transformer or remain JVM-specific optimization?
 
 3. How to handle the transition period where both old and new code paths exist?
 
-### Key Files to Modify
+4. Where exactly should `ASTTransformer.transform()` be called in the compilation pipeline?
 
-| File | Changes Needed |
-|------|----------------|
-| `AbstractNode.java` | Add context/lvalue cached fields |
-| `EmitterVisitor.java` | Read annotations instead of computing |
-| `CompileAssignment.java` | Read lvalue annotations |
-| `CompileContext.java` | Read context annotations |
-| `Compile*.java` (interpreter) | Read same annotations |
+### Key Files Modified
+
+| File | Status | Changes |
+|------|--------|---------|
+| `AbstractNode.java` | ✅ Done | Added context/lvalue cached fields, transformed flag |
+| `ASTAnnotation.java` | ✅ New | Full annotation structure |
+| `ASTTransformPass.java` | ✅ New | Base class for passes |
+| `ASTTransformer.java` | ✅ New | Pass orchestrator with idempotency |
+| `EmitterVisitor.java` | Pending | Read annotations instead of computing |
+| `CompileAssignment.java` | Pending | Read lvalue annotations |
+| `CompileContext.java` | Pending | Read context annotations |
+| `Compile*.java` (interpreter) | Pending | Read same annotations |
 
 ### Dependencies
 
