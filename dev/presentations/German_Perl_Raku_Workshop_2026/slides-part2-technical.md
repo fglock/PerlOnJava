@@ -635,6 +635,28 @@ This is why the dual backend matters beyond performance. GraalVM native image gi
 
 ---
 
+## Interactive Debugger
+
+**Invoke with `-d` flag:** `./jperl -d script.pl`
+
+| Command | Action |
+|---------|--------|
+| `n` | Step over (next line) |
+| `s` | Step into subroutine |
+| `r` | Step out (return) |
+| `c` | Continue to breakpoint |
+| `b 42` | Set breakpoint at line 42 |
+| `l` | List source around current line |
+| `T` | Stack trace |
+| `p $var` | Print variable value |
+
+Supports `$DB::single`, `%DB::sub`, custom `DB::DB` — compatible with Perl's debugger API.
+
+Note:
+The debugger uses the Internal VM backend (forced with -d). DEBUG opcodes are inserted at each statement. DebugHooks handles breakpoint checking, command parsing, and expression evaluation in the current lexical scope. PERL5DB environment variable is supported for custom debuggers.
+
+---
+
 ## Current Limitations
 
 **JVM-incompatible:**
@@ -652,11 +674,11 @@ Workarounds: jnr-posix for native access, Java threading APIs, file auto-close a
 
 ## Roadmap
 
-**Stable now:** JVM backend, Perl class features, IPC, sockets
+**Stable now:** JVM backend, Perl class features, IPC, sockets, interactive debugger
 
 **In progress:** Internal VM optimization, eval STRING performance
 
-**Next:** More compatible regex engine, single-step debugger
+**Next:** More compatible regex engine, additional debugger features
 
 ---
 

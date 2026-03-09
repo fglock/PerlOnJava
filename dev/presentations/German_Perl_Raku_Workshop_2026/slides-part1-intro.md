@@ -59,6 +59,7 @@ The JVM runs on 3+ billion devices. Built-in tooling (JFR flight recorder, JMX m
 - Access any **JDBC database** — no C drivers needed
 - Embed Perl in Java apps via **JSR-223** scripting API
 - Deploy to Docker, Kubernetes — **anywhere Java runs**
+- **Interactive debugger** with step, breakpoints, and stack traces (`-d`)
 
 Note:
 JSR-223 is the standard Java scripting API, available since Java 6. It allows bidirectional Java ↔ Perl communication.
