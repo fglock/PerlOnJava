@@ -82,7 +82,8 @@ public class ContextResolver extends ASTTransformPass {
             case "(" -> visitCall(node);
             case "print", "say", "printf", "warn", "die" -> visitPrintBinary(node);
             case "map", "grep", "sort", "all", "any" -> visitMapBinary(node);
-            case "join", "sprintf" -> visitJoinBinary(node);
+            case "join", "sprintf", "split", "binmode", "seek" -> visitJoinBinary(node);
+            case "x" -> visitRepeat(node);
             default -> visitBinaryDefault(node);
         }
     }
@@ -166,6 +167,18 @@ public class ContextResolver extends ASTTransformPass {
         // join/sprintf: left (separator/format) is SCALAR, right (list to join/args) is LIST
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.LIST);
+    }
+
+    private void visitRepeat(BinaryOperatorNode node) {
+        // x operator: left context depends on outer context and operand type
+        // In LIST context with ListNode left operand: left=LIST (repeat list)
+        // Otherwise: left=SCALAR (repeat string)
+        if (currentContext != RuntimeContextType.SCALAR && node.left instanceof ListNode) {
+            visitInContext(node.left, RuntimeContextType.LIST);
+        } else {
+            visitInContext(node.left, RuntimeContextType.SCALAR);
+        }
+        visitInContext(node.right, RuntimeContextType.SCALAR);
     }
 
     private void visitMapBinary(BinaryOperatorNode node) {
