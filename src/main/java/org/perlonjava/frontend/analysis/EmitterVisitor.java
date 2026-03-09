@@ -3,6 +3,7 @@ package org.perlonjava.frontend.analysis;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.backend.jvm.*;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.HashMap;
@@ -57,6 +58,51 @@ public class EmitterVisitor implements Visitor {
         EmitterVisitor newVisitor = new EmitterVisitor(ctx.with(contextType));
         visitorCache.put(contextType, newVisitor);
         return newVisitor;
+    }
+
+    /**
+     * Visits a child node, warning if cached context differs from expected.
+     * Currently uses fallback context (old behavior) to ensure safety during migration.
+     * Warnings help identify ContextResolver gaps that need fixing.
+     *
+     * <p>Migration strategy:
+     * <ol>
+     *   <li>Phase 1 (current): Always use fallback, warn on mismatch → safe, identifies gaps</li>
+     *   <li>Phase 2: Fix ContextResolver for all warned cases</li>
+     *   <li>Phase 3: Switch to using cached context when available</li>
+     * </ol>
+     *
+     * @param child The child node to visit
+     * @param fallbackContext Context to use (and expected cached context)
+     */
+    public void acceptChild(Node child, int fallbackContext) {
+        // Warn about context mismatches to help identify ContextResolver gaps
+        if (ctx.compilerOptions != null && ctx.compilerOptions.debugEnabled) {
+            if (child instanceof AbstractNode an) {
+                if (!an.hasCachedContext()) {
+                    String nodeType = child.getClass().getSimpleName();
+                    ctx.logDebug("acceptChild: No cached context for " + nodeType + ", using " + contextName(fallbackContext));
+                } else if (an.getCachedContext() != fallbackContext) {
+                    String nodeType = child.getClass().getSimpleName();
+                    ctx.logDebug("acceptChild: Context mismatch for " + nodeType + 
+                            " - cached=" + contextName(an.getCachedContext()) + 
+                            ", fallback=" + contextName(fallbackContext) + 
+                            " (using fallback)");
+                }
+            }
+        }
+        // Always use fallback for now (safe migration)
+        child.accept(with(fallbackContext));
+    }
+
+    private static String contextName(int ctx) {
+        return switch (ctx) {
+            case RuntimeContextType.VOID -> "VOID";
+            case RuntimeContextType.SCALAR -> "SCALAR";
+            case RuntimeContextType.LIST -> "LIST";
+            case RuntimeContextType.RUNTIME -> "RUNTIME";
+            default -> "UNKNOWN(" + ctx + ")";
+        };
     }
 
     /**

@@ -56,7 +56,7 @@ public class EmitStatement {
         Label endLabel = new Label();
 
         // Visit the condition node in scalar context
-        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.condition, RuntimeContextType.SCALAR);
 
         // Convert the result to a boolean
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
@@ -148,7 +148,7 @@ public class EmitStatement {
 
             // Visit the condition node in scalar context
             if (node.condition != null) {
-                node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(node.condition, RuntimeContextType.SCALAR);
 
                 // Convert the result to a boolean
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
@@ -284,7 +284,7 @@ public class EmitStatement {
         emitSignalCheck(mv);
 
         // Visit the loop body
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        emitterVisitor.acceptChild(node.body, RuntimeContextType.VOID);
 
         // Check RuntimeControlFlowRegistry for non-local control flow
         // Use the loop labels we created earlier (don't look them up)
@@ -301,7 +301,7 @@ public class EmitStatement {
         mv.visitLabel(continueLabel);
 
         // Visit the condition node in scalar context
-        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.condition, RuntimeContextType.SCALAR);
 
         // Convert the result to a boolean
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
@@ -400,7 +400,7 @@ public class EmitStatement {
         // Finally block
         mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
-            node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            emitterVisitor.acceptChild(node.finallyBlock, RuntimeContextType.VOID);
         }
         mv.visitLabel(finallyEnd);
 

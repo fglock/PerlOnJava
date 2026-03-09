@@ -1213,9 +1213,9 @@ Or mention the skill name in conversation to auto-invoke.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 (Infrastructure) Complete
+### Current Status: Phase 1 Complete, Phase 2 (ContextResolver) In Progress
 
-The infrastructure for the shared AST transformer is in place. No behavioral changes yet - passes will be implemented incrementally.
+The infrastructure is in place and ContextResolver is actively propagating context through the AST.
 
 ### Completed Phases
 
@@ -1246,20 +1246,74 @@ The infrastructure for the shared AST transformer is in place. No behavioral cha
     - `src/main/java/org/perlonjava/frontend/astnode/AbstractNode.java` (modified)
   - All tests pass - no behavioral change (transformer not yet wired in)
 
+- [x] **Phase 2a: ContextResolver & Integration** (2025-03-09)
+  - Created `ContextResolver` pass that propagates SCALAR/LIST/VOID context through AST
+  - Wired `ASTTransformer.createDefault().transform(ast)` into `PerlLanguageProvider` 
+    - Called before `--parse` output and backend selection
+    - Idempotency verified via `FLAG_AST_TRANSFORMED`
+  - Updated `PrintVisitor` to show `ctx:SCALAR/LIST/VOID` annotations in `--parse` output
+  - **Interpreter integration**: Modified `BytecodeCompiler.compileNode()` to read cached context
+  - **JVM integration**: Added `EmitterVisitor.withNode(Node, int)` method for gradual migration
+    - Prefers cached context from ContextResolver
+    - Falls back to explicit context if not cached
+  - Files changed/added:
+    - `src/main/java/org/perlonjava/frontend/analysis/ContextResolver.java` (new)
+    - `src/main/java/org/perlonjava/runtime/PerlLanguageProvider.java` (modified)
+    - `src/main/java/org/perlonjava/frontend/PrintVisitor.java` (modified)
+    - `src/main/java/org/perlonjava/backend/interpreter/BytecodeCompiler.java` (modified)
+    - `src/main/java/org/perlonjava/frontend/analysis/EmitterVisitor.java` (modified)
+  - All tests pass
+
+### Phase 2a Migration Issue (2025-03-09)
+
+**Problem Discovered**: Aggressive migration of `node.accept(emitterVisitor.with(RuntimeContextType.X))` 
+to `emitterVisitor.acceptChild(node, RuntimeContextType.X)` broke 155/156 tests.
+
+**Root Cause**: 
+- `acceptChild()` uses cached context unconditionally when available
+- Some emitter code paths MUST force a specific context regardless of what ContextResolver cached
+- Example: `handleTimeRelatedOperator` needs LIST context for `select`'s operand, but ContextResolver 
+  cached SCALAR (because `select` appears as print's filehandle, which is scalar context)
+
+**Design Issue**:
+The `acceptChild` method assumes the cached context is always authoritative. But there are cases where:
+1. ContextResolver sets context from the parent's perspective (e.g., print's LHS is SCALAR)
+2. The emitter knows the operator internally needs a different context (e.g., `select` needs LIST operand)
+
+**Solutions Considered**:
+1. **Add `forceContext` parameter** to `acceptChild` - distinguishes fallback vs forced context
+2. **Only migrate safe call sites** - where emitter expectation matches ContextResolver's decision
+3. **Fix ContextResolver** - add special cases for operators with unusual context requirements
+4. **Keep existing pattern** - `node.accept(emitterVisitor.with(X))` for all call sites that force context
+
+**Recommended Approach**:
+- For Phase 2a: Only migrate call sites where the emitter's context matches what ContextResolver would cache
+- Add validation in debug mode: warn when acceptChild's fallback differs from cached (indicates potential issue)
+- Long-term: Extend ContextResolver to handle all operator-specific context requirements
+
+**Files Reverted**:
+- All Emit*.java files in `src/main/java/org/perlonjava/backend/jvm/` reverted to avoid test failures
+- `EmitterVisitor.acceptChild()` method retained for future safe migrations
+
 ### Next Steps
 
-1. **Phase 2: Variable Resolution**
+1. **Audit emitter call sites for safe migration**
+   - Identify call sites where context is "pass-through" (safe to use acceptChild)
+   - Document call sites where context is "forced" (must keep using `.with()`)
+
+2. **Extend ContextResolver for operator-specific contexts**
+   - Add handling for operators like `select`, `gmtime`, etc. that have specific operand contexts
+   - Goal: Make ContextResolver's decisions match what the emitter expects
+
+3. **Test parity between JVM and interpreter backends**
+   - Create test cases that exercise context-sensitive code
+   - Run same code with `--int` flag and without, compare results
+   - Focus on areas where context affects behavior (wantarray, etc.)
+
+4. **Phase 2b: Variable Resolution**
    - Implement `VariableResolver` pass to link variable uses to declarations
    - Detect closure captures
    - Integrate with existing symbol table
-
-2. **Set up differential testing**
-   - Create test harness that runs same code on both backends
-   - Add to CI pipeline
-
-3. **Wire transformer into compilation pipeline**
-   - Call `ASTTransformer.transform()` after parsing, before backend selection
-   - Verify idempotency works with JVM→interpreter fallback
 
 4. **Review existing visitors for integration**
    - `LValueVisitor` - can be directly integrated into LvalueResolver
@@ -1274,7 +1328,7 @@ The infrastructure for the shared AST transformer is in place. No behavioral cha
 
 3. How to handle the transition period where both old and new code paths exist?
 
-4. Where exactly should `ASTTransformer.transform()` be called in the compilation pipeline?
+4. ~~Where exactly should `ASTTransformer.transform()` be called in the compilation pipeline?~~ **Resolved: In `PerlLanguageProvider`, before `--parse` output and backend selection**
 
 ### Key Files Modified
 
@@ -1284,10 +1338,14 @@ The infrastructure for the shared AST transformer is in place. No behavioral cha
 | `ASTAnnotation.java` | ✅ New | Full annotation structure |
 | `ASTTransformPass.java` | ✅ New | Base class for passes |
 | `ASTTransformer.java` | ✅ New | Pass orchestrator with idempotency |
-| `EmitterVisitor.java` | Pending | Read annotations instead of computing |
+| `ContextResolver.java` | ✅ New | Propagates SCALAR/LIST/VOID context through AST |
+| `PerlLanguageProvider.java` | ✅ Done | Wired transformer into compilation pipeline |
+| `PrintVisitor.java` | ✅ Done | Shows `ctx:` annotations in `--parse` output |
+| `BytecodeCompiler.java` | ✅ Done | `compileNode()` reads cached context |
+| `EmitterVisitor.java` | ✅ Done | Added `withNode()` method for cached context |
+| `EmitVariable.java` | Pending | Migrate ~30 call sites to use `withNode()` |
+| `EmitSubroutine.java` | Pending | Migrate call sites to use `withNode()` |
 | `CompileAssignment.java` | Pending | Read lvalue annotations |
-| `CompileContext.java` | Pending | Read context annotations |
-| `Compile*.java` (interpreter) | Pending | Read same annotations |
 
 ### Dependencies
 

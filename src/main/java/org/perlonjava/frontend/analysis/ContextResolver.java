@@ -74,6 +74,7 @@ public class ContextResolver extends ASTTransformPass {
             case "[", "{" -> visitSubscript(node);
             case "->" -> visitArrow(node);
             case "(" -> visitCall(node);
+            case "print", "say", "printf", "warn", "die" -> visitPrintBinary(node);
             default -> visitBinaryDefault(node);
         }
     }
@@ -175,6 +176,17 @@ public class ContextResolver extends ASTTransformPass {
         int saved = currentContext;
         currentContext = RuntimeContextType.SCALAR;
         if (node.left != null) node.left.accept(this);
+        if (node.right != null) node.right.accept(this);
+        currentContext = saved;
+    }
+
+    private void visitPrintBinary(BinaryOperatorNode node) {
+        // print/say/etc: LHS is filehandle (scalar), RHS is arguments (list)
+        int saved = currentContext;
+        currentContext = RuntimeContextType.SCALAR;
+        if (node.left != null) node.left.accept(this);
+
+        currentContext = RuntimeContextType.LIST;
         if (node.right != null) node.right.accept(this);
         currentContext = saved;
     }
