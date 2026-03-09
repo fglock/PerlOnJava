@@ -1934,13 +1934,7 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        // Use cached context from ContextResolver if available
-        int savedContext = currentCallContext;
-        if (node.hasCachedContext()) {
-            currentCallContext = node.getCachedContext();
-        }
         CompileBinaryOperator.visitBinaryOperator(this, node);
-        currentCallContext = savedContext;
     }
 
     /**
@@ -3742,13 +3736,7 @@ public class BytecodeCompiler implements Visitor {
         int savedTarget = targetOutputReg;
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
-        // Use cached context from ContextResolver if available (ensures JVM/interpreter parity)
-        // Fall back to passed callContext for backward compatibility
-        if (node instanceof AbstractNode an && an.hasCachedContext()) {
-            currentCallContext = an.getCachedContext();
-        } else {
-            currentCallContext = callContext;
-        }
+        currentCallContext = callContext;
         node.accept(this);
         targetOutputReg = savedTarget;
         currentCallContext = savedContext;
