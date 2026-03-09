@@ -1,7 +1,11 @@
 package org.perlonjava.runtime.debugger;
 
+import org.perlonjava.backend.bytecode.EvalStringHandler;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.BufferedReader;
@@ -25,15 +29,25 @@ public class DebugHooks {
     
     // Command counter for prompt (1-indexed like Perl)
     private static int commandCounter = 1;
+    
+    // Current execution context for expression evaluation
+    private static InterpretedCode currentCode;
+    private static RuntimeBase[] currentRegisters;
 
     /**
      * Main debug hook called by DEBUG opcode.
      * Checks if we should stop and handles debugger interaction.
      *
-     * @param filename Current source filename
-     * @param line     Current line number (1-based)
+     * @param filename  Current source filename
+     * @param line      Current line number (1-based)
+     * @param code      Current InterpretedCode (for expression evaluation)
+     * @param registers Current register array (for variable access)
      */
-    public static void debug(String filename, int line) {
+    public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers) {
+        // Store context for expression evaluation
+        currentCode = code;
+        currentRegisters = registers;
+        
         // Sync from Perl $DB::single variable to DebugState
         syncFromPerlVariables();
         
@@ -155,6 +169,14 @@ public class DebugHooks {
 
             case 'L':  // list breakpoints
                 handleListBreakpoints();
+                return false;
+
+            case 'p':  // print expression
+                handlePrint(args);
+                return false;
+
+            case 'x':  // dump expression
+                handleDump(args);
                 return false;
 
             default:
@@ -390,9 +412,102 @@ public class DebugHooks {
         System.out.println("  b [line]   Set breakpoint (e.g., 'b 10' or 'b file.pl:10')");
         System.out.println("  B [line]   Delete breakpoint ('B *' deletes all)");
         System.out.println("  L          List all breakpoints");
+        System.out.println("  p expr     Print expression result");
+        System.out.println("  x expr     Dump expression (structured output)");
         System.out.println("  h or ?     Show this help");
         System.out.println("");
         System.out.println("Press Enter to repeat last command (default: n)");
+    }
+
+    /**
+     * Handle 'p' (print) command - evaluate and print expression.
+     */
+    private static void handlePrint(String expr) {
+        if (expr.isEmpty()) {
+            System.out.println("Usage: p <expression>");
+            return;
+        }
+
+        // Temporarily disable debug mode during expression evaluation
+        boolean savedDebugMode = DebugState.debugMode;
+        DebugState.debugMode = false;
+        
+        try {
+            // Evaluate the expression using eval in scalar context
+            RuntimeScalar result = EvalStringHandler.evalString(
+                    expr,
+                    currentCode,
+                    currentRegisters,
+                    DebugState.currentFile,
+                    DebugState.currentLine,
+                    RuntimeContextType.SCALAR
+            );
+            
+            // Check if eval had an error
+            RuntimeScalar evalError = GlobalVariable.getGlobalVariable("main::@");
+            if (evalError.getDefinedBoolean() && !evalError.toString().isEmpty()) {
+                System.out.println("Error: " + evalError.toString().trim());
+            } else {
+                // Print the result (like Perl's print)
+                System.out.println(result.toString());
+            }
+        } catch (Exception e) {
+            System.out.println("Error evaluating expression: " + e.getMessage());
+        } finally {
+            // Restore debug mode
+            DebugState.debugMode = savedDebugMode;
+        }
+    }
+
+    /**
+     * Handle 'x' (dump) command - evaluate and dump expression structure.
+     */
+    private static void handleDump(String expr) {
+        if (expr.isEmpty()) {
+            System.out.println("Usage: x <expression>");
+            return;
+        }
+
+        // Temporarily disable debug mode during expression evaluation
+        boolean savedDebugMode = DebugState.debugMode;
+        DebugState.debugMode = false;
+        
+        try {
+            // Wrap expression to use Data::Dumper-style output
+            // For now, use a simple approach: evaluate and show type info
+            String dumpExpr = "do { use Data::Dumper; local $Data::Dumper::Terse = 1; local $Data::Dumper::Indent = 1; Dumper(" + expr + ") }";
+            
+            RuntimeScalar result = EvalStringHandler.evalString(
+                    dumpExpr,
+                    currentCode,
+                    currentRegisters,
+                    DebugState.currentFile,
+                    DebugState.currentLine,
+                    RuntimeContextType.SCALAR
+            );
+            
+            // Check if eval had an error
+            RuntimeScalar evalError = GlobalVariable.getGlobalVariable("main::@");
+            if (evalError.getDefinedBoolean() && !evalError.toString().isEmpty()) {
+                // Data::Dumper not available, fall back to simple output
+                result = EvalStringHandler.evalString(
+                        expr,
+                        currentCode,
+                        currentRegisters,
+                        DebugState.currentFile,
+                        DebugState.currentLine,
+                        RuntimeContextType.SCALAR
+                );
+                System.out.println("0  " + result.toString());
+            } else {
+                System.out.print(result.toString());
+            }
+        } catch (Exception e) {
+            System.out.println("Error evaluating expression: " + e.getMessage());
+        } finally {
+            // Restore debug mode
+            DebugState.debugMode = savedDebugMode;
+        }
     }
 
     /**

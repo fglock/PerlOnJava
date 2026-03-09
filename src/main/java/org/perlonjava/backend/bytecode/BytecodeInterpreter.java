@@ -1541,7 +1541,7 @@ public class BytecodeInterpreter {
                                 int fileIdx = bytecode[pc++];
                                 int line = bytecode[pc++];
                                 String file = code.stringPool[fileIdx];
-                                DebugHooks.debug(file, line);
+                                DebugHooks.debug(file, line, code, registers);
                             }
 
                             default -> {
