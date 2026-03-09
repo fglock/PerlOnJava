@@ -75,6 +75,7 @@ public class ContextResolver extends ASTTransformPass {
             case "->" -> visitArrow(node);
             case "(" -> visitCall(node);
             case "print", "say", "printf", "warn", "die" -> visitPrintBinary(node);
+            case "map", "grep", "sort" -> visitMapBinary(node);
             default -> visitBinaryDefault(node);
         }
     }
@@ -180,6 +181,17 @@ public class ContextResolver extends ASTTransformPass {
         currentContext = saved;
     }
 
+    private void visitMapBinary(BinaryOperatorNode node) {
+        // map/grep/sort: left is block (scalar context per iteration), right is list (LIST context)
+        int saved = currentContext;
+        currentContext = RuntimeContextType.SCALAR;
+        if (node.left != null) node.left.accept(this);
+
+        currentContext = RuntimeContextType.LIST;
+        if (node.right != null) node.right.accept(this);
+        currentContext = saved;
+    }
+
     private void visitPrintBinary(BinaryOperatorNode node) {
         // print/say/etc: LHS is filehandle (scalar), RHS is arguments (list)
         int saved = currentContext;
@@ -199,6 +211,7 @@ public class ContextResolver extends ASTTransformPass {
             case "$", "*" -> visitScalarDeref(node);
             case "@" -> visitArrayDeref(node);
             case "%" -> visitHashDeref(node);
+            case "\\" -> visitReference(node);
             case "my", "our", "local", "state" -> visitDeclaration(node);
             case "return" -> visitReturn(node);
             case "scalar" -> visitScalarForce(node);
@@ -235,6 +248,15 @@ public class ContextResolver extends ASTTransformPass {
         // % dereference: the operand is scalar (hash ref or name)
         int saved = currentContext;
         currentContext = RuntimeContextType.SCALAR;
+        if (node.operand != null) node.operand.accept(this);
+        currentContext = saved;
+    }
+
+    private void visitReference(OperatorNode node) {
+        // \ (reference): operand context doesn't matter - we take reference to the value
+        // Use LIST context to avoid scalar-context evaluation of %hash or @array
+        int saved = currentContext;
+        currentContext = RuntimeContextType.LIST;
         if (node.operand != null) node.operand.accept(this);
         currentContext = saved;
     }
