@@ -244,9 +244,9 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitReturn(OperatorNode node) {
-        // return takes list context for its argument
+        // return passes caller's context (RUNTIME) to its argument
         int saved = currentContext;
-        currentContext = RuntimeContextType.LIST;
+        currentContext = RuntimeContextType.RUNTIME;
         if (node.operand != null) node.operand.accept(this);
         currentContext = saved;
     }

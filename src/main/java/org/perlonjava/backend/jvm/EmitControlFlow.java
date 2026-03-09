@@ -170,9 +170,9 @@ public class EmitControlFlow {
                     "()V",
                     false);
         } else if (node.operand instanceof ListNode list && list.elements.size() == 1) {
-            list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+            emitterVisitor.acceptChild(list.elements.getFirst(), RuntimeContextType.RUNTIME);
         } else {
-            node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+            emitterVisitor.acceptChild(node.operand, RuntimeContextType.RUNTIME);
         }
 
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
@@ -192,7 +192,7 @@ public class EmitControlFlow {
 
         ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
 
-        subNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(subNode, RuntimeContextType.SCALAR);
         int codeRefSlot = ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledCodeRef = codeRefSlot >= 0;
         if (!pooledCodeRef) {
@@ -200,7 +200,7 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
 
-        argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        emitterVisitor.acceptChild(argsNode, RuntimeContextType.LIST);
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "getList",
@@ -284,7 +284,7 @@ public class EmitControlFlow {
                 ctx.logDebug("visit(goto): Dynamic goto with expression");
 
                 // Evaluate the expression to get the label name at runtime
-                arg.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(arg, RuntimeContextType.SCALAR);
 
                 int targetSlot = ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledTarget = targetSlot >= 0;
