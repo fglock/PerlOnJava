@@ -203,31 +203,55 @@ public class ContextResolver extends ASTTransformPass {
 
     @Override
     public void visit(OperatorNode node) {
-        setContext(node, currentContext);
-
         switch (node.operator) {
-            case "$", "*" -> visitScalarDeref(node);
-            case "@" -> visitArrayDeref(node);
-            case "%" -> visitHashDeref(node);
-            case "\\" -> visitReference(node);
-            case "my", "our", "local", "state" -> visitDeclaration(node);
-            case "return" -> visitReturn(node);
-            case "undef" -> visitUndef(node);
-            case "scalar" -> visitScalarForce(node);
-            case "wantarray" -> visitWantarray(node);
-            case "print", "say", "printf", "warn", "die" -> visitPrintLike(node);
-            case "push", "unshift" -> visitPushLike(node);
-            case "pop", "shift" -> visitPopLike(node);
-            case "keys", "values", "each" -> visitHashListOp(node);
-            case "map", "grep", "sort" -> visitMapLike(node);
-            case "split" -> visitSplit(node);
-            case "join" -> visitJoin(node);
-            case "select", "gmtime", "localtime", "caller", "reset", "times" -> visitListOperand(node);
-            // Operators that take LIST context operands (prototype @)
+            // Sigil operators - context depends on sigil type
+            case "$", "*" -> { setContext(node, currentContext); visitScalarDeref(node); }
+            case "@" -> { setContext(node, currentContext); visitArrayDeref(node); }
+            case "%" -> { setContext(node, currentContext); visitHashDeref(node); }
+            case "\\" -> { setContext(node, currentContext); visitReference(node); }
+            
+            // Declarations pass through context
+            case "my", "our", "local", "state" -> { setContext(node, currentContext); visitDeclaration(node); }
+            case "return" -> { setContext(node, currentContext); visitReturn(node); }
+            case "undef" -> { setContext(node, currentContext); visitUndef(node); }
+            case "scalar" -> { setContext(node, RuntimeContextType.SCALAR); visitScalarForce(node); }
+            case "wantarray" -> { setContext(node, RuntimeContextType.SCALAR); visitWantarray(node); }
+            
+            // Print-like operators
+            case "print", "say", "printf", "warn", "die" -> { setContext(node, currentContext); visitPrintLike(node); }
+            
+            // Array manipulation
+            case "push", "unshift" -> { setContext(node, RuntimeContextType.SCALAR); visitPushLike(node); }
+            case "pop", "shift" -> { setContext(node, RuntimeContextType.SCALAR); visitPopLike(node); }
+            
+            // Hash/array operators that return lists
+            case "keys", "values", "each" -> { setContext(node, currentContext); visitHashListOp(node); }
+            case "map", "grep", "sort" -> { setContext(node, currentContext); visitMapLike(node); }
+            case "split" -> { setContext(node, currentContext); visitSplit(node); }
+            case "join" -> { setContext(node, RuntimeContextType.SCALAR); visitJoin(node); }
+            
+            // Operators with LIST operands
+            case "select", "gmtime", "localtime", "caller", "reset", "times" -> { 
+                setContext(node, currentContext); visitListOperand(node); 
+            }
             case "pack", "mkdir", "opendir", "seekdir", "crypt", "vec", "read", "chmod",
                  "chop", "chomp", "system", "exec", "$#", "splice", "reverse",
-                 "chown", "kill", "unlink", "utime" -> visitListOperand(node);
-            default -> visitOperatorDefault(node);
+                 "chown", "kill", "unlink", "utime" -> { 
+                setContext(node, currentContext); visitListOperand(node); 
+            }
+            
+            // Numeric/string operators always produce SCALAR
+            case "unaryMinus", "unaryPlus", "~", "!", "not",
+                 "abs", "int", "sqrt", "sin", "cos", "exp", "log", "rand",
+                 "length", "defined", "exists", "ref",
+                 "ord", "chr", "hex", "oct",
+                 "lc", "uc", "lcfirst", "ucfirst", "quotemeta",
+                 "++", "--", "++postfix", "--postfix" -> { 
+                setContext(node, RuntimeContextType.SCALAR); visitOperatorDefault(node); 
+            }
+            
+            // Default: inherit context, operand is SCALAR
+            default -> { setContext(node, currentContext); visitOperatorDefault(node); }
         }
     }
 
@@ -452,12 +476,14 @@ public class ContextResolver extends ASTTransformPass {
 
     @Override
     public void visit(NumberNode node) {
-        setContext(node, currentContext);
+        // Numbers are always scalar values
+        setContext(node, RuntimeContextType.SCALAR);
     }
 
     @Override
     public void visit(StringNode node) {
-        setContext(node, currentContext);
+        // Strings are always scalar values
+        setContext(node, RuntimeContextType.SCALAR);
     }
 
     @Override
