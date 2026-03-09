@@ -551,6 +551,14 @@ public class BytecodeCompiler implements Visitor {
             warningFlags = (BitSet) emitterContext.symbolTable.warningFlagsStack.peek().clone();
         }
 
+        // Populate debug source lines if in debug mode
+        if (DebugState.debugMode && errorUtil != null && sourceName != null) {
+            String[] lines = errorUtil.extractSourceLines();
+            if (lines.length > 0) {
+                DebugState.storeSourceLines(sourceName, lines);
+            }
+        }
+
         // Build InterpretedCode
         return new InterpretedCode(
                 toShortArray(),
