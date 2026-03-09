@@ -69,7 +69,8 @@ public class ContextResolver extends ASTTransformPass {
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        setContext(node, currentContext);
+        // Don't pre-set context here - some operators (like subscripts) need to compute their own context
+        // Each case handler must call setContext or forceContext as appropriate
 
         switch (node.operator) {
             case "=" -> visitAssignment(node);
@@ -85,11 +86,12 @@ public class ContextResolver extends ASTTransformPass {
             case "map", "grep", "sort", "all", "any" -> visitMapBinary(node);
             case "join", "sprintf", "split", "binmode", "seek" -> visitJoinBinary(node);
             case "x" -> visitRepeat(node);
-            default -> visitBinaryDefault(node);
+            default -> { setContext(node, currentContext); visitBinaryDefault(node); }
         }
     }
 
     private void visitAssignment(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // LHS determines context for RHS
         int lhsContext = LValueVisitor.getContext(node.left);
         int rhsContext = (lhsContext == RuntimeContextType.LIST)
@@ -101,6 +103,7 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitLogicalOp(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // LHS is scalar (for boolean test)
         visitInContext(node.left, RuntimeContextType.SCALAR);
         // RHS: In LIST context, evaluated in LIST; otherwise SCALAR for short-circuit mechanics
@@ -111,12 +114,14 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitBindingOp(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // =~ and !~: LHS is scalar, RHS is the regex (scalar)
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.SCALAR);
     }
 
     private void visitCommaOp(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         if (currentContext == RuntimeContextType.LIST) {
             // In list context, both sides contribute to the list
             visitInContext(node.left, RuntimeContextType.LIST);
@@ -129,6 +134,7 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitTernaryPart(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // This handles the ":" part of ternary - both branches inherit context
         visitInContext(node.left, currentContext);
         visitInContext(node.right, currentContext);
@@ -141,23 +147,66 @@ public class ContextResolver extends ASTTransformPass {
                 ("@".equals(opNode.operator) || "%".equals(opNode.operator));
         
         // Set node context: slice returns LIST, single element returns SCALAR
-        setContext(node, isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR);
+        // Exception: if parent wants RUNTIME, keep RUNTIME (emitter may pass RUNTIME for return)
+        int subscriptContext = isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
+        if (currentContext == RuntimeContextType.RUNTIME && !isSlice) {
+            subscriptContext = RuntimeContextType.RUNTIME;
+        }
+        setContext(node, subscriptContext);
         
         // Use currentContext for left side (working behavior from d6bd798a)
         visitInContext(node.left, currentContext);
         
-        // Subscript index/key context
-        visitInContext(node.right, isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR);
+        // For subscript indices, visit elements directly (mirroring emitter behavior)
+        // The emitter accesses node.right.elements directly, not visiting ArrayLiteralNode/HashLiteralNode
+        int indexContext = isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
+        if (node.right instanceof ArrayLiteralNode aln) {
+            setContext(aln, indexContext);
+            for (Node element : aln.elements) {
+                visitInContext(element, indexContext);
+            }
+        } else if (node.right instanceof HashLiteralNode hln) {
+            setContext(hln, indexContext);
+            for (Node element : hln.elements) {
+                visitInContext(element, indexContext);
+            }
+        } else {
+            visitInContext(node.right, indexContext);
+        }
     }
 
     private void visitArrow(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // ->[] ->{} ->() : LHS is scalar (the reference)
         visitInContext(node.left, RuntimeContextType.SCALAR);
-        // RHS inherits outer context (working behavior from d6bd798a)
-        visitInContext(node.right, currentContext);
+        
+        // RHS context depends on what follows:
+        // ->[] or ->{} : subscript indices are SCALAR (emitter accesses elements directly in handleArrowArrayDeref/HashDeref)
+        // ->() : call args are LIST
+        // Everything else: inherit outer context
+        if (node.right instanceof ArrayLiteralNode aln) {
+            // Subscript: visit elements directly in SCALAR (mirroring emitter behavior)
+            setContext(aln, RuntimeContextType.SCALAR);
+            for (Node element : aln.elements) {
+                visitInContext(element, RuntimeContextType.SCALAR);
+            }
+        } else if (node.right instanceof HashLiteralNode hln) {
+            // Subscript: visit elements directly in SCALAR
+            setContext(hln, RuntimeContextType.SCALAR);
+            for (Node element : hln.elements) {
+                visitInContext(element, RuntimeContextType.SCALAR);
+            }
+        } else if (node.right instanceof ListNode) {
+            // Method call args: LIST
+            visitInContext(node.right, RuntimeContextType.LIST);
+        } else {
+            // Other cases: inherit outer context
+            visitInContext(node.right, currentContext);
+        }
     }
 
     private void visitCall(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // Subroutine call: LHS is the sub reference, RHS is args (LIST)
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.LIST);
@@ -165,17 +214,20 @@ public class ContextResolver extends ASTTransformPass {
 
     private void visitBinaryDefault(BinaryOperatorNode node) {
         // Most binary operators take scalar operands
+        // setContext already called at call site
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.SCALAR);
     }
 
     private void visitJoinBinary(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // join/sprintf: left (separator/format) is SCALAR, right (list to join/args) is LIST
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.LIST);
     }
 
     private void visitRepeat(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // x operator: left context depends on outer context and operand type
         // In LIST context with ListNode left operand: left=LIST (repeat list)
         // Otherwise: left=SCALAR (repeat string)
@@ -188,18 +240,21 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitPushBinary(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // push/unshift as BinaryOperatorNode: left=array (LIST), right=values (LIST)
         visitInContext(node.left, RuntimeContextType.LIST);
         visitInContext(node.right, RuntimeContextType.LIST);
     }
 
     private void visitMapBinary(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // map/grep/sort: left is block (scalar context per iteration), right is list (LIST context)
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.LIST);
     }
 
     private void visitPrintBinary(BinaryOperatorNode node) {
+        setContext(node, currentContext);
         // print/say/etc: LHS is filehandle (scalar), RHS is arguments (list)
         visitInContext(node.left, RuntimeContextType.SCALAR);
         visitInContext(node.right, RuntimeContextType.LIST);
@@ -224,9 +279,19 @@ public class ContextResolver extends ASTTransformPass {
             // Print-like operators
             case "print", "say", "printf", "warn", "die" -> { setContext(node, currentContext); visitPrintLike(node); }
             
-            // Array manipulation
-            case "push", "unshift" -> { setContext(node, RuntimeContextType.SCALAR); visitPushLike(node); }
-            case "pop", "shift" -> { setContext(node, RuntimeContextType.SCALAR); visitPopLike(node); }
+            // Array manipulation - produce SCALAR, but inherit RUNTIME inside subs
+            case "push", "unshift" -> { 
+                int ctx = (currentContext == RuntimeContextType.RUNTIME) 
+                        ? RuntimeContextType.RUNTIME 
+                        : RuntimeContextType.SCALAR;
+                setContext(node, ctx); visitPushLike(node); 
+            }
+            case "pop", "shift" -> { 
+                int ctx = (currentContext == RuntimeContextType.RUNTIME) 
+                        ? RuntimeContextType.RUNTIME 
+                        : RuntimeContextType.SCALAR;
+                setContext(node, ctx); visitPopLike(node); 
+            }
             
             // Hash/array operators that return lists
             case "keys", "values", "each" -> { setContext(node, currentContext); visitHashListOp(node); }
@@ -244,14 +309,19 @@ public class ContextResolver extends ASTTransformPass {
                 setContext(node, currentContext); visitListOperand(node); 
             }
             
-            // Numeric/string operators always produce SCALAR
+            // Numeric/string operators produce SCALAR, but inherit RUNTIME inside subs
             case "unaryMinus", "unaryPlus", "~", "!", "not",
                  "abs", "int", "sqrt", "sin", "cos", "exp", "log", "rand",
                  "length", "defined", "exists", "ref",
                  "ord", "chr", "hex", "oct",
                  "lc", "uc", "lcfirst", "ucfirst", "quotemeta",
                  "++", "--", "++postfix", "--postfix" -> { 
-                setContext(node, RuntimeContextType.SCALAR); visitOperatorDefault(node); 
+                // In RUNTIME context (sub body), keep RUNTIME so emitter can decide
+                int ctx = (currentContext == RuntimeContextType.RUNTIME) 
+                        ? RuntimeContextType.RUNTIME 
+                        : RuntimeContextType.SCALAR;
+                setContext(node, ctx); 
+                visitOperatorDefault(node); 
             }
             
             // Default: inherit context, operand is SCALAR
@@ -287,7 +357,13 @@ public class ContextResolver extends ASTTransformPass {
 
     private void visitReturn(OperatorNode node) {
         // return passes caller's context (RUNTIME) to its argument
-        visitInContext(node.operand, RuntimeContextType.RUNTIME);
+        // Mirror emitter behavior: unwrap single-element ListNodes
+        if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+            setContext(list, RuntimeContextType.RUNTIME);
+            visitInContext(list.elements.getFirst(), RuntimeContextType.RUNTIME);
+        } else {
+            visitInContext(node.operand, RuntimeContextType.RUNTIME);
+        }
     }
 
     private void visitUndef(OperatorNode node) {
@@ -326,8 +402,9 @@ public class ContextResolver extends ASTTransformPass {
     }
 
     private void visitPopLike(OperatorNode node) {
-        // pop/shift: argument is scalar (the array)
-        visitInContext(node.operand, RuntimeContextType.SCALAR);
+        // pop/shift: argument needs LIST context to get the array object
+        // (handleArrayUnaryBuiltin passes LIST to get RuntimeArray)
+        visitInContext(node.operand, RuntimeContextType.LIST);
     }
 
     private void visitHashListOp(OperatorNode node) {
@@ -463,13 +540,11 @@ public class ContextResolver extends ASTTransformPass {
     @Override
     public void visit(ArrayLiteralNode node) {
         setContext(node, currentContext);
-        // When used as subscript (SCALAR context), elements should be SCALAR
-        // When used as array literal (LIST context), elements are LIST
-        int elemContext = (currentContext == RuntimeContextType.SCALAR)
-                ? RuntimeContextType.SCALAR
-                : RuntimeContextType.LIST;
+        // Array literal elements are always in LIST context
+        // (subscript indices are handled directly in visitSubscript, not here)
+        // Emitter's emitArrayLiteral always uses LIST: elementContext = emitterVisitor.with(LIST)
         for (Node element : node.elements) {
-            visitInContext(element, elemContext);
+            visitInContext(element, RuntimeContextType.LIST);
         }
     }
 
@@ -480,14 +555,14 @@ public class ContextResolver extends ASTTransformPass {
 
     @Override
     public void visit(NumberNode node) {
-        // Numbers are always scalar values
-        setContext(node, RuntimeContextType.SCALAR);
+        // Numbers inherit parent's visitation context to match emitter
+        setContext(node, currentContext);
     }
 
     @Override
     public void visit(StringNode node) {
-        // Strings are always scalar values
-        setContext(node, RuntimeContextType.SCALAR);
+        // Strings inherit parent's visitation context to match emitter
+        setContext(node, currentContext);
     }
 
     @Override
