@@ -1379,6 +1379,29 @@ Changed `acceptChild` to always use fallback context (safe behavior) with warnin
 - `BlockNode cached=LIST expected=SCALAR`: 5 occurrences - blocks inheriting outer LIST context
 - `OperatorNode($) cached=LIST expected=SCALAR`: 1 occurrence - scalar vars in list declarations (`my ($x, $y)`)
 
+**Backend Migration Progress (2025-03-09)**:
+- Migrated `Dereference.java` to use `acceptChild` for all context-setting operations
+- This revealed additional mismatches that were previously hidden from tracking
+- Fixed `ArrayLiteralNode` and `HashLiteralNode` to propagate SCALAR context when used as subscripts
+- **Mismatch reduction after fixes**:
+  - `unaryMinus`: 331 → 153
+  - `$`: 200 → 1
+  - `+`: 153 → 0 (eliminated)
+  - `NumberNode`: 135 → 6
+
+**Current Mismatch Summary (2025-03-09)**:
+| Mismatch Type | Count | Status |
+|--------------|-------|--------|
+| `OperatorNode(@)` | 475 | Expected (prototype wrapping) |
+| `OperatorNode(unaryMinus)` | 153 | Needs investigation |
+| `ListNode` | 7 | Minor edge cases |
+| `NumberNode` | 6 | Minor edge cases |
+| `BlockNode` | 5 | Minor edge cases |
+| `BinaryOperatorNode(->)` | 2 | Minor edge cases |
+| `OperatorNode($)` | 1 | Minor edge case |
+
+**Remaining `.with()` calls to migrate**: ~35 in other backend files
+
 ### Phase 2a Complete
 
 Phase 2a (ContextResolver for JVM parity) is now essentially complete:
@@ -1430,6 +1453,7 @@ Phase 2a (ContextResolver for JVM parity) is now essentially complete:
 | `Node.java` | ✅ Done | Added `setCachedContext()`/`getCachedContext()` to interface |
 | `PrototypeArgs.java` | ✅ Done | Uses `setCachedContext()` instead of string annotation |
 | `EmitOperator.java` | ✅ Done | `handleOperator()` reads `getCachedContext()` |
+| `Dereference.java` | ✅ Done | Migrated all `.with()` calls to `acceptChild` |
 | `EmitterVisitor.java` | ✅ Done | Added `acceptChild()` with mismatch tracking |
 | `PerlLanguageProvider.java` | ✅ Done | Wired transformer into compilation pipeline |
 | `PrintVisitor.java` | ✅ Done | Shows `ctx:` annotations in `--parse` output |
