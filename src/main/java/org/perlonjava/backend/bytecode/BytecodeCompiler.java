@@ -9,6 +9,7 @@ import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -793,10 +794,20 @@ public class BytecodeCompiler implements Visitor {
             if (stmt instanceof AbstractNode an && an.getBooleanAnnotation("compileTimeOnly")) continue;
 
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
+            int stmtTokenIndex = -1;
             if (stmt != null) {
-                int tokenIndex = stmt.getIndex();
+                stmtTokenIndex = stmt.getIndex();
                 int pc = bytecode.size();
-                pcToTokenIndex.put(pc, tokenIndex);
+                pcToTokenIndex.put(pc, stmtTokenIndex);
+            }
+
+            // Emit DEBUG opcode for debugger support (only when -d flag is active)
+            if (DebugState.debugMode && stmtTokenIndex >= 0) {
+                int lineNumber = errorUtil.getLineNumber(stmtTokenIndex);
+                int fileIdx = addToStringPool(sourceName);
+                emit(Opcodes.DEBUG);
+                emit(fileIdx);
+                emit(lineNumber);
             }
 
             boolean isLastStatement = (i == lastMeaningfulIndex);

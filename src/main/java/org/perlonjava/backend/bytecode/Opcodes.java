@@ -1829,6 +1829,18 @@ public class Opcodes {
      */
     public static final short CODE_DEREF_NONSTRICT = 375;
 
+    // =================================================================
+    // DEBUGGER SUPPORT (376)
+    // =================================================================
+
+    /**
+     * Debug hook: Called at statement boundaries when debugger is active.
+     * Checks breakpoints, single-step mode, and may pause for user input.
+     * Format: DEBUG file_string_idx line_number
+     * Only emitted when DebugState.debugMode is true at compile time.
+     */
+    public static final short DEBUG = 376;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

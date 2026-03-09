@@ -1,6 +1,7 @@
 package org.perlonjava.app.cli;
 
 import org.perlonjava.core.Configuration;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
@@ -340,8 +341,11 @@ public class ArgumentParser {
                     parsedArgs.allowUnsafeOperations = true;
                     break;
                 case 'd':
-                    // Run under debugger (currently a no-op for compatibility)
+                    // Run under debugger
                     parsedArgs.runUnderDebugger = true;
+                    parsedArgs.useInterpreter = true;  // Force interpreter mode for debugging
+                    DebugState.debugMode = true;       // Enable debug opcode emission
+                    DebugState.single = true;          // Start in single-step mode
                     break;
                 case 't':
                     // Enable taint warnings
