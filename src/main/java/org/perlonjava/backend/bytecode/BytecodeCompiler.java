@@ -799,6 +799,13 @@ public class BytecodeCompiler implements Visitor {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
             Node stmt = node.elements.get(i);
+            // Visit CompilerFlagNode to set strict/warning/feature flags, even if marked compileTimeOnly.
+            // This is needed because pragmas like 'use strict' create CompilerFlagNode with compileTimeOnly=true,
+            // but we still need to process it to set the flags before compiling subsequent statements.
+            if (stmt instanceof CompilerFlagNode cfn) {
+                cfn.accept(this);
+                continue;
+            }
             if (stmt instanceof AbstractNode an && an.getBooleanAnnotation("compileTimeOnly")) continue;
 
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
