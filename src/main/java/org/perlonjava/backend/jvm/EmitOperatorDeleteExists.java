@@ -104,12 +104,12 @@ public class EmitOperatorDeleteExists {
                             if (binop.left instanceof BinaryOperatorNode leftBinop && leftBinop.operator.equals("->")) {
                                 // Handle compound hash->array dereference for exists/delete
                                 // First evaluate the hash dereference to get the array
-                                leftBinop.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                emitterVisitor.acceptChild(leftBinop, RuntimeContextType.SCALAR);
 
                                 // Now emit the index
                                 if (binop.right instanceof ArrayLiteralNode arrayLiteral &&
                                         arrayLiteral.elements.size() == 1) {
-                                    arrayLiteral.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                    emitterVisitor.acceptChild(arrayLiteral.elements.getFirst(), RuntimeContextType.SCALAR);
                                 } else {
                                     throw new PerlCompilerException(node.tokenIndex,
                                             "Invalid array index in " + operator + " operator",
@@ -219,7 +219,7 @@ public class EmitOperatorDeleteExists {
             }
         }
 
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
         OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         if (operatorHandler != null) {
             EmitOperator.emitOperator(node, emitterVisitor);
@@ -249,7 +249,7 @@ public class EmitOperatorDeleteExists {
 
     private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, String operator, OperatorNode operatorNode) {
         // exists &{"sub"}
-        operatorNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(operatorNode, RuntimeContextType.SCALAR);
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
@@ -265,7 +265,7 @@ public class EmitOperatorDeleteExists {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Create a RuntimeScalar from the string value
-        stringNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(stringNode, RuntimeContextType.SCALAR);
 
         // Push the current package name onto the stack
         emitterVisitor.pushCurrentPackage();
@@ -291,7 +291,7 @@ public class EmitOperatorDeleteExists {
         // Evaluate the expression inside the block to get the method name as a scalar
         if (blockNode.elements.size() == 1) {
             Node expression = blockNode.elements.get(0);
-            expression.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            emitterVisitor.acceptChild(expression, RuntimeContextType.SCALAR);
 
             // Push current package for context
             emitterVisitor.pushCurrentPackage();
@@ -306,10 +306,10 @@ public class EmitOperatorDeleteExists {
                 Node element = blockNode.elements.get(i);
                 if (i == blockNode.elements.size() - 1) {
                     // Last element - use as method name
-                    element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(element, RuntimeContextType.SCALAR);
                 } else {
                     // Intermediate elements - evaluate in void context
-                    element.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    emitterVisitor.acceptChild(element, RuntimeContextType.VOID);
                 }
             }
 

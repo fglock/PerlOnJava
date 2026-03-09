@@ -135,7 +135,7 @@ public class EmitLiteral {
         // Create a RuntimeList from the hash elements
         // This delegates to emitList which handles the LIST context properly
         ListNode listNode = new ListNode(node.elements, node.tokenIndex);
-        listNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        emitterVisitor.acceptChild(listNode, RuntimeContextType.LIST);
 
         // Convert the list to a hash reference
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,

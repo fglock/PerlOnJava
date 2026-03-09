@@ -82,7 +82,7 @@ public class EmitLogicalOperator {
             EmitRegex.handleMatchRegex(emitterVisitor.with(RuntimeContextType.SCALAR), opNode);
         } else {
             // Normal evaluation
-            operandNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            emitterVisitor.acceptChild(operandNode, RuntimeContextType.SCALAR);
         }
     }
 
@@ -101,7 +101,7 @@ public class EmitLogicalOperator {
         // Evaluate the left side once and spill it to keep the operand stack clean.
         // This is critical when the right side may perform non-local control flow (return/last/next/redo)
         // and jump away during evaluation.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
+        emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR); // target - left parameter
 
         int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledLeft = leftSlot >= 0;
@@ -125,7 +125,7 @@ public class EmitLogicalOperator {
 
         // Left was false: evaluate right operand in scalar context.
         // Stack is clean here, so any non-local control flow jump doesn't leave stray values behind.
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.right, RuntimeContextType.SCALAR);
 
         // Load left back for assignment
         mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
@@ -183,7 +183,7 @@ public class EmitLogicalOperator {
                 savedOperand = declaration.operand;
 
                 // emit bytecode for the declaration
-                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                emitterVisitor.acceptChild(declaration, RuntimeContextType.VOID);
                 // replace the declaration with its operand (temporarily)
                 declaration.operator = operatorNode.operator;
                 declaration.operand = operatorNode.operand;
@@ -191,7 +191,7 @@ public class EmitLogicalOperator {
             }
 
             // Evaluate LHS in scalar context (for boolean test)
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR);
             // Stack: [RuntimeScalar]
 
             mv.visitInsn(Opcodes.DUP);
@@ -206,7 +206,7 @@ public class EmitLogicalOperator {
 
             // LHS is false: evaluate RHS in LIST context
             mv.visitInsn(Opcodes.POP); // Remove LHS
-            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.acceptChild(node.right, RuntimeContextType.LIST);
             // Stack: [RuntimeList]
             mv.visitJumpInsn(Opcodes.GOTO, endLabel);
 
@@ -246,7 +246,7 @@ public class EmitLogicalOperator {
 
         // xor always needs RuntimeScalar operands, so evaluate in SCALAR context
         // Evaluate left operand
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR);
         // Stack: [left]
 
         // Store left in a local variable to keep stack clean for control flow
@@ -256,7 +256,7 @@ public class EmitLogicalOperator {
 
         // Evaluate right operand (this may jump away if it's 'next', 'last', 'redo', 'return', etc.)
         // If it jumps, the stack is now clean at the loop level
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.right, RuntimeContextType.SCALAR);
         // Stack: [right] (only if right didn't jump away)
 
         // Load left back onto stack
@@ -296,17 +296,17 @@ public class EmitLogicalOperator {
                 if (voidDeclaration != null && voidDeclaration.operand instanceof OperatorNode voidOperatorNode) {
                     voidSavedOperator = voidDeclaration.operator;
                     voidSavedOperand = voidDeclaration.operand;
-                    voidDeclaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    emitterVisitor.acceptChild(voidDeclaration, RuntimeContextType.VOID);
                     voidDeclaration.operator = voidOperatorNode.operator;
                     voidDeclaration.operand = voidOperatorNode.operand;
                     voidRewritten = true;
                 }
 
-                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR);
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", getBoolean, "()Z", false);
                 mv.visitJumpInsn(compareOpcode, endLabel);
 
-                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(node.right, RuntimeContextType.SCALAR);
                 mv.visitInsn(Opcodes.POP);
 
                 mv.visitLabel(endLabel);
@@ -336,7 +336,7 @@ public class EmitLogicalOperator {
                 savedOperator = declaration.operator;
                 savedOperand = declaration.operand;
 
-                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                emitterVisitor.acceptChild(declaration, RuntimeContextType.VOID);
                 declaration.operator = operatorNode.operator;
                 declaration.operand = operatorNode.operand;
                 rewritten = true;
@@ -397,7 +397,7 @@ public class EmitLogicalOperator {
         int contextType = emitterVisitor.ctx.contextType;
 
         // Visit the condition node in scalar context
-        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.condition, RuntimeContextType.SCALAR);
 
         // Convert the result to a boolean
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);

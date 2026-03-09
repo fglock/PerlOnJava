@@ -64,7 +64,7 @@ public class EmitOperatorFileTest {
                         "([Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             } else {
-                fileOperand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(fileOperand, RuntimeContextType.SCALAR);
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/operators/FileTestOperator",
@@ -83,7 +83,7 @@ public class EmitOperatorFileTest {
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             } else {
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/operators/FileTestOperator",

@@ -380,7 +380,7 @@ public class EmitStatement {
         // Transform catch parameter to 'my'
         OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
         // Create the lexical variable for the catch parameter, push it to the stack
-        catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(catchParameter, RuntimeContextType.SCALAR);
         mv.visitInsn(Opcodes.SWAP);
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,

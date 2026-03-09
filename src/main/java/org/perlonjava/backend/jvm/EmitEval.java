@@ -157,7 +157,7 @@ public class EmitEval {
 
         // Generate bytecode to evaluate the eval string expression
         // This pushes the string value onto the stack
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
         // Stack: [RuntimeScalar(String)]
 
         // Perl clears $@ at entry to eval/evalbytes, before compilation/execution.

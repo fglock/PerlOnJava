@@ -249,7 +249,7 @@ public class EmitSubroutine {
             }
         }
 
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
+        emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR); // Target - left parameter: Code ref
 
         // Dereference the scalar to get the CODE reference if needed
         // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)

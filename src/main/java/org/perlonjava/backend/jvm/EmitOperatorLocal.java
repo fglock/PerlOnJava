@@ -87,7 +87,7 @@ public class EmitOperatorLocal {
 
                         if (varNode instanceof OperatorNode varOpNode && "$@%".contains(varOpNode.operator)) {
                             mv.visitInsn(Opcodes.DUP);
-                            varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            emitterVisitor.acceptChild(varNode, RuntimeContextType.SCALAR);
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                     "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                                     "createReference",

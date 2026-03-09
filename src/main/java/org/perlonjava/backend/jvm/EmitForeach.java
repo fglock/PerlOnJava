@@ -138,7 +138,7 @@ public class EmitForeach {
                 Warnings.warningManager.setWarningState("redefine", false);
             }
             // emit the variable declarations
-            variableNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            emitterVisitor.acceptChild(variableNode, RuntimeContextType.VOID);
             // Use the variable node without the declaration for codegen, but do not mutate the AST.
             variableNode = opNode.operand;
 
@@ -172,7 +172,7 @@ public class EmitForeach {
                 opNode.operator.equals("state") && opNode.operand instanceof OperatorNode declVar
                 && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
             isDeclaredInFor = true;
-            variableNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            emitterVisitor.acceptChild(variableNode, RuntimeContextType.VOID);
             variableNode = opNode.operand;
             String varName = declVar.operator + declId.name;
             int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
@@ -353,7 +353,7 @@ public class EmitForeach {
             // Global $_ as loop variable: evaluate list to array of aliases first
             // This preserves aliasing semantics while ensuring list is evaluated before any
             // parent block's local $_ takes effect (e.g., in nested for loops)
-            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.acceptChild(node.list, RuntimeContextType.LIST);
 
             // For statement modifiers, localize $_ ourselves
             if (needLocalizeUnderscore) {
@@ -389,7 +389,7 @@ public class EmitForeach {
             mv.visitLabel(afterIterLabel);
         } else {
             // Standard path: obtain iterator for the list
-            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.acceptChild(node.list, RuntimeContextType.LIST);
 
             // IMPORTANT: avoid materializing huge ranges.
             // Even for lexical loop variables, ranges should use lazy iteration
@@ -606,7 +606,7 @@ public class EmitForeach {
         mv.visitLabel(continueLabel);
 
         if (node.continueBlock != null) {
-            node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            emitterVisitor.acceptChild(node.continueBlock, RuntimeContextType.VOID);
             // Check registry again after continue block
             emitRegistryCheck(mv, currentLoopLabels, redoLabel, loopStart, loopEnd);
         }
@@ -941,7 +941,7 @@ public class EmitForeach {
         Label loopEnd = new Label();
 
         // Obtain the iterator for the list
-        node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        emitterVisitor.acceptChild(node.list, RuntimeContextType.LIST);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
         int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
@@ -963,7 +963,7 @@ public class EmitForeach {
         mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
 
         // Assign to variable $$f
-        node.variable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(node.variable, RuntimeContextType.SCALAR);
         // Stack: iteratorValue, dereferenced_var
         mv.visitInsn(Opcodes.SWAP);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -980,7 +980,7 @@ public class EmitForeach {
                 loopEnd,
                 RuntimeContextType.VOID);
 
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        emitterVisitor.acceptChild(node.body, RuntimeContextType.VOID);
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 

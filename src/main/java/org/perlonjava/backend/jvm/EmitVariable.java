@@ -395,11 +395,11 @@ public class EmitVariable {
                 // `@$a`
                 emitterVisitor.ctx.logDebug("GETVAR `@$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
                 } else {
                     // no strict refs - allow symbolic references
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "arrayDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
                 }
@@ -411,11 +411,11 @@ public class EmitVariable {
                 // `%$a`
                 emitterVisitor.ctx.logDebug("GETVAR `%$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
                 } else {
                     // no strict refs - allow symbolic references
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "hashDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
                 }
@@ -427,11 +427,11 @@ public class EmitVariable {
                 // `$$a`
                 emitterVisitor.ctx.logDebug("GETVAR `$$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 } else {
                     // no strict refs
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
@@ -444,7 +444,7 @@ public class EmitVariable {
                         && (node.operand instanceof StringNode || node.operand instanceof IdentifierNode);
 
                 if (postfixLiteralSymbol) {
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -452,11 +452,11 @@ public class EmitVariable {
                             "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                             false);
                 } else if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;", false);
                 } else {
                     // no strict refs
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "globDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;", false);
                 }
@@ -472,10 +472,10 @@ public class EmitVariable {
 
                     emitterVisitor.ctx.logDebug("GETVAR `&{sub ...}` - emitting subroutine as RuntimeScalar");
                     // Emit the subroutine directly as a RuntimeScalar (code reference)
-                    blockNode.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(blockNode.elements.get(0), RuntimeContextType.SCALAR);
                 } else {
                     // Regular case: `&$a`
-                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.acceptChild(node.operand, RuntimeContextType.SCALAR);
 
                     // Check if the variable is a lexical subroutine (already a CODE reference)
                     // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
@@ -685,7 +685,7 @@ public class EmitVariable {
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
-                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
+                emitterVisitor.acceptChild(node.right, RuntimeContextType.SCALAR);   // emit the value
 
                 boolean spillRhs = true;
                 int rhsSlot = -1;
@@ -726,7 +726,7 @@ public class EmitVariable {
                         // `keys %x = $number`  - preallocate hash capacity
                         // Emit the hash operand directly instead of calling keys.
                         if (nodeLeft.operand != null) {
-                            nodeLeft.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                            emitterVisitor.acceptChild(nodeLeft.operand, RuntimeContextType.LIST);
                         }
                         // Stack: [hash]
                         mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
@@ -752,7 +752,7 @@ public class EmitVariable {
                     }
                 }
 
-                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
+                emitterVisitor.acceptChild(node.left, RuntimeContextType.SCALAR);   // emit the variable
 
                 if (spillRhs) {
                     mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
@@ -808,7 +808,7 @@ public class EmitVariable {
                     elements.add(right);
                     right = new ListNode(elements, node.tokenIndex);
                 }
-                right.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+                emitterVisitor.acceptChild(right, RuntimeContextType.LIST);   // emit the value
 
                 if (isLocalAssignment) {
                     // Clone the list before calling local()
@@ -832,7 +832,7 @@ public class EmitVariable {
 
                 // For declared references, we need special handling
                 // The my operator needs to be processed to create the variables first
-                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable (target)
+                emitterVisitor.acceptChild(node.left, RuntimeContextType.LIST);   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
 
@@ -865,7 +865,7 @@ public class EmitVariable {
         // Emit: state $var // initializeState(id, value)
         int tokenIndex = node.tokenIndex;
 
-        operatorNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        emitterVisitor.acceptChild(operatorNode, RuntimeContextType.VOID);
 
         Node testStateVariable = new BinaryOperatorNode(
                 "(",
@@ -882,7 +882,7 @@ public class EmitVariable {
                 tokenIndex
         );
         ctx.logDebug("handleAssignOperator initialize state variable " + testStateVariable);
-        // testStateVariable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // emitterVisitor.acceptChild(testStateVariable, RuntimeContextType.SCALAR);
 
         // Determine the method to call and its descriptor based on the sigil
         String methodName = switch (sigil) {
@@ -908,12 +908,12 @@ public class EmitVariable {
                 tokenIndex
         );
         ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
-        // initStateVariable.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        // emitterVisitor.acceptChild(initStateVariable, RuntimeContextType.VOID);
 
-        new BinaryOperatorNode("||", testStateVariable, initStateVariable, tokenIndex)
-                .accept(emitterVisitor.with(RuntimeContextType.VOID));
+        Node stateInit = new BinaryOperatorNode("||", testStateVariable, initStateVariable, tokenIndex);
+        emitterVisitor.acceptChild(stateInit, RuntimeContextType.VOID);
 
-        varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.acceptChild(varNode, RuntimeContextType.SCALAR);
     }
 
     static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
@@ -949,7 +949,7 @@ public class EmitVariable {
                         if (scalarVarNode.annotations != null && Boolean.TRUE.equals(scalarVarNode.annotations.get("isDeclaredReference"))) {
                             myNode.setAnnotation("isDeclaredReference", true);
                         }
-                        myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                        emitterVisitor.acceptChild(myNode, RuntimeContextType.VOID);
                     } else if (operatorNode.operand instanceof ListNode nestedList) {
                         // Handle my(\($d, $e)) - nested list with backslash
                         // Process each element in the nested list as a declared reference
@@ -964,17 +964,17 @@ public class EmitVariable {
                                 // Create a my node for each variable
                                 OperatorNode myNode = new OperatorNode(operator, scalarVarNode, listNode.tokenIndex);
                                 myNode.setAnnotation("isDeclaredReference", true);
-                                myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                                emitterVisitor.acceptChild(myNode, RuntimeContextType.VOID);
                             }
                         }
                     } else {
                         // Unknown structure, fall through to default handling
                         OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
-                        myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                        emitterVisitor.acceptChild(myNode, RuntimeContextType.VOID);
                     }
                 } else {
                     OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
-                    myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    emitterVisitor.acceptChild(myNode, RuntimeContextType.VOID);
                 }
             }
             if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
@@ -1000,7 +1000,7 @@ public class EmitVariable {
                             mv.visitInsn(Opcodes.DUP);  // Dup the RuntimeList
 
                             // Emit the variable in SCALAR context
-                            element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            emitterVisitor.acceptChild(element, RuntimeContextType.SCALAR);
 
                             // Create a reference to the variable
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
@@ -1042,7 +1042,7 @@ public class EmitVariable {
                         for (Node element : listNode.elements) {
                             if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
                                 mv.visitInsn(Opcodes.DUP);
-                                element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                emitterVisitor.acceptChild(element, RuntimeContextType.SCALAR);
 
                                 // If this element has isDeclaredReference, create a reference
                                 if (elemOpNode.annotations != null &&
@@ -1079,7 +1079,7 @@ public class EmitVariable {
                 // and then take a reference to it
 
                 // First, emit the declared reference variable (the inner part)
-                sigilNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.acceptChild(sigilNode, RuntimeContextType.SCALAR);
 
                 // The variable is now on the stack, and we're in an assignment context
                 // The assignment operator will handle storing the reference
@@ -1174,7 +1174,7 @@ public class EmitVariable {
                         }
 
                         Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
-                        codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        emitterVisitor.acceptChild(codeRef, RuntimeContextType.SCALAR);
 
                         ctx.mv.visitLdcInsn(var);
                         ctx.mv.visitLdcInsn(sigilNode.id);

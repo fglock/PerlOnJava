@@ -229,7 +229,7 @@ public class EmitBlock {
 
             // Pre-evaluate the For1Node's list to array of aliases before localizing $_
             int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.acceptChild(forNode.list, RuntimeContextType.LIST);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
