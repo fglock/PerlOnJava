@@ -1454,6 +1454,38 @@ The `acceptChild(node, fallbackContext)` method now:
    - `ConstantFoldingVisitor` - integrate into ConstantFolder phase
    - `FindDeclarationVisitor` - integrate into VariableResolver
 
+### Interpreter Context Fixes (2025-03-09)
+
+Fixed interpreter context mismatches to align with JVM emitter:
+
+1. **String concatenation (`.`) operator** (~5000 mismatches fixed):
+   - Added `.` to `forceScalar` list in `CompileBinaryOperator.java`
+   - Operands now always get SCALAR context (matching ContextResolver)
+   
+2. **Assignment context in blocks** (~5000 mismatches fixed):
+   - Removed special case that passed outer context to non-last assignments
+   - All non-last statements now use VOID context (matching JVM emitter)
+
+**Current State**:
+- JVM emitter mismatches: ~30 (edge cases)
+- Interpreter mismatches: ~20 (edge cases)
+- All gradle tests pass
+
+**Remaining mismatches** (edge cases, low priority):
+| JVM Emitter | Count | Notes |
+|-------------|-------|-------|
+| `ListNode` | 7 | Slice contexts |
+| `OperatorNode(!)` | 5 | Negation in LIST |
+| `BlockNode` | 5 | Block context inheritance |
+| `OperatorNode(unaryMinus)` | 5 | Negation in LIST |
+| `BinaryOperatorNode(->)` | 2 | Arrow dereference |
+
+| Interpreter | Count | Notes |
+|-------------|-------|-------|
+| `OperatorNode(\)` | 11 | Reference in LIST |
+| `StringNode` | 9 | String literals |
+| `BinaryOperatorNode(print)` | 1 | Print in RUNTIME |
+
 ### Open Questions
 
 1. ~~Should we use Option A (typed fields) or Option B (annotation map)?~~ **Resolved: Option A for performance**
