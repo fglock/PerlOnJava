@@ -113,20 +113,18 @@ public class EmitterVisitor implements Visitor {
     }
     
     private boolean hasKnownMismatch(Node node) {
-        // Nodes with known context mismatches - use fallback until fixed
-        if (node instanceof ListNode) return true;
-        if (node instanceof BlockNode) return true;
-        if (node instanceof StringNode) return true;
-        if (node instanceof NumberNode) return true;
+        // Only nodes with actual mismatches need fallback
+        if (node instanceof ListNode) return true;  // 7 mismatches
+        if (node instanceof BlockNode) return true; // 5 mismatches
         if (node instanceof OperatorNode op) {
             return switch (op.operator) {
-                case "@", "$" -> true;
+                case "@", "$" -> true;  // 1 each
                 default -> false;
             };
         }
         if (node instanceof BinaryOperatorNode bin) {
             return switch (bin.operator) {
-                case "->", "[", "(", "{", "print" -> true;
+                case "->", "[" -> true;  // 2 and 1 mismatches
                 default -> false;
             };
         }

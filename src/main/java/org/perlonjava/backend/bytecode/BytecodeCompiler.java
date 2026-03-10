@@ -3776,21 +3776,13 @@ public class BytecodeCompiler implements Visitor {
     }
     
     private boolean hasKnownInterpreterMismatch(Node node) {
-        // Nodes with known context mismatches - use fallback until fixed
-        if (node instanceof StringNode) return true;
-        if (node instanceof NumberNode) return true;
-        if (node instanceof BlockNode) return true;
+        // Only nodes with actual mismatches need fallback
+        if (node instanceof StringNode) return true;  // 9 mismatches
         if (node instanceof OperatorNode op) {
-            return switch (op.operator) {
-                case "$" -> true;
-                default -> false;
-            };
+            return "\\".equals(op.operator);  // 11 mismatches
         }
         if (node instanceof BinaryOperatorNode bin) {
-            return switch (bin.operator) {
-                case "print", "->", "(", "[", "{" -> true;
-                default -> false;
-            };
+            return "print".equals(bin.operator);  // 1 mismatch
         }
         return false;
     }
