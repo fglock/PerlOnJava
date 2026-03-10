@@ -1486,6 +1486,27 @@ Fixed interpreter context mismatches to align with JVM emitter:
 | `StringNode` | 9 | String literals |
 | `BinaryOperatorNode(print)` | 1 | Print in RUNTIME |
 
+### Selective Context Switching (2025-03-09)
+
+Both backends now use cached context from ContextResolver for most node types:
+
+**JVM emitter** (`EmitterVisitor.acceptChild`):
+- Uses cached context by default
+- Falls back to emitter's context for nodes with known mismatches:
+  - `ListNode`, `BlockNode`
+  - `OperatorNode(!,unaryMinus,exists,length,@,$)`
+  - `BinaryOperatorNode(->,])`
+
+**Interpreter** (`BytecodeCompiler.compileNode`):
+- Uses cached context by default
+- Falls back to caller's context for nodes with known mismatches:
+  - `StringNode`
+  - `OperatorNode(\)`
+  - `BinaryOperatorNode(print)`
+
+This allows most nodes to benefit from pre-computed context while isolating
+the ~50 remaining edge cases that need investigation.
+
 ### Open Questions
 
 1. ~~Should we use Option A (typed fields) or Option B (annotation map)?~~ **Resolved: Option A for performance**
