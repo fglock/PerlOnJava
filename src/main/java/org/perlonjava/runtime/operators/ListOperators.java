@@ -108,6 +108,9 @@ public class ListOperators {
 
                 // Retrieve the comparison result and return it as an integer
                 return result.getFirst().getInt();
+            } catch (PerlExitException e) {
+                // exit() should propagate immediately - don't wrap it
+                throw e;
             } catch (Exception e) {
                 // Wrap any exceptions thrown by the comparator in a RuntimeException
                 throw new RuntimeException(e);

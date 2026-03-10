@@ -103,17 +103,8 @@ public class EmitOperatorDeleteExists {
                             // Check if this is a compound expression like $hash->{key}[index]
                             if (binop.left instanceof BinaryOperatorNode leftBinop && leftBinop.operator.equals("->")) {
                                 // Handle compound hash->array dereference for exists/delete
-                                // Spill the left operand before evaluating the index so non-local control flow
-                                // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
-                                MethodVisitor mv = emitterVisitor.ctx.mv;
+                                // First evaluate the hash dereference to get the array
                                 leftBinop.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-                                int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-                                boolean pooled = leftSlot >= 0;
-                                if (!pooled) {
-                                    leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-                                }
-                                mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
                                 // Now emit the index
                                 if (binop.right instanceof ArrayLiteralNode arrayLiteral &&
@@ -123,13 +114,6 @@ public class EmitOperatorDeleteExists {
                                     throw new PerlCompilerException(node.tokenIndex,
                                             "Invalid array index in " + operator + " operator",
                                             emitterVisitor.ctx.errorUtil);
-                                }
-
-                                mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
-                                mv.visitInsn(Opcodes.SWAP);
-
-                                if (pooled) {
-                                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                                 }
 
                                 // Call the appropriate method

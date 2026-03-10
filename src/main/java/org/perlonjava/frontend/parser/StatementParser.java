@@ -18,6 +18,7 @@ import java.util.List;
 import static org.perlonjava.frontend.parser.NumberParser.parseNumber;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.atUnderscoreArgs;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.StringParser.parseVstring;
@@ -533,6 +534,12 @@ public class StatementParser {
                         useWarnings(new RuntimeArray(
                                 new RuntimeScalar("warnings"),
                                 new RuntimeScalar("all")), RuntimeContextType.VOID);
+                        // Copy warning flags to ALL levels of the parser's symbol table
+                        // This matches what's done after import() for 'use warnings'
+                        java.util.BitSet currentWarnings = getCurrentScope().warningFlagsStack.peek();
+                        for (int i = 0; i < parser.ctx.symbolTable.warningFlagsStack.size(); i++) {
+                            parser.ctx.symbolTable.warningFlagsStack.set(i, (java.util.BitSet) currentWarnings.clone());
+                        }
                     }
                 }
             }

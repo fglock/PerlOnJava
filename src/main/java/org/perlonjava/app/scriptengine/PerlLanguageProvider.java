@@ -80,6 +80,10 @@ public class PerlLanguageProvider {
                                               boolean isTopLevelScript,
                                               int callerContext) throws Exception {
 
+        // Save the current scope so we can restore it after execution.
+        // This is critical because require/do should not leak their scope to the caller.
+        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+
         // Store the isMainProgram flag in CompilerOptions for use during code generation
         compilerOptions.isMainProgram = isTopLevelScript;
 
@@ -184,11 +188,19 @@ public class PerlLanguageProvider {
         ctx.symbolTable = ctx.symbolTable.snapShot();
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
 
-        // Compile to executable (compiler or interpreter based on flag)
-        RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
+        try {
+            // Compile to executable (compiler or interpreter based on flag)
+            RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
-        // Execute (unified path for both backends)
-        return executeCode(runtimeCode, ctx, isTopLevelScript, callerContext);
+            // Execute (unified path for both backends)
+            return executeCode(runtimeCode, ctx, isTopLevelScript, callerContext);
+        } finally {
+            // Restore the caller's scope so require/do doesn't leak its scope to the caller.
+            // But do NOT restore for top-level scripts - we want the main script's pragmas to persist.
+            if (savedCurrentScope != null && !isTopLevelScript) {
+                SpecialBlockParser.setCurrentScope(savedCurrentScope);
+            }
+        }
     }
 
     /**
@@ -202,6 +214,9 @@ public class PerlLanguageProvider {
     public static RuntimeList executePerlAST(Node ast,
                                              List<LexerToken> tokens,
                                              CompilerOptions compilerOptions) throws Exception {
+
+        // Save the current scope so we can restore it after execution.
+        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
@@ -236,11 +251,18 @@ public class PerlLanguageProvider {
         ctx.symbolTable = ctx.symbolTable.snapShot();
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
 
-        // Compile to executable (compiler or interpreter based on flag)
-        RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
+        try {
+            // Compile to executable (compiler or interpreter based on flag)
+            RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
-        // executePerlAST is always called from special blocks which use VOID context
-        return executeCode(runtimeCode, ctx, false, RuntimeContextType.VOID);
+            // executePerlAST is always called from special blocks which use VOID context
+            return executeCode(runtimeCode, ctx, false, RuntimeContextType.VOID);
+        } finally {
+            // Restore the caller's scope
+            if (savedCurrentScope != null) {
+                SpecialBlockParser.setCurrentScope(savedCurrentScope);
+            }
+        }
     }
 
     /**

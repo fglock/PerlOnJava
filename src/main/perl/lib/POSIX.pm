@@ -289,24 +289,6 @@ BEGIN {
     }
 }
 
-# Time functions
-sub strftime {
-    my ($fmt, $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = @_;
-    # wday, yday, isdst are ignored per POSIX spec
-    $wday //= -1;
-    $yday //= -1;
-    $isdst //= -1;
-    return POSIX::_strftime($fmt, $sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst);
-}
-
-sub mktime {
-    my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = @_;
-    $wday //= -1;
-    $yday //= -1;
-    $isdst //= -1;
-    return POSIX::_mktime($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst);
-}
-
 # Exit status macros
 sub WIFEXITED { POSIX::_WIFEXITED(@_) }
 sub WEXITSTATUS { POSIX::_WEXITSTATUS(@_) }
