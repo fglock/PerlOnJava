@@ -706,6 +706,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Tie::Scalar** module.
 - ✅  **Time::HiRes** module.
 - ✅  **Time::Local** module.
+- ✅  **Time::Piece** module.
+- ✅  **Time::Seconds** module.
 - ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
 - ✅  **URI::Escape** module.
 - ✅  **Socket** module: socket constants and functions (`pack_sockaddr_in`, `unpack_sockaddr_in`, `sockaddr_in`, `inet_aton`, `inet_ntoa`, `gethostbyname`).
