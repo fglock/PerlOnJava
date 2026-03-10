@@ -156,8 +156,8 @@ public class ContextResolver extends ASTTransformPass {
         
         // Left side of subscript: the container reference
         // For non-slices, emitter always needs SCALAR (the reference to subscript into)
-        // For slices, use currentContext (d6bd798a compatibility)
-        int leftContext = isSlice ? currentContext : RuntimeContextType.SCALAR;
+        // For slices, emitter needs LIST (the array/hash itself)
+        int leftContext = isSlice ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
         visitInContext(node.left, leftContext);
         
         // For subscript indices, visit elements directly (mirroring emitter behavior)
