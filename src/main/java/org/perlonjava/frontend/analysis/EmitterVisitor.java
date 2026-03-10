@@ -90,17 +90,45 @@ public class EmitterVisitor implements Visitor {
     public void acceptChild(Node child, int fallbackContext) {
         if (child == null) return;
         
-        // Log mismatches - these must ALL be fixed before using cached context
+        int contextToUse = fallbackContext;
+        
+        // Use cached context for nodes with no known mismatches
         if (child instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != fallbackContext) {
+                // Log mismatch for debugging
                 String key = nodeDescription(child) + " cached=" + contextName(cached) + " expected=" + contextName(fallbackContext);
                 contextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+                // Use fallback for known problem nodes
+                if (!hasKnownMismatch(child)) {
+                    contextToUse = cached;
+                }
+            } else {
+                // No mismatch - use cached
+                contextToUse = cached;
             }
         }
         
-        // Use fallback context (emitter's expectation) until all mismatches are fixed
-        child.accept(with(fallbackContext));
+        child.accept(with(contextToUse));
+    }
+    
+    private boolean hasKnownMismatch(Node node) {
+        // Nodes with known context mismatches - use fallback until fixed
+        if (node instanceof ListNode) return true;
+        if (node instanceof BlockNode) return true;
+        if (node instanceof OperatorNode op) {
+            return switch (op.operator) {
+                case "!", "unaryMinus", "exists", "length", "@", "$" -> true;
+                default -> false;
+            };
+        }
+        if (node instanceof BinaryOperatorNode bin) {
+            return switch (bin.operator) {
+                case "->", "[" -> true;
+                default -> false;
+            };
+        }
+        return false;
     }
     
     private String nodeDescription(Node node) {

@@ -3737,17 +3737,23 @@ public class BytecodeCompiler implements Visitor {
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
         
-        // Log mismatches - these must ALL be fixed before using cached context
+        // Use cached context when available and no known mismatch
+        int contextToUse = callContext;
         if (node instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != callContext) {
                 String key = nodeDescription(node) + " cached=" + contextName(cached) + " expected=" + contextName(callContext);
                 interpreterContextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+                // Use cached unless this is a known problem node
+                if (!hasKnownInterpreterMismatch(node)) {
+                    contextToUse = cached;
+                }
+            } else {
+                contextToUse = cached;
             }
         }
         
-        // Use passed context (caller's expectation) until all mismatches are fixed
-        currentCallContext = callContext;
+        currentCallContext = contextToUse;
         node.accept(this);
         targetOutputReg = savedTarget;
         currentCallContext = savedContext;
@@ -3767,6 +3773,18 @@ public class BytecodeCompiler implements Visitor {
             case RuntimeContextType.RUNTIME -> "RUNTIME";
             default -> "UNKNOWN(" + ctx + ")";
         };
+    }
+    
+    private boolean hasKnownInterpreterMismatch(Node node) {
+        // Nodes with known context mismatches - use fallback until fixed
+        if (node instanceof StringNode) return true;
+        if (node instanceof OperatorNode op) {
+            return "\\".equals(op.operator);
+        }
+        if (node instanceof BinaryOperatorNode bin) {
+            return "print".equals(bin.operator);
+        }
+        return false;
     }
     
     public static void printInterpreterMismatches() {

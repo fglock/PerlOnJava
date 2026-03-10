@@ -298,6 +298,7 @@ public class ContextResolver extends ASTTransformPass {
             case "map", "grep", "sort" -> { setContext(node, currentContext); visitMapLike(node); }
             case "split" -> { setContext(node, currentContext); visitSplit(node); }
             case "join" -> { setContext(node, RuntimeContextType.SCALAR); visitJoin(node); }
+            case "sprintf" -> { setContext(node, RuntimeContextType.SCALAR); visitSprintfOp(node); }
             
             // Operators with LIST operands
             case "select", "gmtime", "localtime", "caller", "reset", "times" -> { 
@@ -433,6 +434,19 @@ public class ContextResolver extends ASTTransformPass {
 
     private void visitJoin(OperatorNode node) {
         // join: first arg (separator) is scalar, rest is list
+        if (node.operand instanceof ListNode list && list.elements.size() > 0) {
+            visitInContext(list.elements.get(0), RuntimeContextType.SCALAR);
+            for (int i = 1; i < list.elements.size(); i++) {
+                visitInContext(list.elements.get(i), RuntimeContextType.LIST);
+            }
+        } else {
+            visitOperatorDefault(node);
+        }
+    }
+
+    private void visitSprintfOp(OperatorNode node) {
+        // sprintf: first arg (format) is scalar, rest are list
+        // Mirrors interpreter's visitSprintf which compiles args[1..n] with LIST
         if (node.operand instanceof ListNode list && list.elements.size() > 0) {
             visitInContext(list.elements.get(0), RuntimeContextType.SCALAR);
             for (int i = 1; i < list.elements.size(); i++) {
