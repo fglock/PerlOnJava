@@ -1941,9 +1941,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new PerlCompilerException("Undefined subroutine called at ");
             }
 
-            // Push args for @DB::args support and track call depth in debug mode
-            DebugState.pushArgs(a);
-            DebugHooks.enterSubroutine();
+            // Debug mode: push args and track subroutine entry
+            if (DebugState.debugMode) {
+                String debugSubName = (this.subName != null)
+                        ? NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main")
+                        : "";
+                DebugState.pushArgs(a);
+                DebugHooks.enterSubroutine(debugSubName);
+            }
             try {
                 RuntimeList result;
                 if (isStatic) {
@@ -1953,8 +1958,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
-                DebugHooks.exitSubroutine();
-                DebugState.popArgs();
+                if (DebugState.debugMode) {
+                    DebugHooks.exitSubroutine();
+                    DebugState.popArgs();
+                }
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
@@ -2001,9 +2008,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new PerlCompilerException("Undefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called at ");
             }
 
-            // Push args for @DB::args support and track call depth in debug mode
-            DebugState.pushArgs(a);
-            DebugHooks.enterSubroutine();
+            // Debug mode: push args and track subroutine entry
+            if (DebugState.debugMode) {
+                String debugSubName;
+                if (this.subName != null) {
+                    debugSubName = NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main");
+                } else if (subroutineName != null) {
+                    debugSubName = subroutineName;
+                } else {
+                    debugSubName = "";
+                }
+                DebugState.pushArgs(a);
+                DebugHooks.enterSubroutine(debugSubName);
+            }
             try {
                 RuntimeList result;
                 if (isStatic) {
@@ -2013,8 +2030,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
-                DebugHooks.exitSubroutine();
-                DebugState.popArgs();
+                if (DebugState.debugMode) {
+                    DebugHooks.exitSubroutine();
+                    DebugState.popArgs();
+                }
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();

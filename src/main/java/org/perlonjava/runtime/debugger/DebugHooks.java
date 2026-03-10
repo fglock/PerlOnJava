@@ -120,12 +120,19 @@ public class DebugHooks {
         // Get source line for display
         String sourceLine = DebugState.getSourceLine(filename, line);
         
-        // Get current package name
+        // Get current package name and subroutine name
         String packageName = InterpreterState.currentPackage.get().toString();
+        String subName = DebugState.getCurrentSubName();
 
-        // Display current location (format matches Perl: "package::(file:line):\nline:  code")
-        System.out.printf("%s::(%s:%d):%n", packageName, filename, line);
-        System.out.printf("%d:  %s%n", line, sourceLine.trim());
+        // Display current location (format matches Perl: "package::sub(file:line):\nline:  code")
+        // subName already includes package prefix (e.g., "main::foo"), so use it directly
+        // If no subroutine name, shows "main::(file:line):", otherwise "main::foo(file:line):"
+        if (subName.isEmpty()) {
+            System.out.printf("%s::(%s:%d):%n", packageName, filename, line);
+        } else {
+            System.out.printf("%s(%s:%d):%n", subName, filename, line);
+        }
+        System.out.printf("%d:\t%s%n", line, sourceLine.trim());
 
         // Enter command loop
         commandLoop();
@@ -659,19 +666,24 @@ public class DebugHooks {
 
     /**
      * Called when entering a subroutine (for step-over tracking).
+     * Caller must check debugMode before calling.
+     * @param subName The fully-qualified subroutine name (package::subname)
      */
-    public static void enterSubroutine() {
+    public static void enterSubroutine(String subName) {
         DebugState.callDepth++;
+        DebugState.pushSubName(subName);
     }
 
     /**
      * Called when exiting a subroutine (for step-over tracking).
+     * Caller must check debugMode before calling.
      */
     public static void exitSubroutine() {
         DebugState.callDepth--;
         if (DebugState.callDepth < 0) {
             DebugState.callDepth = 0;
         }
+        DebugState.popSubName();
     }
     
     /**

@@ -101,6 +101,41 @@ public class DebugState {
     public static volatile int callDepth = 0;
 
     /**
+     * Thread-local stack of subroutine names for debug display.
+     * Tracks the current subroutine being executed.
+     */
+    public static final ThreadLocal<Deque<String>> subNameStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Get the current subroutine name for debug display.
+     * Returns empty string if in main code (not inside a sub).
+     */
+    public static String getCurrentSubName() {
+        Deque<String> stack = subNameStack.get();
+        return stack.isEmpty() ? "" : stack.peek();
+    }
+
+    /**
+     * Push a subroutine name onto the stack when entering a sub.
+     * Caller must check debugMode before calling.
+     */
+    public static void pushSubName(String subName) {
+        subNameStack.get().push(subName != null ? subName : "");
+    }
+
+    /**
+     * Pop a subroutine name from the stack when exiting a sub.
+     * Caller must check debugMode before calling.
+     */
+    public static void popSubName() {
+        Deque<String> stack = subNameStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+
+    /**
      * One-time breakpoints: "file:line" strings that should be removed after being hit.
      * Used by "c line" command to continue to a specific line once.
      */
@@ -128,6 +163,7 @@ public class DebugState {
         stepOverDepth = -1;
         stepOutDepth = -1;
         callDepth = 0;
+        subNameStack.get().clear();
         quit = false;
     }
 

@@ -484,6 +484,73 @@ This matches Perl's behavior where breakpoints are only valid on statement-start
 
 ---
 
+## Progress Tracking
+
+### Current Status: Phase 2 mostly complete
+
+### Completed Phases
+
+- [x] Phase 1: Infrastructure (complete)
+  - DEBUG opcode (376) in `Opcodes.java`
+  - `-d` flag in `ArgumentParser.java` sets `debugMode=true`, forces interpreter
+  - `BytecodeCompiler` emits DEBUG at statement boundaries when `debugMode=true`
+  - `BytecodeInterpreter` handles DEBUG opcode, calls `DebugHooks.debug()`
+  - `DebugState.java` - global debug flags, breakpoints, source storage
+  - `DebugHooks.java` - command loop with n/s/c/q/l/b/B/L/h commands
+  - Source line extraction from tokens (`ErrorMessageUtil.extractSourceLines()`)
+  - `l` command shows source with `==>` current line marker
+  - Compile-time statements (`use`/`no`) correctly skipped via `compileTimeOnly` annotation
+  - Infrastructure nodes in BEGIN blocks skipped via `skipDebug` annotation
+
+- [x] Phase 2: Source Line Support (partially complete, 2024-03-10)
+  - [x] Store source lines during parsing
+  - [x] Skip compile-time statements (use/no)
+  - [x] Display subroutine names when stepping into code (e.g., `main::foo(/file:line)`)
+    - Added `subNameStack` in `DebugState` for tracking current subroutine
+    - Modified `RuntimeCode.apply()` to track subroutine entry/exit (zero overhead when not debugging)
+    - Uses `NameNormalizer.normalizeVariableName()` for consistent name formatting
+  - [ ] Track breakable lines (statements vs comments)
+  - [ ] Implement `@{"_<$filename"}` magical array
+  - [ ] Implement `%{"_<$filename"}` for breakpoint storage
+
+### Working Commands
+| Command | Description |
+|---------|-------------|
+| `n` | Next (step over) |
+| `s` | Step into |
+| `r` | Return (step out) |
+| `c [line]` | Continue (optionally to line) |
+| `q` | Quit |
+| `l [range]` | List source (`l 10-20` or `l 15`) |
+| `.` | Show current line |
+| `b [line]` | Set breakpoint |
+| `B [line]` | Delete breakpoint (`B *` = all) |
+| `L` | List breakpoints |
+| `T` | Stack trace |
+| `p expr` | Print expression |
+| `x expr` | Dump expression |
+| `h` | Help |
+
+### Next Steps
+
+1. Phase 2 completion:
+   - Implement `@{"_<$filename"}` magical array
+   - Track breakable lines
+
+2. Phase 3: Debug Variables
+   - `$DB::single`, `$DB::trace`, `$DB::signal` as tied variables (partially done - synced from Java)
+   - `@DB::args` support in `caller()` (done)
+   - `%DB::sub` for subroutine location tracking (done)
+
+3. Phase 5: perl5db.pl Compatibility
+   - Test with actual perl5db.pl
+
+### Known Issues
+
+1. **Package scoping after block-local packages**: After `{ package Foo; ... }` block ends, the debugger display may show `Foo::` instead of `main::` for subsequent statements. This is a package scoping issue in the interpreter, not debugger-specific.
+
+---
+
 ## References
 
 - `perldoc perldebug` - User documentation
