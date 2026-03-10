@@ -73,6 +73,8 @@ public class EmitterVisitor implements Visitor {
                         .sorted((a, b) -> b.getValue().get() - a.getValue().get())
                         .forEach(e -> System.err.println(e.getKey() + " : " + e.getValue().get() + " times"));
             }
+            // Also print interpreter mismatches
+            org.perlonjava.backend.bytecode.BytecodeCompiler.printInterpreterMismatches();
         }));
     }
     

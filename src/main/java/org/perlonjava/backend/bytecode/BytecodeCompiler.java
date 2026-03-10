@@ -80,6 +80,10 @@ public class BytecodeCompiler implements Visitor {
 
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
+    
+    // Context mismatch tracking (for migration validation)
+    static final Map<String, java.util.concurrent.atomic.AtomicInteger> interpreterContextMismatches = 
+            new java.util.concurrent.ConcurrentHashMap<>();
     Map<String, Integer> capturedVarIndices;  // Name → register index
     // BEGIN support for named subroutine closures
     int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
@@ -3736,10 +3740,49 @@ public class BytecodeCompiler implements Visitor {
         int savedTarget = targetOutputReg;
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
-        currentCallContext = callContext;
+        
+        // Check for cached context from ContextResolver
+        int effectiveContext = callContext;
+        if (node instanceof AbstractNode an && an.hasCachedContext()) {
+            int cached = an.getCachedContext();
+            if (cached != callContext) {
+                // Log mismatch for analysis (mirrors EmitterVisitor.acceptChild)
+                String key = nodeDescription(node) + " cached=" + contextName(cached) + " expected=" + contextName(callContext);
+                interpreterContextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+            }
+            // Use cached context (from ContextResolver) for migration
+            effectiveContext = cached;
+        }
+        
+        currentCallContext = effectiveContext;
         node.accept(this);
         targetOutputReg = savedTarget;
         currentCallContext = savedContext;
+    }
+    
+    private String nodeDescription(Node node) {
+        if (node instanceof OperatorNode op) return "OperatorNode(" + op.operator + ")";
+        if (node instanceof BinaryOperatorNode bin) return "BinaryOperatorNode(" + bin.operator + ")";
+        return node.getClass().getSimpleName();
+    }
+    
+    private String contextName(int ctx) {
+        return switch (ctx) {
+            case RuntimeContextType.VOID -> "VOID";
+            case RuntimeContextType.SCALAR -> "SCALAR";
+            case RuntimeContextType.LIST -> "LIST";
+            case RuntimeContextType.RUNTIME -> "RUNTIME";
+            default -> "UNKNOWN(" + ctx + ")";
+        };
+    }
+    
+    public static void printInterpreterMismatches() {
+        if (interpreterContextMismatches.isEmpty()) return;
+        System.err.println("\n=== Interpreter Context Mismatches (vs ContextResolver) ===");
+        interpreterContextMismatches.entrySet().stream()
+                .sorted((a, b) -> b.getValue().get() - a.getValue().get())
+                .forEach(e -> System.err.println(e.getKey() + " : " + e.getValue().get() + " times"));
+        System.err.println();
     }
 
     // =========================================================================
