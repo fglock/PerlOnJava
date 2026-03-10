@@ -29,7 +29,7 @@ import org.perlonjava.runtime.runtimetypes.*;
  *   2. Compile this example:
  *        javac -cp target/perlonjava-3.0.0.jar examples/ExifToolExample.java
  *   3. Run:
- *        java -cp target/perlonjava-3.0.0.jar:. examples.ExifToolExample
+ *        java --sun-misc-unsafe-memory-access=allow -cp target/perlonjava-3.0.0.jar:. examples.ExifToolExample
  */
 public class ExifToolExample {
     
