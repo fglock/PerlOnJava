@@ -273,7 +273,7 @@ public class ContextResolver extends ASTTransformPass {
             case "my", "our", "local", "state" -> { setContext(node, currentContext); visitDeclaration(node); }
             case "return" -> { setContext(node, currentContext); visitReturn(node); }
             case "undef" -> { setContext(node, currentContext); visitUndef(node); }
-            case "scalar" -> { setContext(node, RuntimeContextType.SCALAR); visitScalarForce(node); }
+            case "scalar" -> { setContext(node, currentContext); visitScalarForce(node); }
             case "wantarray" -> { setContext(node, RuntimeContextType.SCALAR); visitWantarray(node); }
             
             // Print-like operators

@@ -120,7 +120,7 @@ public class EmitterVisitor implements Visitor {
         if (node instanceof NumberNode) return true;
         if (node instanceof OperatorNode op) {
             return switch (op.operator) {
-                case "@", "$", "scalar" -> true;
+                case "@", "$" -> true;
                 default -> false;
             };
         }
