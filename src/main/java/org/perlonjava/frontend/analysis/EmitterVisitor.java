@@ -79,13 +79,29 @@ public class EmitterVisitor implements Visitor {
     }
     
     /**
-     * Visits a child node with the specified context.
-     * 
-     * <p>Uses fallback context (safe mode) while collecting mismatches for analysis.
-     * Mismatches indicate either ContextResolver or the emitter needs fixing.
+     * Visits a child node using its precomputed context from ContextResolver.
+     * Use this when the node's context was set by ContextResolver.
      *
      * @param child The child node to visit
-     * @param fallbackContext Context to use for visiting
+     */
+    public void acceptChild(Node child) {
+        if (child == null) return;
+        
+        if (child instanceof AbstractNode an && an.hasCachedContext()) {
+            child.accept(with(an.getCachedContext()));
+        } else {
+            // Fallback to current context if no cached context
+            child.accept(this);
+        }
+    }
+    
+    /**
+     * Visits a child node with the specified fallback context.
+     * Uses cached context when available, falls back to specified context otherwise.
+     * Only use this for nodes with known mismatches or dynamically created nodes.
+     *
+     * @param child The child node to visit
+     * @param fallbackContext Context to use when cached context unavailable or mismatched
      */
     public void acceptChild(Node child, int fallbackContext) {
         if (child == null) return;

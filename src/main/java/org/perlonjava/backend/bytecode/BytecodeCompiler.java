@@ -3732,6 +3732,30 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    /**
+     * Compiles a node using its precomputed context from ContextResolver.
+     * Use this when the node's context was set by ContextResolver.
+     */
+    void compileNode(Node node) {
+        if (node == null) return;
+        int savedTarget = targetOutputReg;
+        int savedContext = currentCallContext;
+        targetOutputReg = -1;
+        
+        if (node instanceof AbstractNode an && an.hasCachedContext()) {
+            currentCallContext = an.getCachedContext();
+        }
+        // else keep current context as fallback
+        
+        node.accept(this);
+        targetOutputReg = savedTarget;
+        currentCallContext = savedContext;
+    }
+
+    /**
+     * Compiles a node with explicit fallback context.
+     * Uses cached context when available, falls back to specified context otherwise.
+     */
     void compileNode(Node node, int targetReg, int callContext) {
         int savedTarget = targetOutputReg;
         int savedContext = currentCallContext;
