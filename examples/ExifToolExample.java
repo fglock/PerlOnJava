@@ -21,7 +21,15 @@ import org.perlonjava.runtime.runtimetypes.*;
  * Run the Perl version with:
  *   ./gradlew run --args='examples/ExifToolExample.pl'
  * 
- * Or compile and run the Java version (requires fat jar).
+ * Or compile and run the Java version:
+ *   1. Build the fat jar:
+ *        make
+ *      or:
+ *        ./gradlew shadowJar
+ *   2. Compile this example:
+ *        javac -cp build/libs/perlonjava-*-all.jar examples/ExifToolExample.java
+ *   3. Run:
+ *        java -cp build/libs/perlonjava-*-all.jar:examples examples.ExifToolExample
  */
 public class ExifToolExample {
     
