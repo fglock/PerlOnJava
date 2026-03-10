@@ -1493,19 +1493,23 @@ Both backends now use cached context from ContextResolver for most node types:
 **JVM emitter** (`EmitterVisitor.acceptChild`):
 - Uses cached context by default
 - Falls back to emitter's context for nodes with known mismatches:
-  - `ListNode`, `BlockNode`
-  - `OperatorNode(!,unaryMinus,exists,length,@,$)`
-  - `BinaryOperatorNode(->,])`
+  - `ListNode`, `BlockNode`, `StringNode`, `NumberNode`
+  - `OperatorNode(@,$,scalar)`
+  - `BinaryOperatorNode(->,[(,{,print)`
 
 **Interpreter** (`BytecodeCompiler.compileNode`):
 - Uses cached context by default
 - Falls back to caller's context for nodes with known mismatches:
-  - `StringNode`
-  - `OperatorNode(\)`
-  - `BinaryOperatorNode(print)`
+  - `StringNode`, `NumberNode`, `BlockNode`
+  - `OperatorNode(\,$,scalar)`
+  - `BinaryOperatorNode(print,->,([,{)`
 
 This allows most nodes to benefit from pre-computed context while isolating
-the ~50 remaining edge cases that need investigation.
+the remaining edge cases. All tests pass with this fallback behavior.
+
+**Status as of 2025-03-09**: ~90% of node types use cached context successfully.
+The remaining mismatches are structural issues where the calling pattern differs
+between backends (e.g., subscript indices, hash literal elements, print arguments).
 
 ### Open Questions
 
