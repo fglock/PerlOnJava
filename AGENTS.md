@@ -49,6 +49,25 @@ Example format at the end of a design doc:
   java -jar target/perlonjava.jar --int -e 'code'     # Interpreter
   ```
 
+### Git Workflow
+
+**IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+1. **Create a feature branch** before making changes:
+   ```bash
+   git checkout -b feature/descriptive-name
+   ```
+
+2. **Make commits** on the feature branch with clear messages
+
+3. **Push the feature branch** and create a PR:
+   ```bash
+   git push origin feature/descriptive-name
+   gh pr create --title "Title" --body "Description"
+   ```
+
+4. **Wait for review** before merging
+
 ### Commits
 
 - Reference the design doc or issue in commit messages when relevant

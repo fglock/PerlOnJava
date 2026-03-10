@@ -11,6 +11,17 @@ triggers:
 
 You are debugging failures in the Image::ExifTool test suite running under PerlOnJava (a Perl-to-JVM compiler/interpreter). Failures typically stem from missing Perl features or subtle behavior differences in PerlOnJava, not bugs in ExifTool itself.
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+```bash
+git checkout -b fix/exiftool-issue-name
+# ... make changes ...
+git push origin fix/exiftool-issue-name
+gh pr create --title "Fix: description" --body "Details"
+```
+
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)

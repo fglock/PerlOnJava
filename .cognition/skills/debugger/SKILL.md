@@ -4,6 +4,17 @@
 
 Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger uses DEBUG opcodes injected at statement boundaries in the bytecode interpreter.
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+```bash
+git checkout -b feature/debugger-improvement
+# ... make changes ...
+git push origin feature/debugger-improvement
+gh pr create --title "Debugger: description" --body "Details"
+```
+
 ## Key Documentation
 
 ### Design Document
@@ -36,7 +47,8 @@ Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger
 | Command | Description |
 |---------|-------------|
 | `n` | Next (step over) |
-| `s` | Step into |
+| `s` | Step into (shows subroutine name, e.g., `main::foo(file:line)`) |
+| `r` | Return (step out of current subroutine) |
 | `c [line]` | Continue (optionally to line) |
 | `q` | Quit |
 | `l [range]` | List source (`l 10-20` or `l 15`) |
@@ -44,6 +56,9 @@ Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger
 | `b [line]` | Set breakpoint |
 | `B [line]` | Delete breakpoint (`B *` = all) |
 | `L` | List breakpoints |
+| `T` | Stack trace |
+| `p expr` | Print expression (supports lexical variables) |
+| `x expr` | Dump expression with Data::Dumper (supports lexical variables) |
 | `h` | Help |
 
 ## Comparison with System Perl Debugger
@@ -65,8 +80,8 @@ Tested side-by-side with `perl -d`:
 | Loading message | None | Shows perl5db.pl version | OK (intentional) |
 
 ### Known Differences to Address
-1. **Package prefix**: Add `main::` (or current package) to location display
-2. **Prompt counter**: Change to 1-indexed (`DB<1>`) to match Perl
+1. ~~**Package prefix**: Add `main::` (or current package) to location display~~ **DONE**
+2. ~~**Prompt counter**: Change to 1-indexed (`DB<1>`) to match Perl~~ **DONE**
 3. **`l` command**: Perl shows current line, subsequent `l` shows next 10 lines
 
 ## Source Files
@@ -85,23 +100,26 @@ Tested side-by-side with `perl -d`:
 
 ## Next Steps (from design doc)
 
-### Phase 2: Source Line Support (partially done)
+### Phase 2: Source Line Support (mostly done)
 - [x] Store source lines during parsing
 - [x] Skip compile-time statements (use/no)
+- [x] Display subroutine names when stepping (e.g., `main::foo(file:line)`)
 - [ ] Track breakable lines (statements vs comments)
 - [ ] Implement `@{"_<$filename"}` magical array
 - [ ] Implement `%{"_<$filename"}` for breakpoint storage
 
-### Phase 3: Debug Variables
-- [ ] `$DB::single`, `$DB::trace`, `$DB::signal` as tied variables
-- [ ] `$DB::filename`, `$DB::line` (currently Java-only)
-- [ ] `@DB::args` support in `caller()`
-- [ ] `%DB::sub` for subroutine location tracking
+### Phase 3: Debug Variables (partially done)
+- [x] `$DB::single`, `$DB::trace`, `$DB::signal` synced from Java
+- [x] `$DB::filename`, `$DB::line` set by DEBUG opcode
+- [x] `@DB::args` support in `caller()`
+- [x] `%DB::sub` for subroutine location tracking
+- [ ] Make debug variables fully tied (Perl can modify them)
 
-### Phase 4: Perl Expression Evaluation
-- [ ] `p expr` - print expression value
-- [ ] `x expr` - dump expression (Data::Dumper style)
-- [ ] General expression evaluation in debugger context
+### Phase 4: Perl Expression Evaluation (DONE)
+- [x] `p expr` - print expression value
+- [x] `x expr` - dump expression (Data::Dumper style)
+- [x] Lexical variable access in debugger expressions
+- [x] Registry deduplication to minimize memory usage
 
 ### Phase 5: perl5db.pl Compatibility
 - [ ] Inject `BEGIN { require 'perl5db.pl' }` when `-d` used

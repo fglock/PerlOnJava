@@ -2,6 +2,17 @@
 
 Profile and optimize PerlOnJava runtime performance using Java Flight Recorder.
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+```bash
+git checkout -b perf/optimization-name
+# ... make changes ...
+git push origin perf/optimization-name
+gh pr create --title "Perf: description" --body "Details"
+```
+
 ## When to Use
 
 - Investigating performance bottlenecks in Perl scripts running on PerlOnJava
