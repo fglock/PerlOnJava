@@ -6,6 +6,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -232,11 +233,16 @@ public class OperatorParser {
                 String name = ((IdentifierNode) identifierNode).name;
                 String var = sigil + name;
                 if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                    System.err.println(
-                            ctx.errorUtil.errorMessage(node.getIndex(),
-                                    "Warning: \"" + operator + "\" variable "
-                                            + var
-                                            + " masks earlier declaration in same ctx.symbolTable"));
+                    // Check if shadow warnings are enabled via 'use warnings "shadow"' or via $^W (-w flag)
+                    boolean shadowEnabled = ctx.symbolTable.isWarningCategoryEnabled("shadow")
+                            || GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("W")).getBoolean();
+                    if (shadowEnabled) {
+                        // "our" uses "redeclared", "my"/"state" use "masks earlier declaration in same scope"
+                        String message = operator.equals("our")
+                                ? "\"" + operator + "\" variable " + var + " redeclared"
+                                : "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope";
+                        System.err.print(ctx.errorUtil.warningMessage(node.getIndex(), message));
+                    }
                 }
                 int varIndex = ctx.symbolTable.addVariable(var, operator, node);
                 // Note: the isDeclaredReference flag is stored in node.annotations

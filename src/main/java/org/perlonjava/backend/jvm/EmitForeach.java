@@ -7,6 +7,8 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class EmitForeach {
@@ -132,10 +134,18 @@ public class EmitForeach {
         if (variableNode instanceof OperatorNode opNode &&
                 (opNode.operator.equals("my") || opNode.operator.equals("our"))) {
             isDeclaredInFor = true;
-            boolean isWarningEnabled = Warnings.warningManager.isWarningEnabled("redefine");
+            // Shadow warning is emitted during parsing in OperatorParser.addVariableToScope()
+            // For loop variables, we need to temporarily disable it to avoid spurious warnings
+            // Check both lexical 'shadow' category and $^W
+            boolean isWarningEnabled = Warnings.warningManager.isWarningEnabled("shadow");
+            boolean isWarnVarEnabled = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("W")).getBoolean();
             if (isWarningEnabled) {
-                // turn off "masks earlier declaration" warning
-                Warnings.warningManager.setWarningState("redefine", false);
+                // turn off lexical "shadow" warning for loop variables
+                Warnings.warningManager.setWarningState("shadow", false);
+            }
+            if (isWarnVarEnabled) {
+                // temporarily turn off $^W for loop variables
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("W")).set(0);
             }
             // emit the variable declarations
             variableNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
@@ -160,8 +170,12 @@ public class EmitForeach {
             }
 
             if (isWarningEnabled) {
-                // restore warnings
-                Warnings.warningManager.setWarningState("redefine", true);
+                // restore lexical warnings
+                Warnings.warningManager.setWarningState("shadow", true);
+            }
+            if (isWarnVarEnabled) {
+                // restore $^W
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("W")).set(1);
             }
 
             // Reset global variable check after rewriting

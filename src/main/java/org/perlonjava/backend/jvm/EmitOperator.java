@@ -262,8 +262,26 @@ public class EmitOperator {
     static void handleAtan2(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
+            // Spill the first operand before evaluating the second so non-local control flow
+            // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+            MethodVisitor mv = emitterVisitor.ctx.mv;
             operand.elements.get(0).accept(scalarVisitor);
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
             operand.elements.get(1).accept(scalarVisitor);
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
             emitOperator(node, emitterVisitor);
         }
     }
