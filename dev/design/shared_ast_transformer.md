@@ -1567,15 +1567,18 @@ now always uses cached context from ContextResolver.
 so fallback is required for safety. Interpreter mismatches are mostly harmless
 (e.g., passing LIST to a StringNode that produces a single value regardless).
 
-**Remaining JVM mismatches to fix in ContextResolver** (cause ASM crashes without fallback):
+**Remaining JVM mismatches** (14 total, internal emitter implementation details):
 | Node Type | Count | Expected | Cached | Notes |
 |-----------|-------|----------|--------|-------|
-| ListNode | 7 | LIST | SCALAR | List in non-list context |
-| BlockNode | 5 | SCALAR | LIST | Block return in scalar |
-| BinaryOperatorNode(->) | 2 | SCALAR | VOID | Arrow deref result |
-| BinaryOperatorNode([) | 1 | LIST | SCALAR | Subscript arg |
-| OperatorNode(@) | 1 | LIST | SCALAR | Array in list |
-| OperatorNode($) | 1 | SCALAR | LIST | Scalar sigil |
+| ListNode | 7 | LIST | SCALAR | Internal: say/print args in scalar() |
+| BlockNode | 5 | SCALAR | LIST | Internal: block in scalar context |
+| BinaryOperatorNode([) | 1 | LIST | SCALAR | Internal: subscript index |
+| OperatorNode($) | 1 | SCALAR | LIST | Internal: array deref |
+
+**Recent fixes (2025-03-10)**:
+- Fixed arrow (->) context: non-slice subscript left operands now get SCALAR context
+- Fixed slice context: @arr[...] left operands now get LIST context
+- Eliminated 3 arrow-related mismatches
 
 **Added `AbstractNode.withContext()`**: Helper to set context on dynamically created nodes.
 
