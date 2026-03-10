@@ -1537,11 +1537,12 @@ public class BytecodeInterpreter {
 
                             case Opcodes.DEBUG -> {
                                 // Debug hook at statement boundary
-                                // Format: DEBUG file_string_idx line_number
+                                // Format: DEBUG file_string_idx line_number site_index
                                 int fileIdx = bytecode[pc++];
                                 int line = bytecode[pc++];
+                                int siteIndex = bytecode[pc++];
                                 String file = code.stringPool[fileIdx];
-                                DebugHooks.debug(file, line, code, registers);
+                                DebugHooks.debug(file, line, code, registers, siteIndex);
                             }
 
                             default -> {

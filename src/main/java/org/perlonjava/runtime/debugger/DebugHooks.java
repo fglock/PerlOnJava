@@ -38,6 +38,7 @@ public class DebugHooks {
     // Current execution context for expression evaluation
     private static InterpretedCode currentCode;
     private static RuntimeBase[] currentRegisters;
+    private static int currentSiteIndex = -1;
     
     // Flag to track if PERL5DB was set (user wants custom debugger)
     private static boolean hasCustomDebugger = false;
@@ -53,8 +54,9 @@ public class DebugHooks {
      * @param line      Current line number (1-based)
      * @param code      Current InterpretedCode (for expression evaluation)
      * @param registers Current register array (for variable access)
+     * @param siteIndex Index into evalSiteRegistries for lexical variable access
      */
-    public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers) {
+    public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers, int siteIndex) {
         // Execute PERL5DB on first call (defines user's DB::DB if set)
         if (!perl5dbExecuted) {
             perl5dbExecuted = true;
@@ -64,6 +66,7 @@ public class DebugHooks {
         // Store context for expression evaluation
         currentCode = code;
         currentRegisters = registers;
+        currentSiteIndex = siteIndex;
         
         // Sync from Perl $DB::single variable to DebugState
         syncFromPerlVariables();
@@ -587,6 +590,13 @@ public class DebugHooks {
         DebugState.debugMode = false;
         
         try {
+            // Look up the site-specific variable registry for lexical variable access
+            java.util.Map<String, Integer> siteRegistry = null;
+            if (currentSiteIndex >= 0 && currentCode.evalSiteRegistries != null
+                    && currentSiteIndex < currentCode.evalSiteRegistries.size()) {
+                siteRegistry = currentCode.evalSiteRegistries.get(currentSiteIndex);
+            }
+            
             // Evaluate the expression using eval in scalar context
             RuntimeScalar result = EvalStringHandler.evalString(
                     expr,
@@ -594,7 +604,8 @@ public class DebugHooks {
                     currentRegisters,
                     DebugState.currentFile,
                     DebugState.currentLine,
-                    RuntimeContextType.SCALAR
+                    RuntimeContextType.SCALAR,
+                    siteRegistry
             );
             
             // Check if eval had an error
@@ -627,6 +638,13 @@ public class DebugHooks {
         DebugState.debugMode = false;
         
         try {
+            // Look up the site-specific variable registry for lexical variable access
+            java.util.Map<String, Integer> siteRegistry = null;
+            if (currentSiteIndex >= 0 && currentCode.evalSiteRegistries != null
+                    && currentSiteIndex < currentCode.evalSiteRegistries.size()) {
+                siteRegistry = currentCode.evalSiteRegistries.get(currentSiteIndex);
+            }
+            
             // Wrap expression to use Data::Dumper-style output
             // For now, use a simple approach: evaluate and show type info
             String dumpExpr = "do { use Data::Dumper; local $Data::Dumper::Terse = 1; local $Data::Dumper::Indent = 1; Dumper(" + expr + ") }";
@@ -637,7 +655,8 @@ public class DebugHooks {
                     currentRegisters,
                     DebugState.currentFile,
                     DebugState.currentLine,
-                    RuntimeContextType.SCALAR
+                    RuntimeContextType.SCALAR,
+                    siteRegistry
             );
             
             // Check if eval had an error
@@ -650,7 +669,8 @@ public class DebugHooks {
                         currentRegisters,
                         DebugState.currentFile,
                         DebugState.currentLine,
-                        RuntimeContextType.SCALAR
+                        RuntimeContextType.SCALAR,
+                        siteRegistry
                 );
                 System.out.println("0  " + result.toString());
             } else {

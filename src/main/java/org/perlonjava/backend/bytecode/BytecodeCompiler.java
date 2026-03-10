@@ -42,8 +42,9 @@ public class BytecodeCompiler implements Visitor {
     final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), labelName(String)]
     // Error reporting
     final ErrorMessageUtil errorUtil;
-    // Per-eval-site variable registries: each eval STRING emission snapshots the
-    // currently visible variables so at runtime the correct registers are captured.
+    // Per-site variable registries: each eval STRING or DEBUG opcode emission snapshots
+    // the currently visible variables so at runtime the correct registers are captured.
+    // Used by both eval STRING (for variable capture) and debugger (for lexical access).
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
     final List<int[]> evalSitePragmaFlags = new ArrayList<>();
     // Variables captured by inner closures (named or anonymous subs compiled within this scope).
@@ -826,9 +827,14 @@ public class BytecodeCompiler implements Visitor {
                     // lazily after the main script, making cached line numbers unreliable
                     int lineNumber = errorUtil.getLineNumberAccurate(stmtTokenIndex);
                     int fileIdx = addToStringPool(sourceName);
+                    // Capture variable registry for debugger expression evaluation
+                    // Reuse evalSiteRegistries - same structure needed by both eval and debugger
+                    int siteIndex = evalSiteRegistries.size();
+                    evalSiteRegistries.add(symbolTable.getVisibleVariableRegistry());
                     emit(Opcodes.DEBUG);
                     emit(fileIdx);
                     emit(lineNumber);
+                    emit(siteIndex);
                 }
             }
 
