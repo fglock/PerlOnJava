@@ -1554,6 +1554,31 @@ the calling pattern inherently differs between backends.
 | `EmitSubroutine.java` | Pending | Migrate call sites to use `acceptChild()` |
 | `CompileAssignment.java` | Pending | Read lvalue annotations |
 
+### Mismatch Handling Update (2025-03-09)
+
+**JVM Emitter**: Removed `hasKnownMismatch()` workaround list but kept fallback behavior.
+When ContextResolver's cached context differs from the expected context, the emitter
+now uses the fallback (emitter's expected context) to prevent ASM frame compute crashes.
+
+**Interpreter**: Removed `hasKnownInterpreterMismatch()` workaround. The interpreter
+now always uses cached context from ContextResolver.
+
+**Key insight**: JVM emitter mismatches cause ASM bytecode verification failures,
+so fallback is required for safety. Interpreter mismatches are mostly harmless
+(e.g., passing LIST to a StringNode that produces a single value regardless).
+
+**Remaining JVM mismatches to fix in ContextResolver** (cause ASM crashes without fallback):
+| Node Type | Count | Expected | Cached | Notes |
+|-----------|-------|----------|--------|-------|
+| ListNode | 7 | LIST | SCALAR | List in non-list context |
+| BlockNode | 5 | SCALAR | LIST | Block return in scalar |
+| BinaryOperatorNode(->) | 2 | SCALAR | VOID | Arrow deref result |
+| BinaryOperatorNode([) | 1 | LIST | SCALAR | Subscript arg |
+| OperatorNode(@) | 1 | LIST | SCALAR | Array in list |
+| OperatorNode($) | 1 | SCALAR | LIST | Scalar sigil |
+
+**Added `AbstractNode.withContext()`**: Helper to set context on dynamically created nodes.
+
 ### Dependencies
 
 - No external dependencies needed
