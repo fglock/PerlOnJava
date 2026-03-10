@@ -60,6 +60,11 @@ public class GlobalContext {
             GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set("jperl");
         }
 
+        // Initialize $^W based on -w flag
+        if (compilerOptions.warnFlag) {
+            GlobalVariable.getGlobalVariable(encodeSpecialVar("W")).set(1);
+        }
+
         GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version
         GlobalVariable.getGlobalVariable("main::@").set("");    // initialize $@ to ""
         GlobalVariable.getGlobalVariable("main::_");    // initialize $_ to "undef"
