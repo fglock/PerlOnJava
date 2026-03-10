@@ -1492,24 +1492,36 @@ Both backends now use cached context from ContextResolver for most node types:
 
 **JVM emitter** (`EmitterVisitor.acceptChild`):
 - Uses cached context by default
-- Falls back to emitter's context for nodes with known mismatches:
+- Falls back to emitter's context for nodes in `hasKnownMismatch()`:
   - `ListNode`, `BlockNode`, `StringNode`, `NumberNode`
-  - `OperatorNode(@,$,scalar)`
+  - `OperatorNode(@,$)`
   - `BinaryOperatorNode(->,[(,{,print)`
 
 **Interpreter** (`BytecodeCompiler.compileNode`):
 - Uses cached context by default
-- Falls back to caller's context for nodes with known mismatches:
+- Falls back to caller's context for nodes in `hasKnownInterpreterMismatch()`:
   - `StringNode`, `NumberNode`, `BlockNode`
-  - `OperatorNode(\,$,scalar)`
   - `BinaryOperatorNode(print,->,([,{)`
 
-This allows most nodes to benefit from pre-computed context while isolating
-the remaining edge cases. All tests pass with this fallback behavior.
+**Remaining mismatches (handled by fallback):**
 
-**Status as of 2025-03-09**: ~90% of node types use cached context successfully.
-The remaining mismatches are structural issues where the calling pattern differs
-between backends (e.g., subscript indices, hash literal elements, print arguments).
+| JVM Emitter | Count | Issue |
+|-------------|-------|-------|
+| ListNode cached=SCALAR expected=LIST | 7 | List literals in non-list context |
+| BlockNode cached=LIST expected=SCALAR | 5 | Block returns in scalar context |
+| BinaryOperatorNode(->) cached=VOID expected=SCALAR | 2 | Arrow deref in void |
+| BinaryOperatorNode([) cached=SCALAR expected=LIST | 1 | Subscript index |
+| OperatorNode(@,$) | 2 | Sigil context |
+
+| Interpreter | Count | Issue |
+|-------------|-------|-------|
+| OperatorNode(\) cached=SCALAR expected=LIST | 11 | Reference in list |
+| StringNode cached=SCALAR expected=LIST | 9 | String literals |
+| BinaryOperatorNode(print) cached=VOID expected=RUNTIME | 1 | Print in sub |
+
+**Status as of 2025-03-09**: ~95% of node types use cached context successfully.
+All tests pass. The remaining ~30 mismatches are structural differences where
+the calling pattern inherently differs between backends.
 
 ### Open Questions
 
