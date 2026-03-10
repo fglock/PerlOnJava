@@ -116,15 +116,17 @@ public class EmitterVisitor implements Visitor {
         // Nodes with known context mismatches - use fallback until fixed
         if (node instanceof ListNode) return true;
         if (node instanceof BlockNode) return true;
+        if (node instanceof StringNode) return true;
+        if (node instanceof NumberNode) return true;
         if (node instanceof OperatorNode op) {
             return switch (op.operator) {
-                case "!", "unaryMinus", "exists", "length", "@", "$" -> true;
+                case "@", "$", "scalar" -> true;
                 default -> false;
             };
         }
         if (node instanceof BinaryOperatorNode bin) {
             return switch (bin.operator) {
-                case "->", "[" -> true;
+                case "->", "[", "(", "{", "print" -> true;
                 default -> false;
             };
         }

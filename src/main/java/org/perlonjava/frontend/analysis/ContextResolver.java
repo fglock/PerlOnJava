@@ -310,18 +310,16 @@ public class ContextResolver extends ASTTransformPass {
                 setContext(node, currentContext); visitListOperand(node); 
             }
             
-            // Numeric/string operators produce SCALAR, but inherit RUNTIME inside subs
+            // Numeric/string operators - inherit context from parent
+            // These produce scalar values but the node itself should have parent's context
+            // (the emitter passes parent context, not forced SCALAR)
             case "unaryMinus", "unaryPlus", "~", "!", "not",
                  "abs", "int", "sqrt", "sin", "cos", "exp", "log", "rand",
                  "length", "defined", "exists", "ref",
                  "ord", "chr", "hex", "oct",
                  "lc", "uc", "lcfirst", "ucfirst", "quotemeta",
                  "++", "--", "++postfix", "--postfix" -> { 
-                // In RUNTIME context (sub body), keep RUNTIME so emitter can decide
-                int ctx = (currentContext == RuntimeContextType.RUNTIME) 
-                        ? RuntimeContextType.RUNTIME 
-                        : RuntimeContextType.SCALAR;
-                setContext(node, ctx); 
+                setContext(node, currentContext); 
                 visitOperatorDefault(node); 
             }
             

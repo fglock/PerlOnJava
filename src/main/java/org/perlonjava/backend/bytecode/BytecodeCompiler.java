@@ -3778,11 +3778,19 @@ public class BytecodeCompiler implements Visitor {
     private boolean hasKnownInterpreterMismatch(Node node) {
         // Nodes with known context mismatches - use fallback until fixed
         if (node instanceof StringNode) return true;
+        if (node instanceof NumberNode) return true;
+        if (node instanceof BlockNode) return true;
         if (node instanceof OperatorNode op) {
-            return "\\".equals(op.operator);
+            return switch (op.operator) {
+                case "\\", "$", "scalar" -> true;
+                default -> false;
+            };
         }
         if (node instanceof BinaryOperatorNode bin) {
-            return "print".equals(bin.operator);
+            return switch (bin.operator) {
+                case "print", "->", "(", "[", "{" -> true;
+                default -> false;
+            };
         }
         return false;
     }
