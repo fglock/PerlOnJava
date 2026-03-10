@@ -27,9 +27,9 @@ import org.perlonjava.runtime.runtimetypes.*;
  *      or:
  *        ./gradlew shadowJar
  *   2. Compile this example:
- *        javac -cp build/libs/perlonjava-*-all.jar examples/ExifToolExample.java
+ *        javac -cp target/perlonjava-3.0.0.jar examples/ExifToolExample.java
  *   3. Run:
- *        java -cp build/libs/perlonjava-*-all.jar:examples examples.ExifToolExample
+ *        java -cp target/perlonjava-3.0.0.jar:examples examples.ExifToolExample
  */
 public class ExifToolExample {
     
