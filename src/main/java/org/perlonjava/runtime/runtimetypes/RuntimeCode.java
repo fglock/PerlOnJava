@@ -30,6 +30,7 @@ import java.util.*;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -323,6 +324,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
 
+        // Save the current scope so we can restore it after eval compilation.
+        // This is critical because eval may be called from code compiled with different
+        // warning/feature flags than the caller, and we must not leak the eval's scope.
+        ScopedSymbolTable savedCurrentScope = getCurrentScope();
+
         // Store runtime values in ThreadLocal so SpecialBlockParser can access them during parsing.
         // This enables BEGIN blocks to see outer lexical variables' runtime values.
         //
@@ -583,7 +589,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 capturedHintHash.elements.clear();
                 capturedHintHash.elements.putAll(savedHintHash);
 
-                setCurrentScope(capturedSymbolTable);
+                // Note: Scope restoration moved to outer finally block to handle cache hits
 
                 // Clean up BEGIN aliases for captured variables after compilation.
                 // These aliases were only needed during parsing (for BEGIN blocks to access
@@ -615,6 +621,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             return generatedClass;
         } finally {
+            // Restore the original current scope, not the captured symbol table.
+            // This prevents eval from leaking its compile-time scope to the caller.
+            // This MUST be in the outer finally to handle both cache hits and compilation paths.
+            setCurrentScope(savedCurrentScope);
+
             // Clean up ThreadLocal to prevent memory leaks
             // IMPORTANT: Always clean up ThreadLocal in finally block to ensure it's removed
             // even if compilation fails. Failure to do so could cause memory leaks in
@@ -760,6 +771,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+
+        // Save the current scope so we can restore it after eval execution.
+        // This is critical because eval may be called from code compiled with different
+        // warning/feature flags than the caller, and we must not leak the eval's scope.
+        ScopedSymbolTable savedCurrentScope = getCurrentScope();
 
         // Store runtime values in ThreadLocal for BEGIN block support
         EvalRuntimeContext runtimeCtx = new EvalRuntimeContext(
@@ -1080,6 +1096,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
+
+            // Restore the original current scope, not the captured symbol table.
+            // This prevents eval from leaking its compile-time scope to the caller.
+            setCurrentScope(savedCurrentScope);
 
             // Store source lines in debugger symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention

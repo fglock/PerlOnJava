@@ -1,9 +1,7 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
-import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
 import org.perlonjava.runtime.regex.RegexTimeoutException;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -268,10 +266,8 @@ public class Operator {
         }
 
         if (offset < 0 || offset > strLength) {
-            if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_SUBSTR)) {
-                WarnDie.warn(new RuntimeScalar("substr outside of string"),
-                        RuntimeScalarCache.scalarEmptyString);
-            }
+            WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                    RuntimeScalarCache.scalarEmptyString);
             if (replacement != null) {
                 return new RuntimeScalar();
             }
@@ -538,15 +534,13 @@ public class Operator {
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
-            if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {
-                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
-                        RuntimeScalarCache.scalarEmptyString);
-            }
-            if (!timesScalar.getDefinedBoolean()) {
-                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
-                        RuntimeScalarCache.scalarEmptyString);
-            }
+        if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (!timesScalar.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
+                    RuntimeScalarCache.scalarEmptyString);
         }
 
         // Check for non-finite values first

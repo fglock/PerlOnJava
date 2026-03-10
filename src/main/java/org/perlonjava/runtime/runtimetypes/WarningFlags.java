@@ -5,7 +5,6 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import java.util.*;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
-import static org.perlonjava.runtime.runtimetypes.GlobalContext.encodeSpecialVar;
 
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
@@ -47,13 +46,12 @@ public class WarningFlags {
     }
 
     /**
-     * Returns a list of all warning categories and subcategories in sorted order.
-     * Sorted order is required for consistent bit position assignment.
+     * Returns a list of all warning categories and subcategories.
      *
-     * @return A sorted list of all warning categories.
+     * @return A list of all warning categories.
      */
     public static List<String> getWarningList() {
-        Set<String> warningSet = new TreeSet<>();
+        Set<String> warningSet = new HashSet<>();
         for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
             warningSet.add(entry.getKey());
             warningSet.addAll(Arrays.asList(entry.getValue()));
@@ -62,8 +60,37 @@ public class WarningFlags {
     }
 
     public void initializeEnabledWarnings() {
-        // Enable all warnings by default (Perl behavior for `use warnings;`)
-        enableWarning("all");
+        // Enable deprecated warnings
+        enableWarning("deprecated");
+        enableWarning("deprecated::apostrophe_as_package_separator");
+        enableWarning("deprecated::delimiter_will_be_paired");
+        enableWarning("deprecated::dot_in_inc");
+        enableWarning("deprecated::goto_construct");
+        enableWarning("deprecated::smartmatch");
+        enableWarning("deprecated::unicode_property_name");
+        enableWarning("deprecated::version_downgrade");
+
+        // Enable experimental warnings
+        enableWarning("experimental::args_array_with_signatures");
+        enableWarning("experimental::bitwise");
+        enableWarning("experimental::builtin");
+        enableWarning("experimental::class");
+        enableWarning("experimental::declared_refs");
+        enableWarning("experimental::defer");
+        enableWarning("experimental::extra_paired_delimiters");
+        enableWarning("experimental::private_use");
+        enableWarning("experimental::re_strict");
+        enableWarning("experimental::refaliasing");
+        enableWarning("experimental::try");
+        enableWarning("experimental::uniprop_wildcards");
+        enableWarning("experimental::vlb");
+
+        // Enable IO warnings
+        enableWarning("io");
+
+        // Enable other warnings
+        enableWarning("glob");
+        enableWarning("locale");
     }
 
     /**
@@ -106,33 +133,12 @@ public class WarningFlags {
     }
 
     /**
-     * Checks if $^W (the global warning flag set by -w) is enabled.
-     * @return True if $^W is true, false otherwise.
-     */
-    private boolean isGlobalWarnEnabled() {
-        return GlobalVariable.getGlobalVariable(encodeSpecialVar("W")).getBoolean();
-    }
-
-    /**
      * Checks if a warning category is enabled.
-     * Also returns true if $^W is set (from -w flag).
      *
      * @param category The name of the warning category to check.
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(String category) {
-        return isGlobalWarnEnabled() || getCurrentScope().isWarningCategoryEnabled(category);
-    }
-
-    /**
-     * Fast check if a warning category is enabled using a bit position constant.
-     * Use the ScopedSymbolTable.WARN_* constants for optimal performance.
-     * Also returns true if $^W is set (from -w flag).
-     *
-     * @param bitPosition The bit position of the warning category (e.g., ScopedSymbolTable.WARN_SUBSTR)
-     * @return True if the category is enabled, false otherwise.
-     */
-    public boolean isWarningEnabled(int bitPosition) {
-        return isGlobalWarnEnabled() || getCurrentScope().isWarningEnabled(bitPosition);
+        return getCurrentScope().isWarningCategoryEnabled(category);
     }
 }

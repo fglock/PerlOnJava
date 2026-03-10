@@ -1,8 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.runtime.perlmodule.Warnings;
 
 import java.util.*;
 
@@ -99,11 +97,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         // Warn if odd number of elements
         if (elementCount % 2 != 0) {
-            if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_MISC)) {
-                WarnDie.warn(
-                        new RuntimeScalar(oddWarningMessage),
-                        RuntimeScalarCache.scalarEmptyString);
-            }
+            WarnDie.warn(
+                    new RuntimeScalar(oddWarningMessage),
+                    RuntimeScalarCache.scalarEmptyString);
         }
 
         Iterator<RuntimeScalar> iterator = value.iterator();
@@ -212,11 +208,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
                 // Warn about odd elements (Perl does not warn about references in hash assignment)
                 if (originalSize % 2 != 0) {
-                    if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_MISC)) {
-                        WarnDie.warn(
-                                new RuntimeScalar("Odd number of elements in hash assignment"),
-                                RuntimeScalarCache.scalarEmptyString);
-                    }
+                    WarnDie.warn(
+                            new RuntimeScalar("Odd number of elements in hash assignment"),
+                            RuntimeScalarCache.scalarEmptyString);
                 }
 
                 // Clear existing elements but keep the same Map instance to preserve capacity

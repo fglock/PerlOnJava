@@ -176,10 +176,10 @@ subtest "Multiple format modifiers" => sub {
     # Test switching between modes
     my $packed = pack "U C0 U U0 U", 0x41, 0x10A, 0xA23;
 
-    # Debug info (commented out to reduce test output)
+    # Let's debug what we actually get
     my @bytes = map { ord($_) } split //, $packed;
-    # diag("Packed bytes: " . join(" ", map { sprintf("0x%02X", $_) } @bytes));
-    # diag("Packed length: " . length($packed));
+    diag("Packed bytes: " . join(" ", map { sprintf("0x%02X", $_) } @bytes));
+    diag("Packed length: " . length($packed));
 
     TODO: {
         local $TODO = "Mode switching behavior needs investigation";
@@ -206,9 +206,9 @@ subtest "Pack with W format (UTF-8 bytes)" => sub {
         my $packed_c0w = pack "C0W", 0x10A;
 
         # In PerlOnJava, W might be returning a character instead of bytes
-        # Debug info (commented out to reduce test output)
-        # diag("W format length: " . length($packed_w));
-        # diag("W format ord: " . ord($packed_w));
+        # Let's check what we actually get
+        diag("W format length: " . length($packed_w));
+        diag("W format ord: " . ord($packed_w));
 
         if (length($packed_w) == 1 && ord($packed_w) == 0x10A) {
             # PerlOnJava is returning a character
@@ -232,17 +232,17 @@ subtest "Direct comparison of pack formats" => sub {
     $results{'W'} = pack "W", $char;
     $results{'C0W'} = pack "C0W", $char;
 
-    # Display what each format produces (commented out to reduce test output)
-    # for my $format (sort keys %results) {
-    #     my $result = $results{$format};
-    #     my @bytes = map { ord($_) } split //, $result;
-    #     diag(sprintf("%-5s: length=%d, bytes=[%s], utf8=%s",
-    #         $format,
-    #         length($result),
-    #         join(" ", map { sprintf("0x%02X", $_) } @bytes),
-    #         utf8::is_utf8($result) ? "yes" : "no"
-    #     ));
-    # }
+    # Display what each format produces
+    for my $format (sort keys %results) {
+        my $result = $results{$format};
+        my @bytes = map { ord($_) } split //, $result;
+        diag(sprintf("%-5s: length=%d, bytes=[%s], utf8=%s",
+            $format,
+            length($result),
+            join(" ", map { sprintf("0x%02X", $_) } @bytes),
+            utf8::is_utf8($result) ? "yes" : "no"
+        ));
+    }
 
     # Test expected behaviors
     subtest "U format" => sub {
@@ -301,8 +301,8 @@ subtest "Test from utf.t context" => sub {
     my $utf16le = pack "v*", @utf16_chars;
     my @utf16_bytes = map { ord($_) } split //, $utf16le;
 
-    # Show what gets written to the file (commented out to reduce test output)
-    # diag("UTF-16LE bytes: " . join(" ", map { sprintf("%02X", $_) } @utf16_bytes));
+    # Show what gets written to the file
+    diag("UTF-16LE bytes: " . join(" ", map { sprintf("%02X", $_) } @utf16_bytes));
     is(length($utf16le), 8, "UTF-16LE encoded to 8 bytes");
 };
 
@@ -329,11 +329,10 @@ subtest "Character vs byte string detection" => sub {
         $byte_display = "$byte_string";
     };
 
-    # Debug info (commented out to reduce test output)
-    # diag("Character string displays as: " .
-    #     join(" ", map { sprintf("U+%04X", ord($_)) } split //, $char_display));
-    # diag("Byte string displays as: " .
-    #     join(" ", map { sprintf("0x%02X", ord($_)) } split //, $byte_display));
+    diag("Character string displays as: " .
+        join(" ", map { sprintf("U+%04X", ord($_)) } split //, $char_display));
+    diag("Byte string displays as: " .
+        join(" ", map { sprintf("0x%02X", ord($_)) } split //, $byte_display));
 };
 
 done_testing();

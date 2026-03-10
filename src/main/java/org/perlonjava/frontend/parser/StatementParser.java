@@ -534,6 +534,12 @@ public class StatementParser {
                         useWarnings(new RuntimeArray(
                                 new RuntimeScalar("warnings"),
                                 new RuntimeScalar("all")), RuntimeContextType.VOID);
+                        // Copy warning flags to ALL levels of the parser's symbol table
+                        // This matches what's done after import() for 'use warnings'
+                        java.util.BitSet currentWarnings = getCurrentScope().warningFlagsStack.peek();
+                        for (int i = 0; i < parser.ctx.symbolTable.warningFlagsStack.size(); i++) {
+                            parser.ctx.symbolTable.warningFlagsStack.set(i, (java.util.BitSet) currentWarnings.clone());
+                        }
                     }
                 }
             }
@@ -611,13 +617,6 @@ public class StatementParser {
                             RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
                             setCurrentScope(parser.ctx.symbolTable);
                             RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
-                            // After import, copy the current warning flags to ALL levels of the parser's symbol table
-                            // This is needed because import may have modified warnings in a nested scope
-                            // We must update ALL levels because exitScope() pops from all stacks together
-                            java.util.BitSet currentWarnings = getCurrentScope().warningFlagsStack.peek();
-                            for (int i = 0; i < parser.ctx.symbolTable.warningFlagsStack.size(); i++) {
-                                parser.ctx.symbolTable.warningFlagsStack.set(i, (java.util.BitSet) currentWarnings.clone());
-                            }
                         }
                     }
                 }

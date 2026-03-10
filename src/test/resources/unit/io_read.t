@@ -30,13 +30,13 @@ sub create_test_file {
     close $fh;
 }
 
-# Helper to dump bytes in hex (diag commented out to reduce test output)
+# Helper to dump bytes in hex
 sub dump_bytes {
     my ($data, $label) = @_;
     $label //= "Data";
     my @bytes = unpack("C*", $data);
     my $hex = join(" ", map { sprintf("%02X", $_) } @bytes);
-    # diag("$label: " . length($data) . " bytes: $hex");
+    diag("$label: " . length($data) . " bytes: $hex");
     return $hex;
 }
 
@@ -132,16 +132,15 @@ subtest 'Read with UTF-8 layer' => sub {
         my $buffer;
         my $chars_read = read($fh, $buffer, 8);
         
-        # Debug info (commented out to reduce test output)
-        # diag("Read $chars_read characters");
-        # diag("Buffer content: '$buffer'");
-        # diag("Buffer length: " . length($buffer));
+        diag("Read $chars_read characters");
+        diag("Buffer content: '$buffer'");
+        diag("Buffer length: " . length($buffer));
         
         # Check character by character
-        # my @chars = split //, $buffer;
-        # for (my $i = 0; $i < @chars; $i++) {
-        #     diag("Char $i: '" . $chars[$i] . "' (U+" . sprintf("%04X", ord($chars[$i])) . ")");
-        # }
+        my @chars = split //, $buffer;
+        for (my $i = 0; $i < @chars; $i++) {
+            diag("Char $i: '" . $chars[$i] . "' (U+" . sprintf("%04X", ord($chars[$i])) . ")");
+        }
         
         # For now, just check what we actually got
         ok($chars_read > 0, 'read() read some characters');
@@ -309,43 +308,43 @@ subtest 'Read with buffer manipulation - diagnostic' => sub {
         my $buffer = "";
         
         # First read: "0123"
-        # diag("Initial buffer: '$buffer' (length: " . length($buffer) . ")");
+        diag("Initial buffer: '$buffer' (length: " . length($buffer) . ")");
         my $read1 = read($fh, $buffer, 4, 0);
-        # diag("After read 1 (4 bytes at offset 0): '$buffer' (length: " . length($buffer) . ")");
+        diag("After read 1 (4 bytes at offset 0): '$buffer' (length: " . length($buffer) . ")");
         is($read1, 4, 'First read returns 4 bytes');
         is($buffer, '0123', 'First read content correct');
         
         # Second read: Should read "4567" at offset 8
         # This might extend the buffer with null/space padding
         my $read2 = read($fh, $buffer, 4, 8);
-        # diag("After read 2 (4 bytes at offset 8): '$buffer' (length: " . length($buffer) . ")");
+        diag("After read 2 (4 bytes at offset 8): '$buffer' (length: " . length($buffer) . ")");
         dump_bytes($buffer, "Buffer after read 2");
         is($read2, 4, 'Second read returns 4 bytes');
         
         # Third read: Should read "89AB" at offset 4
         my $read3 = read($fh, $buffer, 4, 4);
-        # diag("After read 3 (4 bytes at offset 4): '$buffer' (length: " . length($buffer) . ")");
+        diag("After read 3 (4 bytes at offset 4): '$buffer' (length: " . length($buffer) . ")");
         dump_bytes($buffer, "Buffer after read 3");
         is($read3, 4, 'Third read returns 4 bytes');
         
-        # Check final buffer state (diag commented out to reduce test output)
-        # diag("Final buffer sections:");
-        # diag("  [0-3]: '" . substr($buffer, 0, 4) . "'");
-        # diag("  [4-7]: '" . substr($buffer, 4, 4) . "'") if length($buffer) >= 8;
-        # diag("  [8-11]: '" . substr($buffer, 8, 4) . "'") if length($buffer) >= 12;
+        # Check final buffer state
+        diag("Final buffer sections:");
+        diag("  [0-3]: '" . substr($buffer, 0, 4) . "'");
+        diag("  [4-7]: '" . substr($buffer, 4, 4) . "'") if length($buffer) >= 8;
+        diag("  [8-11]: '" . substr($buffer, 8, 4) . "'") if length($buffer) >= 12;
         
         # Adjusted expectations based on actual behavior
         ok(length($buffer) >= 8, 'Buffer has been extended');
         is(substr($buffer, 0, 4), '0123', 'First chunk preserved');
         
         # The actual behavior might differ from standard Perl
-        # Let's just verify what we got (diag commented out to reduce test output)
-        # if (length($buffer) >= 8) {
-        #     diag("Actual content at offset 4: '" . substr($buffer, 4, 4) . "'");
-        # }
-        # if (length($buffer) >= 12) {
-        #     diag("Actual content at offset 8: '" . substr($buffer, 8, 4) . "'");
-        # }
+        # Let's just verify what we got
+        if (length($buffer) >= 8) {
+            diag("Actual content at offset 4: '" . substr($buffer, 4, 4) . "'");
+        }
+        if (length($buffer) >= 12) {
+            diag("Actual content at offset 8: '" . substr($buffer, 8, 4) . "'");
+        }
     };
     
     close $fh;

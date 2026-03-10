@@ -1092,8 +1092,15 @@ public class EmitVariable {
                     String name = ((IdentifierNode) identifierNode).name;
                     String var = sigil + name;
                     emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
-                    // Note: shadow warning is emitted during parsing in OperatorParser.addVariableToScope()
-                    // We don't emit it again here to avoid duplicates
+                    if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                        if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                            System.err.println(
+                                    emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
+                                            "Warning: \"" + operator + "\" variable "
+                                                    + var
+                                                    + " masks earlier declaration in same ctx.symbolTable"));
+                        }
+                    }
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined
 

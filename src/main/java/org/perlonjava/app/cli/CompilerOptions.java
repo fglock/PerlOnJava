@@ -67,7 +67,6 @@ public class CompilerOptions implements Cloneable {
     public boolean allowUnsafeOperations = false; // For -U
     public boolean runUnderDebugger = false; // For -d
     public boolean taintWarnings = false; // For -t
-    public boolean warnFlag = false; // For -w (sets $^W = 1)
     public String debugFlags = ""; // For -D
     // Unicode/encoding flags for -C switches
     public boolean unicodeStdin = false; // -CS or -CI

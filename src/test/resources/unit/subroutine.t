@@ -28,8 +28,8 @@ ok(!defined &xnot, "non-existent subroutine is not defined");
 
 # named subroutine with Symbol assignment
 my $sym_ref = qualify_to_ref("A", "B");
-# diag("x is " . \&x);
-# diag("sym_ref is " . $sym_ref);
+diag("x is " . \&x);
+diag("sym_ref is " . $sym_ref);
 *$sym_ref = \&x;
 
 $result = "not called";
