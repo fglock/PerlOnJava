@@ -5,6 +5,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import java.util.*;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.runtime.runtimetypes.GlobalContext.encodeSpecialVar;
 
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
@@ -105,23 +106,33 @@ public class WarningFlags {
     }
 
     /**
+     * Checks if $^W (the global warning flag set by -w) is enabled.
+     * @return True if $^W is true, false otherwise.
+     */
+    private boolean isGlobalWarnEnabled() {
+        return GlobalVariable.getGlobalVariable(encodeSpecialVar("W")).getBoolean();
+    }
+
+    /**
      * Checks if a warning category is enabled.
+     * Also returns true if $^W is set (from -w flag).
      *
      * @param category The name of the warning category to check.
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(String category) {
-        return getCurrentScope().isWarningCategoryEnabled(category);
+        return isGlobalWarnEnabled() || getCurrentScope().isWarningCategoryEnabled(category);
     }
 
     /**
      * Fast check if a warning category is enabled using a bit position constant.
      * Use the ScopedSymbolTable.WARN_* constants for optimal performance.
+     * Also returns true if $^W is set (from -w flag).
      *
      * @param bitPosition The bit position of the warning category (e.g., ScopedSymbolTable.WARN_SUBSTR)
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(int bitPosition) {
-        return getCurrentScope().isWarningEnabled(bitPosition);
+        return isGlobalWarnEnabled() || getCurrentScope().isWarningEnabled(bitPosition);
     }
 }
