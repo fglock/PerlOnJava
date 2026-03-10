@@ -112,7 +112,7 @@ public class EmitterVisitor implements Visitor {
         if (child instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != fallbackContext) {
-                // Log mismatch for debugging - these indicate ContextResolver bugs
+                // Log mismatch - indicates ContextResolver bug
                 String key = nodeDescription(child) + " cached=" + contextName(cached) + " expected=" + contextName(fallbackContext);
                 contextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
                 // Use fallback to avoid ASM crashes until ContextResolver is fixed
