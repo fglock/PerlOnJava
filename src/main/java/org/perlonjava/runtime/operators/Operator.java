@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.perlmodule.Warnings;
@@ -267,7 +268,7 @@ public class Operator {
         }
 
         if (offset < 0 || offset > strLength) {
-            if (Warnings.warningManager.isWarningEnabled("substr")) {
+            if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_SUBSTR)) {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
@@ -537,7 +538,7 @@ public class Operator {
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+        if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
             if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
                         RuntimeScalarCache.scalarEmptyString);

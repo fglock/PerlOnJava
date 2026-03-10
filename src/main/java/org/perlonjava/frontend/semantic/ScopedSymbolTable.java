@@ -20,12 +20,32 @@ public class ScopedSymbolTable {
     // Global package version storage (static so it persists across all symbol table instances)
     private static final Map<String, String> packageVersions = new HashMap<>();
 
+    // Public constants for common warning categories (for fast runtime checks)
+    public static final int WARN_SUBSTR;
+    public static final int WARN_MISC;
+    public static final int WARN_UNINITIALIZED;
+    public static final int WARN_NUMERIC;
+    public static final int WARN_VOID;
+    public static final int WARN_REDEFINE;
+    public static final int WARN_ONCE;
+    public static final int WARN_RECURSION;
+
     static {
         // Initialize warning bit positions
         int bitPosition = 0;
         for (String warning : WarningFlags.getWarningList()) {
             warningBitPositions.put(warning, bitPosition++);
         }
+
+        // Initialize constants for common categories
+        WARN_SUBSTR = warningBitPositions.getOrDefault("substr", -1);
+        WARN_MISC = warningBitPositions.getOrDefault("misc", -1);
+        WARN_UNINITIALIZED = warningBitPositions.getOrDefault("uninitialized", -1);
+        WARN_NUMERIC = warningBitPositions.getOrDefault("numeric", -1);
+        WARN_VOID = warningBitPositions.getOrDefault("void", -1);
+        WARN_REDEFINE = warningBitPositions.getOrDefault("redefine", -1);
+        WARN_ONCE = warningBitPositions.getOrDefault("once", -1);
+        WARN_RECURSION = warningBitPositions.getOrDefault("recursion", -1);
 
         // Initialize feature bit positions
         bitPosition = 0;
@@ -591,6 +611,17 @@ public class ScopedSymbolTable {
     public boolean isWarningCategoryEnabled(String category) {
         Integer bitPosition = warningBitPositions.get(category);
         return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
+    }
+
+    /**
+     * Fast check if a warning category is enabled using the bit position constant.
+     * Use the WARN_* constants for optimal performance.
+     *
+     * @param bitPosition The bit position of the warning category (e.g., WARN_SUBSTR)
+     * @return True if the category is enabled, false otherwise.
+     */
+    public boolean isWarningEnabled(int bitPosition) {
+        return bitPosition >= 0 && warningFlagsStack.peek().get(bitPosition);
     }
 
     // Methods for managing features using bit positions

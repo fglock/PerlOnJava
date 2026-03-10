@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -195,7 +196,7 @@ public class MathOperators {
 
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+        if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
             if (!arg1.getDefinedBoolean()) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
                         RuntimeScalarCache.scalarEmptyString);
@@ -242,7 +243,7 @@ public class MathOperators {
 
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+        if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
             if (!arg1.getDefinedBoolean()) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
                         RuntimeScalarCache.scalarEmptyString);
@@ -620,7 +621,7 @@ public class MathOperators {
 
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+        if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
             if (!arg1.getDefinedBoolean()) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
                         RuntimeScalarCache.scalarEmptyString);

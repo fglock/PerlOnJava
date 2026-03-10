@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.CaseMap;
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -320,7 +321,7 @@ public class StringOperators {
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
         if (!runtimeScalar.getDefinedBoolean() || !b.getDefinedBoolean()) {
-            if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+            if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
                         RuntimeScalarCache.scalarEmptyString);
             }
@@ -547,7 +548,7 @@ public class StringOperators {
 
         // Check if separator is undef and generate warning
         if (warnOnUndef && runtimeScalar.type == RuntimeScalarType.UNDEF) {
-            if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+            if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
@@ -575,7 +576,7 @@ public class StringOperators {
 
             // Check if value is undef and generate warning (but not for string interpolation)
             if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
-                if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+                if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_UNINITIALIZED)) {
                     WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
                             RuntimeScalarCache.scalarEmptyString);
                 }

@@ -141,4 +141,15 @@ public class WarningFlags {
     public boolean isWarningEnabled(String category) {
         return getCurrentScope().isWarningCategoryEnabled(category);
     }
+
+    /**
+     * Fast check if a warning category is enabled using a bit position constant.
+     * Use the ScopedSymbolTable.WARN_* constants for optimal performance.
+     *
+     * @param bitPosition The bit position of the warning category (e.g., ScopedSymbolTable.WARN_SUBSTR)
+     * @return True if the category is enabled, false otherwise.
+     */
+    public boolean isWarningEnabled(int bitPosition) {
+        return getCurrentScope().isWarningEnabled(bitPosition);
+    }
 }

@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
 
@@ -67,7 +68,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
             actualOffset = 0;
         }
         if (actualOffset > strLength) {
-            if (Warnings.warningManager.isWarningEnabled("substr")) {
+            if (Warnings.warningManager.isWarningEnabled(ScopedSymbolTable.WARN_SUBSTR)) {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
