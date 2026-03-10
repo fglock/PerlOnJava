@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
@@ -194,13 +195,15 @@ public class MathOperators {
 
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
-                    RuntimeScalarCache.scalarEmptyString);
+        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+            if (!arg1.getDefinedBoolean()) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
+            if (!arg2.getDefinedBoolean()) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
         }
 
         // Convert string type to number if necessary
@@ -239,13 +242,15 @@ public class MathOperators {
 
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
-                    RuntimeScalarCache.scalarEmptyString);
+        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+            if (!arg1.getDefinedBoolean()) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
+            if (!arg2.getDefinedBoolean()) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
         }
 
         // Convert string type to number if necessary
@@ -615,13 +620,15 @@ public class MathOperators {
 
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
-                    RuntimeScalarCache.scalarEmptyString);
+        if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+            if (!arg1.getDefinedBoolean()) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
+            if (!arg2.getDefinedBoolean()) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
         }
 
         return new RuntimeScalar(Math.pow(arg1.getDouble(), arg2.getDouble()));

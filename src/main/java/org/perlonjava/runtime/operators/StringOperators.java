@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.CaseMap;
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -319,8 +320,10 @@ public class StringOperators {
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
         if (!runtimeScalar.getDefinedBoolean() || !b.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
         }
         String aStr = runtimeScalar.toString();
         String bStr = b.toString();
@@ -544,8 +547,10 @@ public class StringOperators {
 
         // Check if separator is undef and generate warning
         if (warnOnUndef && runtimeScalar.type == RuntimeScalarType.UNDEF) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
-                    RuntimeScalarCache.scalarEmptyString);
+            if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
         }
 
         String delimiter = runtimeScalar.toString();
@@ -570,8 +575,10 @@ public class StringOperators {
 
             // Check if value is undef and generate warning (but not for string interpolation)
             if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
-                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
-                        RuntimeScalarCache.scalarEmptyString);
+                if (Warnings.warningManager.isWarningEnabled("uninitialized")) {
+                    WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
+                            RuntimeScalarCache.scalarEmptyString);
+                }
             }
 
             isByteString = isByteString && scalar.type == BYTE_STRING;
