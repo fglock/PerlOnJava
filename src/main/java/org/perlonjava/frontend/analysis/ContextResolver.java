@@ -154,8 +154,11 @@ public class ContextResolver extends ASTTransformPass {
         }
         setContext(node, subscriptContext);
         
-        // Use currentContext for left side (working behavior from d6bd798a)
-        visitInContext(node.left, currentContext);
+        // Left side of subscript: the container reference
+        // For non-slices, emitter always needs SCALAR (the reference to subscript into)
+        // For slices, use currentContext (d6bd798a compatibility)
+        int leftContext = isSlice ? currentContext : RuntimeContextType.SCALAR;
+        visitInContext(node.left, leftContext);
         
         // For subscript indices, visit elements directly (mirroring emitter behavior)
         // The emitter accesses node.right.elements directly, not visiting ArrayLiteralNode/HashLiteralNode

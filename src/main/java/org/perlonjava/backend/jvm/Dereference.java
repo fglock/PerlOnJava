@@ -292,15 +292,19 @@ public class Dereference {
         }
         if (node.left instanceof ListNode list) { // ("a","b","c")[2]
             // transform to:  ["a","b","c"]->[2]
-            BinaryOperatorNode refNode = new BinaryOperatorNode("->",
-                    new ArrayLiteralNode(list.elements, list.getIndex()),
-                    node.right, node.tokenIndex);
+            BinaryOperatorNode refNode = AbstractNode.withContext(
+                    new BinaryOperatorNode("->",
+                            new ArrayLiteralNode(list.elements, list.getIndex()),
+                            node.right, node.tokenIndex),
+                    emitterVisitor.ctx.contextType);
             refNode.accept(emitterVisitor);
             return;
         }
 
         // default: call `->[]`
-        BinaryOperatorNode refNode = new BinaryOperatorNode("->", node.left, node.right, node.tokenIndex);
+        BinaryOperatorNode refNode = AbstractNode.withContext(
+                new BinaryOperatorNode("->", node.left, node.right, node.tokenIndex),
+                emitterVisitor.ctx.contextType);
         refNode.accept(emitterVisitor);
     }
 
@@ -615,7 +619,9 @@ public class Dereference {
         }
 
         // default: call `->{}`
-        BinaryOperatorNode refNode = new BinaryOperatorNode("->", node.left, node.right, node.tokenIndex);
+        BinaryOperatorNode refNode = AbstractNode.withContext(
+                new BinaryOperatorNode("->", node.left, node.right, node.tokenIndex),
+                emitterVisitor.ctx.contextType);
         handleArrowHashDeref(emitterVisitor, refNode, hashOperation);
     }
 
@@ -628,7 +634,9 @@ public class Dereference {
 
         if (node.right instanceof ListNode) { // ->()
 
-            BinaryOperatorNode applyNode = new BinaryOperatorNode("(", node.left, node.right, node.tokenIndex);
+            BinaryOperatorNode applyNode = AbstractNode.withContext(
+                    new BinaryOperatorNode("(", node.left, node.right, node.tokenIndex),
+                    emitterVisitor.ctx.contextType);
             applyNode.accept(emitterVisitor);
 
         } else if (node.right instanceof ArrayLiteralNode) { // ->[0]
