@@ -19,7 +19,7 @@ import org.perlonjava.runtime.runtimetypes.*;
  *     tar xzf Image-ExifTool-13.44.tar.gz
  * 
  * Run the Perl version with:
- *   ./gradlew run --args='examples/ExifToolExample.pl'
+ *   ./jperl examples/ExifToolExample.pl
  * 
  * Or compile and run the Java version:
  *   1. Build the fat jar:
