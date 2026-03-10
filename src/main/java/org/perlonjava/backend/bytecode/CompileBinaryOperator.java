@@ -547,7 +547,8 @@ public class CompileBinaryOperator {
             case "+", "-", "*", "/", "%", "**",
                  "&", "|", "^", "<<", ">>",
                  "binary&", "binary|", "binary^",
-                 "&.", "|.", "^." -> true;
+                 "&.", "|.", "^.",
+                 "." -> true;  // String concat always takes SCALAR operands
             default -> false;
         };
         int outerCtx = bytecodeCompiler.currentCallContext;

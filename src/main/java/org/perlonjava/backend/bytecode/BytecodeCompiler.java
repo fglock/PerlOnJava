@@ -838,12 +838,8 @@ public class BytecodeCompiler implements Visitor {
 
             boolean isLastStatement = (i == lastMeaningfulIndex);
             int stmtTarget = (isLastStatement && outerResultReg >= 0) ? outerResultReg : -1;
-            int stmtContext;
-            if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
-                stmtContext = RuntimeContextType.VOID;
-            } else {
-                stmtContext = currentCallContext;
-            }
+            // Non-last statements use VOID context (matches JVM emitter)
+            int stmtContext = isLastStatement ? currentCallContext : RuntimeContextType.VOID;
 
             compileNode(stmt, stmtTarget, stmtContext);
 
