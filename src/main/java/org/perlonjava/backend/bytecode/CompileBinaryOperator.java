@@ -15,7 +15,8 @@ public class CompileBinaryOperator {
             // left = filehandle reference (\*STDERR)
             // right = list to print
 
-            bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
+            // Filehandle is evaluated in SCALAR context (matches ContextResolver and JVM emitter)
+            bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int filehandleReg = bytecodeCompiler.lastResultReg;
 
             // Compile the content (right operand) in LIST context

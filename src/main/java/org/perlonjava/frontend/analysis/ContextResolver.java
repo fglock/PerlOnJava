@@ -527,13 +527,11 @@ public class ContextResolver extends ASTTransformPass {
     @Override
     public void visit(HashLiteralNode node) {
         setContext(node, currentContext);
-        // When used as subscript (SCALAR context), elements should be SCALAR
-        // When used as hash literal (LIST context), elements are LIST
-        int elemContext = (currentContext == RuntimeContextType.SCALAR)
-                ? RuntimeContextType.SCALAR
-                : RuntimeContextType.LIST;
+        // Hash literal elements are always in LIST context
+        // (subscript indices are handled directly in visitSubscript/visitArrow, not here)
+        // Emitter's emitHashLiteral always uses LIST: acceptChild(listNode, LIST)
         for (Node element : node.elements) {
-            visitInContext(element, elemContext);
+            visitInContext(element, RuntimeContextType.LIST);
         }
     }
 

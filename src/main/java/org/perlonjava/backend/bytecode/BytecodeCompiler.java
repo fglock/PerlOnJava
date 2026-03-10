@@ -3741,20 +3741,17 @@ public class BytecodeCompiler implements Visitor {
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
         
-        // Check for cached context from ContextResolver
-        int effectiveContext = callContext;
+        // Log mismatches - these must ALL be fixed before using cached context
         if (node instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != callContext) {
-                // Log mismatch for analysis (mirrors EmitterVisitor.acceptChild)
                 String key = nodeDescription(node) + " cached=" + contextName(cached) + " expected=" + contextName(callContext);
                 interpreterContextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
             }
-            // Use cached context (from ContextResolver) for migration
-            effectiveContext = cached;
         }
         
-        currentCallContext = effectiveContext;
+        // Use passed context (caller's expectation) until all mismatches are fixed
+        currentCallContext = callContext;
         node.accept(this);
         targetOutputReg = savedTarget;
         currentCallContext = savedContext;

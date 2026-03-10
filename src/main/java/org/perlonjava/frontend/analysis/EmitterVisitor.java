@@ -90,7 +90,7 @@ public class EmitterVisitor implements Visitor {
     public void acceptChild(Node child, int fallbackContext) {
         if (child == null) return;
         
-        // Log mismatches - these must ALL be fixed
+        // Log mismatches - these must ALL be fixed before using cached context
         if (child instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != fallbackContext) {
@@ -99,7 +99,7 @@ public class EmitterVisitor implements Visitor {
             }
         }
         
-        // Use fallback context (emitter's expectation)
+        // Use fallback context (emitter's expectation) until all mismatches are fixed
         child.accept(with(fallbackContext));
     }
     
