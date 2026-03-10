@@ -34,10 +34,17 @@ public class WarnDie {
     }
 
     /**
-     * Catches the exception in an eval-block
+     * Catches the exception in an eval-block.
+     * Note: PerlExitException should NEVER be caught by eval{} - it always propagates.
      */
     public static RuntimeScalar catchEval(Throwable e) {
         e = unwrapException(e);
+        
+        // exit() should never be caught by eval{} - re-throw it
+        if (e instanceof PerlExitException) {
+            throw (PerlExitException) e;
+        }
+        
         RuntimeScalar err = getGlobalVariable("main::@");
 
         if (e instanceof PerlDieException pde) {
@@ -276,23 +283,28 @@ public class WarnDie {
     }
 
     /**
-     * Terminates the program
+     * Terminates the program by throwing PerlExitException.
+     * <p>
+     * This allows embedded/library use where the calling Java application
+     * can catch the exception and continue execution. The CLI (Main.main())
+     * catches this and converts it to a real System.exit() call.
      *
      * @param runtimeScalar with exit status
-     * @return nothing
+     * @return nothing (always throws)
+     * @throws PerlExitException always thrown with the exit code
      */
     public static RuntimeScalar exit(RuntimeScalar runtimeScalar) {
+        int exitCode = runtimeScalar.getInt();
         try {
             runEndBlocks();
-            RuntimeIO.closeAllHandles();
         } catch (Throwable t) {
             RuntimeIO.closeAllHandles();
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.err.println(errorMessage);
-            System.exit(1);
+            throw new PerlExitException(1);
         }
-        System.exit(runtimeScalar.getInt());
-        return new RuntimeScalar(); // This line will never be reached
+        RuntimeIO.closeAllHandles();
+        throw new PerlExitException(exitCode);
     }
 
     /**

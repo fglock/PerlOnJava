@@ -1965,10 +1965,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
-            if (!(targetException instanceof RuntimeException)) {
-                throw new RuntimeException(targetException);
+            if (targetException instanceof RuntimeException re) {
+                throw re;
             }
-            throw (RuntimeException) targetException;
+            throw new RuntimeException(targetException);
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
@@ -2037,10 +2039,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
-            if (!(targetException instanceof RuntimeException)) {
-                throw new RuntimeException(targetException);
+            if (targetException instanceof RuntimeException re) {
+                throw re;
             }
-            throw (RuntimeException) targetException;
+            throw new RuntimeException(targetException);
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }

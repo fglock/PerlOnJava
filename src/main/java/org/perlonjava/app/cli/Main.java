@@ -3,6 +3,7 @@ package org.perlonjava.app.cli;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Locale;
@@ -49,6 +50,9 @@ public class Main {
             if (rawChildStatus > 0 && rawChildStatus <= 255) {
                 System.exit(rawChildStatus);
             }
+        } catch (PerlExitException e) {
+            // Perl's exit() throws PerlExitException - convert to real System.exit() for CLI
+            System.exit(e.getExitCode());
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack

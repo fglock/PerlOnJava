@@ -77,6 +77,52 @@ try {
 }
 ```
 
+### Handling Script Exit
+
+When a Perl script calls `exit()`, PerlOnJava throws a `PerlExitException` instead of
+terminating the JVM. This allows your Java application to handle script completion
+gracefully and continue execution.
+
+Note: Like in standard Perl, `exit()` is not caught by Perl's `eval{}` blocks - it
+always propagates to the Java caller.
+
+```java
+import org.perlonjava.runtime.runtimetypes.PerlExitException;
+
+ScriptEngine engine = manager.getEngineByName("perl");
+
+try {
+    engine.eval("print 'Processing...'; exit 0;");
+} catch (ScriptException e) {
+    if (e.getCause() instanceof PerlExitException exitEx) {
+        System.out.println("Script exited with code: " + exitEx.getExitCode());
+        // Continue with other work...
+    } else {
+        throw e;
+    }
+}
+```
+
+This is particularly important when running scripts like ExifTool that call `exit()`
+after completing their work:
+
+```java
+import org.perlonjava.app.cli.ArgumentParser;
+import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
+import org.perlonjava.runtime.runtimetypes.PerlExitException;
+
+String[] scriptArgs = new String[]{"path/to/exiftool", "-ver"};
+CompilerOptions options = ArgumentParser.parseArguments(scriptArgs);
+
+try {
+    PerlLanguageProvider.executePerlCode(options, true);
+} catch (PerlExitException e) {
+    System.out.println("ExifTool exited with code: " + e.getExitCode());
+    // Script completed successfully, continue processing...
+}
+```
+
 ## Using PerlOnJava Directly
 
 For more control, you can use PerlOnJava's internal API directly.
