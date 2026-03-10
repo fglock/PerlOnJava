@@ -213,7 +213,39 @@ String perlScript = Files.readString(Path.of("legacy.pl"));
 engine.eval(perlScript);
 ```
 
+### Repeated Execution / Batch Processing
+
+For processing multiple items (e.g., files), don't run a CLI script repeatedly.
+Instead, use the Perl module directly and call methods in a loop:
+
+```java
+// Load module once, call methods repeatedly
+String initCode = """
+    use Image::ExifTool;
+    our $exif = Image::ExifTool->new();
+    
+    sub process_file {
+        my ($file) = @_;
+        return $exif->ImageInfo($file, qw(Make Model));
+    }
+    1;
+    """;
+
+engine.eval(initCode);
+
+// Now call the subroutine for each file - no recompilation needed
+for (String file : files) {
+    engine.eval("process_file('" + file + "')");
+}
+```
+
+See `examples/ExifToolExample.java` and `examples/ExifToolExample.pl` for a complete
+working example using Image::ExifTool.
+
 ## Examples
+
+- `examples/ExifToolExample.pl` - Batch image processing with Image::ExifTool
+- `examples/ExifToolExample.java` - Java integration example
 
 See also:
 - [Quick Start](../../QUICKSTART.md) - Basic examples
