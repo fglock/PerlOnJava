@@ -3782,7 +3782,7 @@ public class BytecodeCompiler implements Visitor {
         if (node instanceof BlockNode) return true;
         if (node instanceof OperatorNode op) {
             return switch (op.operator) {
-                case "\\", "$" -> true;
+                case "$" -> true;
                 default -> false;
             };
         }
