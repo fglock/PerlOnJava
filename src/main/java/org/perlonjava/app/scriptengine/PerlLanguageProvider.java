@@ -286,6 +286,10 @@ public class PerlLanguageProvider {
                 System.out.println(errorMessage);
                 System.out.println("END failed--call queue aborted.");
             }
+        } catch (PerlExitException e) {
+            // PerlExitException already ran END blocks and closed handles in WarnDie.exit()
+            // Just re-throw for the caller to handle
+            throw e;
         } catch (Throwable t) {
             if (isMainProgram) {
                 runEndBlocks();

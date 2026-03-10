@@ -167,13 +167,17 @@ public class JavaSystem extends PerlModuleBase {
     }
 
     /**
-     * Exit the JVM
+     * Exit the JVM by throwing PerlExitException.
+     * <p>
+     * This allows embedded/library use where the calling Java application
+     * can catch the exception and continue execution.
      * Usage: exit(0);
+     *
+     * @throws PerlExitException always thrown with the exit code
      */
     public static RuntimeList exit(RuntimeArray args, int ctx) {
         int status = args.size() > 0 ? (int) args.get(0).getLong() : 0;
-        System.exit(status);
-        return scalarUndef.getList(); // Never reached
+        throw new PerlExitException(status);
     }
 
     /**

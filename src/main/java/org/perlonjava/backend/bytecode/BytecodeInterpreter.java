@@ -1590,6 +1590,9 @@ public class BytecodeInterpreter {
                     String javaLine = (st.length > 0) ? " [java:" + st[0].getFileName() + ":" + st[0].getLineNumber() + "]" : "";
                     String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage() + javaLine;
                     throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
+                } catch (PerlExitException e) {
+                    // exit() should NEVER be caught by eval{} - always propagate
+                    throw e;
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
                     if (!evalCatchStack.isEmpty()) {
@@ -1604,9 +1607,9 @@ public class BytecodeInterpreter {
                     }
 
                     // Not in eval block - propagate exception
-                    // If it's already a PerlDieException, re-throw as-is for proper formatting
-                    if (e instanceof PerlDieException) {
-                        throw (PerlDieException) e;
+                    // Re-throw RuntimeExceptions as-is (includes PerlDieException)
+                    if (e instanceof RuntimeException re) {
+                        throw re;
                     }
 
                     // Check if we're running inside an eval STRING context
