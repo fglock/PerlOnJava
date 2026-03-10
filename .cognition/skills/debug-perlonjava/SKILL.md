@@ -11,6 +11,17 @@ triggers:
 
 You are debugging failures in PerlOnJava, a Perl-to-JVM compiler with a bytecode interpreter fallback. This skill covers debugging workflows for test failures, regressions, and parity issues between backends.
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+```bash
+git checkout -b fix/descriptive-name
+# ... make changes ...
+git push origin fix/descriptive-name
+gh pr create --title "Fix: description" --body "Details"
+```
+
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)

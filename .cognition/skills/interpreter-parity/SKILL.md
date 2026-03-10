@@ -11,6 +11,17 @@ triggers:
 
 You are fixing cases where PerlOnJava's bytecode interpreter produces different results than the JVM compiler backend. The interpreter should be a drop-in replacement — same parsing, same runtime APIs, different execution engine.
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+```bash
+git checkout -b fix/interpreter-issue-name
+# ... make changes ...
+git push origin fix/interpreter-issue-name
+gh pr create --title "Fix interpreter: description" --body "Details"
+```
+
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
