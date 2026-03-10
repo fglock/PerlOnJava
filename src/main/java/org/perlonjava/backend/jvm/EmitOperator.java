@@ -262,8 +262,26 @@ public class EmitOperator {
     static void handleAtan2(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
+            // Spill the first operand before evaluating the second so non-local control flow
+            // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+            MethodVisitor mv = emitterVisitor.ctx.mv;
             operand.elements.get(0).accept(scalarVisitor);
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
             operand.elements.get(1).accept(scalarVisitor);
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
             emitOperator(node, emitterVisitor);
         }
     }
@@ -541,9 +559,31 @@ public class EmitOperator {
 
     // Handles the 'range' operator, which creates a range of values.
     static void handleRangeOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // Accept both left and right operands in SCALAR context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        }
         emitOperator(node, emitterVisitor);
     }
 
