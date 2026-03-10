@@ -112,15 +112,12 @@ public class EmitterVisitor implements Visitor {
         if (child instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != fallbackContext) {
-                // Log mismatch for debugging
+                // Log mismatch for debugging - these indicate ContextResolver bugs
                 String key = nodeDescription(child) + " cached=" + contextName(cached) + " expected=" + contextName(fallbackContext);
                 contextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
-                // Use fallback for known problem nodes
-                if (!hasKnownMismatch(child)) {
-                    contextToUse = cached;
-                }
+                // Use fallback to avoid ASM crashes until ContextResolver is fixed
+                contextToUse = fallbackContext;
             } else {
-                // No mismatch - use cached
                 contextToUse = cached;
             }
         }
@@ -128,23 +125,10 @@ public class EmitterVisitor implements Visitor {
         child.accept(with(contextToUse));
     }
     
+    // No mismatch workarounds - ContextResolver must be fixed instead
+    // Keeping method stub for now to avoid breaking code
     private boolean hasKnownMismatch(Node node) {
-        // Only nodes with actual mismatches need fallback
-        if (node instanceof ListNode) return true;  // 7 mismatches
-        if (node instanceof BlockNode) return true; // 5 mismatches
-        if (node instanceof OperatorNode op) {
-            return switch (op.operator) {
-                case "@", "$" -> true;  // 1 each
-                default -> false;
-            };
-        }
-        if (node instanceof BinaryOperatorNode bin) {
-            return switch (bin.operator) {
-                case "->", "[" -> true;  // 2 and 1 mismatches
-                default -> false;
-            };
-        }
-        return false;
+        return false;  // Trust ContextResolver
     }
     
     private String nodeDescription(Node node) {
