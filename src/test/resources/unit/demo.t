@@ -105,7 +105,10 @@ subtest "List assignment with lvalue array and hash" => sub {
     # Test with non-empty left-hand side including a hash
     my %lvalue_hash;
     @array = (10, 20, 30, 40, 50);
-    $count = ($first, $second, %lvalue_hash) = @array;
+    {
+        no warnings 'misc';  # Suppress "Odd number of elements" warning (expected behavior)
+        $count = ($first, $second, %lvalue_hash) = @array;
+    }
     is($count, 5, "List assignment with lvalue hash returned '$count'");
     is($first, 10, "First variable assigned correctly with value '$first'");
     is($second, 20, "Second variable assigned correctly with value '$second'");

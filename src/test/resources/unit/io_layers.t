@@ -26,29 +26,29 @@ sub cleanup_file {
     unlink $filename if -e $filename;
 }
 
-# Helper to dump bytes in hex
+# Helper to dump bytes in hex (diag calls commented out to reduce test output)
 sub dump_bytes {
     my ($data, $label) = @_;
     $label //= "Data";
     my @bytes = unpack("C*", $data);
     my $hex = join(" ", map { sprintf("%02X", $_) } @bytes);
-    diag("$label: " . length($data) . " bytes: $hex");
+    # diag("$label: " . length($data) . " bytes: $hex");
 
     # Also show ASCII representation
     my $ascii = join("", map { ($_ >= 32 && $_ <= 126) ? chr($_) : '.' } @bytes);
-    diag("$label ASCII: $ascii");
+    # diag("$label ASCII: $ascii");
 
     # Check for UTF-8 multibyte sequences
     my $has_multibyte = grep { $_ >= 0x80 } @bytes;
-    diag("$label has multibyte: " . ($has_multibyte ? "YES" : "NO"));
+    # diag("$label has multibyte: " . ($has_multibyte ? "YES" : "NO"));
 }
 
 subtest 'UTF-8 debugging tests' => sub {
     my $filename = get_test_filename();
 
     subtest 'Debug UTF-8 output' => sub {
-        diag("Original text: '$utf8_text'");
-        diag("Original text length: " . length($utf8_text));
+        # diag("Original text: '$utf8_text'");
+        # diag("Original text length: " . length($utf8_text));
 
         # Show what UTF-8 encoding should produce
         my $expected_utf8 = $utf8_text;
@@ -64,7 +64,7 @@ subtest 'UTF-8 debugging tests' => sub {
 
         # Check file size
         my $file_size = -s $filename;
-        diag("File size: $file_size bytes");
+        # diag("File size: $file_size bytes");
 
         # Read as raw bytes
         open my $raw, '<:raw', $filename or die "Cannot open $filename: $!";
@@ -81,14 +81,15 @@ subtest 'UTF-8 debugging tests' => sub {
         my @actual_bytes = unpack("C*", $raw_content);
 
         my $max_bytes = @expected_bytes > @actual_bytes ? @expected_bytes : @actual_bytes;
-        for (my $i = 0; $i < $max_bytes; $i++) {
-            my $exp = $expected_bytes[$i] // 'undef';
-            my $act = $actual_bytes[$i] // 'undef';
-            if ($exp ne $act) {
-                diag("Byte $i differs: expected " . (defined $exp ? sprintf("0x%02X", $exp) : 'undef') .
-                    ", got " . (defined $act ? sprintf("0x%02X", $act) : 'undef'));
-            }
-        }
+        # Byte comparison loop (diag commented out to reduce test output)
+        # for (my $i = 0; $i < $max_bytes; $i++) {
+        #     my $exp = $expected_bytes[$i] // 'undef';
+        #     my $act = $actual_bytes[$i] // 'undef';
+        #     if ($exp ne $act) {
+        #         diag("Byte $i differs: expected " . (defined $exp ? sprintf("0x%02X", $exp) : 'undef') .
+        #             ", got " . (defined $act ? sprintf("0x%02X", $act) : 'undef'));
+        #     }
+        # }
     };
 
     subtest 'Debug UTF-8 input' => sub {
@@ -97,11 +98,11 @@ subtest 'UTF-8 debugging tests' => sub {
         my $read_text = do { local $/; <$in> };
         close $in;
 
-        # Encode the text for safe diagnostic output
+        # Encode the text for safe diagnostic output (diag commented out)
         my $diag_text = $read_text;
         utf8::encode($diag_text) if utf8::is_utf8($diag_text);
-        diag("Read text: '$diag_text'");
-        diag("Read text length: " . length($read_text));
+        # diag("Read text: '$diag_text'");
+        # diag("Read text length: " . length($read_text));
 
         # Character by character comparison
         my @orig_chars = split //, $utf8_text;
@@ -110,18 +111,19 @@ subtest 'UTF-8 debugging tests' => sub {
         is(scalar(@read_chars), scalar(@orig_chars), 'Same number of characters');
         is($read_text, $utf8_text, 'Read text matches original');
 
-        for (my $i = 0; $i < @orig_chars || $i < @read_chars; $i++) {
-            my $orig = $orig_chars[$i] // '';
-            my $read = $read_chars[$i] // '';
-            if ($orig ne $read) {
-                my $orig_diag = $orig;
-                my $read_diag = $read;
-                utf8::encode($orig_diag) if utf8::is_utf8($orig_diag);
-                utf8::encode($read_diag) if utf8::is_utf8($read_diag);
-                diag("Char $i differs: expected '" . $orig_diag . "' (U+" . sprintf("%04X", ord($orig)) .
-                    "), got '" . $read_diag . "' (U+" . sprintf("%04X", ord($read)) . ")");
-            }
-        }
+        # Character comparison loop (diag commented out to reduce test output)
+        # for (my $i = 0; $i < @orig_chars || $i < @read_chars; $i++) {
+        #     my $orig = $orig_chars[$i] // '';
+        #     my $read = $read_chars[$i] // '';
+        #     if ($orig ne $read) {
+        #         my $orig_diag = $orig;
+        #         my $read_diag = $read;
+        #         utf8::encode($orig_diag) if utf8::is_utf8($orig_diag);
+        #         utf8::encode($read_diag) if utf8::is_utf8($read_diag);
+        #         diag("Char $i differs: expected '" . $orig_diag . "' (U+" . sprintf("%04X", ord($orig)) .
+        #             "), got '" . $read_diag . "' (U+" . sprintf("%04X", ord($read)) . ")");
+        #     }
+        # }
     };
 
     cleanup_file($filename);
@@ -187,14 +189,14 @@ subtest 'Raw write and UTF-8 read test' => sub {
     print $raw_out pack("C*", @utf8_bytes);
     close $raw_out;
 
-    diag("Wrote raw UTF-8 bytes: " . join(" ", map { sprintf("%02X", $_) } @utf8_bytes));
+    # diag("Wrote raw UTF-8 bytes: " . join(" ", map { sprintf("%02X", $_) } @utf8_bytes));
 
     # Read with :utf8 layer
     open my $utf8_in, '<:utf8', $filename or die "Cannot open $filename: $!";
     my $text = do { local $/; <$utf8_in> };
     close $utf8_in;
 
-    diag("Read text: '$text'");
+    # diag("Read text: '$text'");
     is($text, "Hello 世界", 'Raw UTF-8 bytes read correctly with :utf8 layer');
 
     cleanup_file($filename);

@@ -458,9 +458,9 @@ subtest 'Shell interpretation tests' => sub {
     };
 };
 
-# Platform-specific information
-diag("Running on: $^O");
-diag("Is Windows: " . ($is_windows ? "Yes" : "No"));
-diag("Perl version: $]");
+# Platform-specific information (commented out to reduce test output)
+# diag("Running on: $^O");
+# diag("Is Windows: " . ($is_windows ? "Yes" : "No"));
+# diag("Perl version: $]");
 
 done_testing();
