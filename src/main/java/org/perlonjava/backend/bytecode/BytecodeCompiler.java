@@ -47,6 +47,9 @@ public class BytecodeCompiler implements Visitor {
     // Used by both eval STRING (for variable capture) and debugger (for lexical access).
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
     final List<int[]> evalSitePragmaFlags = new ArrayList<>();
+    // Cache for DEBUG site registry deduplication - reuse index if scope unchanged
+    private Map<String, Integer> lastDebugRegistry = null;
+    private int lastDebugRegistryIndex = -1;
     // Variables captured by inner closures (named or anonymous subs compiled within this scope).
     // Assignments to these variables must use SET_SCALAR alone (in-place modification)
     // instead of LOAD_UNDEF + SET_SCALAR, to preserve the RuntimeScalar identity that
@@ -828,9 +831,19 @@ public class BytecodeCompiler implements Visitor {
                     int lineNumber = errorUtil.getLineNumberAccurate(stmtTokenIndex);
                     int fileIdx = addToStringPool(sourceName);
                     // Capture variable registry for debugger expression evaluation
-                    // Reuse evalSiteRegistries - same structure needed by both eval and debugger
-                    int siteIndex = evalSiteRegistries.size();
-                    evalSiteRegistries.add(symbolTable.getVisibleVariableRegistry());
+                    // Deduplicate: reuse previous registry if scope unchanged (common case)
+                    Map<String, Integer> currentRegistry = symbolTable.getVisibleVariableRegistry();
+                    int siteIndex;
+                    if (lastDebugRegistry != null && lastDebugRegistry.equals(currentRegistry)) {
+                        // Scope unchanged - reuse existing registry
+                        siteIndex = lastDebugRegistryIndex;
+                    } else {
+                        // New scope - add new registry
+                        siteIndex = evalSiteRegistries.size();
+                        evalSiteRegistries.add(currentRegistry);
+                        lastDebugRegistry = currentRegistry;
+                        lastDebugRegistryIndex = siteIndex;
+                    }
                     emit(Opcodes.DEBUG);
                     emit(fileIdx);
                     emit(lineNumber);
