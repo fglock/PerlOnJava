@@ -46,12 +46,13 @@ public class WarningFlags {
     }
 
     /**
-     * Returns a list of all warning categories and subcategories.
+     * Returns a list of all warning categories and subcategories in sorted order.
+     * Sorted order is required for consistent bit position assignment.
      *
-     * @return A list of all warning categories.
+     * @return A sorted list of all warning categories.
      */
     public static List<String> getWarningList() {
-        Set<String> warningSet = new HashSet<>();
+        Set<String> warningSet = new TreeSet<>();
         for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
             warningSet.add(entry.getKey());
             warningSet.addAll(Arrays.asList(entry.getValue()));
@@ -60,37 +61,8 @@ public class WarningFlags {
     }
 
     public void initializeEnabledWarnings() {
-        // Enable deprecated warnings
-        enableWarning("deprecated");
-        enableWarning("deprecated::apostrophe_as_package_separator");
-        enableWarning("deprecated::delimiter_will_be_paired");
-        enableWarning("deprecated::dot_in_inc");
-        enableWarning("deprecated::goto_construct");
-        enableWarning("deprecated::smartmatch");
-        enableWarning("deprecated::unicode_property_name");
-        enableWarning("deprecated::version_downgrade");
-
-        // Enable experimental warnings
-        enableWarning("experimental::args_array_with_signatures");
-        enableWarning("experimental::bitwise");
-        enableWarning("experimental::builtin");
-        enableWarning("experimental::class");
-        enableWarning("experimental::declared_refs");
-        enableWarning("experimental::defer");
-        enableWarning("experimental::extra_paired_delimiters");
-        enableWarning("experimental::private_use");
-        enableWarning("experimental::re_strict");
-        enableWarning("experimental::refaliasing");
-        enableWarning("experimental::try");
-        enableWarning("experimental::uniprop_wildcards");
-        enableWarning("experimental::vlb");
-
-        // Enable IO warnings
-        enableWarning("io");
-
-        // Enable other warnings
-        enableWarning("glob");
-        enableWarning("locale");
+        // Enable all warnings by default (Perl behavior for `use warnings;`)
+        enableWarning("all");
     }
 
     /**
