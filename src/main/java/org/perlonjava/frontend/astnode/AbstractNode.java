@@ -204,4 +204,20 @@ public abstract class AbstractNode implements Node {
     public boolean hasAstAnnotation() {
         return astAnnotation != null;
     }
+
+    /**
+     * Sets context on a dynamically created node.
+     * Use this when creating AST nodes on-the-fly in backends to ensure
+     * they have proper context annotations matching ContextResolver behavior.
+     * 
+     * @param node the node to annotate (can be any Node type)
+     * @param context the RuntimeContextType to set
+     * @return the same node for chaining
+     */
+    public static <T extends Node> T withContext(T node, int context) {
+        if (node instanceof AbstractNode an) {
+            an.setCachedContext(context);
+        }
+        return node;
+    }
 }

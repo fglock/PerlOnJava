@@ -3761,20 +3761,17 @@ public class BytecodeCompiler implements Visitor {
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
         
-        // Use cached context when available and no known mismatch
+        // Use cached context when available, track mismatches for debugging
         int contextToUse = callContext;
         if (node instanceof AbstractNode an && an.hasCachedContext()) {
             int cached = an.getCachedContext();
             if (cached != callContext) {
                 String key = nodeDescription(node) + " cached=" + contextName(cached) + " expected=" + contextName(callContext);
-                interpreterContextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
-                // Use cached unless this is a known problem node
-                if (!hasKnownInterpreterMismatch(node)) {
-                    contextToUse = cached;
-                }
-            } else {
-                contextToUse = cached;
+                var counter = interpreterContextMismatches.computeIfAbsent(key, k -> new java.util.concurrent.atomic.AtomicInteger());
+                counter.incrementAndGet();
             }
+            // Always use cached context - ContextResolver is authoritative
+            contextToUse = cached;
         }
         
         currentCallContext = contextToUse;
@@ -3799,17 +3796,8 @@ public class BytecodeCompiler implements Visitor {
         };
     }
     
-    private boolean hasKnownInterpreterMismatch(Node node) {
-        // Only nodes with actual mismatches need fallback
-        if (node instanceof StringNode) return true;  // 9 mismatches
-        if (node instanceof OperatorNode op) {
-            return "\\".equals(op.operator);  // 11 mismatches
-        }
-        if (node instanceof BinaryOperatorNode bin) {
-            return "print".equals(bin.operator);  // 1 mismatch
-        }
-        return false;
-    }
+    // Mismatch list removed - ContextResolver is authoritative
+    // If mismatches cause test failures, fix ContextResolver, not this list
     
     public static void printInterpreterMismatches() {
         if (interpreterContextMismatches.isEmpty()) return;

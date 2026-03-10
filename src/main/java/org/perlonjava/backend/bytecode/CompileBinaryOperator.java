@@ -239,7 +239,9 @@ public class CompileBinaryOperator {
                     // Convert class name to string if needed: Class->method()
                     if (invocantNode instanceof IdentifierNode) {
                         String className = ((IdentifierNode) invocantNode).name;
-                        invocantNode = new StringNode(className, invocantNode.getIndex());
+                        invocantNode = AbstractNode.withContext(
+                            new StringNode(className, invocantNode.getIndex()),
+                            RuntimeContextType.SCALAR);
                     }
 
                     // Convert method name to string if needed
@@ -251,7 +253,9 @@ public class CompileBinaryOperator {
                     }
                     if (methodNode instanceof IdentifierNode) {
                         String methodName = ((IdentifierNode) methodNode).name;
-                        methodNode = new StringNode(methodName, methodNode.getIndex());
+                        methodNode = AbstractNode.withContext(
+                            new StringNode(methodName, methodNode.getIndex()),
+                            RuntimeContextType.SCALAR);
                     }
 
                     // Compile invocant in scalar context
