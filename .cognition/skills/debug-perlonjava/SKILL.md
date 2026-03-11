@@ -123,6 +123,21 @@ git checkout branch && mvn package -q -DskipTests
 ./jperl -e 'failing code'
 ```
 
+**CRITICAL: Save master baselines to files!** When comparing test suites:
+```bash
+# On master - save output to a file so you don't have to rebuild later
+git checkout master && mvn package -q -DskipTests
+cd perl5_t/t && ../../jperl re/subst.t 2>&1 | tee /tmp/subst_master.log
+../../jperl re/subst.t 2>&1 | grep "^ok\|^not ok" > /tmp/subst_master_results.txt
+
+# Count passing tests on master (save this number!)
+grep "^ok" /tmp/subst_master_results.txt | wc -l
+
+# Return to feature branch
+git checkout feature-branch && mvn package -q -DskipTests
+# Now you can compare without rebuilding master again
+```
+
 ### 2. Bisect to find the bad commit
 **IMPORTANT**: Always rebuild after switching commits!
 ```bash

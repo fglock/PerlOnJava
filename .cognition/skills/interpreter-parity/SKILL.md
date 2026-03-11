@@ -162,6 +162,18 @@ JPERL_INTERPRETER=1 ./jperl -e 'failing code'
 ./jperl -e 'failing code'
 ```
 
+**CRITICAL: Save baselines to files!** When comparing test suites across branches:
+```bash
+# On master - save results so you don't have to rebuild later
+git checkout master && mvn package -q -DskipTests
+cd perl5_t/t && JPERL_INTERPRETER=1 ../../jperl test.t 2>&1 | tee /tmp/test_master.log
+JPERL_INTERPRETER=1 ../../jperl test.t 2>&1 | grep "^ok\|^not ok" > /tmp/test_master_results.txt
+grep "^ok" /tmp/test_master_results.txt | wc -l  # Save this number!
+
+# Return to feature branch - now you can compare without rebuilding master
+git checkout feature-branch && mvn package -q -DskipTests
+```
+
 ### 2. Use --disassemble to see interpreter bytecode
 ```bash
 JPERL_INTERPRETER=1 ./jperl --disassemble -e 'code' 2>&1
