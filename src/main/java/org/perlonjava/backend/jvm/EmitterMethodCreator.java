@@ -1480,6 +1480,12 @@ public class EmitterMethodCreator implements Opcodes {
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
             throw e;
+        } catch (InterpreterFallbackException e) {
+            // InterpreterFallbackException already carries the InterpretedCode
+            if (SHOW_FALLBACK) {
+                System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
+            }
+            return e.interpretedCode;
         } catch (RuntimeException e) {
             if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
                 if (SHOW_FALLBACK) {
