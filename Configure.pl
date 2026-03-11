@@ -7,19 +7,42 @@ use Data::Dumper;
 use Getopt::Long;
 use URI::Escape;
 
-# This script is designed to manage configuration settings and dependencies
-# for a Java project. It provides options to update configuration values
-# in a Java configuration file and manage dependencies using Maven coordinates.
-# The script can search for JDBC drivers by class name or use direct Maven
-# coordinates to update build files like build.gradle or pom.xml.
-
-# Note: This script can be run using the following commands:
+# PerlOnJava Configuration Script
 #
-# ./Configure.pl -D perlVersion=v5.40.0
-# ./Configure.pl -D jarVersion=3.0.1
+# This script manages configuration settings and dependencies for the PerlOnJava project.
+# It updates Configuration.java (the single source of truth for version info) and
+# propagates version changes to all relevant files in the repository.
 #
+# USAGE:
+#
+#   ./Configure.pl                      # Show current configuration
+#   ./Configure.pl -D version=5.43.0    # Update version everywhere
+#   ./Configure.pl --upgrade            # Upgrade dependencies to latest versions
+#
+# VERSION UPDATE BEHAVIOR:
+#
+# The 'version' field is special - when updated, it also:
+#   - Updates build.gradle and pom.xml version fields
+#   - Updates jperl and jperl.bat launcher scripts
+#   - Updates README.md feature support line
+#   - Replaces all occurrences of perlonjava-X.Y.Z.jar in documentation
+#   - Updates specific version references in Config.pm (paths, compatibility checks)
+#
+# Safety measures to protect historical version references:
+#   - Only versions with minor >= 40 can be updated (protects 5.10, 5.38, etc.)
+#   - Excluded directories: src/main/perl/, dev/
+#   - Excluded files: docs/about/changelog.md
+#   - Config.pm uses targeted patterns (not blanket replacement)
+#
+# Note: gitCommitId and gitCommitDate are managed by the build system (Gradle/Maven)
+# and should NOT be set via this script.
+#
+# DEPENDENCY MANAGEMENT:
+#
+#   ./Configure.pl --search org.h2.Driver              # Search for JDBC driver
+#   ./Configure.pl --direct com.h2database:h2:2.2.224  # Add direct Maven coordinates
 
-# Define supported actions and options for both dependency management and configuration
+# Define supported actions and options
 my $search = 0;   # Flag to indicate if a search for JDBC driver by class name is requested
 my $direct = 0;   # Flag to indicate if direct Maven coordinates are provided
 my $verbose = 0;  # Flag to enable verbose output for debugging
@@ -27,7 +50,7 @@ my $upgrade = 0;  # Flag to upgrade dependencies to their latest versions
 my %config;       # Hash to store key-value pairs for configuration updates
 my $help = 0;     # Flag to show help message
 
-my $java_config_filename = 'src/main/java/org/perlonjava/Configuration.java';
+my $java_config_filename = 'src/main/java/org/perlonjava/core/Configuration.java';
 
 # Parse command-line options
 Getopt::Long::Configure("no_ignore_case");
@@ -64,6 +87,14 @@ Configuration Options:
     -h, --help                      Show this help message
     -D key=value                    Set configuration value
 
+    Supported configuration keys:
+      version     - PerlOnJava version (e.g., 5.43.0)
+                    Updates Configuration.java, build files, and all JAR references
+
+    Read-only keys (managed by build system):
+      gitCommitId   - Git commit hash (set during build)
+      gitCommitDate - Git commit date (set during build)
+
 Dependency Management Options:
     --search                        Search for JDBC driver by class name
     --direct                        Use direct Maven coordinates
@@ -71,10 +102,11 @@ Dependency Management Options:
     --upgrade                       Upgrade dependencies to their latest versions
 
 Examples:
-    ./Configure.pl -D strict_mode=true -D enable_optimizations=false
-    ./Configure.pl --search org.h2.Driver
+    ./Configure.pl                              # Show current configuration
+    ./Configure.pl -D version=5.43.0            # Update version everywhere
+    ./Configure.pl --search org.h2.Driver       # Search for JDBC driver
     ./Configure.pl --direct com.h2database:h2:2.2.224
-    ./Configure.pl --upgrade
+    ./Configure.pl --upgrade                    # Upgrade all dependencies
 ';
     exit;
 }
@@ -83,7 +115,8 @@ Examples:
 sub show_config {
     my $java_config = read_file($java_config_filename);
     print "Current configuration:\n\n";
-    while ($java_config =~ /public static final (\w+)\s+(\w+)\s*=\s*(.+?);/g) {
+    # Use robust pattern that handles quoted strings and simple values
+    while ($java_config =~ /public static final (\w+)\s+(\w+)\s*=\s*("[^"]*"|[^;]+);/g) {
         print "$2 = $3\n";
     }
     exit;
@@ -97,37 +130,207 @@ sub update_configuration {
 
     foreach my $key (keys %$config) {
         my $value = $config->{$key};
+
+        # Prevent setting git fields - they are managed by the build system
+        if ($key eq 'gitCommitId' || $key eq 'gitCommitDate') {
+            warn "Warning: $key is managed by the build system and cannot be set manually.\n";
+            warn "These values are injected during Gradle/Maven builds.\n";
+            next;
+        }
+
         # Handle string values vs boolean/numeric values
-        $value = "\"$value\"" if $value !~ /^(?:true|false|\d+)$/;
+        my $quoted_value = $value;
+        $quoted_value = "\"$value\"" if $value !~ /^(?:true|false|\d+)$/;
 
-        if ($content =~ /public static final \w+\s+\Q$key\E\s*=\s*.+?;/) {
-            my $old_value = $1 if $content =~ /public static final \w+\s+\Q$key\E\s*=\s*"(.+?)";/;
-            $content =~ s/(public static final \w+\s+\Q$key\E\s*=\s*).+?;/$1$value;/;
-            print "Updated $key = $value\n";
-
-            # Special handling for jarVersion updates
-            if ($key eq 'jarVersion' && $old_value) {
-                my $old_jar = "perlonjava-$old_value.jar";
-                my $new_jar = "perlonjava-" . $value =~ s/"//gr . ".jar";
-
-                # Find and update all files in the repository
-                my @files = `find . -type f -not -path "*/\.*"`;
-                foreach my $file (@files) {
-                    chomp $file;
-                    next if -B $file;  # Skip binary files
-
-                    my $file_content = read_file($file);
-                    if ($file_content =~ s/\Q$old_jar\E/$new_jar/g) {
-                        write_file($file, $file_content);
-                        print "Updated jar version in $file\n";
-                    }
-                }
+        # Use robust pattern that matches quoted strings or simple values
+        # Pattern: "..." for strings, or non-semicolon chars for booleans/numbers
+        if ($content =~ /public static final \w+\s+\Q$key\E\s*=\s*("[^"]*"|[^;]+);/) {
+            # Extract old value for special handling
+            my $old_value;
+            if ($content =~ /public static final \w+\s+\Q$key\E\s*=\s*"([^"]*)";/) {
+                $old_value = $1;
             }
+
+            # Special handling for 'version' field - validate BEFORE making changes
+            if ($key eq 'version' && $old_value) {
+                validate_version_change($old_value, $value);
+            }
+
+            # Perform the replacement
+            $content =~ s/(public static final \w+\s+\Q$key\E\s*=\s*)("[^"]*"|[^;]+);/${1}$quoted_value;/;
+            print "Updated $key = $quoted_value\n";
+
+            # Special handling for 'version' field - propagate to all relevant files
+            if ($key eq 'version' && $old_value) {
+                update_version_everywhere($old_value, $value);
+            }
+        } else {
+            warn "Warning: Key '$key' not found in $file\n";
         }
     }
 
     write_file($file, $content);
     print "\nConfiguration updated successfully\n";
+}
+
+# Function to validate version changes before applying them
+sub validate_version_change {
+    my ($old_version, $new_version) = @_;
+
+    # Safety check: only allow updating versions where minor >= 40
+    # This prevents accidentally replacing historical Perl version references
+    # like 5.10, 5.38, etc. in documentation
+    my ($old_major, $old_minor) = $old_version =~ /^(\d+)\.(\d+)/;
+    my ($new_major, $new_minor) = $new_version =~ /^(\d+)\.(\d+)/;
+    
+    if (!defined $old_minor || $old_minor < 40) {
+        die "Error: Cannot update from version $old_version (minor version must be >= 40)\n" .
+            "This prevents accidentally replacing historical Perl version references.\n";
+    }
+    if (!defined $new_minor || $new_minor < 40) {
+        die "Error: Cannot update to version $new_version (minor version must be >= 40)\n" .
+            "This prevents accidentally replacing historical Perl version references.\n";
+    }
+}
+
+# Function to update version references throughout the repository
+sub update_version_everywhere {
+    my ($old_version, $new_version) = @_;
+
+    # Note: Version validation is done in validate_version_change() before this is called
+
+    print "\nPropagating version change from $old_version to $new_version...\n\n";
+
+    # Directories to exclude from raw version updates (but NOT from JAR reference updates)
+    # These contain historical version references that should not be changed
+    my @excluded_dirs = (
+        './src/main/perl',      # Perl modules with historical version docs
+        './dev',                # Design documents and development notes
+    );
+
+    # Files to exclude from version updates (relative to project root)
+    # These contain historical changelogs and version history
+    my @excluded_files = (
+        './docs/about/changelog.md',
+    );
+
+    # First pass: Update JAR filename references in ALL files (always safe)
+    # This includes: jperl, jperl.bat, docs, examples, src/main/perl comments, etc.
+    # Matches both perlonjava-X.Y.Z.jar and perlonjava-X.Y.Z-all.jar
+    my @all_files = `find . -type f -not -path "*/\\.*" -not -path "*/build/*" -not -path "*/target/*"`;
+    foreach my $file (@all_files) {
+        chomp $file;
+        next if -B $file;  # Skip binary files
+
+        my $file_content = read_file($file);
+        # Match perlonjava-VERSION.jar or perlonjava-VERSION-all.jar
+        if ($file_content =~ s/perlonjava-\Q$old_version\E(-all)?\.jar/"perlonjava-$new_version" . ($1 || "") . ".jar"/ge) {
+            write_file($file, $file_content);
+            print "Updated JAR reference in $file\n";
+        }
+    }
+
+    # Second pass: Update version patterns in non-excluded files
+    # Build exclusion patterns for find command
+    my $exclude_pattern = join(' ', 
+        map { qq{-not -path "$_/*"} } @excluded_dirs
+    );
+
+    my @files = `find . -type f -not -path "*/\\.*" -not -path "*/build/*" -not -path "*/target/*" $exclude_pattern`;
+    foreach my $file (@files) {
+        chomp $file;
+        next if -B $file;  # Skip binary files
+        next if grep { $file eq $_ } @excluded_files;  # Skip excluded files
+
+        my $file_content = read_file($file);
+        my $updated = 0;
+
+        # Update version in build.gradle (project version only)
+        if ($file =~ /build\.gradle$/ && $file_content =~ s/^(version\s*=\s*')$old_version(')\s*$/$1$new_version$2/m) {
+            $updated = 1;
+            print "Updated version in $file\n";
+        }
+
+        # Update version in pom.xml (project version, not dependency versions)
+        if ($file =~ /pom\.xml$/) {
+            # Match only the project version (near the top, after artifactId)
+            if ($file_content =~ s|(<artifactId>perlonjava</artifactId>\s*<version>)$old_version(</version>)|$1$new_version$2|s) {
+                $updated = 1;
+                print "Updated version in $file\n";
+            }
+        }
+
+        # Update version in README.md (feature support line)
+        if ($file =~ /README\.md$/) {
+            if ($file_content =~ s/(Supports most Perl )$old_version( features)/$1$new_version$2/g) {
+                $updated = 1;
+                print "Updated version in $file\n";
+            }
+        }
+
+        write_file($file, $file_content) if $updated;
+    }
+
+    # Config.pm is handled separately since it's in an excluded directory
+    # but needs specific version updates for runtime compatibility
+    update_config_pm($old_version, $new_version);
+}
+
+# Function to update Config.pm with new version
+# This is separate because Config.pm is in src/main/perl (excluded dir)
+# but needs version updates for Perl runtime compatibility checks
+sub update_config_pm {
+    my ($old_version, $new_version) = @_;
+    
+    my $config_pm = './src/main/perl/lib/Config.pm';
+    return unless -f $config_pm;
+    
+    my $content = read_file($config_pm);
+    my $updated = 0;
+    
+    # Update version strings that are clearly PerlOnJava version identifiers
+    # These patterns match Config.pm's version declarations, not historical references
+    
+    # Pattern: perlonjava => 'X.Y.Z'
+    if ($content =~ s/(perlonjava\s*=>\s*')$old_version(')/$1$new_version$2/g) {
+        $updated = 1;
+    }
+    
+    # Pattern: version => 'X.Y.Z'  
+    if ($content =~ s/(^\s*version\s*=>\s*')$old_version(')/$1$new_version$2/gm) {
+        $updated = 1;
+    }
+    
+    # Pattern: api_versionstring => 'X.Y.Z'
+    if ($content =~ s/(api_versionstring\s*=>\s*')$old_version(')/$1$new_version$2/g) {
+        $updated = 1;
+    }
+    
+    # Pattern: lib version check - die "...(X.Y.Z)..."
+    if ($content =~ s/(Perl lib version \()$old_version(\))/$1$new_version$2/g) {
+        $updated = 1;
+    }
+    
+    # Pattern: $^V eq X.Y.Z
+    if ($content =~ s/(\$\^V eq )$old_version(\s)/$1$new_version$2/g) {
+        $updated = 1;
+    }
+    
+    # Pattern: path components like /5.42.0/
+    if ($content =~ s|(/perl5/)$old_version(/)|$1$new_version$2|g) {
+        $updated = 1;
+    }
+    if ($content =~ s|(/site_perl/)$old_version(/)|$1$new_version$2|g) {
+        $updated = 1;
+    }
+    if ($content =~ s|(/vendor_perl/)$old_version(/)|$1$new_version$2|g) {
+        $updated = 1;
+    }
+    
+    if ($updated) {
+        write_file($config_pm, $content);
+        print "Updated version in $config_pm\n";
+    }
 }
 # Function to handle dependency management based on search or direct options
 sub handle_dependencies {

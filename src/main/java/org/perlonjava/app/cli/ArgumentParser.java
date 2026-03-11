@@ -565,9 +565,22 @@ public class ArgumentParser {
     }
 
     private static void printVersionInfo() {
-        String version = Configuration.getPerlVersionNoV();
+        // Parse version into components (e.g., "5.42.0" -> major=5, minor=42, subversion=0)
+        String versionNoV = Configuration.getPerlVersionNoV();
+        String[] parts = versionNoV.split("\\.");
+        String major = parts.length > 0 ? parts[0] : "5";
+        String minor = parts.length > 1 ? parts[1] : "0";
+        String subversion = parts.length > 2 ? parts[2] : "0";
+        
+        // Build git info suffix if available
+        String gitInfo = "";
+        if (!Configuration.gitCommitId.equals("dev")) {
+            gitInfo = " (" + Configuration.gitCommitId + " " + Configuration.gitCommitDate + ")";
+        }
+        
         System.out.println();
-        System.out.println("This is perl 5, version " + version + " built for JVM");
+        System.out.println("This is perl " + major + ", version " + minor + ", subversion " + subversion 
+                + " (v" + versionNoV + ") built for JVM" + gitInfo);
         System.out.println();
         System.out.println("Copyright 1987-2025, Larry Wall");
         System.out.println();
@@ -591,13 +604,33 @@ public class ArgumentParser {
         GlobalContext.initializeGlobals(parsedArgs);
 
         if (configVar != null) {
-            // Print specific configuration variable or 'UNKNOWN' if not found
-            String value = System.getProperty(configVar, "UNKNOWN");
+            // Handle built-in configuration variables
+            String value;
+            switch (configVar) {
+                case "version":
+                    value = Configuration.version;
+                    break;
+                case "git_commit_id":
+                    value = Configuration.gitCommitId;
+                    break;
+                case "git_commit_date":
+                    value = Configuration.gitCommitDate;
+                    break;
+                default:
+                    value = System.getProperty(configVar, "UNKNOWN");
+            }
             System.out.println(configVar + "='" + value + "';");
         } else {
             // Print all configuration information
             String version = Configuration.getPerlVersionNoV();
             System.out.println("Summary of my perl5 (" + version + ") configuration:");
+            System.out.println();
+
+            // Print PerlOnJava-specific info
+            System.out.println("  PerlOnJava:");
+            System.out.println("    version: " + Configuration.version);
+            System.out.println("    git_commit_id: " + Configuration.gitCommitId);
+            System.out.println("    git_commit_date: " + Configuration.gitCommitDate);
             System.out.println();
 
             System.out.println("  JVM properties:");
@@ -1052,7 +1085,7 @@ public class ArgumentParser {
      * Prints the help message detailing the usage of the program and its options.
      */
     private static void printHelp() {
-        System.out.println("Usage: java -jar target/perlonjava-3.0.0.jar [options] [file] [args]");
+        System.out.println("Usage: java -jar target/perlonjava-" + Configuration.version + ".jar [options] [file] [args]");
         System.out.println();
         System.out.println("  -0[octal/hexadecimal] specify record separator (\\0, if no argument)");
         System.out.println("  -a                    autosplit mode with -n or -p (splits $_ into @F)");

@@ -19,4 +19,4 @@ rem   --enable-native-access=ALL-UNNAMED: Required by JNR-POSIX library for nati
 rem     (file operations, process management). Can be removed if JNR-POSIX is replaced.
 rem   --sun-misc-unsafe-memory-access=allow: Suppresses deprecation warnings from JFFI library
 rem     (used by JNR). Can be removed when JFFI updates to use MemorySegment API (Java 22+).
-java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow %JPERL_OPTS% -cp "%CLASSPATH%;%SCRIPT_DIR%target\perlonjava-3.0.0.jar" org.perlonjava.app.cli.Main %*
+java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow %JPERL_OPTS% -cp "%CLASSPATH%;%SCRIPT_DIR%target\perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main %*

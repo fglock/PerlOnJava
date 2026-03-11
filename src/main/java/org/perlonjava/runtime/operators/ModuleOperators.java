@@ -708,7 +708,7 @@ public class ModuleOperators {
         // ===== CASE 1: Version checking =====
         if (runtimeScalar.type == RuntimeScalarType.INTEGER || runtimeScalar.type == RuntimeScalarType.DOUBLE || runtimeScalar.type == RuntimeScalarType.VSTRING || runtimeScalar.type == RuntimeScalarType.BOOLEAN) {
             // `require VERSION` - use version comparison
-            String currentVersionStr = Configuration.perlVersion;
+            String currentVersionStr = Configuration.version;
             String displayVersion = VersionHelper.getDisplayVersionForRequire(runtimeScalar);
             String normalizedRequired = VersionHelper.normalizeVersionForRequireComparison(runtimeScalar);
 

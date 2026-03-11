@@ -773,7 +773,7 @@ Tied scalars, arrays, hashes, and filehandles are supported for core behaviors. 
 The **300+ bundled Perl modules** live *inside the JAR file* itself:
 ```
 %INC: 'Data/Dumper.pm' =>
-  'file:/path/to/perlonjava-3.0.0.jar!/lib/Data/Dumper.pm'
+  'file:/path/to/perlonjava-5.42.0.jar!/lib/Data/Dumper.pm'
 ```
 
 **Pure-Perl CPAN modules** typically work as-is — add their path to `PERL5LIB` or use `-I`. **XS modules** need Java equivalents (many are bundled already).

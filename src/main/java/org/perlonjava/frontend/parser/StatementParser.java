@@ -501,7 +501,7 @@ public class StatementParser {
                 if (packageName == null) {
                     parser.ctx.logDebug("use version: check Perl version");
                     VersionHelper.compareVersion(
-                            new RuntimeScalar(Configuration.perlVersion),
+                            new RuntimeScalar(Configuration.version),
                             versionScalar,
                             "Perl");
 

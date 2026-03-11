@@ -16,11 +16,11 @@ JPERL_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$SCRIPT_DIR/j
 export PERLONJAVA_EXECUTABLE="$JPERL_PATH"
 
 # Check development environment first (target directory)
-if [ -f "$SCRIPT_DIR/target/perlonjava-3.0.0.jar" ]; then
-    JAR_PATH="$SCRIPT_DIR/target/perlonjava-3.0.0.jar"
+if [ -f "$SCRIPT_DIR/target/perlonjava-5.42.0.jar" ]; then
+    JAR_PATH="$SCRIPT_DIR/target/perlonjava-5.42.0.jar"
 else
     # Use installed package path (when installed via deb package)
-    JAR_PATH="$SCRIPT_DIR/../lib/perlonjava-3.0.0.jar"
+    JAR_PATH="$SCRIPT_DIR/../lib/perlonjava-5.42.0.jar"
 fi
 
 # Launch Java

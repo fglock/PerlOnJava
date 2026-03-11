@@ -16,7 +16,7 @@
 A Perl compiler and runtime for the JVM that:
 - Compiles Perl scripts to Java bytecode
 - Integrates with Java libraries (JDBC databases, Maven dependencies)
-- Supports most Perl 5.42 features
+- Supports most Perl 5.42.0 features
 - Includes 150+ core Perl modules (DBI, HTTP::Tiny, JSON, YAML, Text::CSV)
 
 ## Quick Start
