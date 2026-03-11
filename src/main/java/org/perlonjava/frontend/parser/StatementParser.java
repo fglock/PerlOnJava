@@ -335,6 +335,29 @@ public class StatementParser {
     }
 
     /**
+     * Parses a defer statement.
+     * <p>
+     * defer { BLOCK }
+     * <p>
+     * The defer block is registered to execute when the enclosing scope exits,
+     * regardless of how it exits (normal flow, return, exception, etc.).
+     *
+     * @param parser The Parser instance
+     * @return A DeferNode representing the defer statement
+     */
+    public static Node parseDeferStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "defer"
+
+        // Parse the defer block
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node deferBlock = ParseBlock.parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        return new DeferNode(deferBlock, index);
+    }
+
+    /**
      * Parses a when statement (part of given/when feature from Perl 5.10).
      * <p>
      * when(COND) { BLOCK }  becomes:  if ($_ ~~ COND) { BLOCK }

@@ -183,6 +183,12 @@ public class ReturnTypeVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        // Defer blocks don't have a return type (they run at scope exit)
+        returnType = null;
+    }
+
+    @Override
     public void visit(LabelNode node) {
         // Labels don't have a return type
         returnType = null;

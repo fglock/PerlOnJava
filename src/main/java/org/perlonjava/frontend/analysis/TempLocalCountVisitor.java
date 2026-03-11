@@ -156,6 +156,11 @@ public class TempLocalCountVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        if (node.block != null) node.block.accept(this);
+    }
+
+    @Override
     public void visit(LabelNode node) {
         // LabelNode only has a label string, no child nodes to visit
     }

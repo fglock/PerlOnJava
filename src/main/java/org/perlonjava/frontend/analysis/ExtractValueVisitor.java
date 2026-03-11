@@ -159,6 +159,13 @@ public class ExtractValueVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        if (node.block != null) {
+            node.block.accept(this);
+        }
+    }
+
+    @Override
     public void visit(LabelNode node) {
     }
 

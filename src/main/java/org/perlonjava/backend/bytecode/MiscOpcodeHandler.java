@@ -43,6 +43,7 @@ public class MiscOpcodeHandler {
                 yield new RuntimeScalar("");
             }
             case Opcodes.SYSTEM -> SystemOperator.system(args, false, ctx);
+            case Opcodes.KILL -> KillOperator.kill(ctx, argsArray);
             case Opcodes.CALLER -> RuntimeCode.caller(args, ctx);
             // EACH is handled above before the RuntimeList cast
             case Opcodes.PACK -> Pack.pack(args);

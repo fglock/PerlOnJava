@@ -759,7 +759,13 @@ public class SlowOpcodeHandler {
 
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList indices = (RuntimeList) registers[indicesReg];
-        RuntimeList values = (RuntimeList) registers[valuesReg];
+        RuntimeBase valuesBase = registers[valuesReg];
+
+        // Materialize values into a flat list using addToArray (handles PerlRange, etc.)
+        RuntimeArray valuesArray = new RuntimeArray();
+        valuesBase.addToArray(valuesArray);
+        RuntimeList values = new RuntimeList();
+        values.elements.addAll(valuesArray.elements);
 
         array.setSlice(indices, values);
 
@@ -982,21 +988,11 @@ public class SlowOpcodeHandler {
         RuntimeList keysList = (RuntimeList) registers[keysListReg];
         RuntimeBase valuesBase = registers[valuesListReg];
 
-        // Convert values to RuntimeList if needed
-        RuntimeList valuesList;
-        if (valuesBase instanceof RuntimeList) {
-            valuesList = (RuntimeList) valuesBase;
-        } else if (valuesBase instanceof RuntimeArray) {
-            // Convert RuntimeArray to RuntimeList
-            valuesList = new RuntimeList();
-            for (RuntimeScalar elem : valuesBase) {
-                valuesList.elements.add(elem);
-            }
-        } else {
-            // Single value - wrap in list
-            valuesList = new RuntimeList();
-            valuesList.elements.add(valuesBase.scalar());
-        }
+        // Materialize values into a flat list using addToArray (handles PerlRange, etc.)
+        RuntimeArray valuesArray = new RuntimeArray();
+        valuesBase.addToArray(valuesArray);
+        RuntimeList valuesList = new RuntimeList();
+        valuesList.elements.addAll(valuesArray.elements);
 
         // Set all key-value pairs
         hash.setSlice(keysList, valuesList);

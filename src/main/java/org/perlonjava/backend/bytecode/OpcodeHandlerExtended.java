@@ -316,7 +316,7 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
-        RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
+        RuntimeScalar result = BitwiseOperators.bitwiseOr(
                 (RuntimeScalar) registers[rd],
                 (RuntimeScalar) registers[rs]
         );
@@ -339,7 +339,7 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
-        RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
+        RuntimeScalar result = BitwiseOperators.bitwiseXor(
                 (RuntimeScalar) registers[rd],
                 (RuntimeScalar) registers[rs]
         );

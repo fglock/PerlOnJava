@@ -352,30 +352,35 @@ public class EmitterMethodCreator implements Opcodes {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
             throw tooLarge;
+        } catch (InterpreterFallbackException fallback) {
+            // Re-throw - caller will handle interpreter fallback
+            throw fallback;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
-            // In normal operation we MUST NOT fall back to no-frames output, as that will fail
-            // verification on modern JVMs ("Expecting a stackmap frame...").
-            //
-            // When JPERL_ASM_DEBUG is enabled, do a diagnostic pass without COMPUTE_FRAMES so we can
-            // disassemble + analyze the produced bytecode.
-            frameComputeCrash.printStackTrace();
-            try {
-                String failingClass = (ctx != null && ctx.javaClassInfo != null)
-                        ? ctx.javaClassInfo.javaClassName
-                        : "<unknown>";
-                int failingIndex = ast != null ? ast.getIndex() : -1;
-                String fileName = (ctx != null && ctx.errorUtil != null) ? ctx.errorUtil.getFileName() : "<unknown>";
-                int lineNumber = -1;
-                if (ctx != null && ctx.errorUtil != null && failingIndex >= 0) {
-                    // ErrorMessageUtil caches line-number scanning state; reset it for an accurate lookup here.
-                    ctx.errorUtil.setTokenIndex(-1);
-                    ctx.errorUtil.setLineNumber(1);
-                    lineNumber = ctx.errorUtil.getLineNumber(failingIndex);
+            // ASM frame computation failed - fall back to interpreter
+            // This commonly happens with nested defers and complex control flow
+            
+            boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+            if (showFallback || asmDebug) {
+                frameComputeCrash.printStackTrace();
+                try {
+                    String failingClass = (ctx != null && ctx.javaClassInfo != null)
+                            ? ctx.javaClassInfo.javaClassName
+                            : "<unknown>";
+                    int failingIndex = ast != null ? ast.getIndex() : -1;
+                    String fileName = (ctx != null && ctx.errorUtil != null) ? ctx.errorUtil.getFileName() : "<unknown>";
+                    int lineNumber = -1;
+                    if (ctx != null && ctx.errorUtil != null && failingIndex >= 0) {
+                        ctx.errorUtil.setTokenIndex(-1);
+                        ctx.errorUtil.setLineNumber(1);
+                        lineNumber = ctx.errorUtil.getLineNumber(failingIndex);
+                    }
+                    String at = lineNumber >= 0 ? (fileName + ":" + lineNumber) : fileName;
+                    System.err.println("ASM frame compute crash in generated class: " + failingClass + 
+                            " (astIndex=" + failingIndex + ", at " + at + ") - using interpreter fallback");
+                } catch (Throwable ignored) {
                 }
-                String at = lineNumber >= 0 ? (fileName + ":" + lineNumber) : fileName;
-                System.err.println("ASM frame compute crash in generated class: " + failingClass + " (astIndex=" + failingIndex + ", at " + at + ")");
-            } catch (Throwable ignored) {
             }
+            
             if (asmDebug) {
                 try {
                     // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
@@ -390,13 +395,11 @@ public class EmitterMethodCreator implements Opcodes {
                     diagErr.printStackTrace();
                 }
             }
-            throw new PerlCompilerException(
-                    ast.getIndex(),
-                    "Internal compiler error: ASM frame computation failed. " +
-                            "Re-run with JPERL_ASM_DEBUG=1 to print disassembly and analysis. " +
-                            "Original error: " + frameComputeCrash.getMessage(),
-                    ctx.errorUtil,
-                    frameComputeCrash);
+            
+            // Compile to interpreter as fallback
+            InterpretedCode interpretedCode = compileToInterpreter(ast, ctx, useTryCatch);
+            String[] envNames = ctx.capturedEnv != null ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
+            throw new InterpreterFallbackException(interpretedCode, envNames);
         }
     }
 
@@ -594,6 +597,8 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Setup local variables and environment for the method
             int dynamicIndex = Local.localSetup(ctx, ast, mv);
+            // Store dynamicIndex so goto &sub can access it for cleanup before tail call
+            ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
@@ -696,17 +701,13 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
-            // Phase 3: Check for control flow markers
-            // RuntimeList is on stack after getList()
-
+            // Check for non-local control flow markers (LAST/NEXT/REDO/GOTO).
+            // TAILCALL is now handled at call sites, so we only see non-TAILCALL markers here.
+            // For eval blocks, these are errors. For normal subs, we just propagate (return with marker).
             if (ENABLE_TAILCALL_TRAMPOLINE) {
-                // First, check if it's a TAILCALL (global trampoline)
-                Label tailcallLoop = new Label();
-                Label notTailcall = new Label();
                 Label normalReturn = new Label();
 
                 mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
-                mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeList",
                         "isNonLocalGoto",
@@ -714,155 +715,11 @@ public class EmitterMethodCreator implements Opcodes {
                         false);
                 mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, return normally
 
-                // Marked: check if TAILCALL
-                // Cast to RuntimeControlFlowList to access getControlFlowType()
-                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                        "getControlFlowType",
-                        "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
-                        false);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/ControlFlowType",
-                        "ordinal",
-                        "()I",
-                        false);
-                mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
-                mv.visitJumpInsn(Opcodes.IF_ICMPNE, notTailcall);
-
-                // TAILCALL trampoline loop
-                mv.visitLabel(tailcallLoop);
-                // Cast to RuntimeControlFlowList to access getTailCallCodeRef/getTailCallArgs
-                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-
-                if (DEBUG_CONTROL_FLOW) {
-                    // Debug: print what we're about to process
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitFieldInsn(Opcodes.GETFIELD,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                            "marker",
-                            "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-                    mv.visitLdcInsn("TRAMPOLINE_LOOP");
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/runtimetypes/ControlFlowMarker",
-                            "debugPrint",
-                            "(Ljava/lang/String;)V",
-                            false);
-                }
-
-                // Extract codeRef and args
-                // Use allocated slots from symbol table
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                        "getTailCallCodeRef",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-                mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.tailCallCodeRefSlot);
-
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                        "getTailCallArgs",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
-                        false);
-                mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.tailCallArgsSlot);
-
-                // Re-invoke: RuntimeCode.apply(codeRef, "tailcall", args, context)
-                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.tailCallCodeRefSlot);
-                mv.visitLdcInsn("tailcall");
-                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.tailCallArgsSlot);
-                mv.visitVarInsn(Opcodes.ILOAD, 2);  // context (from parameter)
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                        "apply",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
-                        false);
-
-                // Check if result is another TAILCALL
-                mv.visitInsn(Opcodes.DUP);
-
-                if (DEBUG_CONTROL_FLOW) {
-                    // Debug: print the result before checking
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitFieldInsn(Opcodes.GETSTATIC,
-                            "java/lang/System",
-                            "err",
-                            "Ljava/io/PrintStream;");
-                    mv.visitInsn(Opcodes.SWAP);
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "java/io/PrintStream",
-                            "println",
-                            "(Ljava/lang/Object;)V",
-                            false);
-                }
-
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
-                        "isNonLocalGoto",
-                        "()Z",
-                        false);
-
-                if (DEBUG_CONTROL_FLOW) {
-                    // Debug: print the isNonLocalGoto result
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitFieldInsn(Opcodes.GETSTATIC,
-                            "java/lang/System",
-                            "err",
-                            "Ljava/io/PrintStream;");
-                    mv.visitInsn(Opcodes.SWAP);
-                    mv.visitLdcInsn("isNonLocalGoto: ");
-                    mv.visitInsn(Opcodes.SWAP);
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "java/io/PrintStream",
-                            "print",
-                            "(Ljava/lang/String;)V",
-                            false);
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "java/io/PrintStream",
-                            "println",
-                            "(Z)V",
-                            false);
-                }
-
-                mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, done
-
-                // Cast to RuntimeControlFlowList to access getControlFlowType()
-                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-                mv.visitInsn(Opcodes.DUP);
-
-                if (DEBUG_CONTROL_FLOW) {
-                    // Debug: print the control flow type
-                    mv.visitInsn(Opcodes.DUP);
-                    mv.visitFieldInsn(Opcodes.GETFIELD,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                            "marker",
-                            "Lorg/perlonjava/runtime/runtimetypes/ControlFlowMarker;");
-                    mv.visitLdcInsn("TRAMPOLINE_CHECK");
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/runtimetypes/ControlFlowMarker",
-                            "debugPrint",
-                            "(Ljava/lang/String;)V",
-                            false);
-                }
-
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                        "getControlFlowType",
-                        "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
-                        false);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/ControlFlowType",
-                        "ordinal",
-                        "()I",
-                        false);
-                mv.visitInsn(Opcodes.ICONST_4);
-                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, tailcallLoop);  // Loop if still TAILCALL
-                // Not TAILCALL: check if we're inside a loop and should jump to loop handler
-                mv.visitLabel(notTailcall);
+                // Marked with non-TAILCALL marker (LAST/NEXT/REDO/GOTO)
                 if (useTryCatch) {
                     // For eval BLOCK, any marked non-TAILCALL result is an eval failure.
-                    // Stack here: [RuntimeControlFlowList]
+                    mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
                     int msgSlot = ctx.symbolTable.allocateLocalVariable();
 
                     // msg = marker.buildErrorMessage()
@@ -917,16 +774,10 @@ public class EmitterMethodCreator implements Opcodes {
                     // so $@ must be preserved.
                     mv.visitJumpInsn(Opcodes.GOTO, endCatch);
                 }
-                // TODO: Check ctx.javaClassInfo loop stack, if non-empty, jump to innermost loop handler
-                // For now, just propagate (return to caller)
+                // For non-eval subs: marker just propagates (falls through to return)
 
-                // Normal return
+                // Normal return (or propagate marker for non-eval subs)
                 mv.visitLabel(normalReturn);
-
-                // The RuntimeList is currently on stack when coming from the trampoline checks.
-                // When jumping here from the initial isNonLocalGoto check, we need to reload it.
-                // To normalize both paths, store any on-stack value and then reload from the slot.
-                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
             }  // End of if (ENABLE_TAILCALL_TRAMPOLINE)
 
             if (useTryCatch) {
@@ -1018,14 +869,33 @@ public class EmitterMethodCreator implements Opcodes {
                     "materializeSpecialVarsInResult",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
 
-            // Teardown local variables — popToLocalLevel() also restores regex state
-            // (RegexState was pushed onto the DVM stack at sub entry).
-            Local.localTeardown(dynamicIndex, mv);
-
-            // After DVM teardown, re-set $@ if we caught an eval error.
-            // DVM pop may have restored `local $@` from a callee, clobbering
-            // the error that catchEval set.
             if (useTryCatch) {
+                // For eval BLOCK, wrap the teardown in a try-catch to catch exceptions
+                // from defer blocks. If a defer block throws, we need to:
+                // 1. Catch the exception
+                // 2. Set $@ to the new exception (last exception wins, Perl semantics)
+                // 3. Return undef/empty list
+                
+                // Spill RuntimeList to slot before try block to keep stack clean
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+                
+                Label teardownTryStart = new Label();
+                Label teardownTryEnd = new Label();
+                Label teardownCatch = new Label();
+                Label teardownDone = new Label();
+
+                mv.visitTryCatchBlock(teardownTryStart, teardownTryEnd, teardownCatch, "java/lang/Throwable");
+                mv.visitLabel(teardownTryStart);
+
+                // Teardown local variables — popToLocalLevel() also restores regex state
+                // (RegexState was pushed onto the DVM stack at sub entry).
+                Local.localTeardown(dynamicIndex, mv);
+
+                mv.visitLabel(teardownTryEnd);
+
+                // After DVM teardown, re-set $@ if we caught an eval error.
+                // DVM pop may have restored `local $@` from a callee, clobbering
+                // the error that catchEval set.
                 Label skipErrorRestore = new Label();
                 mv.visitVarInsn(Opcodes.ALOAD, evalErrorSlot);
                 mv.visitJumpInsn(Opcodes.IFNULL, skipErrorRestore);
@@ -1041,6 +911,83 @@ public class EmitterMethodCreator implements Opcodes {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 mv.visitInsn(Opcodes.POP);
                 mv.visitLabel(skipErrorRestore);
+
+                mv.visitJumpInsn(Opcodes.GOTO, teardownDone);
+
+                // Catch exceptions from defer blocks during teardown
+                mv.visitLabel(teardownCatch);
+                // Stack: [Throwable]
+
+                // Set $@ to the new exception (last exception wins)
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/operators/WarnDie",
+                        "catchEval",
+                        "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitInsn(Opcodes.POP);
+
+                // Save the new error
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn("main::@");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "getGlobalVariable",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "<init>",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                mv.visitVarInsn(Opcodes.ASTORE, evalErrorSlot);
+
+                // Create undef/empty list return value
+                Label teardownCatchList = new Label();
+                Label teardownCatchDone = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD, 2);
+                mv.visitInsn(Opcodes.ICONST_2); // RuntimeContextType.LIST
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, teardownCatchList);
+
+                // Scalar/void: RuntimeList(new RuntimeScalar())
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>", "()V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                mv.visitJumpInsn(Opcodes.GOTO, teardownCatchDone);
+
+                // List: new RuntimeList()
+                mv.visitLabel(teardownCatchList);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
+                mv.visitLabel(teardownCatchDone);
+
+                // Store new return value
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+
+                // Restore $@ from saved slot
+                mv.visitLdcInsn("main::@");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "getGlobalVariable",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitVarInsn(Opcodes.ALOAD, evalErrorSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "set",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitInsn(Opcodes.POP);
+
+                // Both paths join here with empty stack
+                mv.visitLabel(teardownDone);
+
+                // Load the return value for ARETURN
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+            } else {
+                // No try-catch: just do the teardown
+                // Teardown local variables — popToLocalLevel() also restores regex state
+                // (RegexState was pushed onto the DVM stack at sub entry).
+                Local.localTeardown(dynamicIndex, mv);
             }
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object

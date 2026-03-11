@@ -165,12 +165,24 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            RuntimeScalar res = RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR).scalar();
+            RuntimeList res = RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+
+            // Handle TAILCALL with trampoline loop (for goto &sub in __WARN__ handlers)
+            while (res.isNonLocalGoto()) {
+                RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
+                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                    RuntimeArray callArgs = flow.getTailCallArgs();
+                    res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
+                } else {
+                    break;
+                }
+            }
 
             // Restore $SIG{__WARN__}
             DynamicVariableManager.popToLocalLevel(level);
 
-            return res;
+            return res.scalar();
         }
 
         // Get the RuntimeIO for STDERR and write the message
@@ -235,6 +247,18 @@ public class WarnDie {
             DynamicVariableManager.pushLocalVariable(sig);
 
             RuntimeList res = RuntimeCode.apply(sigHandler, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
+
+            // Handle TAILCALL with trampoline loop (for goto &sub in __DIE__ handlers)
+            while (res.isNonLocalGoto()) {
+                RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
+                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                    RuntimeArray callArgs = flow.getTailCallArgs();
+                    res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
+                } else {
+                    break;
+                }
+            }
 
             // Restore $SIG{__DIE__}
             DynamicVariableManager.popToLocalLevel(level);

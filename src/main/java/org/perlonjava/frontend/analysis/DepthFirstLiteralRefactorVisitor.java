@@ -209,6 +209,13 @@ public class DepthFirstLiteralRefactorVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        if (node.block != null) {
+            node.block.accept(this);
+        }
+    }
+
+    @Override
     public void visit(OperatorNode node) {
         if (node.operand != null) {
             node.operand.accept(this);

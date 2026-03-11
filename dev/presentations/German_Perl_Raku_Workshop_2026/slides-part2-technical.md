@@ -28,7 +28,7 @@ Perl Source → Compiler → JVM Bytecode → JVM Execution
 Shared frontend + shared runtime, two execution paths.
 
 Note:
-Why not transpile to Java source? Perlito5 (predecessor) compiled Perl → Java → bytecode. Efficient, but slower startup and `eval STRING` invokes the Java compiler at runtime. PerlOnJava generates bytecode directly.
+Perlito5 compiled Perl → Java → bytecode. This worked, but `eval STRING` invoked the Java compiler at runtime. PerlOnJava generates bytecode directly — faster startup.
 
 ---
 
@@ -64,7 +64,7 @@ Perl limits identifiers to 251 code points; ICU4J handles code points rather tha
    - `StringParser`, `PackParser`, `SprintfFormatParser`
    - `NumberParser`, `IdentifierParser`, `SignatureParser`
 
-Produces AST nodes: `BlockNode`, `BinaryOperatorNode`, `ListNode`. Modular — easy to add new syntax.
+Modular AST: `BlockNode`, `BinaryOperatorNode`, `ListNode` — easy to extend.
 
 ---
 
@@ -84,7 +84,7 @@ Parser encounters `BEGIN` → wraps as anonymous sub → **executes immediately*
 `use Module` is sugar for `BEGIN { require Module; Module->import() }`
 
 Note:
-Other special blocks: END runs at program exit, INIT runs after compilation before runtime, CHECK runs after compilation in reverse order, UNITCHECK runs after each compilation unit. Behavior follows the Perl test suite; some edge cases not yet implemented.
+END runs at exit, INIT after compilation, CHECK in reverse order, UNITCHECK per compilation unit. Behavior follows the Perl test suite.
 
 ---
 
@@ -107,7 +107,7 @@ say @data;                    # Runtime — must see "a b c"
 5. At runtime, `my @data` **retrieves** the value from the global and removes it
 
 Note:
-This is implemented in SpecialBlockParser (capture + alias) and PersistentVariable (retrieve + cleanup). For eval STRING, the runtime values are passed via ThreadLocal storage so BEGIN blocks inside eval can access the caller's lexicals. The temporary globals are cleaned up after retrieval to avoid leaks.
+Implemented in SpecialBlockParser (capture + alias) and PersistentVariable (retrieve + cleanup). eval STRING uses ThreadLocal storage for BEGIN access to caller lexicals. Temporary globals cleaned up after retrieval.
 
 ---
 
@@ -118,7 +118,7 @@ This is implemented in SpecialBlockParser (capture + alias) and PersistentVariab
 - Manages symbol tables
 - Context propagation (void/scalar/list)
 
-**Key challenge:** The JVM imposes a **64KB limit per method**. Large Perl subroutines can exceed this.
+**Key challenge:** JVM's **64KB method size limit** — large Perl subs can exceed it.
 
 **Solution:** Automatic fallback to the Internal VM for oversized methods.
 
@@ -272,7 +272,7 @@ LABEL: print "Jumped out!\n";
 ```
 
 - **Stack-based:** Stack state becomes inconsistent on non-local jumps
-- **Register-based:** Explicit operands (`rd = rs1 op rs2`) maintain correctness regardless of control flow
+- **Register-based:** Explicit operands (`rd = rs1 op rs2`) — correct regardless of control flow
 
 Perl's complex control flow — labeled loops, `goto`, `eval` — requires register architecture.
 
@@ -287,10 +287,10 @@ Perl's complex control flow — labeled loops, `goto`, `eval` — requires regis
 | Perl 5 | 1.29s |
 | PerlOnJava (Internal VM) | 2.78s |
 
-The Internal VM avoids ClassLoader overhead — each eval compiles directly to register bytecode without generating a JVM class.
+Internal VM skips ClassLoader — compiles directly to register bytecode, no JVM class generated.
 
 Note:
-Set JPERL_EVAL_USE_INTERPRETER=1. Each iteration evals a different string, so compilation overhead dominates. For typical eval usage with repeated patterns, performance is much closer.
+Set JPERL_EVAL_USE_INTERPRETER=1. Each iteration evals a unique string, so compilation dominates. Repeated patterns perform much closer.
 
 ---
 
@@ -311,7 +311,7 @@ Set JPERL_EVAL_USE_INTERPRETER=1. Each iteration evals a different string, so co
 5. **RuntimeGlob** — typeglob with slot delegation
 
 Note:
-RuntimeScalar supports: integer, double, string, reference, undef, regex, glob, tied, dualvar. RuntimeArray and RuntimeHash support plain, autovivifying, tied, and read-only modes. Context tracking, auto-vivification, and string/number coercion are implemented consistently across both backends.
+RuntimeScalar types: integer, double, string, reference, undef, regex, glob, tied, dualvar. Arrays/hashes support plain, autovivifying, tied, and read-only modes. Coercion and context consistent across both backends.
 
 ---
 
@@ -324,7 +324,7 @@ RuntimeScalar supports: integer, double, string, reference, undef, regex, glob, 
 Type field determines how to interpret the value.
 
 Note:
-Full type list: INTEGER, DOUBLE, STRING, UNDEF, BOOLEAN, TIED_SCALAR, DUALVAR, plus reference types with high bit set: CODE, ARRAYREFERENCE, HASHREFERENCE, REGEX, GLOBREFERENCE.
+Types: INTEGER, DOUBLE, STRING, UNDEF, BOOLEAN, TIED_SCALAR, DUALVAR. References (high bit set): CODE, ARRAYREFERENCE, HASHREFERENCE, REGEX, GLOBREFERENCE.
 
 ---
 
@@ -337,7 +337,7 @@ Full type list: INTEGER, DOUBLE, STRING, UNDEF, BOOLEAN, TIED_SCALAR, DUALVAR, p
 ~10–20ns saved per operation. Detection happens once at `bless` time.
 
 Note:
-This is a critical optimization because overload checks happen on nearly every operation on blessed references.
+Critical because overload checks happen on nearly every operation on blessed references.
 
 ---
 
@@ -416,16 +416,16 @@ Registers maintain state explicitly. Label → bytecode offset mapping with shar
 sub foo { print "Called from: ", (caller)[1], " line ", (caller)[2], "\n" }
 ```
 
-**Key trick:** `caller()` creates a `new Throwable()` to capture the **native JVM stack** — zero overhead when not called.
+**Key trick:** `caller()` captures the **native JVM stack** via `new Throwable()` — zero cost when unused.
 
-**JVM backend:** Each Perl sub compiles to a JVM class. `ByteCodeSourceMapper` maps token indices back to Perl file/line/package at compile time.
+**JVM backend:** Each sub → JVM class. `ByteCodeSourceMapper` maps tokens to file/line/package.
 
-**Internal VM:** `InterpreterState` maintains a parallel frame stack (ThreadLocal). `ExceptionFormatter` walks the JVM stack, matching `BytecodeInterpreter.execute()` frames to Perl-level info.
+**Internal VM:** `InterpreterState` keeps a frame stack (ThreadLocal). `ExceptionFormatter` maps JVM frames to Perl-level info.
 
 No shadow stack needed — the JVM does the bookkeeping for us.
 
 Note:
-ExceptionFormatter handles three frame types: JVM-compiled Perl subs (org.perlonjava.anon*), Internal VM frames (BytecodeInterpreter.execute), and compile-time frames (CallerStack for use/BEGIN). The same mechanism powers warn/die location messages.
+ExceptionFormatter handles three frame types: JVM-compiled subs (anon*), Internal VM frames, and compile-time frames (CallerStack). Same mechanism powers warn/die messages.
 
 ---
 
@@ -441,7 +441,7 @@ say $c->();  # 1
 say $c->();  # 2
 ```
 
-**JVM backend:** Each anonymous sub → new JVM class. All visible lexicals passed as constructor arguments. Captured variables shared by Java reference — mutations visible to both scopes.
+**JVM backend:** Each anon sub → new JVM class. Visible lexicals passed as constructor args. Shared by reference — mutations visible to both scopes.
 
 **Internal VM:** Dedicated opcode for closure variable allocation, same runtime objects.
 
@@ -457,7 +457,7 @@ my @arr = flexible();   # list context → (1, 2, 3)
 my $n   = flexible();   # scalar context → 42
 ```
 
-Context threaded through the entire call stack as `EmitterContext` during code generation. At each call site, the compiler emits the correct context flag. `wantarray` reads this flag at runtime. Works in both backends.
+Compiler threads context via `EmitterContext`, emitting the right flag at each call site. `wantarray` reads it at runtime. Works in both backends.
 
 ---
 
@@ -473,7 +473,7 @@ Context threaded through the entire call stack as `EmitterContext` during code g
 All four use JVM local variable slots for fast access. The difference is *lifetime* and *initialization*.
 
 Note:
-`my` creates a fresh RuntimeScalar per call. `our` fetches the existing global RuntimeScalar from GlobalVariable registry and stores it in a local slot — it's the same object, so mutations are visible globally. `state` uses a static registry keyed by the enclosing sub reference + variable name, so it persists across calls but is unique per closure clone. `local` uses DynamicVariableManager to push/pop state — the compiler inserts getLocalLevel() at block entry and popToLocalLevel() in a finally block.
+`my` creates fresh RuntimeScalar per call. `our` aliases a global into a local slot — same object, mutations visible globally. `state` persists via registry keyed by sub ref + name, unique per closure clone. `local` uses DynamicVariableManager push/pop with getLocalLevel()/popToLocalLevel() in a finally block.
 
 ---
 
@@ -492,10 +492,10 @@ outer();  # "dynamic"
 inner();  # "global" again
 ```
 
-Compiler wraps the scope with `getLocalLevel()` / `popToLocalLevel()` — restores even through `die`/`eval`. Works for scalars, arrays, hashes, typeglobs, and filehandles.
+Compiler wraps scope with `getLocalLevel()` / `popToLocalLevel()` — restores even through `die`/`eval`. Supports all variable types.
 
 Note:
-DynamicVariableManager maintains a Stack of saved states. pushLocalVariable() calls dynamicSaveState() which snapshots {type, value, blessId} and resets to undef. popToLocalLevel() calls dynamicRestoreState() for each saved variable. The compiler detects `local` usage at compile time (FindDeclarationVisitor) and only emits save/restore code for blocks that need it.
+DynamicVariableManager uses a Stack of saved states. pushLocalVariable() snapshots {type, value, blessId} and resets to undef. popToLocalLevel() restores each variable. Compiler detects `local` at compile time and only emits save/restore for blocks that need it.
 
 ---
 
@@ -513,7 +513,7 @@ $x = 10;   # prints "writing!"
 say $x;    # prints "reading!" then 10
 ```
 
-`TIED_SCALAR` type in `RuntimeScalar` dispatches `FETCH`/`STORE` transparently. Supported for scalars, arrays, hashes, and filehandles.
+`TIED_SCALAR` type dispatches `FETCH`/`STORE` transparently. Works for scalars, arrays, hashes, and filehandles.
 
 ---
 
@@ -537,7 +537,7 @@ say "Caught: $@" if $@;
 4. Check is a volatile boolean read (~2 CPU cycles) — zero cost when idle
 
 Note:
-The kill() operator also uses this mechanism for self-signals. On Unix, external signals use jnr-posix to call POSIX kill(). On Windows, signals map to GenerateConsoleCtrlEvent and TerminateProcess. The signal queue pattern ensures handlers always execute in the original thread context, not the timer thread.
+kill() reuses this mechanism. Unix signals via jnr-posix; Windows via GenerateConsoleCtrlEvent/TerminateProcess. Handlers always execute in the original thread context.
 
 ---
 
@@ -553,7 +553,7 @@ Uses **Java's regex engine** with a Perl compatibility layer:
 Cache of 1000 compiled patterns.
 
 Note:
-Also handles octal escapes, named Unicode (\N{name}), and surrogate pairs. Unsupported: recursive patterns, variable-length lookbehind. RuntimeRegex manages matching, captures, and special variables ($1, $&, etc.).
+Also handles octal escapes, named Unicode (\N{name}), surrogate pairs. Unsupported: recursive patterns, variable-length lookbehind. RuntimeRegex manages captures and special variables.
 
 ---
 
@@ -628,10 +628,10 @@ Object result = perl.eval("process_data($data)");
 1. **GraalVM** — native executables, instant startup
 2. **Android DEX** — Perl on mobile devices
 
-The Internal VM is the key — custom bytecode is platform-independent and portable to any JVM derivative.
+The Internal VM is key — custom bytecode is portable to any JVM derivative.
 
 Note:
-This is why the dual backend matters beyond performance. GraalVM native image gives standalone executables with smaller footprint. Android DEX converts JVM bytecode to Dalvik bytecode.
+Dual backend matters beyond performance. GraalVM gives standalone executables. Android DEX converts JVM to Dalvik bytecode.
 
 ---
 
@@ -653,7 +653,7 @@ This is why the dual backend matters beyond performance. GraalVM native image gi
 Supports `$DB::single`, `%DB::sub`, custom `DB::DB` — compatible with Perl's debugger API.
 
 Note:
-The debugger uses the Internal VM backend (forced with -d). DEBUG opcodes are inserted at each statement. DebugHooks handles breakpoint checking, command parsing, and expression evaluation in the current lexical scope. PERL5DB environment variable is supported for custom debuggers.
+Debugger uses Internal VM (forced with -d). DEBUG opcodes inserted at each statement. DebugHooks handles breakpoints, command parsing, and eval in current scope. PERL5DB supported for custom debuggers.
 
 ---
 

@@ -666,6 +666,12 @@ public class ConstantFoldingVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        result = node;
+        isConstant = false;
+    }
+
+    @Override
     public void visit(LabelNode node) {
         result = node;
         isConstant = false;

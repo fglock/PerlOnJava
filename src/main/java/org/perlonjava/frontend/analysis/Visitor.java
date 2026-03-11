@@ -125,6 +125,13 @@ public interface Visitor {
      */
     void visit(TryNode node);
 
+    /**
+     * Visit a DeferNode.
+     *
+     * @param node the DeferNode to visit
+     */
+    void visit(DeferNode node);
+
     void visit(LabelNode node);
 
     void visit(CompilerFlagNode node);

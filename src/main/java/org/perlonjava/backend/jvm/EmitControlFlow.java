@@ -34,6 +34,22 @@ public class EmitControlFlow {
     static void handleNextOperator(EmitterContext ctx, OperatorNode node) {
         ctx.logDebug("visit(next)");
 
+        String operator = node.operator;
+        
+        // Check if we're inside a defer block - control flow out of defer is prohibited
+        if (ctx.javaClassInfo.isInDeferBlock) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                    "Can't \"" + operator + "\" out of a \"defer\" block",
+                    ctx.errorUtil);
+        }
+        
+        // Check if we're inside a finally block - control flow out of finally is prohibited
+        if (ctx.javaClassInfo.finallyBlockDepth > 0) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                    "Can't \"" + operator + "\" out of a \"finally\" block",
+                    ctx.errorUtil);
+        }
+
         // Initialize label string for labeled loops
         String labelStr = null;
         ListNode labelNode = (ListNode) node.operand;
@@ -48,7 +64,6 @@ public class EmitControlFlow {
             }
         }
 
-        String operator = node.operator;
         // Find loop labels by name.
         LoopLabels loopLabels;
         if (labelStr == null) {
@@ -122,7 +137,6 @@ public class EmitControlFlow {
     /**
      * Handles the 'return' operator for subroutine exits.
      * Processes both single and multiple return values, ensuring proper stack management.
-     * Also detects and handles 'goto &NAME' tail calls.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
      * @param node           The operator node representing the return statement
@@ -130,33 +144,22 @@ public class EmitControlFlow {
     static void handleReturnOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
+        // Check if we're inside a defer block - return out of defer is prohibited
+        if (ctx.javaClassInfo.isInDeferBlock) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                    "Can't \"return\" out of a \"defer\" block",
+                    ctx.errorUtil);
+        }
+        
+        // Check if we're inside a finally block - return out of finally is prohibited
+        if (ctx.javaClassInfo.finallyBlockDepth > 0) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                    "Can't \"return\" out of a \"finally\" block",
+                    ctx.errorUtil);
+        }
+
         ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
         ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
-
-        // Check if this is a 'goto &NAME' or 'goto EXPR' tail call (parsed as 'return (coderef(@_))')
-        // This handles: goto &foo, goto __SUB__, goto $coderef, etc.
-        if (node.operand instanceof ListNode list && list.elements.size() == 1) {
-            Node firstElement = list.elements.getFirst();
-            if (firstElement instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
-                // This is a function call - check if it's a coderef form
-                Node callTarget = callNode.left;
-
-                // Handle &sub syntax
-                if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
-                    ctx.logDebug("visit(return): Detected goto &NAME tail call");
-                    handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
-                    return;
-                }
-
-                // Handle __SUB__ and other code reference expressions
-                // In Perl, goto EXPR where EXPR evaluates to a coderef is a tail call
-                if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
-                    ctx.logDebug("visit(return): Detected goto __SUB__ tail call");
-                    handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
-                    return;
-                }
-            }
-        }
 
         boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
 
@@ -218,6 +221,10 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
 
+        // Create TAILCALL marker. Teardown (defer blocks, local variables) happens
+        // at returnLabel before this marker is returned to the caller.
+        // The caller's call-site trampoline handles the actual tail call.
+
         ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
         ctx.mv.visitInsn(Opcodes.DUP);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
@@ -238,7 +245,85 @@ public class EmitControlFlow {
             ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        // Jump to returnLabel (trampoline will handle it)
+        // Jump to returnLabel (teardown happens there, then marker returned to caller)
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+    }
+
+    /**
+     * Handles 'goto &{expr}' tail call with symbolic code dereference.
+     * Evaluates the block to get the subroutine name, looks up the CODE reference,
+     * and creates a TAILCALL marker.
+     *
+     * @param emitterVisitor The visitor handling the bytecode emission
+     * @param blockNode      The block node containing the expression for the subroutine name
+     * @param argsNode       The node representing the arguments
+     * @param tokenIndex     The token index for error reporting
+     */
+    static void handleGotoSubroutineBlock(EmitterVisitor emitterVisitor, BlockNode blockNode, Node argsNode, int tokenIndex) {
+        EmitterContext ctx = emitterVisitor.ctx;
+
+        ctx.logDebug("visit(goto &{expr}): Emitting TAILCALL marker");
+
+        // Evaluate the block to get the subroutine name/reference
+        blockNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        // Call codeDerefNonStrict to look up the CODE reference from the string/glob
+        emitterVisitor.pushCurrentPackage();
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "codeDerefNonStrict",
+                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+
+        int codeRefSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledCodeRef = codeRefSlot >= 0;
+        if (!pooledCodeRef) {
+            codeRefSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
+
+        // Build the args array
+        argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                "getList",
+                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                "getArrayOfAlias",
+                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                false);
+        int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArgs = argsSlot >= 0;
+        if (!pooledArgs) {
+            argsSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
+
+        // Create TAILCALL marker
+        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, argsSlot);
+        ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+        int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(tokenIndex) : 0;
+        ctx.mv.visitLdcInsn(lineNumber);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                "<init>",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;I)V",
+                false);
+
+        if (pooledArgs) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledCodeRef) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
+
+        // Jump to returnLabel (teardown happens there, then marker returned to caller)
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
@@ -255,6 +340,20 @@ public class EmitControlFlow {
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
+        // Check if we're inside a defer block - goto out of defer is prohibited
+        if (ctx.javaClassInfo.isInDeferBlock) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                    "Can't \"goto\" out of a \"defer\" block",
+                    ctx.errorUtil);
+        }
+        
+        // Check if we're inside a finally block - goto out of finally is prohibited
+        if (ctx.javaClassInfo.finallyBlockDepth > 0) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                    "Can't \"goto\" out of a \"finally\" block",
+                    ctx.errorUtil);
+        }
+
         // Parse the goto argument
         String labelName = null;
         boolean isDynamic = false;
@@ -266,6 +365,25 @@ public class EmitControlFlow {
             if (arg instanceof IdentifierNode) {
                 labelName = ((IdentifierNode) arg).name;
             } else {
+                // Check if this is goto &NAME or goto &{expr} - a subroutine call form
+                // The parser produces: BinaryOperatorNode "(" with left=OperatorNode "&" (for &NAME)
+                // or left=BlockNode (for &{expr}) and right=args
+                if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
+                    Node callTarget = callNode.left;
+                    if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
+                        ctx.logDebug("visit(goto): Detected goto &NAME tail call");
+                        handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
+                        return;
+                    }
+                    // Handle goto &{expr} - symbolic code dereference
+                    // BlockNode contains an expression that evaluates to a subroutine name
+                    if (callTarget instanceof BlockNode blockNode) {
+                        ctx.logDebug("visit(goto): Detected goto &{expr} tail call");
+                        handleGotoSubroutineBlock(emitterVisitor, blockNode, callNode.right, node.tokenIndex);
+                        return;
+                    }
+                }
+
                 // Check if this is a tail call (goto EXPR where EXPR is a coderef)
                 // This handles: goto __SUB__, goto $coderef, etc.
                 if (arg instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
@@ -304,6 +422,8 @@ public class EmitControlFlow {
                 ctx.mv.visitJumpInsn(Opcodes.IF_ICMPNE, notCodeRef);
 
                 // Build a TAILCALL marker with the coderef and the current @_ array.
+                // Teardown (defer blocks, local variables) happens at returnLabel
+                // before this marker is returned to the caller.
                 ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
                 ctx.mv.visitInsn(Opcodes.DUP);
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);

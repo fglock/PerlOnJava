@@ -178,6 +178,12 @@ public class LValueVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        // A DeferNode is not an L-value, so set context to VOID
+        context = RuntimeContextType.VOID;
+    }
+
+    @Override
     public void visit(LabelNode node) {
     }
 

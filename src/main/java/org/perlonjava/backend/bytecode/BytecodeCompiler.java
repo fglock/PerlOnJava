@@ -96,6 +96,10 @@ public class BytecodeCompiler implements Visitor {
     private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
     // True when this compiler was constructed for eval STRING (has parentRegistry)
     private boolean isEvalString;
+    // True when compiling inside a defer block (control flow out of defer is prohibited)
+    private boolean isInDeferBlock;
+    // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
+    private int finallyBlockDepth;
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
     private String[] capturedVarNames;            // Parallel array of names
@@ -458,6 +462,22 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Check if we're inside a defer or finally block and throw an error if so.
+     * Control flow statements (return, goto, last, next, redo) are prohibited in these blocks.
+     *
+     * @param tokenIndex The token index for error reporting
+     * @param operator   The control flow operator (e.g., "return", "goto", "last")
+     */
+    void checkNotInDeferBlock(int tokenIndex, String operator) {
+        if (isInDeferBlock) {
+            throwCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
+        }
+        if (finallyBlockDepth > 0) {
+            throwCompilerException("Can't \"" + operator + "\" out of a \"finally\" block", tokenIndex);
+        }
+    }
+
+    /**
      * Compile an AST node to InterpretedCode.
      *
      * @param node The AST node to compile
@@ -758,7 +778,8 @@ public class BytecodeCompiler implements Visitor {
                 && localOp.operator.equals("local");
 
         // Save DynamicVariableManager level before the block body when the block contains
-        // `local` operators or a scoped package declaration, so locals are restored on block exit.
+        // `local` operators, defer statements, or a scoped package declaration, so locals 
+        // and deferred blocks are restored/executed on block exit.
         // This matches the JVM compiler's Local.localSetup/localTeardown pattern.
         int localLevelReg = -1;
         boolean needsLocalRestore = false;
@@ -767,8 +788,9 @@ public class BytecodeCompiler implements Visitor {
                     && node.elements.get(0) instanceof OperatorNode firstOp
                     && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
                     && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"));
-            boolean hasLocal = FindDeclarationVisitor.findOperator(node, "local") != null;
-            if (hasScopedPackage || hasLocal) {
+            // Check for both local operators and defer statements - both need scope cleanup
+            boolean hasLocalOrDefer = FindDeclarationVisitor.containsLocalOrDefer(node);
+            if (hasScopedPackage || hasLocalOrDefer) {
                 needsLocalRestore = true;
                 localLevelReg = allocateRegister();
                 emit(Opcodes.GET_LOCAL_LEVEL);
@@ -4241,6 +4263,12 @@ public class BytecodeCompiler implements Visitor {
         );
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
+        
+        // Check if this subroutine is a defer block
+        Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
+        if (isDeferBlock != null && isDeferBlock) {
+            subCompiler.isInDeferBlock = true;
+        }
 
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
@@ -4805,6 +4833,27 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(TryNode node) {
         throw new UnsupportedOperationException("Try/catch not yet implemented");
+    }
+
+    @Override
+    public void visit(DeferNode node) {
+        // Compile the defer block as a closure
+        // Create a SubroutineNode to wrap the block
+        SubroutineNode closureNode = new SubroutineNode(
+                null, null, null, node.block, false, node.tokenIndex);
+        // Mark the closure as a defer block so control flow checks can be performed
+        closureNode.setAnnotation("isDeferBlock", true);
+        closureNode.accept(this);
+        int codeReg = lastResultReg;
+
+        // Create DeferBlock and push onto dynamic variable stack
+        // PUSH_DEFER takes code_reg and args_reg (@_ is always register 1)
+        // This ensures the defer block sees the same @_ as the enclosing scope
+        emit(Opcodes.PUSH_DEFER);
+        emitReg(codeReg);
+        emitReg(1);  // @_ is always in register 1
+
+        lastResultReg = -1; // defer doesn't produce a value
     }
 
     @Override

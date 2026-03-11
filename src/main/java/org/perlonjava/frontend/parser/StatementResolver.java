@@ -85,6 +85,10 @@ public class StatementResolver {
                         ? StatementParser.parseTryStatement(parser)
                         : null;
 
+                case "defer" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("defer")
+                        ? StatementParser.parseDeferStatement(parser)
+                        : null;
+
                 case "package" -> StatementParser.parsePackageDeclaration(parser, token);
 
                 case "class" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class")

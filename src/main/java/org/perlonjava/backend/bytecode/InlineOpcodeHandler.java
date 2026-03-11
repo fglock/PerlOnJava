@@ -1245,4 +1245,19 @@ public class InlineOpcodeHandler {
         registers[rd].undefine();
         return pc;
     }
+
+    /**
+     * Create a DeferBlock from a RuntimeScalar code reference and push it onto the DVM stack.
+     * Format: PUSH_DEFER code_reg args_reg
+     * Creates DeferBlock with captured @_ and pushes: DynamicVariableManager.pushLocalVariable(new DeferBlock(codeRef, args))
+     */
+    public static int executePushDefer(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int codeReg = bytecode[pc++];
+        int argsReg = bytecode[pc++];
+        RuntimeScalar codeRef = (RuntimeScalar) registers[codeReg];
+        RuntimeArray args = (RuntimeArray) registers[argsReg];
+        DeferBlock deferBlock = new DeferBlock(codeRef, args);
+        DynamicVariableManager.pushLocalVariable(deferBlock);
+        return pc;
+    }
 }

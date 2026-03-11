@@ -141,9 +141,17 @@ public class EmitSubroutine {
         newSymbolTable.resetLocalVariableIndex(resetTo);
 
         // Create the new method context
+        JavaClassInfo newJavaClassInfo = new JavaClassInfo();
+        
+        // Check if this subroutine is a defer block - control flow restrictions apply
+        Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
+        if (isDeferBlock != null && isDeferBlock) {
+            newJavaClassInfo.isInDeferBlock = true;
+        }
+        
         EmitterContext subCtx =
                 new EmitterContext(
-                        new JavaClassInfo(), // Internal Java class name
+                        newJavaClassInfo, // Internal Java class name
                         newSymbolTable, // Closure symbolTable
                         null, // Method visitor
                         null, // Class writer
@@ -152,64 +160,151 @@ public class EmitSubroutine {
                         ctx.errorUtil, // Error message utility
                         ctx.compilerOptions,
                         null);
-        Class<?> generatedClass =
-                EmitterMethodCreator.createClassWithMethod(
-                        subCtx, node.block, node.useTryCatch
-                );
-        String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
-        ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
-        ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
-        RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
-
+        
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
+        
+        try {
+            Class<?> generatedClass =
+                    EmitterMethodCreator.createClassWithMethod(
+                            subCtx, node.block, node.useTryCatch
+                    );
+            String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
+            ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
+            ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
+            RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
-        // Direct instantiation approach - no reflection needed!
+            // Direct instantiation approach - no reflection needed!
 
-        // 1. NEW - Create new instance
-        mv.visitTypeInsn(Opcodes.NEW, subCtx.javaClassInfo.javaClassName);
-        mv.visitInsn(Opcodes.DUP);
+            // 1. NEW - Create new instance
+            mv.visitTypeInsn(Opcodes.NEW, subCtx.javaClassInfo.javaClassName);
+            mv.visitInsn(Opcodes.DUP);
 
-        // 2. Load all captured variables for the constructor
-        int newIndex = 0;
-        for (Integer currentIndex : visibleVariables.keySet()) {
-            if (newIndex >= skipVariables) {
-                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
+            // 2. Load all captured variables for the constructor
+            int newIndex = 0;
+            for (Integer currentIndex : visibleVariables.keySet()) {
+                if (newIndex >= skipVariables) {
+                    mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
+                }
+                newIndex++;
             }
-            newIndex++;
-        }
 
-        // 3. Build the constructor descriptor
-        StringBuilder constructorDescriptor = new StringBuilder("(");
-        for (int i = skipVariables; i < newEnv.length; i++) {
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
-            constructorDescriptor.append(descriptor);
-        }
-        constructorDescriptor.append(")V");
+            // 3. Build the constructor descriptor
+            StringBuilder constructorDescriptor = new StringBuilder("(");
+            for (int i = skipVariables; i < newEnv.length; i++) {
+                String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
+                constructorDescriptor.append(descriptor);
+            }
+            constructorDescriptor.append(")V");
 
-        // 4. INVOKESPECIAL - Call the constructor
-        mv.visitMethodInsn(
-                Opcodes.INVOKESPECIAL,
-                subCtx.javaClassInfo.javaClassName,
-                "<init>",
-                constructorDescriptor.toString(),
-                false);
-
-        // 5. Create a CODE variable using RuntimeCode.makeCodeObject
-        if (node.prototype != null) {
-            mv.visitLdcInsn(node.prototype);
+            // 4. INVOKESPECIAL - Call the constructor
             mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "makeCodeObject",
-                    "(Ljava/lang/Object;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    Opcodes.INVOKESPECIAL,
+                    subCtx.javaClassInfo.javaClassName,
+                    "<init>",
+                    constructorDescriptor.toString(),
                     false);
-        } else {
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
+
+            // 5. Create a CODE variable using RuntimeCode.makeCodeObject
+            if (node.prototype != null) {
+                mv.visitLdcInsn(node.prototype);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "makeCodeObject",
+                        "(Ljava/lang/Object;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            } else {
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "makeCodeObject",
+                        "(Ljava/lang/Object;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+        } catch (InterpreterFallbackException fallback) {
+            // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
+            ctx.logDebug("Using interpreter fallback for subroutine");
+            
+            // Store the InterpretedCode in the interpretedSubs map with a unique key
+            String fallbackKey = "interpreted_" + System.identityHashCode(fallback.interpretedCode);
+            RuntimeCode.interpretedSubs.put(fallbackKey, fallback.interpretedCode);
+            
+            // Generate bytecode to retrieve and configure the InterpretedCode
+            // 1. Load the InterpretedCode from the map
+            mv.visitFieldInsn(Opcodes.GETSTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "makeCodeObject",
-                    "(Ljava/lang/Object;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "interpretedSubs",
+                    "Ljava/util/HashMap;");
+            mv.visitLdcInsn(fallbackKey);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "java/util/HashMap",
+                    "get",
+                    "(Ljava/lang/Object;)Ljava/lang/Object;",
                     false);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/backend/bytecode/InterpretedCode");
+            
+            // 2. Build RuntimeBase[] array of captured variables
+            int numCaptured = newEnv.length - skipVariables;
+            if (numCaptured > 0) {
+                // Store the InterpretedCode temporarily
+                int codeSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, codeSlot);
+                
+                // Create array for captured vars
+                mv.visitLdcInsn(numCaptured);
+                mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+                
+                // Fill the array with captured variables
+                int arrayIndex = 0;
+                int varIndex = 0;
+                for (Integer currentIndex : visibleVariables.keySet()) {
+                    if (varIndex >= skipVariables) {
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitLdcInsn(arrayIndex);
+                        mv.visitVarInsn(Opcodes.ALOAD, currentIndex);
+                        mv.visitInsn(Opcodes.AASTORE);
+                        arrayIndex++;
+                    }
+                    varIndex++;
+                }
+                
+                // Call withCapturedVars to create a new InterpretedCode with captured vars
+                int arraySlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+                
+                mv.visitVarInsn(Opcodes.ALOAD, codeSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/backend/bytecode/InterpretedCode",
+                        "withCapturedVars",
+                        "([Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/backend/bytecode/InterpretedCode;",
+                        false);
+            }
+            
+            // 3. Wrap in RuntimeScalar(RuntimeCode)
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            mv.visitInsn(Opcodes.DUP_X1);
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "<init>",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeCode;)V",
+                    false);
+            
+            // Set prototype if needed
+            if (node.prototype != null) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "getCode",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeCode;",
+                        false);
+                mv.visitLdcInsn(node.prototype);
+                mv.visitFieldInsn(Opcodes.PUTFIELD,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "prototype",
+                        "Ljava/lang/String;");
+            }
         }
 
         // 6. Clean up the stack if context is VOID
@@ -415,7 +510,91 @@ public class EmitSubroutine {
                     false);
             mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
 
-            // Marked: jump to block-level dispatcher
+            // Marked: check if TAILCALL (handle locally with trampoline)
+            Label tailcallLoop = new Label();
+            Label notTailcall = new Label();
+
+            // Check if type is TAILCALL
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "getControlFlowType",
+                    "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/ControlFlowType",
+                    "ordinal",
+                    "()I",
+                    false);
+            mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, notTailcall);
+
+            // TAILCALL trampoline loop - handle tail calls at the call site
+            mv.visitLabel(tailcallLoop);
+
+            // Extract codeRef and args from the marker
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "getTailCallCodeRef",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
+
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "getTailCallArgs",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
+
+            // Call target: RuntimeCode.apply(codeRef, "tailcall", args, context)
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
+            mv.visitLdcInsn("tailcall");
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
+            mv.visitVarInsn(Opcodes.ILOAD, 2);  // context parameter (passed to current sub)
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "apply",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+
+            // Store result to controlFlowTempSlot
+            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+            // Check if result is still a control flow marker
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "isNonLocalGoto",
+                    "()Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);  // Not marked, done
+
+            // Marked: check if still TAILCALL
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "getControlFlowType",
+                    "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/ControlFlowType",
+                    "ordinal",
+                    "()I",
+                    false);
+            mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, tailcallLoop);  // Still TAILCALL, loop
+
+            // Not TAILCALL - different marker (LAST/NEXT/REDO/GOTO), dispatch it
+            mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
+
+            // Not TAILCALL initially - jump to block dispatcher
+            mv.visitLabel(notTailcall);
             mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
 
             // Not a control flow marker - load it back and continue

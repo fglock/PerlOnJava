@@ -58,6 +58,11 @@ public class DynamicVariableManager {
      * Pops dynamic variables from the stack until the stack size matches the specified target local level.
      * This is useful for restoring the stack to a previous state by removing any variables added after that state.
      *
+     * <p>This method is exception-safe: if a DynamicState (e.g., a DeferBlock) throws an exception
+     * during restoration, the method continues processing remaining items on the stack. The last
+     * exception thrown is re-thrown after all cleanup is complete. This implements Perl's defer
+     * semantics where the last exception "wins".</p>
+     *
      * @param targetLocalLevel the target size of the stack after popping variables.
      */
     public static void popToLocalLevel(int targetLocalLevel) {
@@ -66,10 +71,30 @@ public class DynamicVariableManager {
             throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
         }
 
+        // Track the last exception so we can re-throw after all cleanup
+        Throwable pendingException = null;
+
         // Pop variables until the stack size matches the target local level
         while (variableStack.size() > targetLocalLevel) {
             DynamicState variable = variableStack.pop();
-            variable.dynamicRestoreState();
+            try {
+                variable.dynamicRestoreState();
+            } catch (Throwable t) {
+                // For defer blocks: last exception wins (Perl semantics)
+                // Continue cleanup even if an exception occurs
+                pendingException = t;
+            }
+        }
+
+        // Re-throw the last exception after all cleanup is done
+        if (pendingException != null) {
+            if (pendingException instanceof RuntimeException re) {
+                throw re;
+            } else if (pendingException instanceof Error e) {
+                throw e;
+            } else {
+                throw new RuntimeException(pendingException);
+            }
         }
     }
 }

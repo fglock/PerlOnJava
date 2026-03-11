@@ -335,6 +335,13 @@ public class BytecodeSizeEstimator implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        // Defer compiles the block as a closure, then pushes DeferBlock
+        if (node.block != null) node.block.accept(this);
+        estimatedSize += OBJECT_CREATION + METHOD_CALL_OVERHEAD * 2; // DeferBlock + push
+    }
+
+    @Override
     public void visit(LabelNode node) {
         // Mirror EmitLabel.emitLabel() patterns
         // Labels don't generate bytecode, just metadata

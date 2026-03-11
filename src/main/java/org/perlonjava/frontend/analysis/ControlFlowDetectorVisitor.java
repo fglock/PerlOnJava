@@ -1128,6 +1128,13 @@ public class ControlFlowDetectorVisitor implements Visitor {
         }
     }
 
+    @Override
+    public void visit(DeferNode node) {
+        if (node.block != null) {
+            node.block.accept(this);
+        }
+    }
+
     // Simple implementations for other node types
     @Override
     public void visit(IdentifierNode node) {

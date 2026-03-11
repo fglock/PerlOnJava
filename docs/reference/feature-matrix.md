@@ -631,8 +631,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - 🚧  **bytes** pragma
 - 🚧  **feature** pragma
-  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
-  - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `defer`, `refaliasing`.
+  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `defer`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
+  - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `refaliasing`.
 - 🚧  **warnings** pragma
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas
