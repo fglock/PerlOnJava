@@ -7,36 +7,65 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
  * Central configuration class for the Perl-to-Java compiler.
  * Contains constants that control compiler behavior and runtime settings.
  * <p>
- * Note: Configuration values can be set using the Configure.pl script.
- * For example, to set the Perl version, you can run:
+ * Configuration values are managed using the Configure.pl script:
  * <p>
- * ./Configure.pl -D perlVersion=v5.40.0
+ * ./Configure.pl -D version=5.43.0    # Update version everywhere
+ * ./Configure.pl                       # Show current configuration
  * <p>
- * To update the jar version across all files in the repository:
+ * This will update the version constant in this class and replace all
+ * occurrences of perlonjava-X.Y.Z.jar throughout the repository.
  * <p>
- * ./Configure.pl -D jarVersion=3.0.1
- * <p>
- * This will update both constants in this configuration class and replace
- * all occurrences of perlonjava-3.0.0.jar with perlonjava-3.0.1.jar.
+ * Git commit information (gitCommitId, gitCommitDate) is automatically
+ * injected by the build system (Gradle or Maven) before compilation.
+ * Do not edit these values manually - they will be overwritten on each build.
  */
 public final class Configuration {
 
-    // Perl version information
-    public static final String perlVersion = "v5.42.0";
-    public static final String jarVersion = "3.0.0";
+    /**
+     * Unified version number for PerlOnJava.
+     * This version is used for both the JAR artifact and Perl compatibility version.
+     * Updated via: ./Configure.pl -D version=X.Y.Z
+     */
+    public static final String version = "5.42.0";
+
+    /**
+     * Git commit ID (short hash) of the build.
+     * Automatically populated by Gradle/Maven during build.
+     * DO NOT EDIT MANUALLY - this value is replaced at build time.
+     */
+    public static final String gitCommitId = "610d942c5";
+
+    /**
+     * Git commit date of the build (ISO format: YYYY-MM-DD).
+     * Automatically populated by Gradle/Maven during build.
+     * DO NOT EDIT MANUALLY - this value is replaced at build time.
+     */
+    public static final String gitCommitDate = "2026-03-10";
 
     // Prevent instantiation
     private Configuration() {
     }
 
+    /**
+     * Returns the version for use with "use VERSION" feature bundles.
+     * For version 5.42.0, returns ":5.42"
+     */
     public static String getPerlVersionBundle() {
-        return ":" + perlVersion.substring(1, perlVersion.lastIndexOf('.'));
+        int lastDot = version.lastIndexOf('.');
+        return ":" + version.substring(0, lastDot);
     }
 
+    /**
+     * Returns the version string without 'v' prefix.
+     * Since version is already stored without 'v', this returns it directly.
+     */
     public static String getPerlVersionNoV() {
-        return perlVersion.startsWith("v") ? perlVersion.substring(1) : perlVersion;
+        return version.startsWith("v") ? version.substring(1) : version;
     }
 
+    /**
+     * Returns the version in old Perl $] format (e.g., "5.042000" for 5.42.0).
+     */
     public static String getPerlVersionOld() {
         String versionNoV = getPerlVersionNoV();
         String[] parts = versionNoV.split("\\.");
@@ -55,7 +84,7 @@ public final class Configuration {
 
     /**
      * Returns the Perl version as a vstring RuntimeScalar.
-     * For example, v5.42.0 becomes a vstring with bytes \u0005*\u0000
+     * For example, 5.42.0 becomes a vstring with bytes \u0005*\u0000
      * where each version component is represented as a character.
      *
      * @return RuntimeScalar with type VSTRING containing the version

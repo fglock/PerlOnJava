@@ -139,5 +139,5 @@ Fix strategy:
 
 ## Notes
 
-- `jperl` runs `target/perlonjava-3.0.0.jar`. Rebuild after changes, otherwise you may be debugging stale code.
+- `jperl` runs `target/perlonjava-5.42.0.jar`. Rebuild after changes, otherwise you may be debugging stale code.
 - `JPERL_ASM_DEBUG_CLASS` is useful to avoid massive logs during large tests.

@@ -9,30 +9,40 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 public class VersionHelper {
     // Helper method to normalize version to a comparable decimal format for require
     private static String normalizeVersionToDecimalForRequire(String version) {
-        if (version.startsWith("v")) {
-            // v-string like v5.42.0 -> 5.042000, v5.5.630 -> 5.005630
-            String[] parts = version.substring(1).split("\\.");
-            if (parts.length > 0) {
-                StringBuilder normalized = new StringBuilder(parts[0]);
-                if (parts.length > 1) {
-                    normalized.append(".");
-                    for (int i = 1; i < parts.length; i++) {
-                        // Pad each component to 3 digits with leading zeros
-                        String part = parts[i];
-                        while (part.length() < 3) {
-                            part = "0" + part;  // Pad with leading zeros
-                        }
-                        normalized.append(part);
-                    }
-                } else {
-                    // Handle cases like "v5" -> "5.000000"
-                    normalized.append(".000000");
+        // Remove v prefix if present
+        String v = version.startsWith("v") ? version.substring(1) : version;
+        
+        // Handle underscore versions like 5.005_63 -> 5.00563
+        v = v.replace("_", "");
+        
+        // Check if this is a dot-separated version like 5.42.0 (more than one dot)
+        String[] parts = v.split("\\.");
+        if (parts.length > 2 || (parts.length == 2 && version.startsWith("v"))) {
+            // Multi-component version like 5.42.0 or v5.42.0 -> 5.042000
+            StringBuilder normalized = new StringBuilder(parts[0]);
+            normalized.append(".");
+            for (int i = 1; i < parts.length; i++) {
+                // Pad each component to 3 digits with leading zeros
+                String part = parts[i];
+                while (part.length() < 3) {
+                    part = "0" + part;  // Pad with leading zeros
                 }
-                return normalized.toString();
+                normalized.append(part);
             }
+            // Ensure at least 6 decimal digits for consistency
+            String decimalPart = normalized.substring(normalized.indexOf(".") + 1);
+            while (decimalPart.length() < 6) {
+                normalized.append("0");
+                decimalPart = normalized.substring(normalized.indexOf(".") + 1);
+            }
+            return normalized.toString();
+        } else if (parts.length == 1) {
+            // Single number like "10" -> "10.000000"
+            return v + ".000000";
         }
-        // Handle underscore versions like 5.005_63 -> 5.005063
-        return version.replace("_", "");
+        
+        // Already in decimal format like 5.042000
+        return v;
     }
 
     // Helper method to normalize version for require comparison

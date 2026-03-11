@@ -42,7 +42,7 @@ Added GraalVM support to pom.xml in a dedicated profile:
 Used GraalVM tracing agent to capture required runtime methods:
 
 ```bash
-java -agentlib:native-image-agent=config-output-dir=src/main/resources/META-INF/native-image -jar target/perlonjava-3.0.0.jar examples/life.pl
+java -agentlib:native-image-agent=config-output-dir=src/main/resources/META-INF/native-image -jar target/perlonjava-5.42.0.jar examples/life.pl
 ```
 
 ## Results

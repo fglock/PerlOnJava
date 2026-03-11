@@ -5,7 +5,7 @@ import javax.script.ScriptEngineFactory;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.perlonjava.core.Configuration.perlVersion;
+import static org.perlonjava.core.Configuration.version;
 
 /**
  * The PerlScriptEngineFactory class is an implementation of the ScriptEngineFactory interface.
@@ -53,7 +53,7 @@ public class PerlScriptEngineFactory implements ScriptEngineFactory {
 
     @Override
     public String getLanguageVersion() {
-        return perlVersion;
+        return version;
     }
 
     @Override

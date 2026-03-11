@@ -5,7 +5,7 @@
 
     <groupId>org.perlonjava</groupId>
     <artifactId>perlonjava</artifactId>
-    <version>3.0.0</version>
+    <version>5.42.0</version>
     <packaging>jar</packaging>
 
     <name>perlonjava</name>
@@ -115,6 +115,7 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Git Info Injection is handled by OS-specific profiles below -->
             <!-- Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -245,6 +246,87 @@
                         <configuration>
                             <argLine>--enable-native-access=ALL-UNNAMED -Dtest.shard.index=4 -Dtest.shard.total=4</argLine>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Git info injection for Unix/Linux/macOS -->
+        <profile>
+            <id>inject-git-unix</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                </os>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>inject-git-info</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>bash</executable>
+                                    <arguments>
+                                        <argument>-c</argument>
+                                        <argument><![CDATA[
+CONFIG_FILE="src/main/java/org/perlonjava/core/Configuration.java"
+if [ -f "$CONFIG_FILE" ]; then
+    GIT_COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
+    GIT_COMMIT_DATE=$(git log -1 --format=%cs HEAD 2>/dev/null || echo "unknown")
+    if [ "$GIT_COMMIT_ID" != "dev" ]; then
+        perl -i -pe "s/(gitCommitId\\s*=\\s*)\"[^\"]*\"/\$1\"$GIT_COMMIT_ID\"/" "$CONFIG_FILE"
+        perl -i -pe "s/(gitCommitDate\\s*=\\s*)\"[^\"]*\"/\$1\"$GIT_COMMIT_DATE\"/" "$CONFIG_FILE"
+        echo "Injected git info: $GIT_COMMIT_ID ($GIT_COMMIT_DATE)"
+    fi
+fi
+                                        ]]></argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Git info injection for Windows -->
+        <profile>
+            <id>inject-git-windows</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>inject-git-info</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>powershell</executable>
+                                    <arguments>
+                                        <argument>-ExecutionPolicy</argument>
+                                        <argument>Bypass</argument>
+                                        <argument>-File</argument>
+                                        <argument>scripts/inject-git-info.ps1</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

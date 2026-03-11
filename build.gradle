@@ -34,7 +34,68 @@ tasks.buildDeb {
 
 // Project metadata
 group = 'org.perlonjava'
-version = '3.0.0'
+version = '5.42.0'
+// Git info injection - injects commit ID and date into Configuration.java before compilation
+// This ensures the built JAR contains accurate version information for -v output
+def configFilePath = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
+
+tasks.register('injectGitInfo') {
+    description = 'Injects git commit info into Configuration.java'
+    group = 'build'
+    
+    // Declare inputs/outputs for configuration cache compatibility
+    def configFile = configFilePath.asFile
+    
+    doLast {
+        if (!configFile.exists()) {
+            logger.warn("Configuration.java not found, skipping git info injection")
+            return
+        }
+        
+        // Get git commit info using Runtime.exec
+        def gitCommitId = 'dev'
+        def gitCommitDate = 'unknown'
+        
+        try {
+            def commitIdProcess = ['git', 'rev-parse', '--short', 'HEAD'].execute()
+            commitIdProcess.waitFor()
+            if (commitIdProcess.exitValue() == 0) {
+                gitCommitId = commitIdProcess.text.trim()
+            }
+            
+            def commitDateProcess = ['git', 'log', '-1', '--format=%cs', 'HEAD'].execute()
+            commitDateProcess.waitFor()
+            if (commitDateProcess.exitValue() == 0) {
+                gitCommitDate = commitDateProcess.text.trim()
+            }
+        } catch (Exception e) {
+            logger.warn("Could not get git info: ${e.message}")
+        }
+        
+        // Only update if we got valid values
+        if (gitCommitId && gitCommitId != 'dev') {
+            def content = configFile.text
+            
+            // Use safe pattern matching for quoted string values
+            content = content.replaceAll(
+                /(gitCommitId\s*=\s*)"[^"]*"/,
+                "\$1\"${gitCommitId}\""
+            )
+            content = content.replaceAll(
+                /(gitCommitDate\s*=\s*)"[^"]*"/,
+                "\$1\"${gitCommitDate}\""
+            )
+            
+            configFile.text = content
+            logger.lifecycle("Injected git info: ${gitCommitId} (${gitCommitDate})")
+        }
+    }
+}
+
+// Make compilation depend on git info injection
+tasks.named('compileJava') {
+    dependsOn 'injectGitInfo'
+}
 
 // OS package configuration for Debian packaging
 ospackage {

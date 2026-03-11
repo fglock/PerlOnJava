@@ -4,7 +4,7 @@
 # curl https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar --output h2-2.2.224.jar
 #
 # Run using:
-# java -cp "h2-2.2.224.jar:target/perlonjava-3.0.0.jar" org.perlonjava.app.cli.Main examples/dbi.pl
+# java -cp "h2-2.2.224.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main examples/dbi.pl
 #
 # or using:
 # CLASSPATH=h2-2.2.224.jar ./jperl examples/dbi.pl
