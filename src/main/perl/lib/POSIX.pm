@@ -232,6 +232,8 @@ sub chdir { POSIX::_chdir(@_) }
 sub time { POSIX::_time() }
 sub sleep { POSIX::_sleep(@_) }
 sub alarm { POSIX::_alarm(@_) }
+sub strftime { POSIX::_strftime(@_) }
+sub mktime { POSIX::_mktime(@_) }
 
 # Math functions (many can use Perl builtins)
 sub abs { CORE::abs($_[0]) }
