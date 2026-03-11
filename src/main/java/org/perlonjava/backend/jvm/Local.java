@@ -28,9 +28,10 @@ public class Local {
     }
 
     static localRecord localSetup(EmitterContext ctx, Node ast, MethodVisitor mv, boolean blockLevel) {
-        boolean containsLocalOperator = FindDeclarationVisitor.findOperator(ast, "local") != null;
+        // Check for both local operators and defer statements - both need scope cleanup
+        boolean needsCleanup = FindDeclarationVisitor.containsLocalOrDefer(ast);
         int dynamicIndex = -1;
-        if (containsLocalOperator) {
+        if (needsCleanup) {
             dynamicIndex = ctx.symbolTable.allocateLocalVariable();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
@@ -39,11 +40,11 @@ public class Local {
                     false);
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         }
-        return new localRecord(containsLocalOperator, dynamicIndex);
+        return new localRecord(needsCleanup, dynamicIndex);
     }
 
     static void localTeardown(localRecord localRecord, MethodVisitor mv) {
-        if (localRecord.containsLocalOperator()) {
+        if (localRecord.needsCleanup()) {
             mv.visitVarInsn(Opcodes.ILOAD, localRecord.dynamicIndex());
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
@@ -53,6 +54,6 @@ public class Local {
         }
     }
 
-    record localRecord(boolean containsLocalOperator, int dynamicIndex) {
+    record localRecord(boolean needsCleanup, int dynamicIndex) {
     }
 }

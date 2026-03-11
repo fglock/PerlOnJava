@@ -111,6 +111,11 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        EmitStatement.emitDefer(this, node);
+    }
+
+    @Override
     public void visit(SubroutineNode node) {
         EmitSubroutine.emitSubroutine(ctx, node);
     }

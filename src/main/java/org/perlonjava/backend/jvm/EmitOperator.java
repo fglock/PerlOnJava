@@ -342,9 +342,10 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-        // Push the formatted line number as a message using errorUtil for correct line tracking
-        String fileName = emitterVisitor.ctx.errorUtil.getFileName();
-        int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumberAccurate(node.tokenIndex);
+        // Push the formatted line number as a message using getSourceLocationAccurate to honor #line directives
+        var loc = emitterVisitor.ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+        String fileName = loc.fileName();
+        int lineNumber = loc.lineNumber();
         Node message = new StringNode(" at " + fileName + " line " + lineNumber, node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 

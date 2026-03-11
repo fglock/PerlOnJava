@@ -15,6 +15,10 @@ public class FindDeclarationVisitor implements Visitor {
      */
     private boolean containsLocalOperator = false;
     /**
+     * Tracks whether a defer statement has been found
+     */
+    private boolean containsDefer = false;
+    /**
      * The name of the operator we are searching for (e.g., "local", "my")
      */
     private String operatorName = null;
@@ -35,6 +39,20 @@ public class FindDeclarationVisitor implements Visitor {
         visitor.operatorName = operatorName;
         blockNode.accept(visitor);
         return visitor.operatorNode;
+    }
+
+    /**
+     * Static method to check if a block contains either local or defer statements.
+     * This is used to determine if scope cleanup (popToLocalLevel) is needed.
+     *
+     * @param blockNode The AST node to search within
+     * @return true if the block contains local or defer, false otherwise
+     */
+    public static boolean containsLocalOrDefer(Node blockNode) {
+        FindDeclarationVisitor visitor = new FindDeclarationVisitor();
+        visitor.operatorName = "local";
+        blockNode.accept(visitor);
+        return visitor.containsLocalOperator || visitor.containsDefer;
     }
 
     @Override
@@ -180,6 +198,13 @@ public class FindDeclarationVisitor implements Visitor {
         if (node.finallyBlock != null) {
             node.finallyBlock.accept(this);
         }
+    }
+
+    @Override
+    public void visit(DeferNode node) {
+        // Mark that we found a defer statement
+        containsDefer = true;
+        // Don't traverse into the defer block - those are compiled separately
     }
 
     @Override

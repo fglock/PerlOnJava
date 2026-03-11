@@ -407,6 +407,24 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        appendIndent();
+        sb.append("DeferNode:\n");
+        printAnnotations(node);
+        indentLevel++;
+
+        appendIndent();
+        sb.append("Block:\n");
+        indentLevel++;
+        if (node.block != null) {
+            node.block.accept(this);
+        }
+        indentLevel--;
+
+        indentLevel--;
+    }
+
+    @Override
     public void visit(LabelNode node) {
         appendIndent();
         sb.append("LabelNode: ").append(node.label).append(":\n");

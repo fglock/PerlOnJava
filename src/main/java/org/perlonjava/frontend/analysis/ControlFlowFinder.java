@@ -563,6 +563,12 @@ public class ControlFlowFinder implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        if (foundControlFlow) return;
+        if (node.block != null) node.block.accept(this);
+    }
+
+    @Override
     public void visit(HashLiteralNode node) {
         if (foundControlFlow) return;
         for (Node element : node.elements) {

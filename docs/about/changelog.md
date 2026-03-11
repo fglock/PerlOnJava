@@ -6,9 +6,10 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 ## v5.42.3: Unreleased - Next minor version
 
 - Perl debugger with `-d`
+- Add `defer` feature
 - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
-- Add modules: `TOML`.
+- Add modules: `Time::Piece`, `TOML`.
 - Bugfix: operator override in Time::Hires now works.
 - Bugfix: internal temp variables are now pre-initialized.
 - Optimization: faster list assignment.

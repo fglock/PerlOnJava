@@ -53,6 +53,25 @@ public class JavaClassInfo {
 
     public int controlFlowActionSlot;
 
+    /**
+     * Local variable slot that stores the saved dynamic variable level from localSetup().
+     * Used by goto &sub to call popToLocalLevel() before tail calls.
+     */
+    public int dynamicLevelSlot;
+
+    /**
+     * Flag indicating if this subroutine is a defer block.
+     * Control flow statements (last, next, redo, return, goto) are prohibited in defer blocks.
+     */
+    public boolean isInDeferBlock;
+
+    /**
+     * Counter tracking nesting depth inside finally blocks.
+     * Control flow statements (last, next, redo, return, goto) are prohibited in finally blocks.
+     * This is a counter rather than a boolean to handle nested finally blocks.
+     */
+    public int finallyBlockDepth;
+
     public int[] spillSlots;
     public int spillTop;
     /**
@@ -74,6 +93,7 @@ public class JavaClassInfo {
         this.javaClassName = EmitterMethodCreator.generateClassName();
         this.returnLabel = null;
         this.returnValueSlot = -1;
+        this.dynamicLevelSlot = -1;
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
         this.blockDispatcherLabels = new HashMap<>();

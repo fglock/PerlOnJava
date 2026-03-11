@@ -1845,6 +1845,41 @@ public class Opcodes {
      */
     public static final short DEBUG = 376;
 
+    // =================================================================
+    // DEFER SUPPORT (377)
+    // =================================================================
+
+    /**
+     * Create a DeferBlock from a code reference and push it onto the dynamic variable stack.
+     * Format: PUSH_DEFER code_reg
+     * Effect: DynamicVariableManager.pushLocalVariable(new DeferBlock(code_reg))
+     */
+    public static final short PUSH_DEFER = 377;
+
+    /**
+     * Create a TAILCALL marker for goto &sub and return it.
+     * Format: GOTO_TAILCALL rd coderef_reg args_reg context
+     * Effect: rd = new RuntimeControlFlowList(TAILCALL, coderef, args, context)
+     * The caller's CALL/CALL_METHOD trampoline will execute the tail call.
+     */
+    public static final short GOTO_TAILCALL = 378;
+
+    /**
+     * Polymorphic bitwise NOT: checks if operand is string or number.
+     * Format: BITWISE_NOT rd rs
+     * Effect: rd = BitwiseOperators.bitwiseNot(rs)
+     * For strings: character-by-character complement
+     * For numbers: 32-bit unsigned complement
+     */
+    public static final short BITWISE_NOT = 379;
+
+    /**
+     * Send signal to process(es).
+     * Format: KILL rd args_reg ctx
+     * Effect: rd = KillOperator.kill(ctx, args...)
+     */
+    public static final short KILL = 380;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

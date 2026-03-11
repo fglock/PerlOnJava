@@ -59,6 +59,18 @@ JPERL_INTERPRETER=1 ./jperl script.pl
 JPERL_INTERPRETER=1 ./jperl -e 'code'
 ```
 
+**CRITICAL: eval STRING uses interpreter by default!**
+Even when running with JVM backend, `eval STRING` compiles code with the interpreter.
+This means interpreter bugs can cause test failures even without `--interpreter`.
+
+To trace eval STRING execution:
+```bash
+JPERL_EVAL_TRACE=1 ./jperl script.pl 2>&1 | grep -i interpreter
+```
+
+Fallback for large subs (`JPERL_SHOW_FALLBACK=1`) does NOT show eval STRING usage.
+One-liners won't trigger fallback - test with actual test files!
+
 ## Architecture: Two Backends, Shared Everything Else
 
 ```
@@ -153,6 +165,53 @@ All paths relative to `src/main/java/org/perlonjava/`.
 **Issues**: If BEGIN creates a constant sub but the InterpretedCode has null prototype, the parser won't recognize it as a known sub, causing disambiguation failures.
 
 ## Debugging Workflow
+
+### CRITICAL: Save Master Baselines ONCE, Don't Rebuild Repeatedly
+
+**Save master baseline to files FIRST** (do this once per debugging session):
+```bash
+# Switch to master and build
+git stash && git checkout master
+mvn package -q -DskipTests
+
+# Save master test output for JVM backend
+cd perl5_t/t && ../../jperl re/subst.t 2>&1 > /tmp/master_subst.log
+grep "^not ok" /tmp/master_subst.log > /tmp/master_subst_fails.txt
+
+# ALSO save interpreter baseline!
+cd perl5_t/t && ../../jperl --interpreter re/subst.t 2>&1 > /tmp/master_subst_interp.log
+
+# Switch back to feature branch
+git checkout feature-branch && git stash pop
+```
+
+**After making changes**, compare against saved baselines:
+```bash
+mvn package -q -DskipTests
+
+# Test JVM backend
+cd perl5_t/t && ../../jperl re/subst.t 2>&1 > /tmp/feature_subst.log
+diff /tmp/master_subst_fails.txt <(grep "^not ok" /tmp/feature_subst.log)
+
+# MUST ALSO test with interpreter!
+cd perl5_t/t && ../../jperl --interpreter re/subst.t 2>&1 > /tmp/feature_subst_interp.log
+```
+
+### CRITICAL: Always Test with BOTH Backends
+
+A fix that works for JVM backend may break interpreter, or vice versa.
+
+**For quick tests (one-liners):**
+```bash
+./jperl -e 'test code'               # JVM backend
+./jperl --interpreter -e 'test code' # Interpreter backend
+```
+
+**For test files (use env var so require/do/eval also use interpreter):**
+```bash
+./jperl test.t                        # JVM backend
+JPERL_INTERPRETER=1 ./jperl test.t    # Interpreter backend (full)
+```
 
 ### 1. Reproduce with minimal code
 ```bash

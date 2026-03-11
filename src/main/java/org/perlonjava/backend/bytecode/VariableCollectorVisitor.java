@@ -197,6 +197,13 @@ public class VariableCollectorVisitor implements Visitor {
     }
 
     @Override
+    public void visit(DeferNode node) {
+        if (node.block != null) {
+            node.block.accept(this);
+        }
+    }
+
+    @Override
     public void visit(LabelNode node) {
         // LabelNode is just a label marker with no children
     }

@@ -30,6 +30,7 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.EXP -> MathOperators.exp((RuntimeScalar) registers[rs]);
             case Opcodes.ABS -> MathOperators.abs((RuntimeScalar) registers[rs]);
             case Opcodes.BINARY_NOT -> BitwiseOperators.bitwiseNotBinary((RuntimeScalar) registers[rs]);
+            case Opcodes.BITWISE_NOT -> BitwiseOperators.bitwiseNot((RuntimeScalar) registers[rs]);
             case Opcodes.INTEGER_BITWISE_NOT -> BitwiseOperators.integerBitwiseNot((RuntimeScalar) registers[rs]);
             case Opcodes.ORD -> ScalarOperators.ord((RuntimeScalar) registers[rs]);
             case Opcodes.ORD_BYTES -> ScalarOperators.ordBytes((RuntimeScalar) registers[rs]);
@@ -77,6 +78,8 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.ABS -> sb.append("ABS r").append(rd).append(" = abs(r").append(rs).append(")\n");
             case Opcodes.BINARY_NOT ->
                     sb.append("BINARY_NOT r").append(rd).append(" = binary~(r").append(rs).append(")\n");
+            case Opcodes.BITWISE_NOT ->
+                    sb.append("BITWISE_NOT r").append(rd).append(" = ~(r").append(rs).append(")\n");
             case Opcodes.INTEGER_BITWISE_NOT ->
                     sb.append("INTEGER_BITWISE_NOT r").append(rd).append(" = integerBitwiseNot(r").append(rs).append(")\n");
             case Opcodes.ORD -> sb.append("ORD r").append(rd).append(" = ord(r").append(rs).append(")\n");

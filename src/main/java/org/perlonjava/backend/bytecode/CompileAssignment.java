@@ -881,6 +881,17 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
+                } else if (leftOp.operator.equals("vec")) {
+                    // vec($x, offset, bits) = value - lvalue assignment to bit vector
+                    // vec() returns a RuntimeVecLvalue that can be assigned to
+                    bytecodeCompiler.compileNode(node.left, -1, rhsContext);
+                    int lvalueReg = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(lvalueReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("@") && (leftOp.operand instanceof OperatorNode || leftOp.operand instanceof BlockNode)) {
                     // Array dereference assignment: @$r = ... or @{expr} = ...
                     // The operand should evaluate to an array reference

@@ -400,7 +400,13 @@ public class EmitStatement {
         // Finally block
         mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
-            node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            // Track that we're inside a finally block for control flow checks
+            emitterVisitor.ctx.javaClassInfo.finallyBlockDepth++;
+            try {
+                node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            } finally {
+                emitterVisitor.ctx.javaClassInfo.finallyBlockDepth--;
+            }
         }
         mv.visitLabel(finallyEnd);
 
@@ -409,6 +415,66 @@ public class EmitStatement {
         }
 
         emitterVisitor.ctx.logDebug("emitTryCatch end");
+    }
+
+    /**
+     * Emits bytecode for a defer statement.
+     *
+     * <p>A defer block is compiled as a closure (anonymous subroutine) that captures
+     * the current lexical scope. At runtime, the closure is wrapped in a DeferBlock
+     * and pushed onto the DynamicVariableManager stack. When the enclosing scope exits
+     * (via popToLocalLevel in the finally block), the defer block's code is executed.</p>
+     *
+     * <p>The defer block captures the enclosing subroutine's {@code @_} at registration
+     * time, so the block sees the same {@code @_} as the enclosing scope (per Perl semantics).</p>
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node           The defer node representing the defer statement.
+     */
+    public static void emitDefer(EmitterVisitor emitterVisitor, org.perlonjava.frontend.astnode.DeferNode node) {
+        emitterVisitor.ctx.logDebug("emitDefer start");
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Compile the defer block as a closure (anonymous subroutine)
+        // This captures lexical variables at the point where defer is encountered
+        // The SubroutineNode compilation returns a RuntimeScalar (code reference)
+        org.perlonjava.frontend.astnode.SubroutineNode closureNode =
+            new org.perlonjava.frontend.astnode.SubroutineNode(
+                null, null, null, node.block, false, node.tokenIndex);
+        // Mark this subroutine as a defer block - control flow restrictions apply
+        closureNode.setAnnotation("isDeferBlock", true);
+        closureNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // Stack: RuntimeScalar (the code reference)
+
+        // Load the current @_ to capture it for the defer block
+        // @_ is at local variable slot 1 in subroutines (declared as "our" in symbol table)
+        // This ensures the defer block sees the same @_ as the enclosing scope
+        mv.visitVarInsn(Opcodes.ALOAD, 1);
+        // Stack: RuntimeScalar, RuntimeArray (@_)
+
+        // Create a new DeferBlock with the code reference and captured @_
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/DeferBlock");
+        mv.visitInsn(Opcodes.DUP_X2);
+        mv.visitInsn(Opcodes.DUP_X2);
+        mv.visitInsn(Opcodes.POP);
+        // Stack: DeferBlock, DeferBlock, RuntimeScalar, RuntimeArray
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/DeferBlock",
+                "<init>",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                false);
+        // Stack: DeferBlock
+
+        // Push the DeferBlock onto the dynamic variable stack
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
+                "pushLocalVariable",
+                "(Lorg/perlonjava/runtime/runtimetypes/DynamicState;)V",
+                false);
+        // Stack: empty
+
+        emitterVisitor.ctx.logDebug("emitDefer end");
     }
 
     /**

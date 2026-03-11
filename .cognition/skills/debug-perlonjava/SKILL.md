@@ -60,6 +60,32 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/op
 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 perl5_t/t
 ```
 
+### Test runner environment variables
+The test runner (`dev/tools/perl_test_runner.pl`) automatically sets environment variables for specific tests:
+
+```perl
+# JPERL_UNIMPLEMENTED="warn" for these tests:
+re/pat_rt_report.t | re/pat.t | re/regex_sets.t | re/regexp_unicode_prop.t
+op/pack.t | op/index.t | op/split.t | re/reg_pmod.t | op/sprintf.t | base/lex.t
+
+# JPERL_OPTS="-Xss256m" for these tests:
+re/pat.t | op/repeat.t | op/list.t
+
+# PERL_SKIP_BIG_MEM_TESTS=1 for ALL tests
+```
+
+To reproduce what the test runner does for a specific test:
+```bash
+# For re/pat.t (needs all three):
+cd perl5_t/t && JPERL_UNIMPLEMENTED=warn JPERL_OPTS=-Xss256m PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/pat.t
+
+# For re/subst.t (only PERL_SKIP_BIG_MEM_TESTS):
+cd perl5_t/t && PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/subst.t
+
+# For op/bop.t (only PERL_SKIP_BIG_MEM_TESTS):
+cd perl5_t/t && PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl op/bop.t
+```
+
 ### Interpreter mode
 ```bash
 ./jperl --interpreter script.pl
@@ -123,40 +149,18 @@ git checkout branch && mvn package -q -DskipTests
 ./jperl -e 'failing code'
 ```
 
-**CRITICAL: Save master baselines to files!** When comparing test suites:
-```bash
-# On master - save output to a file so you don't have to rebuild later
-git checkout master && mvn package -q -DskipTests
-cd perl5_t/t && ../../jperl re/subst.t 2>&1 | tee /tmp/subst_master.log
-../../jperl re/subst.t 2>&1 | grep "^ok\|^not ok" > /tmp/subst_master_results.txt
-
-# Count passing tests on master (save this number!)
-grep "^ok" /tmp/subst_master_results.txt | wc -l
-
-# Return to feature branch
-git checkout feature-branch && mvn package -q -DskipTests
-# Now you can compare without rebuilding master again
-```
-
-### 2. Bisect to find the bad commit
-**IMPORTANT**: Always rebuild after switching commits!
-```bash
-git log master..branch --oneline
-git checkout <commit> && mvn package -q -DskipTests && ./jperl -e 'test'
-```
-
-### 3. Create minimal reproducer
+### 2. Create minimal reproducer
 Reduce the failing test to the smallest code that demonstrates the bug:
 ```bash
 ./jperl -e 'my $x = 58; eval q{($x) .= "z"}; print "x=$x\n"'
 ```
 
-### 4. Compare with system Perl
+### 3. Compare with system Perl
 ```bash
 perl -e 'same code'
 ```
 
-### 5. Use --parse to check AST
+### 4. Use --parse to check AST
 When parsing issues are suspected, compare the parse tree:
 ```bash
 ./jperl --parse -e 'code'                    # Show PerlOnJava AST
@@ -164,13 +168,13 @@ perl -MO=Deparse -e 'code'                   # Compare with Perl's interpretatio
 ```
 This helps identify operator precedence issues and incorrect parsing.
 
-### 6. Use disassembly to understand
+### 5. Use disassembly to understand
 ```bash
 ./jperl --disassemble -e 'minimal code'                      # JVM bytecode
 ./jperl --disassemble --interpreter -e 'minimal code'        # Interpreter bytecode
 ```
 
-### 7. Profile with JFR (for performance issues)
+### 6. Profile with JFR (for performance issues)
 ```bash
 # Record profile
 $JAVA_HOME/bin/java -XX:StartFlightRecording=duration=10s,filename=profile.jfr \
@@ -181,14 +185,14 @@ $JAVA_HOME/bin/jfr print --events jdk.ExecutionSample profile.jfr 2>&1 | \
   grep -E "^\s+[a-z].*line:" | sed 's/line:.*//' | sort | uniq -c | sort -rn | head -20
 ```
 
-### 8. Add debug prints (if needed)
+### 7. Add debug prints (if needed)
 In Java source, add:
 ```java
 System.err.println("DEBUG: var=" + var);
 ```
 Then rebuild with `mvn package -q -DskipTests`.
 
-### 9. Fix and verify
+### 8. Fix and verify
 ```bash
 # After fixing
 mvn package -q -DskipTests
@@ -273,6 +277,50 @@ Both backends share the parser (same AST) and runtime (same operators, same Runt
 
 All paths relative to `src/main/java/org/perlonjava/`.
 
+## CRITICAL: Investigate JVM Backend First
+
+**When fixing interpreter bugs, ALWAYS investigate how the JVM backend handles the same operation before implementing a fix.**
+
+The interpreter and JVM backends share the same runtime classes (`RuntimeScalar`, `RuntimeArray`, `RuntimeHash`, `RuntimeList`, `PerlRange`, etc.). The JVM backend is the reference implementation - if the interpreter handles something differently, it's likely wrong.
+
+### How to investigate JVM behavior
+
+1. **Disassemble the JVM bytecode** to see what runtime methods it calls:
+   ```bash
+   ./jperl --disassemble -e 'code that works'
+   ```
+
+2. **Look for the runtime method calls** in the disassembly (INVOKEVIRTUAL, INVOKESTATIC):
+   ```
+   INVOKEVIRTUAL org/perlonjava/runtime/runtimetypes/RuntimeList.addToArray
+   INVOKEVIRTUAL org/perlonjava/runtime/runtimetypes/RuntimeBase.setFromList
+   ```
+
+3. **Read those runtime methods** to understand the correct behavior:
+   - How does `setFromList()` handle different input types?
+   - What methods does it call internally (`addToArray`, `getList`, etc.)?
+
+4. **Use the same runtime methods in the interpreter** instead of reimplementing the logic with special cases.
+
+### Example: Hash slice assignment with PerlRange
+
+**Wrong approach** (special-casing types in interpreter):
+```java
+if (valuesBase instanceof RuntimeList) { ... }
+else if (valuesBase instanceof RuntimeArray) { ... }
+else if (valuesBase instanceof PerlRange) { ... }  // BAD: special case
+else { ... }
+```
+
+**Correct approach** (use same runtime methods as JVM):
+```java
+// JVM calls addToArray() which handles all types uniformly
+RuntimeArray valuesArray = new RuntimeArray();
+valuesBase.addToArray(valuesArray);  // Works for RuntimeList, RuntimeArray, PerlRange, etc.
+```
+
+The JVM's `setFromList()` → `addToArray()` chain already handles `PerlRange` correctly via `PerlRange.addToArray()` → `toList().addToArray()`. The interpreter should use the same mechanism.
+
 ## Common Bug Patterns
 
 ### 1. Context not propagated correctly
@@ -349,10 +397,6 @@ perl -MO=Deparse -e 'code'
 
 # Compare output
 diff <(./jperl -e 'code') <(perl -e 'code')
-
-# Bisect
-git log master..HEAD --oneline
-git checkout <sha> && mvn package -q -DskipTests && ./jperl -e 'test'
 
 # Git workflow (always use branches!)
 git checkout -b fix-name

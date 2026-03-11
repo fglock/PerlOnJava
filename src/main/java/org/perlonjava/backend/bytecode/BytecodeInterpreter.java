@@ -819,6 +819,21 @@ public class BytecodeInterpreter {
 
                                 RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
 
+                                // Handle TAILCALL with trampoline loop (same as JVM backend)
+                                while (result.isNonLocalGoto()) {
+                                    RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                        // Extract codeRef and args, call target
+                                        codeRef = flow.getTailCallCodeRef();
+                                        callArgs = flow.getTailCallArgs();
+                                        result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                        // Loop to handle chained tail calls
+                                    } else {
+                                        // Not TAILCALL - check labeled blocks or propagate
+                                        break;
+                                    }
+                                }
+
                                 // Convert to scalar if called in scalar context
                                 if (context == RuntimeContextType.SCALAR) {
                                     RuntimeBase scalarResult = result.scalar();
@@ -827,7 +842,7 @@ public class BytecodeInterpreter {
                                     registers[rd] = result;
                                 }
 
-                                // Check for control flow (last/next/redo/goto/tail-call)
+                                // Check for control flow (last/next/redo/goto) - TAILCALL already handled above
                                 if (result.isNonLocalGoto()) {
                                     RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
                                     // Check labeled block stack for a matching label
@@ -878,6 +893,21 @@ public class BytecodeInterpreter {
 
                                 RuntimeList result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
 
+                                // Handle TAILCALL with trampoline loop (same as JVM backend)
+                                while (result.isNonLocalGoto()) {
+                                    RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                        // Extract codeRef and args, call target
+                                        RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                                        callArgs = flow.getTailCallArgs();
+                                        result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                        // Loop to handle chained tail calls
+                                    } else {
+                                        // Not TAILCALL - check labeled blocks or propagate
+                                        break;
+                                    }
+                                }
+
                                 // Convert to scalar if called in scalar context
                                 if (context == RuntimeContextType.SCALAR) {
                                     RuntimeBase scalarResult = result.scalar();
@@ -886,7 +916,7 @@ public class BytecodeInterpreter {
                                     registers[rd] = result;
                                 }
 
-                                // Check for control flow (last/next/redo/goto/tail-call)
+                                // Check for control flow (last/next/redo/goto) - TAILCALL already handled above
                                 if (result.isNonLocalGoto()) {
                                     RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
                                     boolean handled = false;
@@ -926,6 +956,42 @@ public class BytecodeInterpreter {
 
                             case Opcodes.CREATE_GOTO -> {
                                 pc = InlineOpcodeHandler.executeCreateGoto(bytecode, pc, registers, code);
+                            }
+
+                            case Opcodes.GOTO_TAILCALL -> {
+                                // Create TAILCALL marker for goto &sub
+                                // Format: GOTO_TAILCALL rd coderef_reg args_reg context
+                                int rd = bytecode[pc++];
+                                int coderefReg = bytecode[pc++];
+                                int argsReg = bytecode[pc++];
+                                int context = bytecode[pc++];  // unused in marker, but consumed
+
+                                // Get coderef
+                                RuntimeBase codeRefBase = registers[coderefReg];
+                                RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
+                                        ? (RuntimeScalar) codeRefBase
+                                        : codeRefBase.scalar();
+
+                                // Dereference symbolic code references
+                                if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
+                                    String currentPkg = InterpreterState.currentPackage.get().toString();
+                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                }
+
+                                // Get args
+                                RuntimeBase argsBase = registers[argsReg];
+                                RuntimeArray callArgs;
+                                if (argsBase instanceof RuntimeArray) {
+                                    callArgs = (RuntimeArray) argsBase;
+                                } else if (argsBase instanceof RuntimeList) {
+                                    callArgs = new RuntimeArray();
+                                    argsBase.setArrayOfAlias(callArgs);
+                                } else {
+                                    callArgs = new RuntimeArray((RuntimeScalar) argsBase);
+                                }
+
+                                // Create TAILCALL marker - caller's trampoline will execute it
+                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0);
                             }
 
                             case Opcodes.IS_CONTROL_FLOW -> {
@@ -1417,7 +1483,7 @@ public class BytecodeInterpreter {
 
                             // scalar_unary
                             case Opcodes.INT, Opcodes.LOG, Opcodes.SQRT, Opcodes.COS, Opcodes.SIN, Opcodes.EXP,
-                                 Opcodes.ABS, Opcodes.BINARY_NOT, Opcodes.INTEGER_BITWISE_NOT, Opcodes.ORD,
+                                 Opcodes.ABS, Opcodes.BINARY_NOT, Opcodes.BITWISE_NOT, Opcodes.INTEGER_BITWISE_NOT, Opcodes.ORD,
                                  Opcodes.ORD_BYTES, Opcodes.OCT, Opcodes.HEX, Opcodes.SRAND, Opcodes.CHR,
                                  Opcodes.CHR_BYTES, Opcodes.LENGTH_BYTES, Opcodes.QUOTEMETA, Opcodes.FC, Opcodes.LC,
                                  Opcodes.LCFIRST, Opcodes.UC, Opcodes.UCFIRST, Opcodes.SLEEP, Opcodes.TELL,
@@ -1490,7 +1556,7 @@ public class BytecodeInterpreter {
                             // Miscellaneous operators with context-sensitive signatures
                             case Opcodes.CHMOD, Opcodes.UNLINK, Opcodes.UTIME, Opcodes.RENAME, Opcodes.LINK,
                                  Opcodes.READLINK, Opcodes.UMASK, Opcodes.GETC, Opcodes.FILENO, Opcodes.QX,
-                                 Opcodes.SYSTEM, Opcodes.CALLER, Opcodes.EACH, Opcodes.PACK, Opcodes.UNPACK,
+                                 Opcodes.SYSTEM, Opcodes.KILL, Opcodes.CALLER, Opcodes.EACH, Opcodes.PACK, Opcodes.UNPACK,
                                  Opcodes.VEC, Opcodes.LOCALTIME, Opcodes.GMTIME, Opcodes.RESET, Opcodes.TIMES, Opcodes.CRYPT,
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
@@ -1529,6 +1595,14 @@ public class BytecodeInterpreter {
 
                             case Opcodes.DO_FILE -> {
                                 pc = InlineOpcodeHandler.executeDoFile(bytecode, pc, registers);
+                            }
+
+                            // =================================================================
+                            // DEFER SUPPORT
+                            // =================================================================
+
+                            case Opcodes.PUSH_DEFER -> {
+                                pc = InlineOpcodeHandler.executePushDefer(bytecode, pc, registers);
                             }
 
                             // =================================================================

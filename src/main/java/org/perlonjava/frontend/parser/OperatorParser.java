@@ -834,13 +834,8 @@ public class OperatorParser {
     static OperatorNode parseGoto(Parser parser, int currentIndex) {
         Node operand;
         // Handle 'goto' keyword as a unary operator with an operand
-        boolean isSubroutine = peek(parser).text.equals("&");  // goto &subr
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
-        if (isSubroutine) {
-            // goto &sub form
-            return new OperatorNode("return", operand, currentIndex);
-        }
-        // goto LABEL form
+        // Always return a goto operator - the emitter handles &sub vs LABEL distinction
         return new OperatorNode("goto", operand, currentIndex);
     }
 
@@ -948,8 +943,10 @@ public class OperatorParser {
 
     static OperatorNode dieWarnNode(Parser parser, String operator, ListNode args, int tokenIndex) {
         var node = new OperatorNode(operator, args, tokenIndex);
-        node.setAnnotation("line", parser.ctx.errorUtil.getLineNumberAccurate(tokenIndex));
-        node.setAnnotation("file", parser.ctx.errorUtil.getFileName());
+        // Use getSourceLocationAccurate to honor #line directives
+        var loc = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+        node.setAnnotation("line", loc.lineNumber());
+        node.setAnnotation("file", loc.fileName());
         return node;
     }
 

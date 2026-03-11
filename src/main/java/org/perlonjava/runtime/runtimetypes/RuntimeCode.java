@@ -174,6 +174,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
+    public static HashMap<String, Object> interpretedSubs = new HashMap<>(); // storage for interpreter fallback closures
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
     // Runtime eval counter for generating unique filenames when $^P is set
     private static int runtimeEvalCounter = 1;
@@ -241,6 +242,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         USE_INTERPRETER = value;
     }
 
+    /**
+     * Check if AUTOLOAD exists for a given RuntimeCode's package.
+     * Checks source package first (for imported subs), then current package.
+     *
+     * @param code The RuntimeCode to check AUTOLOAD for
+     * @return true if AUTOLOAD exists and is defined
+     */
+    public static boolean hasAutoload(RuntimeCode code) {
+        if (code.packageName == null) {
+            return false;
+        }
+        // Check source package AUTOLOAD first (for imported subs)
+        if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
+            String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
+            RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+            if (sourceAutoload.getDefinedBoolean()) {
+                return true;
+            }
+        }
+        // Then check current package AUTOLOAD
+        String autoloadString = code.packageName + "::AUTOLOAD";
+        RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+        return autoload.getDefinedBoolean();
+    }
+
 
     /**
      * Get the current eval runtime context for accessing variable runtime values during parsing.
@@ -267,6 +293,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         evalCache.clear();
         methodHandleCache.clear();
         anonSubs.clear();
+        interpretedSubs.clear();
         evalContext.clear();
         evalRuntimeContext.remove();
     }
@@ -1506,6 +1533,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return res;
     }
 
+    /**
+     * Returns the appropriate error prefix for undefined subroutine errors.
+     * For tail calls (goto &sub), returns "Goto u" so message is "Goto undefined...".
+     * For regular calls, returns "U" so message is "Undefined...".
+     */
+    private static String gotoErrorPrefix(String subroutineName) {
+        return "tailcall".equals(subroutineName) ? "Goto u" : "U";
+    }
+
     // Method to apply (execute) a subroutine reference
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
         // Check if the type of this RuntimeScalar is CODE
@@ -1549,7 +1585,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         return apply(autoload, a, callContext);
                     }
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called");
             }
             // Cast the value to RuntimeCode and call apply()
             return code.apply(a, callContext);
@@ -1694,7 +1730,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Call AUTOLOAD
                     return apply(autoload, a, callContext);
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
             }
         }
 
@@ -1774,9 +1810,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     getGlobalVariable(autoloadString).set(fullSubName);
                     return apply(autoload, a, callContext);
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
             }
-            throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+            throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
         }
 
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
@@ -1956,7 +1992,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         getGlobalVariable(autoloadString).set(fullSubName);
                         return apply(autoload, a, callContext);
                     }
-                    throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+                    throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called");
                 }
                 throw new PerlCompilerException("Undefined subroutine called at ");
             }
@@ -2025,9 +2061,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         getGlobalVariable(autoloadString).set(fullSubName);
                         return apply(autoload, a, callContext);
                     }
-                    throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
+                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called at ");
+                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + (fullSubName != null ? fullSubName : "") + " called");
             }
 
             // Debug mode: push args and track subroutine entry

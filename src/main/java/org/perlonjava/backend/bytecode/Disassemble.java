@@ -1334,6 +1334,7 @@ public class Disassemble {
                     case Opcodes.GETC:
                     case Opcodes.FILENO:
                     case Opcodes.SYSTEM:
+                    case Opcodes.KILL:
                     case Opcodes.CALLER:
                     case Opcodes.EACH:
                     case Opcodes.VEC: {
@@ -1358,6 +1359,7 @@ public class Disassemble {
                             case Opcodes.GETC -> "getc";
                             case Opcodes.FILENO -> "fileno";
                             case Opcodes.SYSTEM -> "system";
+                            case Opcodes.KILL -> "kill";
                             case Opcodes.CALLER -> "caller";
                             case Opcodes.EACH -> "each";
                             case Opcodes.VEC -> "vec";
@@ -1458,6 +1460,12 @@ public class Disassemble {
                     case Opcodes.DO_FILE:
                         sb.append("DO_FILE r").append(interpretedCode.bytecode[pc++]).append(" = doFile(r").append(interpretedCode.bytecode[pc++]).append(") ctx=").append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
+                    case Opcodes.PUSH_DEFER: {
+                        int deferCodeReg = interpretedCode.bytecode[pc++];
+                        int deferArgsReg = interpretedCode.bytecode[pc++];
+                        sb.append("PUSH_DEFER pushLocalVariable(new DeferBlock(r").append(deferCodeReg).append(", r").append(deferArgsReg).append("))\n");
+                        break;
+                    }
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];

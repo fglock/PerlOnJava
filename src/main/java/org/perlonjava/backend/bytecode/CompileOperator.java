@@ -182,7 +182,9 @@ public class CompileOperator {
         if (lineObj != null && fileObj != null) {
             locationMsg = " at " + fileObj + " line " + lineObj;
         } else if (bc.errorUtil != null) {
-            locationMsg = " at " + bc.errorUtil.getFileName() + " line " + bc.errorUtil.getLineNumberAccurate(node.getIndex());
+            // Use getSourceLocationAccurate to honor #line directives
+            var loc = bc.errorUtil.getSourceLocationAccurate(node.getIndex());
+            locationMsg = " at " + loc.fileName() + " line " + loc.lineNumber();
         } else {
             locationMsg = " at " + bc.sourceName + " line " + bc.sourceLine;
         }
@@ -584,7 +586,9 @@ public class CompileOperator {
 
             // Simple unary ops (dispatchOperator)
             case "not", "!" -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.NOT);
-            case "~", "binary~" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
+            case "~" -> emitSimpleUnary(bytecodeCompiler, node,
+                    bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_BITWISE_NOT : Opcodes.BITWISE_NOT);
+            case "binary~" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
             case "~." -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
             case "defined" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.DEFINED);
             case "wantarray" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WANTARRAY); bytecodeCompiler.emitReg(rd); bytecodeCompiler.emitReg(2); bytecodeCompiler.lastResultReg = rd; }
@@ -647,6 +651,7 @@ public class CompileOperator {
             case "fileno" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.FILENO);
             case "qx" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.QX);
             case "system" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSTEM);
+            case "kill" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.KILL);
             case "caller" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CALLER);
             case "pack" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PACK);
             case "unpack" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.UNPACK);
@@ -804,29 +809,8 @@ public class CompileOperator {
             }
             case "++", "--", "++postfix", "--postfix" -> visitIncrDecr(bytecodeCompiler, node, op);
             case "return" -> {
-                if (node.operand instanceof ListNode list && list.elements.size() == 1) {
-                    Node firstElement = list.elements.getFirst();
-                    if (firstElement instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
-                        Node callTarget = callNode.left;
-                        if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
-                            int outerContext = bytecodeCompiler.currentCallContext;
-                            bytecodeCompiler.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
-                            int codeRefReg = bytecodeCompiler.lastResultReg;
-                            bytecodeCompiler.compileNode(callNode.right, -1, RuntimeContextType.LIST);
-                            int argsReg = bytecodeCompiler.lastResultReg;
-                            int rd = bytecodeCompiler.allocateOutputRegister();
-                            bytecodeCompiler.emit(Opcodes.CALL_SUB);
-                            bytecodeCompiler.emitReg(rd);
-                            bytecodeCompiler.emitReg(codeRefReg);
-                            bytecodeCompiler.emitReg(argsReg);
-                            bytecodeCompiler.emit(outerContext);
-                            bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
-                            bytecodeCompiler.emitReg(rd);
-                            bytecodeCompiler.lastResultReg = -1;
-                            return;
-                        }
-                    }
-                }
+                // Check if we're inside a defer block - return out of defer is prohibited
+                bytecodeCompiler.checkNotInDeferBlock(node.getIndex(), "return");
                 if (node.operand != null) {
                     node.operand.accept(bytecodeCompiler);
                     int exprReg = bytecodeCompiler.lastResultReg;
@@ -842,6 +826,8 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = -1;
             }
             case "last", "next", "redo" -> {
+                // Check if we're inside a defer block - control flow out of defer is prohibited
+                bytecodeCompiler.checkNotInDeferBlock(node.getIndex(), op);
                 bytecodeCompiler.handleLoopControlOperator(node, op);
                 bytecodeCompiler.lastResultReg = -1;
             }
@@ -1235,7 +1221,8 @@ public class CompileOperator {
 
     private static void visitTie(BytecodeCompiler bc, OperatorNode node, String op) {
         if (node.operand == null) bc.throwCompilerException(op + " requires arguments");
-        node.operand.accept(bc); int argsReg = bc.lastResultReg;
+        // Compile operand in LIST context - tie/untie/tied expect a RuntimeList argument
+        bc.compileNode(node.operand, -1, RuntimeContextType.LIST); int argsReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
         short opcode = switch (op) { case "tie" -> Opcodes.TIE; case "untie" -> Opcodes.UNTIE; case "tied" -> Opcodes.TIED; default -> throw new IllegalStateException("Unexpected operator: " + op); };
         bc.emitWithToken(opcode, node.getIndex()); bc.emitReg(rd); bc.emitReg(argsReg); bc.emit(bc.currentCallContext);
@@ -1279,9 +1266,66 @@ public class CompileOperator {
     }
 
     private static void visitGoto(BytecodeCompiler bc, OperatorNode node) {
+        // Check if we're inside a defer block - goto out of defer is prohibited
+        bc.checkNotInDeferBlock(node.getIndex(), "goto");
+        
         String labelStr = null;
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
+            
+            // Check if this is goto &NAME or goto &{expr} - a subroutine call form
+            // The parser produces: BinaryOperatorNode "(" with left=OperatorNode "&" (for &NAME)
+            // or left=BlockNode (for &{expr}) and right=args
+            if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
+                Node callTarget = callNode.left;
+                if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
+                    // This is goto &sub - create a TAILCALL marker and return it
+                    int outerContext = bc.currentCallContext;
+                    bc.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
+                    int codeRefReg = bc.lastResultReg;
+                    bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
+                    int argsReg = bc.lastResultReg;
+                    int rd = bc.allocateOutputRegister();
+                    bc.emit(Opcodes.GOTO_TAILCALL);
+                    bc.emitReg(rd);
+                    bc.emitReg(codeRefReg);
+                    bc.emitReg(argsReg);
+                    bc.emit(outerContext);
+                    bc.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bc.emitReg(rd);
+                    bc.lastResultReg = -1;
+                    return;
+                }
+                // Handle goto &{expr} - symbolic code dereference
+                // BlockNode contains an expression that evaluates to a subroutine name
+                if (callTarget instanceof BlockNode blockNode) {
+                    int outerContext = bc.currentCallContext;
+                    // Evaluate the block to get the subroutine name/reference
+                    bc.compileNode(blockNode, -1, RuntimeContextType.SCALAR);
+                    int nameReg = bc.lastResultReg;
+                    // Look up the CODE reference using codeDerefNonStrict
+                    int codeRefReg = bc.allocateOutputRegister();
+                    int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                    bc.emit(Opcodes.CODE_DEREF_NONSTRICT);
+                    bc.emitReg(codeRefReg);
+                    bc.emitReg(nameReg);
+                    bc.emit(pkgIdx);
+                    // Compile the args
+                    bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
+                    int argsReg = bc.lastResultReg;
+                    int rd = bc.allocateOutputRegister();
+                    bc.emit(Opcodes.GOTO_TAILCALL);
+                    bc.emitReg(rd);
+                    bc.emitReg(codeRefReg);
+                    bc.emitReg(argsReg);
+                    bc.emit(outerContext);
+                    bc.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bc.emitReg(rd);
+                    bc.lastResultReg = -1;
+                    return;
+                }
+            }
+            
             if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;
         }
         if (labelStr == null) bc.throwCompilerException("goto must be given label");
