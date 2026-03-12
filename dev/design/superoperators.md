@@ -456,7 +456,22 @@ grep -E '^\s+[0-9]+:' bytecode.txt | sed 's/^[^:]*: //' | \
   - BytecodeInterpreter skips `getLocalLevel()`/`popToLocalLevel()`/`RegexState.save()`
     when the code doesn't use localization
   - Reduces overhead for subroutines that don't use `local` variables
+  - **Bug fix**: `withCapturedVars()` now preserves `usesLocalization` flag for closures
+- **Cached InterpreterFrame**: Pre-create frame in InterpretedCode to avoid allocation per call
+  - Added `getOrCreateFrame()` method that caches and reuses frames
 - **Benchmark results** (simple closure without Benchmark.pm overhead):
-  - Interpreter: 357/s
-  - JVM backend: 1250/s (3.5x faster)
-- **Note**: Benchmark.pm itself uses `local $_` in the hot loop, masking the optimization benefit
+  - Original: ~274/s
+  - After optimizations: ~430/s (**+57% improvement**)
+  - JVM backend: ~1380/s (3.2x faster than interpreter)
+
+### Remaining Hotspots for Future Optimization
+Based on JFR profiling:
+1. **Integer boxing** (318 samples) - RuntimeScalar.<init>, RuntimeScalarCache.getScalarInt
+2. **Math operations** (160 samples) - MathOperators.add/addAssign
+3. **Frame management** (102 samples) - InterpreterState.push/pushFrame/pop
+4. **List operations** (44 samples) - executeCreateList
+
+Potential optimizations:
+- Pool int[] pcHolders for frame management
+- Optimize RuntimeScalarCache for hot integer values
+- Consider inlining simple math operations in interpreter
