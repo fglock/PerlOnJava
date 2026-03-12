@@ -17,12 +17,12 @@ German Perl/Raku Workshop 2026 — Flavio Glock
 ## Compilation Approaches
 
 **Perl 5 (traditional):**
-```
+```text
 Perl Source → Lexer → Parser → OP Tree → Optimizer → Execution
 ```
 
 **PerlOnJava (dual backend):**
-```
+```text
 Perl Source → Lexer → Parser → Syntax Tree → JVM Bytecode → JVM Execution
                                              ↘ Custom Bytecode → Internal VM
 ```
@@ -63,8 +63,7 @@ Perl limits identifiers to 251 code points; ICU4J handles code points rather tha
    - Operator precedence, associativity, ternary, method calls
 
 3. **Operator-specific parsers** (20+ specialized)
-   - `StringParser`, `PackParser`, `SprintfFormatParser`
-   - `NumberParser`, `IdentifierParser`, `SignatureParser`
+   - `StringParser`, `PackParser`, `SignatureParser`
 
 Modular AST: `BlockNode`, `BinaryOperatorNode`, `ListNode` — easy to extend.
 
@@ -148,7 +147,7 @@ my $msg = "Hello $name!\n";
 ```
 
 **Generated AST** (from `./jperl --parse`):
-```
+```text
 BinaryOperatorNode: =
   OperatorNode: my
     OperatorNode: $
@@ -583,7 +582,7 @@ Also: globalIORefs → IO, globalFormatRefs → FORMAT. Slot access: *foo{CODE} 
 `require` converts `Module::Name` → `Module/Name.pm`, searches `@INC`, caches in `%INC`.
 
 **300+ modules bundled inside the JAR:**
-```
+```text
 %INC: 'Data/Dumper.pm' =>
   'file:/path/to/perlonjava.jar!/lib/Data/Dumper.pm'
 ```

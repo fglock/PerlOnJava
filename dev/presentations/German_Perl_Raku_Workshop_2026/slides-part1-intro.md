@@ -70,7 +70,7 @@ JSR-223 is the standard Java scripting API, available since Java 6. It allows bi
 
 **`perlonjava-5.42.0.jar`** — 25 MB, zero external dependencies
 
-```
+```text
 perlonjava.jar
 ├── org/perlonjava/   ← 392 Java compiled classes
 ├── lib/              ← 341 Perl modules (DBI, JSON, HTTP::Tiny…)
@@ -201,7 +201,7 @@ Supports PostgreSQL, MySQL, Oracle, SQLite, H2 — any JDBC driver.
 
 `my $x = 1 + 2` becomes:
 
-```
+```text
 assignment → addition → operands
 ```
 
@@ -222,7 +222,7 @@ PerlOnJava emits bytecode directly via the **ASM library** — no Java source in
 
 ## The Compilation Pipeline
 
-```
+```text
 Perl Source → Lexer → Parser → Syntax Tree → JVM Bytecode → JVM Execution
                                              ↘ Custom Bytecode → Internal VM
 ```
@@ -248,7 +248,7 @@ The dual backend is a common VM design pattern. HotSpot, V8, SpiderMonkey, and C
 **Perl:** `my $x = 10; say $x`
 
 **Generated JVM bytecode** (`./jperl --disassemble`):
-```
+```text
 LDC 10
 INVOKESTATIC RuntimeScalarCache.getScalarInt(I)
 ASTORE 7
@@ -274,7 +274,7 @@ Standard JVM bytecode — optimized by the JVM's JIT compiler at runtime.
 **Same Perl:** `my $x = 10; say $x`
 
 **Generated Internal VM bytecode** (`./jperl --interpreter --disassemble`):
-```
+```text
 Registers: 9
 Bytecode length: 26 shorts
 
