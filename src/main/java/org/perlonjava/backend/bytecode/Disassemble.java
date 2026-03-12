@@ -2125,6 +2125,39 @@ public class Disassemble {
                         break;
                     }
 
+                    case Opcodes.HASH_DEREF_FETCH_NONSTRICT: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int hashrefReg = interpretedCode.bytecode[pc++];
+                        int keyIdx = interpretedCode.bytecode[pc++];
+                        int pkgIdxH = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_DEREF_FETCH_NONSTRICT r").append(rd)
+                                .append(" = r").append(hashrefReg).append("->{\"");
+                        if (interpretedCode.stringPool != null && keyIdx < interpretedCode.stringPool.length) {
+                            sb.append(interpretedCode.stringPool[keyIdx]);
+                        }
+                        sb.append("\"} pkg=");
+                        if (interpretedCode.stringPool != null && pkgIdxH < interpretedCode.stringPool.length) {
+                            sb.append(interpretedCode.stringPool[pkgIdxH]);
+                        }
+                        sb.append("\n");
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_DEREF_FETCH_NONSTRICT: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int arrayrefReg = interpretedCode.bytecode[pc++];
+                        int index = InterpretedCode.readInt(interpretedCode.bytecode, pc);
+                        pc += 1;
+                        int pkgIdxA = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_DEREF_FETCH_NONSTRICT r").append(rd)
+                                .append(" = r").append(arrayrefReg).append("->[").append(index).append("] pkg=");
+                        if (interpretedCode.stringPool != null && pkgIdxA < interpretedCode.stringPool.length) {
+                            sb.append(interpretedCode.stringPool[pkgIdxA]);
+                        }
+                        sb.append("\n");
+                        break;
+                    }
+
                     default:
                         sb.append("UNKNOWN(").append(opcode).append(")\n");
                         break;

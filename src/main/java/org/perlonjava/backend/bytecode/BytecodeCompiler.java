@@ -1761,13 +1761,23 @@ public class BytecodeCompiler implements Visitor {
         // Try to use superoperator for constant string keys
         String constantKey = getConstantStringKey(keyExpr);
         if (constantKey != null) {
-            // SUPEROPERATOR: Constant key - use HASH_DEREF_FETCH
             int keyIdx = addToStringPool(constantKey);
             int rd = allocateOutputRegister();
-            emit(Opcodes.HASH_DEREF_FETCH);
-            emitReg(rd);
-            emitReg(baseReg);
-            emit(keyIdx);
+            if (isStrictRefsEnabled()) {
+                // SUPEROPERATOR: Constant key + strict refs - use HASH_DEREF_FETCH
+                emit(Opcodes.HASH_DEREF_FETCH);
+                emitReg(rd);
+                emitReg(baseReg);
+                emit(keyIdx);
+            } else {
+                // SUPEROPERATOR: Constant key + non-strict - use HASH_DEREF_FETCH_NONSTRICT
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emit(Opcodes.HASH_DEREF_FETCH_NONSTRICT);
+                emitReg(rd);
+                emitReg(baseReg);
+                emit(keyIdx);
+                emit(pkgIdx);
+            }
             return rd;
         }
 
@@ -1820,12 +1830,22 @@ public class BytecodeCompiler implements Visitor {
         // Try to use superoperator for integer literal indices
         Integer constantIndex = getConstantIntegerIndex(indexExpr);
         if (constantIndex != null) {
-            // SUPEROPERATOR: Integer literal - use ARRAY_DEREF_FETCH
             int rd = allocateOutputRegister();
-            emit(Opcodes.ARRAY_DEREF_FETCH);
-            emitReg(rd);
-            emitReg(baseReg);
-            emitInt(constantIndex);
+            if (isStrictRefsEnabled()) {
+                // SUPEROPERATOR: Integer literal + strict refs - use ARRAY_DEREF_FETCH
+                emit(Opcodes.ARRAY_DEREF_FETCH);
+                emitReg(rd);
+                emitReg(baseReg);
+                emitInt(constantIndex);
+            } else {
+                // SUPEROPERATOR: Integer literal + non-strict - use ARRAY_DEREF_FETCH_NONSTRICT
+                int pkgIdx = addToStringPool(getCurrentPackage());
+                emit(Opcodes.ARRAY_DEREF_FETCH_NONSTRICT);
+                emitReg(rd);
+                emitReg(baseReg);
+                emitInt(constantIndex);
+                emit(pkgIdx);
+            }
             return rd;
         }
 

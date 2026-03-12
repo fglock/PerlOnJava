@@ -280,6 +280,17 @@ public class CompileBinaryOperator {
                 }
             }
 
+            // Handle ListNode case: (expr)[index] like (caller)[0]
+            // Transform to [expr]->[index] like JVM does
+            if (node.left instanceof ListNode listNode) {
+                // Create: ArrayLiteralNode containing the list elements
+                // Then: BinaryOperatorNode("->", arrayLiteral, node.right)
+                ArrayLiteralNode arrayLiteral = new ArrayLiteralNode(listNode.elements, listNode.getIndex());
+                BinaryOperatorNode arrowNode = new BinaryOperatorNode("->", arrayLiteral, node.right, node.getIndex());
+                arrowNode.accept(bytecodeCompiler);
+                return;
+            }
+
             // Handle general case: expr[index]
             // This covers cases like $matrix[1][0] where $matrix[1] is an expression
             bytecodeCompiler.handleGeneralArrayAccess(node);
