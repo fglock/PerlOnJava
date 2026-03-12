@@ -103,7 +103,7 @@ public class EmitEval {
                 " file=" + emitterVisitor.ctx.compilerOptions.fileName + " token=" + node.tokenIndex);
 
         // Log current symbol table state for debugging
-        emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
 
         // Capture the current lexical environment
         // This creates a snapshot of all variables visible at this eval site
@@ -115,7 +115,7 @@ public class EmitEval {
 
         // Get list of all captured variable names
         String[] newEnv = newSymbolTable.getVariableNames();
-        emitterVisitor.ctx.logDebug("evalStringHelper newSymbolTable: " + newSymbolTable);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("evalStringHelper newSymbolTable: " + newSymbolTable);
 
         // Generate unique identifier for this eval site
         // This counter is incremented globally, ensuring each eval gets a unique tag
@@ -724,7 +724,7 @@ public class EmitEval {
                 mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
                 mv.visitInsn(Opcodes.AASTORE);
-                emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
             }
         }
         // Stack: [Constructor, Object[]]

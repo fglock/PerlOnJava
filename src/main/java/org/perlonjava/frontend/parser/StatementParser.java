@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
@@ -480,7 +482,7 @@ public class StatementParser {
      */
     public static Node parseUseDeclaration(Parser parser, LexerToken token) {
         EmitterContext ctx = parser.ctx;
-        ctx.logDebug("use: " + token.text);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("use: " + token.text);
         boolean isNoDeclaration = token.text.equals("no");
 
         TokenUtils.consume(parser);   // "use"
@@ -493,13 +495,13 @@ public class StatementParser {
                 // Not a valid module name token
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
-            ctx.logDebug("use module: " + token);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("use module: " + token);
             packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             if (packageName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
             fullName = NameNormalizer.moduleToFilename(packageName);
-            ctx.logDebug("use fullName: " + fullName);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("use fullName: " + fullName);
         }
 
         // Parse Version string
@@ -514,7 +516,7 @@ public class StatementParser {
             }
         }
         if (versionNode != null) {
-            parser.ctx.logDebug("use version: " + versionNode + " next:" + TokenUtils.peek(parser));
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("use version: " + versionNode + " next:" + TokenUtils.peek(parser));
             // Extract version string using ExtractValueVisitor
             RuntimeList versionValues = ExtractValueVisitor.getValues(versionNode);
             if (!versionValues.isEmpty()) {
@@ -522,7 +524,7 @@ public class StatementParser {
                 // parser.ctx.logDebug("use version String: " + printable(versionString));
                 versionScalar = versionValues.getFirst();
                 if (packageName == null) {
-                    parser.ctx.logDebug("use version: check Perl version");
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("use version: check Perl version");
                     VersionHelper.compareVersion(
                             new RuntimeScalar(Configuration.version),
                             versionScalar,
@@ -576,7 +578,7 @@ public class StatementParser {
         // Parse the parameter list
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
         Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
-        ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         StatementResolver.parseStatementTerminator(parser);
 
@@ -591,15 +593,15 @@ public class StatementParser {
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
             try {
 
-                ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
 
                 // execute 'require(fullName)'
                 RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName));
-                ctx.logDebug("Use statement return: " + ret);
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement return: " + ret);
 
                 if (versionNode != null) {
                     // check module version
-                    parser.ctx.logDebug("use version: check module version");
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("use version: check module version");
                     RuntimeArray args = new RuntimeArray();
                     RuntimeArray.push(args, new RuntimeScalar(packageName));
                     RuntimeArray.push(args, versionScalar);
@@ -612,7 +614,7 @@ public class StatementParser {
                 // Execute the argument list immediately
                 RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
 
-                ctx.logDebug("Use statement list: " + args);
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list: " + args);
                 if (hasParentheses && args.isEmpty()) {
                     // do not import
                 } else {
@@ -630,12 +632,12 @@ public class StatementParser {
                         InheritanceResolver.autoloadEnabled = true;
                     }
 
-                    ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
                     if (codeList.size() == 1) {
                         RuntimeScalar code = codeList.getFirst();
                         if (code.getBoolean()) {
                             // call the method
-                            ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
+                            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                             RuntimeArray importArgs = args.getArrayOfAlias();
                             RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
                             setCurrentScope(parser.ctx.symbolTable);
@@ -688,7 +690,7 @@ public class StatementParser {
 
         // Parse Version string and store it in the symbol table
         Node version = parseOptionalPackageVersion(parser);
-        parser.ctx.logDebug("package version: " + version);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("package version: " + version);
         if (version != null) {
             // Extract the actual version value from the node
             String versionString = null;

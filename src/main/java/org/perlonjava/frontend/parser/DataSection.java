@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.io.ScalarBackedIO;
@@ -38,7 +40,7 @@ public class DataSection {
 
         placeholderCreated.add(handleName);
 
-        parser.ctx.logDebug("Creating placeholder DATA handle for package: " + handleName);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Creating placeholder DATA handle for package: " + handleName);
 
         // Create an empty placeholder file handle that will be populated later
         RuntimeScalar emptyContent = new RuntimeScalar("");
@@ -55,7 +57,7 @@ public class DataSection {
     public static void createDataHandle(Parser parser, String content) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
-        parser.ctx.logDebug("Populating DATA handle for package: " + handleName + " with content: " + content);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Populating DATA handle for package: " + handleName + " with content: " + content);
 
         // Get the existing RuntimeIO (which should be the placeholder we created earlier)
         RuntimeIO existingIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
@@ -66,13 +68,13 @@ public class DataSection {
             RuntimeScalar contentScalar = new RuntimeScalar(content);
             ScalarBackedIO newScalarIO = new ScalarBackedIO(contentScalar);
             existingIO.ioHandle = newScalarIO;
-            parser.ctx.logDebug("Updated existing DATA handle with new content");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Updated existing DATA handle with new content");
         } else {
             // Fallback: create new handle if no placeholder exists
             RuntimeScalar contentScalar = new RuntimeScalar(content);
             var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
             GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
-            parser.ctx.logDebug("Created new DATA handle");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Created new DATA handle");
         }
     }
 

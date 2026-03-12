@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -90,7 +92,7 @@ public class EmitForeach {
     }
 
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
-        emitterVisitor.ctx.logDebug("FOR1 start");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 start");
 
         Node variableNode = node.variable;
 
@@ -100,7 +102,7 @@ public class EmitForeach {
                 opNode.operand instanceof OperatorNode nestedOpNode &&
                 opNode.operator.equals("$") && nestedOpNode.operator.equals("$")) {
 
-            emitterVisitor.ctx.logDebug("FOR1 emitting complex lvalue $$var as while loop");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 emitting complex lvalue $$var as while loop");
             emitFor1AsWhileLoop(emitterVisitor, node);
             return;
         }
@@ -228,7 +230,7 @@ public class EmitForeach {
                     }
 
                     mv.visitVarInsn(Opcodes.ASTORE, savedValueIndex);
-                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved local var " + varName + " to index " + savedValueIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved local var " + varName + " to index " + savedValueIndex);
                 } else {
                     // Global variable - save its current value
                     String globalName = ((IdentifierNode) innerOp.operand).name;
@@ -260,7 +262,7 @@ public class EmitForeach {
                     }
 
                     mv.visitVarInsn(Opcodes.ASTORE, savedValueIndex);
-                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved global var " + globalName + " to index " + savedValueIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved global var " + globalName + " to index " + savedValueIndex);
                 }
             }
 
@@ -464,7 +466,7 @@ public class EmitForeach {
                         continue;
                     }
                     int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
-                    emitterVisitor.ctx.logDebug("FOR1 multi var name:" + varName + " index:" + varIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 multi var name:" + varName + " index:" + varIndex);
                     mv.visitVarInsn(Opcodes.ASTORE, varIndex);
                 }
             }
@@ -538,7 +540,7 @@ public class EmitForeach {
                     // Unsupported variable shape; skip assignment rather than failing compilation.
                 } else {
                     loopVarIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
-                    emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + loopVarIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + loopVarIndex);
                     mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
                 }
             }
@@ -657,7 +659,7 @@ public class EmitForeach {
                 if (varIndex != -1) {
                     // Local variable - restore it
                     mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored local var " + varName + " from index " + savedValueIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored local var " + varName + " from index " + savedValueIndex);
                 } else {
                     // Global variable - restore it
                     String globalName = ((IdentifierNode) innerOp.operand).name;
@@ -684,7 +686,7 @@ public class EmitForeach {
                                 false);
                     }
 
-                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored global var " + globalName + " from index " + savedValueIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored global var " + globalName + " from index " + savedValueIndex);
                 }
             }
         }
@@ -740,7 +742,7 @@ public class EmitForeach {
             }
         }
 
-        emitterVisitor.ctx.logDebug("FOR1 end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 end");
     }
 
     /**

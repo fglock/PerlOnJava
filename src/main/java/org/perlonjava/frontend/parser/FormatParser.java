@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -47,7 +49,7 @@ public class FormatParser {
         // This ensures EmitFormat and typeglob access use the same key
         formatName = NameNormalizer.normalizeVariableName(formatName, parser.ctx.symbolTable.getCurrentPackage());
 
-        parser.ctx.logDebug("Parsing format declaration: " + formatName);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Parsing format declaration: " + formatName);
 
         // Parse format template content immediately
         List<FormatLine> templateLines = parseFormatTemplateContentImmediate(parser);
@@ -72,12 +74,12 @@ public class FormatParser {
         boolean foundTerminator = false;
         int lineIndex = parser.tokenIndex;
 
-        parser.ctx.logDebug("FormatParser.parseFormatTemplateContentImmediate: Starting at tokenIndex=" + parser.tokenIndex);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("FormatParser.parseFormatTemplateContentImmediate: Starting at tokenIndex=" + parser.tokenIndex);
 
         // Process tokens until we find the terminator '.'
         while (parser.tokenIndex < tokens.size()) {
             LexerToken token = tokens.get(parser.tokenIndex);
-            parser.ctx.logDebug("  Processing token: " + token.text + " type: " + token.type);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Processing token: " + token.text + " type: " + token.type);
 
             if (token.type == LexerTokenType.EOF) {
                 break;
@@ -86,11 +88,11 @@ public class FormatParser {
             if (token.type == LexerTokenType.NEWLINE) {
                 // End of current line
                 String line = currentLine.toString();
-                parser.ctx.logDebug("  Completed line: '" + line + "'");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Completed line: '" + line + "'");
 
                 // Check if this line is the terminator
                 if (line.trim().equals(".")) {
-                    parser.ctx.logDebug("Found format terminator '.' at token index " + lineIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Found format terminator '.' at token index " + lineIndex);
                     foundTerminator = true;
                     parser.tokenIndex++; // consume the newline
                     break;
@@ -126,7 +128,7 @@ public class FormatParser {
                     "Format not terminated", parser.ctx.errorUtil);
         }
 
-        parser.ctx.logDebug("FormatParser.parseFormatTemplateContentImmediate: Parsed " +
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("FormatParser.parseFormatTemplateContentImmediate: Parsed " +
                 templateLines.size() + " template lines");
 
         return templateLines;
@@ -140,12 +142,12 @@ public class FormatParser {
      * @param parser The parser instance
      */
     public static void parseFormatTemplateContent(Parser parser) {
-        parser.ctx.logDebug("FORMAT_PROCESSING_START");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("FORMAT_PROCESSING_START");
         List<FormatNode> formatNodes = parser.getFormatNodes();
         List<LexerToken> tokens = parser.tokens;
         int currentIndex = parser.tokenIndex;
 
-        parser.ctx.logDebug("FormatParser.parseFormatTemplateContent: Starting at tokenIndex=" +
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("FormatParser.parseFormatTemplateContent: Starting at tokenIndex=" +
                 currentIndex + ", format count=" + formatNodes.size());
 
         // Process all pending format nodes
@@ -154,11 +156,11 @@ public class FormatParser {
         while (!formatNodes.isEmpty()) {
             FormatNode formatNode = formatNodes.removeFirst();
 
-            parser.ctx.logDebug("Processing format: " + formatNode.formatName);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Processing format: " + formatNode.formatName);
 
             // Check if we have enough tokens
             if (currentIndex + 1 >= tokens.size()) {
-                parser.ctx.logDebug("Deferring format " + formatNode.formatName + " - not enough tokens");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Deferring format " + formatNode.formatName + " - not enough tokens");
                 deferredFormats.add(formatNode);
                 continue;
             }
@@ -169,22 +171,22 @@ public class FormatParser {
             StringBuilder currentLine = new StringBuilder();
             boolean foundTerminator = false;
 
-            parser.ctx.logDebug("  Looking for format content starting at token index: " + lineIndex);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Looking for format content starting at token index: " + lineIndex);
 
             while (lineIndex < tokens.size()) {
                 LexerToken token = tokens.get(lineIndex);
 
-                parser.ctx.logDebug("  Token[" + lineIndex + "]: type=" + token.type +
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Token[" + lineIndex + "]: type=" + token.type +
                         ", text='" + token.text.replace("\n", "\\n") + "'");
 
                 if (token.type == LexerTokenType.NEWLINE || token.type == LexerTokenType.EOF) {
                     // End of current line
                     String line = currentLine.toString();
-                    parser.ctx.logDebug("  Completed line: '" + line + "'");
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Completed line: '" + line + "'");
 
                     // Check if this line is the terminator
                     if (line.trim().equals(".")) {
-                        parser.ctx.logDebug("Found format terminator '.' at token index " + lineIndex);
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Found format terminator '.' at token index " + lineIndex);
                         foundTerminator = true;
                         break;
                     }
@@ -212,7 +214,7 @@ public class FormatParser {
                 }
 
                 // Defer for parent context to handle
-                parser.ctx.logDebug("Format " + formatNode.formatName + " terminator not found - deferring");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Format " + formatNode.formatName + " terminator not found - deferring");
                 deferredFormats.add(formatNode);
                 continue;
             }
@@ -230,7 +232,7 @@ public class FormatParser {
 
         // Re-add deferred formats
         formatNodes.addAll(deferredFormats);
-        parser.ctx.logDebug("FormatParser.parseFormatTemplateContent: Deferred " +
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("FormatParser.parseFormatTemplateContent: Deferred " +
                 deferredFormats.size() + " formats back to queue");
 
         parser.tokenIndex = currentIndex;

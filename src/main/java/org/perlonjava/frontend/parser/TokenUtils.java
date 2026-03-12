@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -70,13 +72,13 @@ public class TokenUtils {
             } else {
                 str = token.text.substring(0, 1);
                 token.text = token.text.substring(1);
-                parser.ctx.logDebug("consumeChar left: " + token);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("consumeChar left: " + token);
                 if (token.text.equals("=")) {
                     LexerToken next = parser.tokens.get(parser.tokenIndex + 1);
                     if (next.text.equals("=")) {
                         next.text = "==";
                         parser.tokenIndex++;
-                        parser.ctx.logDebug("consumeChar resync: " + TokenUtils.peek(parser));
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("consumeChar resync: " + TokenUtils.peek(parser));
                     }
                 }
             }

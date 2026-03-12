@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -42,7 +44,7 @@ public class EmitStatement {
      * @param node           The if node representing the if statement.
      */
     public static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
-        emitterVisitor.ctx.logDebug("IF start: " + node.operator);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF start: " + node.operator);
 
         List<String> branchLabels = new ArrayList<>();
         EmitBlock.collectIfChainLabels(node, branchLabels);
@@ -93,7 +95,7 @@ public class EmitStatement {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 
-        emitterVisitor.ctx.logDebug("IF end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF end");
     }
 
     /**
@@ -106,7 +108,7 @@ public class EmitStatement {
         if (node.isDoWhile) {
             emitDoWhile(emitterVisitor, node);
         } else {
-            emitterVisitor.ctx.logDebug("FOR3 start");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR3 start");
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
             EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID); // some parts have context VOID
@@ -163,7 +165,7 @@ public class EmitStatement {
 
             if (node.useNewScope) {
                 // Register next/redo/last labels
-                emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
                 // A simple-block For3Node (isSimpleBlock=true) is used to model bare/labeled
                 // blocks like `{ ... }` and `LABEL: { ... }` (including `... } continue { ... }`).
                 // Unlabeled next/last/redo must be allowed for *bare* blocks (no label), but
@@ -230,7 +232,7 @@ public class EmitStatement {
                 EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             }
 
-            emitterVisitor.ctx.logDebug("FOR end");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR end");
         }
     }
 
@@ -241,7 +243,7 @@ public class EmitStatement {
      * @param node           The for-loop node representing the do-while loop.
      */
     static void emitDoWhile(EmitterVisitor emitterVisitor, For3Node node) {
-        emitterVisitor.ctx.logDebug("DO-WHILE start");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("DO-WHILE start");
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Enter a new scope in the symbol table
@@ -329,11 +331,11 @@ public class EmitStatement {
             EmitOperator.emitUndef(emitterVisitor.ctx.mv);
         }
 
-        emitterVisitor.ctx.logDebug("DO-WHILE end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("DO-WHILE end");
     }
 
     public static void emitTryCatch(EmitterVisitor emitterVisitor, TryNode node) {
-        emitterVisitor.ctx.logDebug("emitTryCatch start");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitTryCatch start");
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -414,7 +416,7 @@ public class EmitStatement {
             mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
         }
 
-        emitterVisitor.ctx.logDebug("emitTryCatch end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitTryCatch end");
     }
 
     /**
@@ -432,7 +434,7 @@ public class EmitStatement {
      * @param node           The defer node representing the defer statement.
      */
     public static void emitDefer(EmitterVisitor emitterVisitor, org.perlonjava.frontend.astnode.DeferNode node) {
-        emitterVisitor.ctx.logDebug("emitDefer start");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitDefer start");
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -474,7 +476,7 @@ public class EmitStatement {
                 false);
         // Stack: empty
 
-        emitterVisitor.ctx.logDebug("emitDefer end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitDefer end");
     }
 
     /**

@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -35,7 +37,7 @@ public class EmitOperator {
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }
-        emitterVisitor.ctx.logDebug("emitOperator " +
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitOperator " +
                 operatorHandler.methodType() + " " +
                 operatorHandler.className() + " " +
                 operatorHandler.methodName() + " " +
@@ -63,7 +65,7 @@ public class EmitOperator {
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }
-        emitterVisitor.ctx.logDebug("emitOperator " +
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitOperator " +
                 operatorHandler.methodType() + " " +
                 operatorHandler.className() + " " +
                 operatorHandler.methodName() + " " +
@@ -131,7 +133,7 @@ public class EmitOperator {
      */
     static void handleReadlineOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;
-        emitterVisitor.ctx.logDebug("handleReadlineOperator " + node);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleReadlineOperator " + node);
 
         // Emit the File Handle
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
@@ -337,7 +339,7 @@ public class EmitOperator {
     static void handleDieBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  die LIST
         //   static RuntimeBase die(RuntimeBase value, int ctx)
-        emitterVisitor.ctx.logDebug("handleDieBuiltin " + node);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleDieBuiltin " + node);
         MethodVisitor mv = emitterVisitor.ctx.mv;
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -359,7 +361,7 @@ public class EmitOperator {
     static void handleSystemBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  reverse LIST
         //   static RuntimeBase reverse(RuntimeBase value, int ctx)
-        emitterVisitor.ctx.logDebug("handleSystemBuiltin " + node);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleSystemBuiltin " + node);
 
         ListNode operand = (ListNode) node.operand;
         boolean hasHandle = false;
@@ -389,7 +391,7 @@ public class EmitOperator {
     // Handles the 'splice' built-in function, which modifies an array.
     static void handleSpliceBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  splice @array, LIST
-        emitterVisitor.ctx.logDebug("handleSpliceBuiltin " + node);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
         if (args instanceof ListNode listArgs) {
             if (!listArgs.elements.isEmpty()) {
@@ -476,7 +478,7 @@ public class EmitOperator {
     static void handleDiamondBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
-        emitterVisitor.ctx.logDebug("visit diamond " + argument);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit diamond " + argument);
         if (argument.isEmpty() || argument.equals("<>")) {
             // Handle null filehandle:  <>  <<>>
             node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -979,7 +981,7 @@ public class EmitOperator {
         // Check if 'use bytes' is in effect
         if (emitterVisitor.ctx.symbolTable != null &&
                 emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
-            emitterVisitor.ctx.logDebug("handleLengthOperator: Using lengthBytes (bytes pragma enabled)");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleLengthOperator: Using lengthBytes (bytes pragma enabled)");
             // Use lengthBytes when bytes pragma is in effect
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
@@ -987,7 +989,7 @@ public class EmitOperator {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } else {
-            emitterVisitor.ctx.logDebug("handleLengthOperator: Using normal length (bytes pragma not enabled)");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleLengthOperator: Using normal length (bytes pragma not enabled)");
             // Use normal length
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
@@ -1012,7 +1014,7 @@ public class EmitOperator {
         // Check if 'use bytes' is in effect
         if (emitterVisitor.ctx.symbolTable != null &&
                 emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
-            emitterVisitor.ctx.logDebug("handleChrOperator: Using chrBytes (bytes pragma enabled)");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleChrOperator: Using chrBytes (bytes pragma enabled)");
             // Use chrBytes when bytes pragma is in effect
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
@@ -1020,7 +1022,7 @@ public class EmitOperator {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } else {
-            emitterVisitor.ctx.logDebug("handleChrOperator: Using normal chr (bytes pragma not enabled)");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleChrOperator: Using normal chr (bytes pragma not enabled)");
             // Use normal chr
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
@@ -1045,7 +1047,7 @@ public class EmitOperator {
         // Check if 'use bytes' is in effect
         if (emitterVisitor.ctx.symbolTable != null &&
                 emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
-            emitterVisitor.ctx.logDebug("handleOrdOperator: Using ordBytes (bytes pragma enabled)");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleOrdOperator: Using ordBytes (bytes pragma enabled)");
             // Use ordBytes when bytes pragma is in effect
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/ScalarOperators",
@@ -1053,7 +1055,7 @@ public class EmitOperator {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } else {
-            emitterVisitor.ctx.logDebug("handleOrdOperator: Using normal ord (bytes pragma not enabled)");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleOrdOperator: Using normal ord (bytes pragma not enabled)");
             // Use normal ord
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/ScalarOperators",
@@ -1194,7 +1196,7 @@ public class EmitOperator {
     static void handleArrayUnaryBuiltin(EmitterVisitor emitterVisitor, OperatorNode node,
                                         String operator) {
         Node operand = node.operand;
-        emitterVisitor.ctx.logDebug("handleArrayUnaryBuiltin " + operand);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleArrayUnaryBuiltin " + operand);
         if (operand instanceof ListNode listNode) {
             operand = listNode.elements.getFirst();
         }
@@ -1230,7 +1232,7 @@ public class EmitOperator {
         } else {
             if (node.operand instanceof OperatorNode operatorNode &&
                     operatorNode.operator.equals("&")) {
-                emitterVisitor.ctx.logDebug("Handle \\& " + operatorNode.operand);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Handle \\& " + operatorNode.operand);
                 if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                     emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);

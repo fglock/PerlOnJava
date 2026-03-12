@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.astnode.*;
@@ -33,7 +35,7 @@ public class StatementResolver {
     public static Node parseStatement(Parser parser, String label) {
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
-        parser.ctx.logDebug("parseStatement `" + token.text + "`");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseStatement `" + token.text + "`");
 
         // Store the current source location - this will be used for stack trace generation
         ByteCodeSourceMapper.saveSourceLocation(parser.ctx, parser.tokenIndex);
@@ -690,7 +692,7 @@ public class StatementResolver {
                     if (isDoWhile) {
                         // Special case: `do { BLOCK } while CONDITION`
                         // Executes the loop at least once
-                        parser.ctx.logDebug("do-while " + expression);
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("do-while " + expression);
                     }
                     yield new For3Node(null,
                             false,
@@ -723,14 +725,14 @@ public class StatementResolver {
         boolean hasBlockIndicator = false; // Found ;, or statement modifier
         boolean hasContent = false; // Track if we've seen any content
 
-        parser.ctx.logDebug("isHashLiteral START - initial braceCount: " + braceCount);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral START - initial braceCount: " + braceCount);
 
         while (braceCount > 0) {
             LexerToken token = consume(parser);
-            parser.ctx.logDebug("isHashLiteral token: '" + token.text + "' type:" + token.type + " braceCount:" + braceCount);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral token: '" + token.text + "' type:" + token.type + " braceCount:" + braceCount);
 
             if (token.type == LexerTokenType.EOF) {
-                parser.ctx.logDebug("isHashLiteral EOF reached");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral EOF reached");
                 break; // Let caller handle EOF error
             }
 
@@ -748,22 +750,22 @@ public class StatementResolver {
             };
 
             if (oldBraceCount != braceCount) {
-                parser.ctx.logDebug("isHashLiteral braceCount changed from " + oldBraceCount + " to " + braceCount);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral braceCount changed from " + oldBraceCount + " to " + braceCount);
             }
 
             // Only check for indicators at depth 1
             if (braceCount == 1 && !token.text.matches("[{(\\[)}\\]]")) {
-                parser.ctx.logDebug("isHashLiteral checking token '" + token.text + "' at depth 1");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral checking token '" + token.text + "' at depth 1");
 
                 switch (token.text) {
                     case "=>" -> {
                         // Fat comma is a definitive hash indicator
-                        parser.ctx.logDebug("isHashLiteral found => (hash indicator)");
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found => (hash indicator)");
                         hasHashIndicator = true;
                     }
                     case ";" -> {
                         // Semicolon is a definitive block indicator
-                        parser.ctx.logDebug("isHashLiteral found ; (block indicator)");
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found ; (block indicator)");
                         hasBlockIndicator = true;
                     }
                     case "=" -> {
@@ -774,15 +776,15 @@ public class StatementResolver {
                         int searchIndex = parser.tokenIndex - 1;
                         while (searchIndex >= currentIndex && searchIndex < parser.tokens.size()) {
                             LexerToken checkToken = parser.tokens.get(searchIndex);
-                            parser.ctx.logDebug("isHashLiteral checking token '" + checkToken.text + "' at index " + searchIndex);
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral checking token '" + checkToken.text + "' at index " + searchIndex);
                             if (checkToken.type == LexerTokenType.IDENTIFIER && ParsePrimary.isIsQuoteLikeOperator(checkToken.text)) {
-                                parser.ctx.logDebug("isHashLiteral found = after quote-like operator '" + checkToken.text + "', treating as q-string delimiter");
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found = after quote-like operator '" + checkToken.text + "', treating as q-string delimiter");
                                 isQStringDelimiter = true;
                                 break;
                             }
                             // If we hit a meaningful token that's not a quote-like operator, stop searching
                             if (checkToken.type != LexerTokenType.OPERATOR || !checkToken.text.equals("=")) {
-                                parser.ctx.logDebug("isHashLiteral stopping search at token '" + checkToken.text + "'");
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral stopping search at token '" + checkToken.text + "'");
                                 break;
                             }
                             searchIndex--;
@@ -803,46 +805,46 @@ public class StatementResolver {
 
                         if (!isQStringDelimiter && looksLikeAssignment) {
                             // This looks like an assignment
-                            parser.ctx.logDebug("isHashLiteral found = (block indicator)");
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found = (block indicator)");
                             hasBlockIndicator = true;
                         } else {
-                            parser.ctx.logDebug("isHashLiteral found = but not treating as block indicator (q-string or not assignment-like)");
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found = but not treating as block indicator (q-string or not assignment-like)");
                         }
                     }
                     case "," -> {
                         // Comma alone is not definitive - could be function args or hash
                         // Continue scanning for more evidence
-                        parser.ctx.logDebug("isHashLiteral found comma, continuing scan");
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found comma, continuing scan");
                     }
                     case "for", "while", "if", "unless", "until", "foreach", "my", "our", "say", "print", "local" -> {
                         // Check if this is a hash key (followed by =>) or statement modifier
                         LexerToken nextToken = TokenUtils.peek(parser);
-                        parser.ctx.logDebug("isHashLiteral found keyword '" + token.text + "', next token: '" + nextToken.text + "'");
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found keyword '" + token.text + "', next token: '" + nextToken.text + "'");
                         if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
                             // Statement modifier - definitive block indicator
-                            parser.ctx.logDebug("isHashLiteral found statement modifier (block indicator)");
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found statement modifier (block indicator)");
                             hasBlockIndicator = true;
                         } else {
-                            parser.ctx.logDebug("isHashLiteral keyword followed by => or , (possible hash key)");
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral keyword followed by => or , (possible hash key)");
                         }
                     }
                     default -> {
-                        parser.ctx.logDebug("isHashLiteral token '" + token.text + "' not a special indicator");
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral token '" + token.text + "' not a special indicator");
                     }
                 }
             } else if (braceCount == 1) {
-                parser.ctx.logDebug("isHashLiteral skipping bracket token '" + token.text + "' at depth 1");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral skipping bracket token '" + token.text + "' at depth 1");
             }
 
             // Early exit if we have definitive evidence
             if (hasBlockIndicator) {
-                parser.ctx.logDebug("isHashLiteral EARLY EXIT - block indicator found, returning FALSE");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral EARLY EXIT - block indicator found, returning FALSE");
                 parser.tokenIndex = currentIndex;
                 return false;
             }
 
             if (braceCount == 0) {
-                parser.ctx.logDebug("isHashLiteral braceCount reached 0, exiting loop");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral braceCount reached 0, exiting loop");
             }
         }
 
@@ -853,20 +855,20 @@ public class StatementResolver {
         // - If we found block indicators, it's a block
         // - Empty {} is a hash ref
         // - Otherwise, default to block (safer when parsing is incomplete)
-        parser.ctx.logDebug("isHashLiteral FINAL DECISION - hasHashIndicator:" + hasHashIndicator +
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral FINAL DECISION - hasHashIndicator:" + hasHashIndicator +
                 " hasBlockIndicator:" + hasBlockIndicator + " hasContent:" + hasContent);
 
         if (hasHashIndicator) {
-            parser.ctx.logDebug("isHashLiteral RESULT: TRUE - hash indicator found");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - hash indicator found");
             return true;
         } else if (hasBlockIndicator) {
-            parser.ctx.logDebug("isHashLiteral RESULT: FALSE - block indicator found");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - block indicator found");
             return false;
         } else if (!hasContent) {
-            parser.ctx.logDebug("isHashLiteral RESULT: TRUE - empty {} is hash ref");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - empty {} is hash ref");
             return true; // Empty {} is a hash ref
         } else {
-            parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
             return false; // Default: assume block when we can't determine
         }
     }

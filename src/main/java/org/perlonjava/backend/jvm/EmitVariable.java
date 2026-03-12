@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -146,7 +148,7 @@ public class EmitVariable {
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
-        ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
         // Perl creates package symbols at compile time when they are referenced.
         // Our emitter runs before the program executes, so we pre-vivify globals here
@@ -274,7 +276,7 @@ public class EmitVariable {
         // Examples: $var, @array, %hash, *glob, &sub
         if (node.operand instanceof IdentifierNode identifierNode) { // $a @a %a
             String name = identifierNode.name;
-            emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
 
             if (sigil.equals("*")) {
                 // typeglob
@@ -387,13 +389,13 @@ public class EmitVariable {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             }
 
-            emitterVisitor.ctx.logDebug("GETVAR end " + symbolEntry);
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR end " + symbolEntry);
             return;
         }
         switch (sigil) {
             case "@":
                 // `@$a`
-                emitterVisitor.ctx.logDebug("GETVAR `@$a`");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR `@$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
@@ -409,7 +411,7 @@ public class EmitVariable {
                 return;
             case "%":
                 // `%$a`
-                emitterVisitor.ctx.logDebug("GETVAR `%$a`");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR `%$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;", false);
@@ -425,7 +427,7 @@ public class EmitVariable {
                 return;
             case "$":
                 // `$$a`
-                emitterVisitor.ctx.logDebug("GETVAR `$$a`");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR `$$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
@@ -438,7 +440,7 @@ public class EmitVariable {
                 return;
             case "*":
                 // `*$a`
-                emitterVisitor.ctx.logDebug("GETVAR `*$a`");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR `*$a`");
                 boolean isPostfixDeref = Boolean.TRUE.equals(node.getAnnotation("postfixDeref"));
                 boolean postfixLiteralSymbol = isPostfixDeref
                         && (node.operand instanceof StringNode || node.operand instanceof IdentifierNode);
@@ -463,14 +465,14 @@ public class EmitVariable {
                 return;
             case "&":
                 // `&$a` or `&{sub ...}`
-                emitterVisitor.ctx.logDebug("GETVAR `&$a` or `&{sub ...}`");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR `&$a` or `&{sub ...}`");
 
                 // Special handling for &{sub ...} - BlockNode containing SubroutineNode
                 if (node.operand instanceof BlockNode blockNode &&
                         blockNode.elements.size() == 1 &&
                         blockNode.elements.get(0) instanceof SubroutineNode) {
 
-                    emitterVisitor.ctx.logDebug("GETVAR `&{sub ...}` - emitting subroutine as RuntimeScalar");
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR `&{sub ...}` - emitting subroutine as RuntimeScalar");
                     // Emit the subroutine directly as a RuntimeScalar (code reference)
                     blockNode.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                 } else {
@@ -498,7 +500,7 @@ public class EmitVariable {
                     }
                 }
 
-                emitterVisitor.ctx.logDebug("EmitVariable: about to call RuntimeCode.apply for &$var");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("EmitVariable: about to call RuntimeCode.apply for &$var");
 
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
@@ -660,12 +662,12 @@ public class EmitVariable {
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        ctx.logDebug("SET " + node);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET " + node);
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
         int lvalueContext = LValueVisitor.getContext(node);
-        ctx.logDebug("SET Lvalue context: " + lvalueContext);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET Lvalue context: " + lvalueContext);
         // Execute the right side first: assignment is right-associative
 
         Node left = node.left;
@@ -675,7 +677,7 @@ public class EmitVariable {
 
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
-                ctx.logDebug("SET right side scalar");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET right side scalar");
 
                 if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("state")) {
                     emitStateInitialization(emitterVisitor, node, operatorNode, ctx);
@@ -795,7 +797,7 @@ public class EmitVariable {
                 }
                 break;
             case RuntimeContextType.LIST:
-                emitterVisitor.ctx.logDebug("SET right side list");
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET right side list");
 
                 if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("state")) {
                     emitStateInitialization(emitterVisitor, node, operatorNode, ctx);
@@ -852,12 +854,12 @@ public class EmitVariable {
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }
         EmitOperator.handleVoidContext(emitterVisitor);
-        emitterVisitor.ctx.logDebug("SET end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
     }
 
     private static void emitStateInitialization(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorNode operatorNode, EmitterContext ctx) {
         // This is a state variable initialization, it should run exactly once.
-        ctx.logDebug("handleAssignOperator initialize state variable " + operatorNode);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleAssignOperator initialize state variable " + operatorNode);
         OperatorNode varNode = (OperatorNode) operatorNode.operand;
         IdentifierNode nameNode = (IdentifierNode) varNode.operand;
         String sigil = varNode.operator;
@@ -881,7 +883,7 @@ public class EmitVariable {
                 ),
                 tokenIndex
         );
-        ctx.logDebug("handleAssignOperator initialize state variable " + testStateVariable);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleAssignOperator initialize state variable " + testStateVariable);
         // testStateVariable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Determine the method to call and its descriptor based on the sigil
@@ -907,7 +909,7 @@ public class EmitVariable {
                 ),
                 tokenIndex
         );
-        ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
         // initStateVariable.accept(emitterVisitor.with(RuntimeContextType.VOID));
 
         new BinaryOperatorNode("||", testStateVariable, initStateVariable, tokenIndex)
@@ -920,10 +922,10 @@ public class EmitVariable {
         EmitterContext ctx = emitterVisitor.ctx;
 
         String operator = node.operator;
-        ctx.logDebug("handleMyOperator: operator=" + operator + ", operand type=" + (node.operand != null ? node.operand.getClass().getSimpleName() : "null") + ", contextType=" + ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleMyOperator: operator=" + operator + ", operand type=" + (node.operand != null ? node.operand.getClass().getSimpleName() : "null") + ", contextType=" + ctx.contextType);
         if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
-            ctx.logDebug("handleMyOperator: ListNode operand, contextType=" + ctx.contextType + ", annotations=" + node.annotations);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleMyOperator: ListNode operand, contextType=" + ctx.contextType + ", annotations=" + node.annotations);
             for (Node element : listNode.elements) {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
@@ -984,7 +986,7 @@ public class EmitVariable {
 
                 if (isDeclaredReference) {
                     // For declared references, return a list of references to the variables
-                    emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=true, emitting references for list elements");
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=true, emitting references for list elements");
                     MethodVisitor mv = emitterVisitor.ctx.mv;
 
                     // Create a new RuntimeList
@@ -994,9 +996,9 @@ public class EmitVariable {
 
                     // For each element in the list, emit the variable and create a reference
                     for (Node element : listNode.elements) {
-                        ctx.logDebug("handleMyOperator: processing element: " + element + ", class=" + element.getClass().getSimpleName());
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleMyOperator: processing element: " + element + ", class=" + element.getClass().getSimpleName());
                         if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
-                            ctx.logDebug("handleMyOperator: emitting createReference for " + elemOpNode.operator);
+                            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleMyOperator: emitting createReference for " + elemOpNode.operator);
                             mv.visitInsn(Opcodes.DUP);  // Dup the RuntimeList
 
                             // Emit the variable in SCALAR context
@@ -1032,7 +1034,7 @@ public class EmitVariable {
                     if (hasAnyDeclaredRef) {
                         // Mixed case: some elements are declared refs, some are not
                         // Build the list manually, emitting references for declared refs
-                        emitterVisitor.ctx.logDebug("handleMyOperator: hasAnyDeclaredRef=true, building mixed list");
+                        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleMyOperator: hasAnyDeclaredRef=true, building mixed list");
                         MethodVisitor mv = emitterVisitor.ctx.mv;
 
                         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
@@ -1062,7 +1064,7 @@ public class EmitVariable {
                             }
                         }
                     } else {
-                        emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=false, emitting listNode directly");
+                        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=false, emitting listNode directly");
                         listNode.accept(emitterVisitor);
                     }
                 }
@@ -1091,7 +1093,7 @@ public class EmitVariable {
                 if (identifierNode instanceof IdentifierNode) { // my $a
                     String name = ((IdentifierNode) identifierNode).name;
                     String var = sigil + name;
-                    emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
                     if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         if (Warnings.warningManager.isWarningEnabled("redefine")) {
                             System.err.println(

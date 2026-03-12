@@ -178,13 +178,13 @@ public class SpecialBlockParser {
                             // Put in the appropriate global map based on variable type
                             if (runtimeValue instanceof RuntimeArray) {
                                 GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
-                                parser.ctx.logDebug("BEGIN block: Aliased array " + fullName);
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased array " + fullName);
                             } else if (runtimeValue instanceof RuntimeHash) {
                                 GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
-                                parser.ctx.logDebug("BEGIN block: Aliased hash " + fullName);
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased hash " + fullName);
                             } else if (runtimeValue instanceof RuntimeScalar) {
                                 GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
-                                parser.ctx.logDebug("BEGIN block: Aliased scalar " + fullName);
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased scalar " + fullName);
                             }
                         }
                     }
@@ -235,7 +235,7 @@ public class SpecialBlockParser {
 
         CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
         parsedArgs.compileOnly = false; // Special blocks are always run
-        parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
         try {
             setCurrentScope(parser.ctx.symbolTable);

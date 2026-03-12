@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
@@ -172,7 +174,7 @@ public abstract class StringSegmentParser {
     protected void parseVariableInterpolation(String sigil) {
         flushCurrentSegment();
 
-        ctx.logDebug("str sigil");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str sigil");
 
         Node operand;
         var isArray = "@".equals(sigil);
@@ -197,7 +199,7 @@ public abstract class StringSegmentParser {
 
                         // Apply @ to dereference the block result
                         operand = new OperatorNode("@", block, tokenIndex);
-                        ctx.logDebug("str @{[...]} operand " + operand);
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str @{[...]} operand " + operand);
                     } catch (PerlCompilerException e) {
                         // Re-throw with offset-aware error reporting
                         createOffsetAwareError(tokenIndex, "Syntax error in @{[...]} block: " + e.getMessage());
@@ -235,7 +237,7 @@ public abstract class StringSegmentParser {
                 }
             }
 
-            ctx.logDebug("str operand " + operand);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str operand " + operand);
         } else {
             // Parse simple variables using shared logic, but keep the exact same flow
             operand = parseSimpleVariableInterpolation(sigil);
@@ -361,7 +363,7 @@ public abstract class StringSegmentParser {
             // Add validation that was missing - this fixes $01, $02 issues
             IdentifierParser.validateIdentifier(parser, identifier, startIndex);
 
-            ctx.logDebug("str Identifier: " + identifier);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str Identifier: " + identifier);
 
             // Check if this is a field that needs transformation to $self->{field}
             // This mirrors the logic in Variable.parseVariable
@@ -532,19 +534,19 @@ public abstract class StringSegmentParser {
      * @return the final AST node representing the parsed string
      */
     public Node parse() {
-        ctx.logDebug("StringSegmentParser.parse: Starting with " + tokens.size() + " tokens, heredoc count: " + parser.getHeredocNodes().size());
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser.parse: Starting with " + tokens.size() + " tokens, heredoc count: " + parser.getHeredocNodes().size());
 
         while (true) {
             if (parser.tokenIndex >= tokens.size()) {
-                ctx.logDebug("StringSegmentParser.parse: Reached end of tokens at index " + parser.tokenIndex);
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser.parse: Reached end of tokens at index " + parser.tokenIndex);
                 break;
             }
             var token = tokens.get(parser.tokenIndex++);
 
-            ctx.logDebug("StringSegmentParser.parse: Token at " + (parser.tokenIndex - 1) + ": type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser.parse: Token at " + (parser.tokenIndex - 1) + ": type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
 
             if (token.type == LexerTokenType.EOF) {
-                ctx.logDebug("StringSegmentParser.parse: Found EOF token");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser.parse: Found EOF token");
                 break;
             }
 
@@ -552,11 +554,11 @@ public abstract class StringSegmentParser {
             if (token.type == LexerTokenType.NEWLINE) {
                 // Check if there are pending heredocs to process
                 if (!parser.getHeredocNodes().isEmpty()) {
-                    ctx.logDebug("StringSegmentParser: Found NEWLINE with " + parser.getHeredocNodes().size() + " pending heredocs at index " + (parser.tokenIndex - 1));
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser: Found NEWLINE with " + parser.getHeredocNodes().size() + " pending heredocs at index " + (parser.tokenIndex - 1));
 
                     // Log which heredocs are pending
                     for (OperatorNode heredoc : parser.getHeredocNodes()) {
-                        ctx.logDebug("  Pending heredoc: " + heredoc.getAnnotation("identifier"));
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("  Pending heredoc: " + heredoc.getAnnotation("identifier"));
                     }
 
                     // Flush current segment before processing heredocs
@@ -565,18 +567,18 @@ public abstract class StringSegmentParser {
                     // Adjust tokenIndex to point to the NEWLINE token for parseHeredocAfterNewline
                     parser.tokenIndex--;  // Back up to the NEWLINE token
 
-                    ctx.logDebug("StringSegmentParser: Calling parseHeredocAfterNewline with tokenIndex=" + parser.tokenIndex);
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser: Calling parseHeredocAfterNewline with tokenIndex=" + parser.tokenIndex);
 
                     // Process ALL heredocs after the newline
                     ParseHeredoc.parseHeredocAfterNewline(parser);
 
                     // Check if we've consumed all tokens
                     if (parser.tokenIndex >= tokens.size()) {
-                        ctx.logDebug("StringSegmentParser: Heredoc processing consumed all remaining tokens");
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser: Heredoc processing consumed all remaining tokens");
                         break;
                     }
 
-                    ctx.logDebug("StringSegmentParser: After heredoc processing, tokenIndex = " + parser.tokenIndex + ", remaining tokens = " + (tokens.size() - parser.tokenIndex));
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser: After heredoc processing, tokenIndex = " + parser.tokenIndex + ", remaining tokens = " + (tokens.size() - parser.tokenIndex));
 
                     // parseHeredocAfterNewline updates parser.tokenIndex, so continue from there
                     continue;
@@ -596,7 +598,7 @@ public abstract class StringSegmentParser {
             appendToCurrentSegment(text);
         }
 
-        ctx.logDebug("StringSegmentParser.parse: Finished parsing, segments count: " + segments.size());
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser.parse: Finished parsing, segments count: " + segments.size());
         return buildResult();
     }
 

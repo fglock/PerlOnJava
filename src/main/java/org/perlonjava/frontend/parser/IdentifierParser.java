@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -339,7 +341,7 @@ public class IdentifierParser {
                     // `$^` can be followed by an optional uppercase identifier: `$^A`
                     //  ^A is control-A char(1)
                     TokenUtils.consume(parser); // consume the ^
-                    parser.ctx.logDebug("parse $^ at token " + TokenUtils.peek(parser).text);
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parse $^ at token " + TokenUtils.peek(parser).text);
                     //  `$^LAST_FH` is parsed as `$^L` + `AST_FH`
                     //  `${^LAST_FH}` is parsed as `${^LAST_FH}`
                     String str = insideBraces

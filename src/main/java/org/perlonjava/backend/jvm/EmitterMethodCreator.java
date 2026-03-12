@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
@@ -433,7 +435,7 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Define the class with version, access flags, name, signature, superclass, and interfaces
             cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, className, null, "java/lang/Object", null);
-            ctx.logDebug("Create class: " + className);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Create class: " + className);
 
             // Add instance fields to the class for closure variables
             for (String fieldName : env) {
@@ -442,7 +444,7 @@ public class EmitterMethodCreator implements Opcodes {
                     continue;
                 }
                 String descriptor = getVariableDescriptor(fieldName);
-                ctx.logDebug("Create instance field: " + descriptor);
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Create instance field: " + descriptor);
                 cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
             }
 
@@ -457,7 +459,7 @@ public class EmitterMethodCreator implements Opcodes {
                 constructorDescriptor.append(descriptor);
             }
             constructorDescriptor.append(")V");
-            ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
             ctx.mv =
                     cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
             MethodVisitor mv = ctx.mv;
@@ -486,7 +488,7 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitEnd();
 
             // Create the public "apply" method for the generated class
-            ctx.logDebug("Create the method");
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Create the method");
             ctx.mv =
                     cw.visitMethod(
                             Opcodes.ACC_PUBLIC,
@@ -511,7 +513,7 @@ public class EmitterMethodCreator implements Opcodes {
                 }
                 String descriptor = getVariableDescriptor(env[i]);
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-                ctx.logDebug("Init closure variable: " + descriptor);
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Init closure variable: " + descriptor);
                 mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
@@ -625,7 +627,7 @@ public class EmitterMethodCreator implements Opcodes {
             Label endCatch = null;
 
             if (useTryCatch) {
-                ctx.logDebug("useTryCatch");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("useTryCatch");
 
                 // --------------------------------
                 // Start of try-catch block
@@ -663,7 +665,7 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
 
                 // Handle the return value
-                ctx.logDebug("Return the last value");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Return the last value");
 
 
                 // --------------------------------
@@ -688,7 +690,7 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
 
                 // Handle the return value
-                ctx.logDebug("Return the last value");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Return the last value");
             }
 
             // Join point for all returns/gotos. Must be stack-neutral.

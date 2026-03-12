@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.LabelNode;
 import org.perlonjava.frontend.astnode.ListNode;
@@ -102,7 +104,7 @@ public class ParseBlock {
                 statements.add(statement);
             } else {
                 // This should never happen - log and skip
-                parser.ctx.logDebug("WARNING: parseStatement returned null at token: " + token.text);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("WARNING: parseStatement returned null at token: " + token.text);
             }
 
             token = peek(parser);

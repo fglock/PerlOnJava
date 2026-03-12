@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.astnode.*;
@@ -126,10 +128,10 @@ public class OperatorParser {
             // Check if the token is a dollar sign, indicating a variable
             if (tokenText.equals("$")) {
                 // Handle the case for <$fh>
-                parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
                 parser.tokenIndex++;
                 Node var = Variable.parseVariable(parser, "$"); // Parse the variable following the dollar sign
-                parser.ctx.logDebug("diamond operator var " + var);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("diamond operator var " + var);
 
                 // Check if the next token is a closing angle bracket
                 if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
@@ -147,7 +149,7 @@ public class OperatorParser {
             // Check if the token is one of the standard input sources
             if (tokenText.equals("STDIN") || tokenText.equals("DATA") || tokenText.equals("ARGV")) {
                 // Handle the case for <STDIN>, <DATA>, or <ARGV>
-                parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
                 parser.tokenIndex++;
 
                 // Check if the next token is a closing angle bracket
@@ -205,7 +207,7 @@ public class OperatorParser {
             if (paren) {
                 TokenUtils.consume(parser, OPERATOR, ")");
             }
-            parser.ctx.logDebug("parsePrint: " + operand.handle + " : " + operand);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parsePrint: " + operand.handle + " : " + operand);
         }
 
         handle = operand.handle;
@@ -295,7 +297,7 @@ public class OperatorParser {
 
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
         Node operand = ParsePrimary.parsePrimary(parser);
-        parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
 
         // Add variables to the scope
         if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
@@ -1013,7 +1015,7 @@ public class OperatorParser {
             // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
             // But don't intercept quote-like operators like q(), qq(), etc.
             String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
-            parser.ctx.logDebug("require module name `" + moduleName + "`");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("require module name `" + moduleName + "`");
             if (moduleName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
@@ -1051,7 +1053,7 @@ public class OperatorParser {
                 if (firstElement instanceof IdentifierNode identifierNode) {
                     // `require` module
                     String moduleName = identifierNode.name;
-                    parser.ctx.logDebug("name `" + moduleName + "`");
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("name `" + moduleName + "`");
                     if (moduleName == null) {
                         throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
                     }

@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -20,7 +22,7 @@ public class EmitBinaryOperator {
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        emitterVisitor.ctx.logDebug("handleBinaryOperator: " + node.toString());
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleBinaryOperator: " + node.toString());
 
         // Optimization
         if ((node.operator.equals("+")

@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.FormatNode;
 import org.perlonjava.frontend.astnode.Node;
@@ -205,11 +207,11 @@ public class Parser {
 
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
             if (ParserTables.RIGHT_ASSOC_OP.contains(token.text)) {
-                ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
                 left = ParseInfix.parseInfixOperation(this, left, tokenPrecedence - 1); // Parse the right side with lower precedence.
             } else {
                 // Otherwise, parse it normally with the same precedence.
-                ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " left assoc");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " left assoc");
                 left = ParseInfix.parseInfixOperation(this, left, tokenPrecedence);
             }
         }
@@ -237,7 +239,7 @@ public class Parser {
     }
 
     public void debugHeredocState(String location) {
-        this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
+        if (CompilerOptions.DEBUG_ENABLED) this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
                 " heredocCount=" + heredocNodes.size());
     }
 

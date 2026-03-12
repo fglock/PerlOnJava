@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
@@ -79,7 +81,7 @@ public class ListParser {
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
     static ListNode parseZeroOrMoreList(Parser parser, int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex) {
-        parser.ctx.logDebug("parseZeroOrMoreList start");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(parser.tokenIndex);
 
         int currentIndex = parser.tokenIndex;
@@ -191,7 +193,7 @@ public class ListParser {
         if (hasParen) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
-        parser.ctx.logDebug("parseZeroOrMoreList end: " + expr);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList end: " + expr);
 
         if (expr.elements.size() < minItems) {
             parser.throwError("syntax error");
@@ -252,18 +254,18 @@ public class ListParser {
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
     static List<Node> parseList(Parser parser, String close, int minItems) {
-        parser.ctx.logDebug("parseList start");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList start");
         ListNode expr;
 
         LexerToken token = TokenUtils.peek(parser);
-        parser.ctx.logDebug("parseList start at " + token);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList start at " + token);
         if (token.text.equals(close)) {
             // Empty list
             TokenUtils.consume(parser);
             expr = new ListNode(parser.tokenIndex);
         } else {
             expr = ListNode.makeList(parser.parseExpression(0));
-            parser.ctx.logDebug("parseList end at " + TokenUtils.peek(parser));
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList end at " + TokenUtils.peek(parser));
 
             // Check for closing delimiter with better error message for hash/array literals
             LexerToken closingToken = TokenUtils.peek(parser);
@@ -282,7 +284,7 @@ public class ListParser {
         if (expr.elements.size() < minItems) {
             parser.throwError("syntax error");
         }
-        parser.ctx.logDebug("parseList end");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseList end");
 
         return expr.elements;
     }
@@ -320,39 +322,39 @@ public class ListParser {
         } else if (token.text.equals("-")) {
             // -d, -e, -f, -l, -p, -x
             // -$v
-            parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator or unary minus");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator or unary minus");
         } else if (ParserTables.INFIX_OP.contains(token.text) || token.text.equals(",")) {
-            parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("<") || token.text.equals("<<")) {
                 // Looks like diamond operator
-                parser.ctx.logDebug("parseZeroOrMoreList looks like <>");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like <>");
             } else if (token.text.equals("+")) {
                 // Looks like a prefix `+`, not an infix `+`
-                parser.ctx.logDebug("parseZeroOrMoreList looks like prefix plus");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like prefix plus");
             } else if (token.text.equals("*")) {
                 // Looks like a prefix `*`, not an infix `*`
-                parser.ctx.logDebug("parseZeroOrMoreList looks like typeglob prefix");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like typeglob prefix");
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
-                parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
             } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.text.equals("{") || nextToken.type == LexerTokenType.IDENTIFIER)) {
                 // Looks like a hash deref, not an infix `%`
                 // %$ref, %{expr}, %hash
-                parser.ctx.logDebug("parseZeroOrMoreList looks like Hash: token=" + token.text + " nextToken=" + nextToken.text);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like Hash: token=" + token.text + " nextToken=" + nextToken.text);
             } else if (token.text.equals("@") && nextToken.text.equals("{")) {
                 // Looks like an array deref @{expr}, not an infix `@`
-                parser.ctx.logDebug("parseZeroOrMoreList looks like Array deref");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like Array deref");
             } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
                 // Looks like a fractional number, not an infix `.`
-                parser.ctx.logDebug("parseZeroOrMoreList looks like Number");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like Number");
             } else if (token.text.equals("/")) {
                 // Looks like a regex pattern, not division
                 // In Perl, /pattern/ at the start of a list context is a regex match
                 // Note: // is the defined-or operator, not a regex, so we don't include it here
-                parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
-                parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
                 // if (LVALUE_INFIX_OP.contains(token.text)) {
                 //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
                 // }

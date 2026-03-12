@@ -120,8 +120,8 @@ public class PerlLanguageProvider {
             globalInitialized = true;
         }
 
-        ctx.logDebug("parse code: " + compilerOptions.code);
-        ctx.logDebug("  call context " + ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parse code: " + compilerOptions.code);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("  call context " + ctx.contextType);
 
         // Apply any BEGIN-block filters before tokenization if requested
         // This is a workaround for the limitation that our architecture tokenizes all source upfront
@@ -175,10 +175,10 @@ public class PerlLanguageProvider {
             RuntimeIO.closeAllHandles();
             return null; // success
         }
-        ctx.logDebug("-- AST:\n" + ast + "--\n");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("-- AST:\n" + ast + "--\n");
 
         // Create the Java class from the AST
-        ctx.logDebug("createClassWithMethod");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("createClassWithMethod");
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         // Snapshot the symbol table after parsing.
@@ -241,11 +241,11 @@ public class PerlLanguageProvider {
             globalInitialized = true;
         }
 
-        ctx.logDebug("Using provided AST");
-        ctx.logDebug("  call context " + ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using provided AST");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("  call context " + ctx.contextType);
 
         // Create the Java class from the AST
-        ctx.logDebug("createClassWithMethod");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("createClassWithMethod");
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         // Snapshot the symbol table as seen by the parser (includes lexical decls + pragma state).
         ctx.symbolTable = ctx.symbolTable.snapShot();
@@ -323,7 +323,7 @@ public class PerlLanguageProvider {
             throw new RuntimeException(t);
         }
 
-        ctx.logDebug("Result of generatedMethod: " + result);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Result of generatedMethod: " + result);
 
         RuntimeIO.flushAllHandles();
         return result;
@@ -343,7 +343,7 @@ public class PerlLanguageProvider {
     private static RuntimeCode compileToExecutable(Node ast, EmitterContext ctx) throws Exception {
         if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {
             // Interpreter path - returns InterpretedCode (extends RuntimeCode)
-            ctx.logDebug("Compiling to bytecode interpreter");
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Compiling to bytecode interpreter");
             BytecodeCompiler compiler = new BytecodeCompiler(
                     ctx.compilerOptions.fileName,
                     1,  // sourceLine (legacy parameter)
@@ -361,7 +361,7 @@ public class PerlLanguageProvider {
             return interpretedCode;
         } else {
             // Compiler path - returns CompiledCode (wrapper around generated class)
-            ctx.logDebug("Compiling to JVM bytecode");
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Compiling to JVM bytecode");
             try {
                 Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                         ctx,
@@ -399,7 +399,7 @@ public class PerlLanguageProvider {
                         System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
                     }
 
-                    ctx.logDebug("Falling back to bytecode interpreter due to method size");
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Falling back to bytecode interpreter due to method size");
                     // Reset strict/feature/warning flags before fallback compilation.
                     // The JVM compiler already processed BEGIN blocks (use strict, etc.)
                     // which set these flags on ctx.symbolTable. But the interpreter will

@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -137,7 +139,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         // In regex context, we preserve escapes for the regex engine
         var isRegex = !parseEscapes;
-        ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
 
         // Tokenize the string content
         var lexer = new Lexer(input);

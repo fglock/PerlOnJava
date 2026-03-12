@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -125,7 +127,7 @@ public class EmitBlock {
             return;
         }
 
-        emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
@@ -247,7 +249,7 @@ public class EmitBlock {
                 // "not a statement, continue parsing" (e.g., AUTOLOAD without {}, try without feature enabled)
                 // ParseBlock.parseBlock() adds these null results to the statements list
                 if (element == null) {
-                    emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
                     continue;
                 }
 
@@ -256,11 +258,11 @@ public class EmitBlock {
                 // Emit the statement with current context
                 if (i == lastNonNullIndex) {
                     // Special case for the last element
-                    emitterVisitor.ctx.logDebug("Last element: " + element);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Last element: " + element);
                     element.accept(emitterVisitor);
                 } else {
                     // General case for all other elements
-                    emitterVisitor.ctx.logDebug("Element: " + element);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Element: " + element);
                     element.accept(voidVisitor);
                 }
 
@@ -306,7 +308,7 @@ public class EmitBlock {
         }
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
-        emitterVisitor.ctx.logDebug("generateCodeBlock end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
 
 }

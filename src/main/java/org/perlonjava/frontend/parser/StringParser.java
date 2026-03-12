@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -72,12 +74,12 @@ public class StringParser {
 
             // Process heredocs at newlines during string parsing
             if (currentToken.type == LexerTokenType.NEWLINE) {
-                ctx.logDebug("parseRawStringWithDelimiter: Found NEWLINE at tokPos=" + tokPos +
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseRawStringWithDelimiter: Found NEWLINE at tokPos=" + tokPos +
                         ", parser=" + (parser != null) +
                         ", heredocCount=" + (parser != null ? parser.getHeredocNodes().size() : 0));
 
                 if (parser != null && !parser.getHeredocNodes().isEmpty()) {
-                    ctx.logDebug("parseRawStringWithDelimiter: Processing heredocs");
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseRawStringWithDelimiter: Processing heredocs");
 
                     // Save the current parser position
                     int savedIndex = parser.tokenIndex;
@@ -91,7 +93,7 @@ public class StringParser {
                     int afterHeredocTokPos = parser.tokenIndex;
                     int tokensConsumed = afterHeredocTokPos - beforeHeredocTokPos;
 
-                    ctx.logDebug("parseRawStringWithDelimiter: Heredoc consumed " + tokensConsumed + " tokens");
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseRawStringWithDelimiter: Heredoc consumed " + tokensConsumed + " tokens");
 
                     // If heredoc consumed more than just the newline, we need to handle it
                     if (tokensConsumed > 1) {
@@ -334,7 +336,7 @@ public class StringParser {
         Node replace;
         if (modifierStr.contains("e")) {
             // if modifiers include `e`, then parse the `replace` code
-            ctx.logDebug("regex e-modifier: " + replaceStr);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("regex e-modifier: " + replaceStr);
             Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize(), parser.getHeredocNodes());
             replace = ParseBlock.parseBlock(blockParser);
         } else if (rawStr.secondBufferStartDelim != '\'') {
@@ -548,7 +550,7 @@ public class StringParser {
             }
         }
 
-        parser.ctx.logDebug("v-string: " + printable(vStringBuilder.toString()) + " next:" + TokenUtils.peek(parser));
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("v-string: " + printable(vStringBuilder.toString()) + " next:" + TokenUtils.peek(parser));
 
         // Create a StringNode with the constructed v-string
         return new StringNode(vStringBuilder.toString(), true, currentIndex);

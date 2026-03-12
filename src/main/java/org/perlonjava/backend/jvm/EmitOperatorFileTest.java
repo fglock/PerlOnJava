@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.IdentifierNode;
@@ -14,7 +16,7 @@ import java.util.List;
 public class EmitOperatorFileTest {
     static void handleFileTestBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  -d FILE,  -r -w -x FILE
-        emitterVisitor.ctx.logDebug("handleFileTestBuiltin " + node);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleFileTestBuiltin " + node);
 
         // Collect stacked operators by traversing nested OperatorNodes
         List<String> operators = new ArrayList<>();
