@@ -436,3 +436,12 @@ grep -E '^\s+[0-9]+:' bytecode.txt | sed 's/^[^:]*: //' | \
 - Added disassembler support for NONSTRICT variants
 - Fixed `(expr)[index]` compilation: Added ListNode-to-ArrayLiteralNode transformation in
   CompileBinaryOperator.java (matching JVM backend in Dereference.java)
+
+### Phase 3.4: Re-enable Superoperators in General Handlers (2025-03-12)
+- Re-enabled superoperators in `handleGeneralArrayAccess()` and `handleGeneralHashAccess()`
+- Now that ListNode cases (like `(caller)[0]`) are transformed before reaching these handlers,
+  it's safe to use superoperators
+- Both handlers now use `emitArrayDerefGet()` / `emitHashDerefGet()` helpers
+- Changed `handleGeneralArrayAccess` to compile left side in SCALAR context (not LIST)
+- **Result**: Chained access like `$v[1]{a}{b}{c}->[2]` now uses superoperators throughout
+- **Bytecode reduction**: Example went from 50 shorts to 32 shorts (36% reduction)
