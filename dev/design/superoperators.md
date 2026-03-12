@@ -445,3 +445,18 @@ grep -E '^\s+[0-9]+:' bytecode.txt | sed 's/^[^:]*: //' | \
 - Changed `handleGeneralArrayAccess` to compile left side in SCALAR context (not LIST)
 - **Result**: Chained access like `$v[1]{a}{b}{c}->[2]` now uses superoperators throughout
 - **Bytecode reduction**: Example went from 50 shorts to 32 shorts (36% reduction)
+
+### Phase 4: Interpreter Performance Optimizations (2025-03-12)
+- **Stack → ArrayDeque**: Changed synchronized `java.util.Stack` to `ArrayDeque` in:
+  - `DynamicVariableManager.variableStack`
+  - `InterpreterState.evalCatchStack` and `regexStateStack`
+  - `InterpreterState.labeledBlockStack` (ArrayList for indexed access)
+- **usesLocalization flag**: Added to InterpretedCode
+  - BytecodeCompiler tracks when LOCAL_* or PUSH_LOCAL_VARIABLE opcodes are emitted
+  - BytecodeInterpreter skips `getLocalLevel()`/`popToLocalLevel()`/`RegexState.save()`
+    when the code doesn't use localization
+  - Reduces overhead for subroutines that don't use `local` variables
+- **Benchmark results** (simple closure without Benchmark.pm overhead):
+  - Interpreter: 357/s
+  - JVM backend: 1250/s (3.5x faster)
+- **Note**: Benchmark.pm itself uses `local $_` in the hot loop, masking the optimization benefit
