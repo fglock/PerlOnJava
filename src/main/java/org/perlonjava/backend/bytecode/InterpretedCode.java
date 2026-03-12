@@ -32,6 +32,10 @@ public class InterpretedCode extends RuntimeCode {
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<int[]> evalSitePragmaFlags; // Per-eval-site [strictOptions, featureFlags]
 
+    // Optimization flags (set by compiler after construction)
+    // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
+    public boolean usesLocalization = true;
+
     // Lexical pragma state (for eval STRING to inherit)
     public final int strictOptions;        // Strict flags at compile time
     public final int featureFlags;         // Feature flags at compile time

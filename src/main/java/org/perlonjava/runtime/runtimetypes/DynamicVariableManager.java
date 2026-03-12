@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.Stack;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /**
  * The DynamicVariableManager class is responsible for managing a stack of dynamic variables.
@@ -10,7 +11,8 @@ import java.util.Stack;
  */
 public class DynamicVariableManager {
     // A stack to hold the dynamic states of variables.
-    private static final Stack<DynamicState> variableStack = new Stack<>();
+    // Using ArrayDeque instead of Stack for better performance (no synchronization overhead).
+    private static final Deque<DynamicState> variableStack = new ArrayDeque<>();
 
     /**
      * Returns the current local level, which is the size of the variable stack.
@@ -31,27 +33,27 @@ public class DynamicVariableManager {
     public static RuntimeBase pushLocalVariable(RuntimeBase variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack.push(variable);
+        variableStack.addLast(variable);
         return variable;
     }
 
     public static RuntimeScalar pushLocalVariable(RuntimeScalar variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack.push(variable);
+        variableStack.addLast(variable);
         return variable;
     }
 
     public static RuntimeGlob pushLocalVariable(RuntimeGlob variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack.push(variable);
+        variableStack.addLast(variable);
         return variable;
     }
 
     public static void pushLocalVariable(DynamicState variable) {
         variable.dynamicSaveState();
-        variableStack.push(variable);
+        variableStack.addLast(variable);
     }
 
     /**
@@ -76,7 +78,7 @@ public class DynamicVariableManager {
 
         // Pop variables until the stack size matches the target local level
         while (variableStack.size() > targetLocalLevel) {
-            DynamicState variable = variableStack.pop();
+            DynamicState variable = variableStack.removeLast();
             try {
                 variable.dynamicRestoreState();
             } catch (Throwable t) {

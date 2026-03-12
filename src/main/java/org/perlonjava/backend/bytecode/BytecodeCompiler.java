@@ -100,6 +100,8 @@ public class BytecodeCompiler implements Visitor {
     private boolean isInDeferBlock;
     // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
     private int finallyBlockDepth;
+    // Tracks whether any LOCAL_* or PUSH_LOCAL_VARIABLE opcodes are emitted (for DynamicVariableManager optimization)
+    private boolean usesLocalization;
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
     private String[] capturedVarNames;            // Parallel array of names
@@ -585,7 +587,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Build InterpretedCode
-        return new InterpretedCode(
+        InterpretedCode code = new InterpretedCode(
                 toShortArray(),
                 constants.toArray(),
                 stringPool.toArray(new String[0]),
@@ -603,6 +605,10 @@ public class BytecodeCompiler implements Visitor {
                 evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags
         );
+        // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
+        // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
+        code.usesLocalization = this.usesLocalization;
+        return code;
     }
 
     /**
@@ -3993,6 +3999,12 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void emit(short opcode) {
+        // Track if any localization opcodes are emitted
+        if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
+                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
+                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL) {
+            usesLocalization = true;
+        }
         bytecode.add((int) opcode);
     }
 
@@ -4001,6 +4013,12 @@ public class BytecodeCompiler implements Visitor {
      * Use this for opcodes that may throw exceptions (DIE, method calls, etc.)
      */
     void emitWithToken(short opcode, int tokenIndex) {
+        // Track if any localization opcodes are emitted
+        if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
+                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
+                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL) {
+            usesLocalization = true;
+        }
         int pc = bytecode.size();
         pcToTokenIndex.put(pc, tokenIndex);
         bytecode.add((int) opcode);

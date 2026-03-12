@@ -58,10 +58,13 @@ public class InterpreterState {
      * @param code           The InterpretedCode being executed
      * @param packageName    The package context (e.g., "main")
      * @param subroutineName The subroutine name (or null for main code)
+     * @return The PC holder array for direct updates (avoids ThreadLocal lookups in hot loop)
      */
-    public static void push(InterpretedCode code, String packageName, String subroutineName) {
+    public static int[] push(InterpretedCode code, String packageName, String subroutineName) {
         frameStack.get().push(new InterpreterFrame(code, packageName, subroutineName));
-        pcStack.get().add(new int[]{0});  // Mutable holder for PC
+        int[] pcHolder = new int[]{0};  // Mutable holder for PC
+        pcStack.get().add(pcHolder);
+        return pcHolder;  // Return for direct updates in interpreter loop
     }
 
     /**
@@ -84,6 +87,28 @@ public class InterpreterState {
         ArrayList<int[]> pcs = pcStack.get();
         if (!pcs.isEmpty()) {
             pcs.getLast()[0] = pc;  // Direct mutation, no allocation
+        }
+    }
+
+    /**
+     * Push a new PC holder and return it for direct updates.
+     * This avoids repeated ThreadLocal.get() calls in the hot interpreter loop.
+     *
+     * @return The int[1] holder for direct PC updates, or null if push failed
+     */
+    public static int[] pushAndGetPcHolder() {
+        int[] holder = new int[]{0};
+        pcStack.get().add(holder);
+        return holder;
+    }
+
+    /**
+     * Pop the PC holder. Called when execution completes.
+     */
+    public static void popPcHolder() {
+        ArrayList<int[]> pcs = pcStack.get();
+        if (!pcs.isEmpty()) {
+            pcs.removeLast();
         }
     }
 

@@ -69,7 +69,8 @@ public class BytecodeInterpreter {
         // Track interpreter state for stack traces
         String framePackageName = code.packageName != null ? code.packageName : "main";
         String frameSubName = subroutineName != null ? subroutineName : (code.subName != null ? code.subName : "(eval)");
-        InterpreterState.push(code, framePackageName, frameSubName);
+        // Get PC holder for direct updates (avoids ThreadLocal lookups in hot loop)
+        int[] pcHolder = InterpreterState.push(code, framePackageName, frameSubName);
 
         // Pure register file (NOT stack-based - matches compiler for control flow correctness)
         RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
@@ -90,22 +91,29 @@ public class BytecodeInterpreter {
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
         // When exception occurs, pop from stack and jump to catch PC
-        java.util.Stack<Integer> evalCatchStack = new java.util.Stack<>();
+        // Use ArrayDeque instead of Stack for better performance (no synchronization)
+        java.util.ArrayDeque<Integer> evalCatchStack = new java.util.ArrayDeque<>();
 
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
-        java.util.Stack<int[]> labeledBlockStack = new java.util.Stack<>();
+        // Uses ArrayList for O(1) indexed access when searching for labels
+        java.util.ArrayList<int[]> labeledBlockStack = new java.util.ArrayList<>();
         // Each entry is [labelStringPoolIdx, exitPc]
 
-        java.util.Stack<RegexState> regexStateStack = new java.util.Stack<>();
+        java.util.ArrayDeque<RegexState> regexStateStack = new java.util.ArrayDeque<>();
 
+        // Optimization: only save/restore DynamicVariableManager state if the code uses localization.
+        // This avoids overhead for simple subroutines that don't use `local`.
+        boolean usesLocalization = code.usesLocalization;
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
-        int savedLocalLevel = DynamicVariableManager.getLocalLevel();
+        int savedLocalLevel = usesLocalization ? DynamicVariableManager.getLocalLevel() : 0;
         String savedPackage = InterpreterState.currentPackage.get().toString();
         InterpreterState.currentPackage.get().set(framePackageName);
-        RegexState.save();
+        if (usesLocalization) {
+            RegexState.save();
+        }
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
         // Outer try/finally — cleanup only, no catch.
@@ -125,7 +133,8 @@ public class BytecodeInterpreter {
                         // Update current PC for caller()/stack trace reporting.
                         // This allows ExceptionFormatter to map pc->tokenIndex->line using code.errorUtil,
                         // which also honors #line directives inside eval strings.
-                        InterpreterState.setCurrentPc(pc);
+                        // Uses cached pcHolder to avoid ThreadLocal lookups in hot loop.
+                        pcHolder[0] = pc;
                         int opcode = bytecode[pc++];
 
                         switch (opcode) {
@@ -853,7 +862,7 @@ public class BytecodeInterpreter {
                                         if (flow.matchesLabel(blockLabel)) {
                                             // Pop entries down to and including the match
                                             while (labeledBlockStack.size() > i) {
-                                                labeledBlockStack.pop();
+                                                labeledBlockStack.removeLast();
                                             }
                                             pc = entry[1]; // jump to block exit
                                             handled = true;
@@ -925,7 +934,7 @@ public class BytecodeInterpreter {
                                         String blockLabel = code.stringPool[entry[0]];
                                         if (flow.matchesLabel(blockLabel)) {
                                             while (labeledBlockStack.size() > i) {
-                                                labeledBlockStack.pop();
+                                                labeledBlockStack.removeLast();
                                             }
                                             pc = entry[1];
                                             handled = true;
@@ -1329,12 +1338,12 @@ public class BytecodeInterpreter {
                                 int labelIdx = bytecode[pc++];
                                 int exitPc = readInt(bytecode, pc);
                                 pc += 1;
-                                labeledBlockStack.push(new int[]{labelIdx, exitPc});
+                                labeledBlockStack.add(new int[]{labelIdx, exitPc});
                             }
 
                             case Opcodes.POP_LABELED_BLOCK -> {
                                 if (!labeledBlockStack.isEmpty()) {
-                                    labeledBlockStack.pop();
+                                    labeledBlockStack.removeLast();
                                 }
                             }
 
@@ -1811,7 +1820,9 @@ public class BytecodeInterpreter {
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.
-            DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            if (usesLocalization) {
+                DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            }
             InterpreterState.currentPackage.get().set(savedPackage);
             InterpreterState.pop();
         }
