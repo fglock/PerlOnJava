@@ -17,12 +17,14 @@ German Perl/Raku Workshop 2026 — Flavio Glock
 ## Compilation Approaches
 
 **Perl 5 (traditional):**
-- Builds OP tree → peephole optimizations → runs
+```
+Perl Source → Lexer → Parser → OP Tree → Optimizer → Execution
+```
 
 **PerlOnJava (dual backend):**
 ```
-Perl Source → Compiler → JVM Bytecode → JVM Execution
-                       ↘ Custom Bytecode → Internal VM
+Perl Source → Lexer → Parser → Syntax Tree → JVM Bytecode → JVM Execution
+                                             ↘ Custom Bytecode → Internal VM
 ```
 
 Shared frontend + shared runtime, two execution paths.
@@ -50,7 +52,7 @@ Perl limits identifiers to 251 code points; ICU4J handles code points rather tha
 
 ---
 
-## Parser: Building the AST
+## Parser: Building the Syntax Tree
 
 **Three-layer architecture:**
 
@@ -181,7 +183,7 @@ JVM bytecode is the primary path — but three problems need a second backend:
 The Internal VM solves all three.
 
 Note:
-This is a common VM design pattern: HotSpot, V8, SpiderMonkey, CRuby all use tiered execution for similar reasons.
+This is a common VM design pattern: HotSpot, V8, SpiderMonkey, CRuby all use multi-backend execution for similar reasons.
 
 ---
 
@@ -688,9 +690,9 @@ Workarounds: jnr-posix for native access, Java threading APIs, file auto-close a
 
 ## Perl Was Never Designed to Run on the JVM
 
-We made it work anyway — and made it run fast**.
+We made it work anyway — and made it **fast**.
 
-<span class="metric">200,000+ tests</span> · <span class="metric">392 files</span> · <span class="metric">5,741 commits</span>
+<span class="metric">~200,000 tests</span> · <span class="metric">392 files</span> · <span class="metric">5,741 commits</span>
 
 No formal spec exists. The tests **are** the specification.
 

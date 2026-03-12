@@ -223,11 +223,11 @@ PerlOnJava emits bytecode directly via the **ASM library** — no Java source in
 ## The Compilation Pipeline
 
 ```
-Perl Source → Compiler → JVM Bytecode → JVM Execution
-                       ↘ Custom Bytecode → Internal VM
+Perl Source → Lexer → Parser → Syntax Tree → JVM Bytecode → JVM Execution
+                                             ↘ Custom Bytecode → Internal VM
 ```
 
-**Five stages:** Lexer → Parser → StringParser → EmitterVisitor → ClassLoader
+**Five stages:** Lexer → Parser → AST → EmitterVisitor → ClassLoader
 
 ---
 
@@ -239,7 +239,7 @@ Perl Source → Compiler → JVM Bytecode → JVM Execution
 Both share **100% of the runtime**. User code doesn't know which backend is running.
 
 Note:
-The dual backend is a common VM design pattern. HotSpot, V8, SpiderMonkey, and CRuby all use tiered execution for similar reasons.
+The dual backend is a common VM design pattern. HotSpot, V8, SpiderMonkey, and CRuby all use multi-backend execution for similar reasons.
 
 ---
 
