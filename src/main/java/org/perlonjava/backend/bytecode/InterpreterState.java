@@ -61,10 +61,23 @@ public class InterpreterState {
      * @return The PC holder array for direct updates (avoids ThreadLocal lookups in hot loop)
      */
     public static int[] push(InterpretedCode code, String packageName, String subroutineName) {
-        frameStack.get().push(new InterpreterFrame(code, packageName, subroutineName));
+        // Use pre-created frame from InterpretedCode when possible
+        InterpreterFrame frame = code.getOrCreateFrame(packageName, subroutineName);
+        return pushFrame(frame);
+    }
+
+    /**
+     * Push a pre-created interpreter frame onto the stack.
+     * This avoids allocating a new InterpreterFrame on every call.
+     *
+     * @param frame The pre-created InterpreterFrame
+     * @return The PC holder array for direct updates
+     */
+    public static int[] pushFrame(InterpreterFrame frame) {
+        frameStack.get().push(frame);
         int[] pcHolder = new int[]{0};  // Mutable holder for PC
         pcStack.get().add(pcHolder);
-        return pcHolder;  // Return for direct updates in interpreter loop
+        return pcHolder;
     }
 
     /**

@@ -36,6 +36,10 @@ public class InterpretedCode extends RuntimeCode {
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
 
+    // Pre-created InterpreterFrame to avoid allocation on every call
+    // Created lazily on first use (after packageName/subName are set)
+    public volatile InterpreterState.InterpreterFrame cachedFrame;
+
     // Lexical pragma state (for eval STRING to inherit)
     public final int strictOptions;        // Strict flags at compile time
     public final int featureFlags;         // Feature flags at compile time
@@ -151,6 +155,31 @@ public class InterpretedCode extends RuntimeCode {
      */
     static int readInt(int[] bytecode, int pc) {
         return bytecode[pc];
+    }
+
+    /**
+     * Get or create the cached InterpreterFrame for this code.
+     * Uses double-checked locking for thread safety with minimal overhead.
+     *
+     * @param packageName    The package name (usually from this.packageName)
+     * @param subroutineName The subroutine name (usually from this.subName)
+     * @return The cached frame if names match, or a new frame if they don't
+     */
+    public InterpreterState.InterpreterFrame getOrCreateFrame(String packageName, String subroutineName) {
+        InterpreterState.InterpreterFrame frame = cachedFrame;
+        if (frame != null && frame.packageName().equals(packageName) && 
+            java.util.Objects.equals(frame.subroutineName(), subroutineName)) {
+            return frame;
+        }
+        // Create new frame (either first time, or names don't match)
+        frame = new InterpreterState.InterpreterFrame(this, packageName, subroutineName);
+        // Cache it if this is the "normal" case (using code's own names)
+        String defaultPkg = this.packageName != null ? this.packageName : "main";
+        String defaultSub = this.subName != null ? this.subName : "(eval)";
+        if (packageName.equals(defaultPkg) && java.util.Objects.equals(subroutineName, defaultSub)) {
+            cachedFrame = frame;
+        }
+        return frame;
     }
 
     /**
