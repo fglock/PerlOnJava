@@ -1741,6 +1741,152 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = targetReg;
     }
 
+    // =========================================================================
+    // SUPEROPERATOR HELPERS
+    // These methods centralize the logic for emitting superoperators vs
+    // regular instruction sequences. Called from both BytecodeCompiler and
+    // CompileBinaryOperator to handle all code paths consistently.
+    // =========================================================================
+
+    /**
+     * Emit hash dereference + element access, using HASH_DEREF_FETCH superoperator when possible.
+     * Handles: $hashref->{key} or expr{key} patterns
+     *
+     * @param baseReg   Register containing the hashref
+     * @param keyExpr   The key expression node
+     * @param tokenIndex Token index for error reporting
+     * @return The result register containing the hash element
+     */
+    int emitHashDerefGet(int baseReg, Node keyExpr, int tokenIndex) {
+        // Try to use superoperator for constant string keys
+        String constantKey = getConstantStringKey(keyExpr);
+        if (constantKey != null) {
+            // SUPEROPERATOR: Constant key - use HASH_DEREF_FETCH
+            int keyIdx = addToStringPool(constantKey);
+            int rd = allocateOutputRegister();
+            emit(Opcodes.HASH_DEREF_FETCH);
+            emitReg(rd);
+            emitReg(baseReg);
+            emit(keyIdx);
+            return rd;
+        }
+
+        // General case: compile key, dereference, then get
+        int keyReg;
+        if (keyExpr instanceof IdentifierNode) {
+            // Bareword key - autoquote it
+            String keyString = ((IdentifierNode) keyExpr).name;
+            keyReg = allocateRegister();
+            int keyIdx = addToStringPool(keyString);
+            emit(Opcodes.LOAD_STRING);
+            emitReg(keyReg);
+            emit(keyIdx);
+        } else {
+            compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
+            keyReg = lastResultReg;
+        }
+
+        int hashReg = allocateRegister();
+        if (isStrictRefsEnabled()) {
+            emitWithToken(Opcodes.DEREF_HASH, tokenIndex);
+            emitReg(hashReg);
+            emitReg(baseReg);
+        } else {
+            int pkgIdx = addToStringPool(getCurrentPackage());
+            emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, tokenIndex);
+            emitReg(hashReg);
+            emitReg(baseReg);
+            emit(pkgIdx);
+        }
+
+        int rd = allocateOutputRegister();
+        emit(Opcodes.HASH_GET);
+        emitReg(rd);
+        emitReg(hashReg);
+        emitReg(keyReg);
+        return rd;
+    }
+
+    /**
+     * Emit array dereference + element access, using ARRAY_DEREF_FETCH superoperator when possible.
+     * Handles: $arrayref->[n] or expr[n] patterns
+     *
+     * @param baseReg    Register containing the arrayref
+     * @param indexExpr  The index expression node
+     * @param tokenIndex Token index for error reporting
+     * @return The result register containing the array element
+     */
+    int emitArrayDerefGet(int baseReg, Node indexExpr, int tokenIndex) {
+        // Try to use superoperator for integer literal indices
+        Integer constantIndex = getConstantIntegerIndex(indexExpr);
+        if (constantIndex != null) {
+            // SUPEROPERATOR: Integer literal - use ARRAY_DEREF_FETCH
+            int rd = allocateOutputRegister();
+            emit(Opcodes.ARRAY_DEREF_FETCH);
+            emitReg(rd);
+            emitReg(baseReg);
+            emitInt(constantIndex);
+            return rd;
+        }
+
+        // General case: compile index, dereference, then get
+        compileNode(indexExpr, -1, RuntimeContextType.SCALAR);
+        int indexReg = lastResultReg;
+
+        int arrayReg = allocateRegister();
+        if (isStrictRefsEnabled()) {
+            emitWithToken(Opcodes.DEREF_ARRAY, tokenIndex);
+            emitReg(arrayReg);
+            emitReg(baseReg);
+        } else {
+            int pkgIdx = addToStringPool(getCurrentPackage());
+            emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, tokenIndex);
+            emitReg(arrayReg);
+            emitReg(baseReg);
+            emit(pkgIdx);
+        }
+
+        int rd = allocateOutputRegister();
+        emit(Opcodes.ARRAY_GET);
+        emitReg(rd);
+        emitReg(arrayReg);
+        emitReg(indexReg);
+        return rd;
+    }
+
+    /**
+     * Extract a constant string key from a key expression node.
+     * Returns the string value for IdentifierNode (bareword) or StringNode,
+     * null otherwise.
+     */
+    private String getConstantStringKey(Node keyExpr) {
+        if (keyExpr instanceof IdentifierNode idNode) {
+            return idNode.name;
+        } else if (keyExpr instanceof StringNode strNode) {
+            return strNode.value;
+        }
+        return null;
+    }
+
+    /**
+     * Extract a constant integer index from an index expression node.
+     * Returns the integer value for NumberNode with valid integer,
+     * null otherwise.
+     */
+    private Integer getConstantIntegerIndex(Node indexExpr) {
+        if (indexExpr instanceof NumberNode numNode) {
+            String value = numNode.value.replace("_", "");
+            try {
+                if (ScalarUtils.isInteger(value)) {
+                    return Integer.parseInt(value);
+                }
+            } catch (NumberFormatException e) {
+                // Not a valid integer
+            }
+        }
+        return null;
+    }
+
     /**
      * Handle general array access: expr[index]
      * Example: $matrix[1][0] where $matrix[1] returns an arrayref
@@ -1762,66 +1908,9 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Handle single element access
+        // Handle single element access using helper
         if (indexNode.elements.size() == 1) {
-            Node indexExpr = indexNode.elements.get(0);
-
-            // Check if we can use the ARRAY_DEREF_FETCH superoperator
-            // Conditions: index is a small integer literal and strict refs is enabled
-            if (indexExpr instanceof NumberNode numNode && isStrictRefsEnabled()) {
-                String value = numNode.value.replace("_", "");
-                try {
-                    // Check if it's a small integer (fits in 16-bit)
-                    if (ScalarUtils.isInteger(value)) {
-                        int intValue = Integer.parseInt(value);
-                        // SUPEROPERATOR: Integer literal index with strict refs - use ARRAY_DEREF_FETCH
-                        // This combines DEREF_ARRAY + LOAD_INT + ARRAY_GET into one opcode
-                        int rd = allocateOutputRegister();
-                        emit(Opcodes.ARRAY_DEREF_FETCH);
-                        emitReg(rd);
-                        emitReg(baseReg);
-                        emitInt(intValue);
-
-                        lastResultReg = rd;
-                        return;
-                    }
-                } catch (NumberFormatException e) {
-                    // Fall through to general case
-                }
-            }
-
-            // General case: Compile index in SCALAR context to ensure RuntimeScalar
-            compileNode(indexExpr, -1, RuntimeContextType.SCALAR);
-            int indexReg = lastResultReg;
-
-            // The base might be either:
-            // 1. A RuntimeArray (from $array which was an array variable)
-            // 2. A RuntimeScalar containing an arrayref (from $matrix[1])
-            // We need to handle both cases. The ARRAY_GET opcode should handle
-            // dereferencing if needed, or we can use a deref+get sequence.
-
-            // For now, let's assume it's a scalar with arrayref and dereference it first
-            int arrayReg = allocateRegister();
-            if (isStrictRefsEnabled()) {
-                emit(Opcodes.DEREF_ARRAY);
-                emitReg(arrayReg);
-                emitReg(baseReg);
-            } else {
-                int pkgIdx = addToStringPool(getCurrentPackage());
-                emit(Opcodes.DEREF_ARRAY_NONSTRICT);
-                emitReg(arrayReg);
-                emitReg(baseReg);
-                emit(pkgIdx);
-            }
-
-            // Now get the element
-            int rd = allocateOutputRegister();
-            emit(Opcodes.ARRAY_GET);
-            emitReg(rd);
-            emitReg(arrayReg);
-            emitReg(indexReg);
-
-            lastResultReg = rd;
+            lastResultReg = emitArrayDerefGet(baseReg, indexNode.elements.get(0), node.getIndex());
         } else {
             throwCompilerException("Multi-element array access not yet implemented");
         }
@@ -1877,76 +1966,9 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(keyReg);
 
                 lastResultReg = rd;
-            } else if (keyExpr instanceof IdentifierNode && isStrictRefsEnabled()) {
-                // SUPEROPERATOR: Bareword key with strict refs - use HASH_DEREF_FETCH
-                // This combines DEREF_HASH + LOAD_STRING + HASH_GET into one opcode
-                String keyString = ((IdentifierNode) keyExpr).name;
-                int keyIdx = addToStringPool(keyString);
-
-                int rd = allocateOutputRegister();
-                emit(Opcodes.HASH_DEREF_FETCH);
-                emitReg(rd);
-                emitReg(baseReg);
-                emit(keyIdx);
-
-                lastResultReg = rd;
-            } else if (keyExpr instanceof StringNode && isStrictRefsEnabled()) {
-                // SUPEROPERATOR: String literal key with strict refs - use HASH_DEREF_FETCH
-                // This combines DEREF_HASH + LOAD_STRING + HASH_GET into one opcode
-                String keyString = ((StringNode) keyExpr).value;
-                int keyIdx = addToStringPool(keyString);
-
-                int rd = allocateOutputRegister();
-                emit(Opcodes.HASH_DEREF_FETCH);
-                emitReg(rd);
-                emitReg(baseReg);
-                emit(keyIdx);
-
-                lastResultReg = rd;
             } else {
-                // General case: compile the key and use separate opcodes
-                int keyReg;
-                if (keyExpr instanceof IdentifierNode) {
-                    // Bareword key - autoquote it (non-strict refs case)
-                    String keyString = ((IdentifierNode) keyExpr).name;
-                    keyReg = allocateRegister();
-                    int keyIdx = addToStringPool(keyString);
-                    emit(Opcodes.LOAD_STRING);
-                    emitReg(keyReg);
-                    emit(keyIdx);
-                } else {
-                    // Expression key - compile it in SCALAR context to ensure RuntimeScalar
-                    compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
-                    keyReg = lastResultReg;
-                }
-
-                // Normal hash access: dereference first, then get element
-                // The base might be either:
-                // 1. A RuntimeHash (from %hash which was a hash variable)
-                // 2. A RuntimeScalar containing a hashref (from $hash{outer})
-                // We need to handle both cases. Dereference if needed.
-
-                int hashReg = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emit(Opcodes.DEREF_HASH);
-                    emitReg(hashReg);
-                    emitReg(baseReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emit(Opcodes.DEREF_HASH_NONSTRICT);
-                    emitReg(hashReg);
-                    emitReg(baseReg);
-                    emit(pkgIdx);
-                }
-
-                // Now get the element
-                int rd = allocateOutputRegister();
-                emit(Opcodes.HASH_GET);
-                emitReg(rd);
-                emitReg(hashReg);
-                emitReg(keyReg);
-
-                lastResultReg = rd;
+                // Use helper for normal hash access (handles superoperator + fallback)
+                lastResultReg = emitHashDerefGet(baseReg, keyExpr, node.getIndex());
             }
         } else {
             throwCompilerException("Multi-element hash access not yet implemented");
