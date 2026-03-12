@@ -1,5 +1,14 @@
 package Socket;
 
+#
+# Original Socket module maintained in Perl core by the Perl 5 Porters.
+# It was extracted to dual-life on CPAN at version 1.95 by
+# Paul Evans <leonerd@leonerd.org.uk>
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The implementation is in: src/main/java/org/perlonjava/perlmodule/Socket.java
+#
+
 use Exporter "import";
 use warnings;
 use strict;
@@ -109,5 +118,13 @@ Creates a packed socket address structure for IPv4.
 This is a simplified implementation for PerlOnJava. It provides basic
 functionality to support socket operations but may not include all
 features of the standard Perl Socket module.
+
+=head1 AUTHOR
+
+Original module maintained in Perl core by the Perl 5 Porters.
+It was extracted to dual-life on CPAN at version 1.95 by
+Paul Evans <leonerd@leonerd.org.uk>
+
+PerlOnJava implementation by Flavio S. Glock.
 
 =cut

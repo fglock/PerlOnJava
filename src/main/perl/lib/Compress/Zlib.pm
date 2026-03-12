@@ -1,4 +1,16 @@
 package Compress::Zlib;
+
+#
+# Original Compress::Zlib module by Paul Marquess <pmqs@cpan.org>
+# Copyright (c) 1995-2025 Paul Marquess. All rights reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the same terms as Perl itself.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The implementation is in: src/main/java/org/perlonjava/perlmodule/CompressZlib.java
+#
+
 use strict;
 use warnings;
 

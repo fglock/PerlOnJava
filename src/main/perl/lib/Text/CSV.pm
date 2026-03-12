@@ -1,4 +1,13 @@
 package Text::CSV;
+
+#
+# Original Text::CSV module by ISHIGAKI (Kenichi Ishigaki)
+# A comma-separated values manipulator
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The implementation is in: src/main/java/org/perlonjava/perlmodule/TextCsv.java
+#
+
 use strict;
 use warnings;
 

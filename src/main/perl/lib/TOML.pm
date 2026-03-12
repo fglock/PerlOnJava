@@ -1,5 +1,15 @@
 package TOML;
 
+#
+# Original TOML module by KARUPA (Masayuki Matsuki)
+# This module is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; version 2.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The implementation is in: src/main/java/org/perlonjava/perlmodule/Toml.java
+#
+
 use Exporter "import";
 use warnings;
 use strict;
@@ -63,5 +73,17 @@ string.
 =head1 SEE ALSO
 
 L<https://github.com/toml-lang/toml>
+
+=head1 AUTHOR
+
+Original module by KARUPA (Masayuki Matsuki).
+
+PerlOnJava implementation by Flavio S. Glock.
+
+=head1 LICENSE
+
+This module is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; version 2.
 
 =cut

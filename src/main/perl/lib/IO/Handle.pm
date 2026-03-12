@@ -1,5 +1,12 @@
 package IO::Handle;
 
+#
+# Original IO::Handle module is part of the Perl core, maintained by the Perl 5 Porters.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The XS implementation is in: src/main/java/org/perlonjava/perlmodule/IOHandle.java
+#
+
 use strict;
 use warnings;
 use Carp;

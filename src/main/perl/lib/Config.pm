@@ -1,4 +1,15 @@
 package Config;
+
+#
+# Config.pm - PerlOnJava configuration module
+#
+# This module provides access to configuration values for the PerlOnJava runtime.
+# It is designed to be compatible with Perl's Config module but provides
+# values specific to the Java environment.
+#
+# Author: Flavio S. Glock
+#
+
 use strict;
 use warnings;
 use Java::System qw(getProperty getenv);

@@ -1,5 +1,11 @@
 package IO;
 
+#
+# Original IO module is part of the Perl core, maintained by the Perl 5 Porters.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+#
+
 use strict;
 use warnings;
 

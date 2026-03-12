@@ -1,5 +1,16 @@
 package File::Temp;
 
+#
+# Original File::Temp module by Tim Jenness <tjenness@cpan.org>
+# Copyright (c) 2025 by Tim Jenness and the UK Particle Physics and
+# Astronomy Research Council.
+#
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+#
+
 use strict;
 use warnings;
 use Carp;

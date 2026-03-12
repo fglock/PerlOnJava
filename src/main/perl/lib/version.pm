@@ -1,6 +1,14 @@
 #!perl -w
 package version;
 
+#
+# Original version module by John Peacock <jpeacock@cpan.org>
+# Part of the Perl core distribution.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The XS implementation is in: src/main/java/org/perlonjava/perlmodule/Version.java
+#
+
 use 5.006002;
 use strict;
 use warnings::register;

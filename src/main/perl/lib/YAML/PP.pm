@@ -1,5 +1,13 @@
 package YAML::PP;
 
+#
+# Original YAML::PP module by TINITA (Tina Mueller)
+# A YAML 1.2 processor
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The implementation is in: src/main/java/org/perlonjava/perlmodule/YAMLPP.java
+#
+
 use Exporter "import";
 use warnings;
 use strict;

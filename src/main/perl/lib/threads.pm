@@ -1,8 +1,12 @@
 package threads;
 
-# Stub implementation - threads are not actually supported in PerlOnJava
-# This provides minimal API so test harness can detect lack of thread support
-# and fall back to alarm() for watchdog functionality
+#
+# Original threads module is part of the Perl core, maintained by the Perl 5 Porters.
+#
+# PerlOnJava stub implementation by Flavio S. Glock.
+# Threads are not actually supported in PerlOnJava; this provides a minimal API
+# so test harness can detect lack of thread support and fall back to alarm().
+#
 
 # tid() is needed by t/loc_tools.pl
 sub tid {

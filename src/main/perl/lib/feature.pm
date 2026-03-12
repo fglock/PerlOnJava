@@ -1,4 +1,12 @@
 package feature;
+
+#
+# Original feature pragma is part of the Perl core, maintained by the Perl 5 Porters.
+#
+# PerlOnJava implementation by Flavio S. Glock.
+# The XS implementation is in: src/main/java/org/perlonjava/perlmodule/Feature.java
+#
+
 our $VERSION = '1.99';
 
 # Load the Java implementation first

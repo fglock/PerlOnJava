@@ -1,5 +1,15 @@
 package B;
 
+#      B.pm
+#
+#      Original Copyright (c) 1996, 1997, 1998 Malcolm Beattie
+#
+#      You may distribute under the terms of either the GNU General Public
+#      License or the Artistic License, as specified in the README file.
+#
+#      This is a minimal stub implementation for PerlOnJava.
+#      PerlOnJava implementation by Flavio S. Glock.
+#
 # Minimal B module for PerlOnJava
 # Provides basic functionality for Test2
 
@@ -200,6 +210,19 @@ that can work with limited B functionality.
 - Cannot determine actual package names
 - CV flags are generic
 - File locations are not tracked
+
+=head1 AUTHOR
+
+Original B module by Malcolm Beattie, C<mbeattie@sable.ox.ac.uk>
+
+PerlOnJava implementation by Flavio S. Glock.
+
+=head1 COPYRIGHT
+
+Original Copyright (c) 1996, 1997, 1998 Malcolm Beattie
+
+You may distribute under the terms of either the GNU General Public
+License or the Artistic License, as specified in the README file.
 
 =cut
 
