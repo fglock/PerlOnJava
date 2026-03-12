@@ -412,3 +412,16 @@ grep -E '^\s+[0-9]+:' bytecode.txt | sed 's/^[^:]*: //' | \
 - Refactored CompileBinaryOperator.java `->` operator handling to use helpers
 - **Result**: Superoperators now work for both `$h->{a}{b}` (implicit arrows) and `$h->{a}->{b}` (explicit arrows)
 - Code duplication reduced across 3 call sites
+
+### Phase 3.2: Bug Fix - RuntimeList Handling (2025-03-12)
+- **Bug**: Superoperators in `handleGeneralArrayAccess()` and `handleGeneralHashAccess()` 
+  caused `(caller)[0]` and similar expressions to fail with:
+  `Can't use string ("...") as an ARRAY ref while "strict refs" in use`
+- **Root cause**: Superoperators (`ARRAY_DEREF_FETCH`, `HASH_DEREF_FETCH`) expect a scalar
+  containing a reference, but these handlers can receive a RuntimeList (e.g., from `(caller)`)
+- **Fix**: Reverted `handleGeneralArrayAccess()` and `handleGeneralHashAccess()` to use 
+  the original DEREF_ARRAY/HASH + ARRAY/HASH_GET instruction sequence, which correctly
+  handles all input types (RuntimeArray, RuntimeList, RuntimeScalar with reference)
+- **Superoperators remain in**: CompileBinaryOperator.java `->` operator handler, where
+  the left side is always compiled in SCALAR context and thus guaranteed to be a scalar reference
+- This fix resolves the Getopt::Long / life_bitpacked.pl regression
