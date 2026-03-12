@@ -1619,6 +1619,104 @@ public class BytecodeInterpreter {
                                 DebugHooks.debug(file, line, code, registers, siteIndex);
                             }
 
+                            // =================================================================
+                            // SUPEROPERATORS - Combined instruction sequences for performance
+                            // =================================================================
+
+                            case Opcodes.HASH_DEREF_FETCH -> {
+                                // Combined: DEREF_HASH + LOAD_STRING + HASH_GET
+                                // Format: HASH_DEREF_FETCH rd hashref_reg key_string_idx
+                                // Equivalent to: $hashref->{key}
+                                int rd = bytecode[pc++];
+                                int hashrefReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+
+                                RuntimeBase hashrefBase = registers[hashrefReg];
+
+                                // Dereference to get the hash
+                                RuntimeHash hash;
+                                if (hashrefBase instanceof RuntimeHash) {
+                                    hash = (RuntimeHash) hashrefBase;
+                                } else {
+                                    hash = hashrefBase.scalar().hashDeref();
+                                }
+
+                                // Get the element using string key from pool
+                                String key = code.stringPool[keyIdx];
+                                registers[rd] = hash.get(key);
+                            }
+
+                            case Opcodes.ARRAY_DEREF_FETCH -> {
+                                // Combined: DEREF_ARRAY + LOAD_INT + ARRAY_GET
+                                // Format: ARRAY_DEREF_FETCH rd arrayref_reg index_immediate
+                                // Equivalent to: $arrayref->[n]
+                                int rd = bytecode[pc++];
+                                int arrayrefReg = bytecode[pc++];
+                                int index = readInt(bytecode, pc);
+                                pc += 1;
+
+                                RuntimeBase arrayrefBase = registers[arrayrefReg];
+
+                                // Dereference to get the array
+                                RuntimeArray array;
+                                if (arrayrefBase instanceof RuntimeArray) {
+                                    array = (RuntimeArray) arrayrefBase;
+                                } else {
+                                    array = arrayrefBase.scalar().arrayDeref();
+                                }
+
+                                // Get the element at index
+                                registers[rd] = array.get(index);
+                            }
+
+                            case Opcodes.HASH_DEREF_FETCH_NONSTRICT -> {
+                                // Combined: DEREF_HASH_NONSTRICT + LOAD_STRING + HASH_GET
+                                // Format: HASH_DEREF_FETCH_NONSTRICT rd hashref_reg key_string_idx pkg_string_idx
+                                // Equivalent to: $hashref->{key} without strict refs
+                                int rd = bytecode[pc++];
+                                int hashrefReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+                                int pkgIdx = bytecode[pc++];
+
+                                RuntimeBase hashrefBase = registers[hashrefReg];
+
+                                // Dereference to get the hash (non-strict allows symbolic refs)
+                                RuntimeHash hash;
+                                if (hashrefBase instanceof RuntimeHash) {
+                                    hash = (RuntimeHash) hashrefBase;
+                                } else {
+                                    hash = hashrefBase.scalar().hashDerefNonStrict(code.stringPool[pkgIdx]);
+                                }
+
+                                // Get the element using string key from pool
+                                String key = code.stringPool[keyIdx];
+                                registers[rd] = hash.get(key);
+                            }
+
+                            case Opcodes.ARRAY_DEREF_FETCH_NONSTRICT -> {
+                                // Combined: DEREF_ARRAY_NONSTRICT + LOAD_INT + ARRAY_GET
+                                // Format: ARRAY_DEREF_FETCH_NONSTRICT rd arrayref_reg index_immediate pkg_string_idx
+                                // Equivalent to: $arrayref->[n] without strict refs
+                                int rd = bytecode[pc++];
+                                int arrayrefReg = bytecode[pc++];
+                                int index = readInt(bytecode, pc);
+                                pc += 1;
+                                int pkgIdx = bytecode[pc++];
+
+                                RuntimeBase arrayrefBase = registers[arrayrefReg];
+
+                                // Dereference to get the array (non-strict allows symbolic refs)
+                                RuntimeArray array;
+                                if (arrayrefBase instanceof RuntimeArray) {
+                                    array = (RuntimeArray) arrayrefBase;
+                                } else {
+                                    array = arrayrefBase.scalar().arrayDerefNonStrict(code.stringPool[pkgIdx]);
+                                }
+
+                                // Get the element at index
+                                registers[rd] = array.get(index);
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(

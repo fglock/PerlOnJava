@@ -134,37 +134,13 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int scalarRefReg = bytecodeCompiler.lastResultReg;
 
-                int hashReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
-                bytecodeCompiler.emitReg(hashReg);
-                bytecodeCompiler.emitReg(scalarRefReg);
-
                 if (keyNode.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("Hash dereference requires key");
                 }
 
-                int keyReg;
-                Node keyElement = keyNode.elements.get(0);
-                if (keyElement instanceof IdentifierNode) {
-                    String keyString = ((IdentifierNode) keyElement).name;
-                    keyReg = bytecodeCompiler.allocateRegister();
-                    int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                    bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                    bytecodeCompiler.emitReg(keyReg);
-                    bytecodeCompiler.emit(keyIdx);
-                } else {
-                    bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
-                    keyReg = bytecodeCompiler.lastResultReg;
-                }
-
-                // Access hash element
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.HASH_GET);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(hashReg);
-                bytecodeCompiler.emitReg(keyReg);
-
-                bytecodeCompiler.lastResultReg = rd;
+                // Use helper for hash deref get (handles superoperator + fallback)
+                bytecodeCompiler.lastResultReg = bytecodeCompiler.emitHashDerefGet(
+                        scalarRefReg, keyNode.elements.get(0), node.getIndex());
                 return;
             } else if (node.right instanceof ArrayLiteralNode indexNode) {
                 // Arrayref dereference: $ref->[index]
@@ -174,26 +150,13 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int scalarRefReg = bytecodeCompiler.lastResultReg;
 
-                int arrayReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(scalarRefReg);
-
                 if (indexNode.elements.isEmpty()) {
                     bytecodeCompiler.throwCompilerException("Array dereference requires index");
                 }
 
-                bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
-                int indexReg = bytecodeCompiler.lastResultReg;
-
-                // Access array element
-                int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.ARRAY_GET);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(arrayReg);
-                bytecodeCompiler.emitReg(indexReg);
-
-                bytecodeCompiler.lastResultReg = rd;
+                // Use helper for array deref get (handles superoperator + fallback)
+                bytecodeCompiler.lastResultReg = bytecodeCompiler.emitArrayDerefGet(
+                        scalarRefReg, indexNode.elements.get(0), node.getIndex());
                 return;
             }
             // Code reference call: $code->() or $code->(@args)
@@ -315,6 +278,17 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.handleArrayElementAccess(node, leftOp);
                     return;
                 }
+            }
+
+            // Handle ListNode case: (expr)[index] like (caller)[0]
+            // Transform to [expr]->[index] like JVM does
+            if (node.left instanceof ListNode listNode) {
+                // Create: ArrayLiteralNode containing the list elements
+                // Then: BinaryOperatorNode("->", arrayLiteral, node.right)
+                ArrayLiteralNode arrayLiteral = new ArrayLiteralNode(listNode.elements, listNode.getIndex());
+                BinaryOperatorNode arrowNode = new BinaryOperatorNode("->", arrayLiteral, node.right, node.getIndex());
+                arrowNode.accept(bytecodeCompiler);
+                return;
             }
 
             // Handle general case: expr[index]
