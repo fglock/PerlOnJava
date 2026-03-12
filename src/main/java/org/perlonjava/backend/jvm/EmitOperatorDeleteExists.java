@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -43,7 +45,7 @@ public class EmitOperatorDeleteExists {
             if (operand.elements.size() == 1) {
                 if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
                     if ((operator.equals("exists") || operator.equals("defined")) && operatorNode.operator.equals("&")) {
-                        emitterVisitor.ctx.logDebug(operator + " & " + operatorNode.operand);
+                        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug(operator + " & " + operatorNode.operand);
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                             // exists/defined &sub
                             handleExistsSubroutine(emitterVisitor, operator, identifierNode);
@@ -191,7 +193,7 @@ public class EmitOperatorDeleteExists {
             if (operand.elements.size() == 1) {
                 if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
                     if (operator.equals("defined") && operatorNode.operator.equals("&")) {
-                        emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
+                        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                             // exists &sub
                             handleExistsSubroutine(emitterVisitor, operator, identifierNode);

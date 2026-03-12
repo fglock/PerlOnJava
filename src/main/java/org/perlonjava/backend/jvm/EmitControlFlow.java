@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -32,7 +34,7 @@ public class EmitControlFlow {
      * @throws PerlCompilerException if the operator is used outside a loop block
      */
     static void handleNextOperator(EmitterContext ctx, OperatorNode node) {
-        ctx.logDebug("visit(next)");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next)");
 
         String operator = node.operator;
         
@@ -73,7 +75,7 @@ public class EmitControlFlow {
         } else {
             loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
         }
-        ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
 
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
         if (loopLabels != null && !loopLabels.isTrueLoop) {
@@ -84,7 +86,7 @@ public class EmitControlFlow {
 
         if (loopLabels == null) {
             // Non-local control flow: return tagged RuntimeControlFlowList
-            ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
 
             // Determine control flow type
             ControlFlowType type = operator.equals("next") ? ControlFlowType.NEXT
@@ -158,8 +160,8 @@ public class EmitControlFlow {
                     ctx.errorUtil);
         }
 
-        ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
-        ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
 
         boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
 
@@ -193,7 +195,7 @@ public class EmitControlFlow {
     static void handleGotoSubroutine(EmitterVisitor emitterVisitor, OperatorNode subNode, Node argsNode) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
 
         subNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         int codeRefSlot = ctx.javaClassInfo.acquireSpillSlot();
@@ -263,7 +265,7 @@ public class EmitControlFlow {
     static void handleGotoSubroutineBlock(EmitterVisitor emitterVisitor, BlockNode blockNode, Node argsNode, int tokenIndex) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        ctx.logDebug("visit(goto &{expr}): Emitting TAILCALL marker");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto &{expr}): Emitting TAILCALL marker");
 
         // Evaluate the block to get the subroutine name/reference
         blockNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -371,14 +373,14 @@ public class EmitControlFlow {
                 if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
                     Node callTarget = callNode.left;
                     if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
-                        ctx.logDebug("visit(goto): Detected goto &NAME tail call");
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto &NAME tail call");
                         handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
                         return;
                     }
                     // Handle goto &{expr} - symbolic code dereference
                     // BlockNode contains an expression that evaluates to a subroutine name
                     if (callTarget instanceof BlockNode blockNode) {
-                        ctx.logDebug("visit(goto): Detected goto &{expr} tail call");
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto &{expr} tail call");
                         handleGotoSubroutineBlock(emitterVisitor, blockNode, callNode.right, node.tokenIndex);
                         return;
                     }
@@ -387,7 +389,7 @@ public class EmitControlFlow {
                 // Check if this is a tail call (goto EXPR where EXPR is a coderef)
                 // This handles: goto __SUB__, goto $coderef, etc.
                 if (arg instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
-                    ctx.logDebug("visit(goto): Detected goto __SUB__ tail call");
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto __SUB__ tail call");
                     // Create a ListNode with @_ as the argument
                     ListNode argsNode = new ListNode(opNode.tokenIndex);
                     OperatorNode atUnderscore = new OperatorNode("@",
@@ -399,7 +401,7 @@ public class EmitControlFlow {
 
                 // Dynamic label (goto EXPR) - expression evaluated at runtime
                 isDynamic = true;
-                ctx.logDebug("visit(goto): Dynamic goto with expression");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Dynamic goto with expression");
 
                 // Evaluate the expression to get the label name at runtime
                 arg.accept(emitterVisitor.with(RuntimeContextType.SCALAR));

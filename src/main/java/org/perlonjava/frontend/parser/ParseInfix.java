@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -311,7 +313,7 @@ public class ParseInfix {
                         } else {
                             // Method call with ->method or ->method()
                             right = SubroutineParser.parseSubroutineCall(parser, true);
-                            parser.ctx.logDebug("method call -> " + right);
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("method call -> " + right);
                         }
                         parser.parsingForLoopVariable = false;
 
@@ -387,7 +389,7 @@ public class ParseInfix {
     }
 
     static List<Node> parseHashSubscript(Parser parser) {
-        parser.ctx.logDebug("parseHashSubscript start");
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseHashSubscript start");
         int currentIndex = parser.tokenIndex;
 
         LexerToken ident = TokenUtils.consume(parser);

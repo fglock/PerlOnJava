@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -152,7 +154,7 @@ public class Variable {
         int startIndex = parser.tokenIndex;
 
         String varName = IdentifierParser.parseComplexIdentifier(parser, sigil.equals("*"));
-        parser.ctx.logDebug("Parsing variable: " + varName);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Parsing variable: " + varName);
 
         if (varName != null) {
             if (varName.isEmpty()) {
@@ -291,7 +293,7 @@ public class Variable {
                         if (operand == null) {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing bracket", parser.ctx.errorUtil);
                         }
-                        parser.ctx.logDebug("str operand " + operand);
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("str operand " + operand);
                     }
                     case "{" -> {
                         // Hash access
@@ -299,7 +301,7 @@ public class Variable {
                         if (operand == null) {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing brace", parser.ctx.errorUtil);
                         }
-                        parser.ctx.logDebug("str operand " + operand);
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("str operand " + operand);
                     }
                     case "->" -> {
                         // Method call or dereference
@@ -315,7 +317,7 @@ public class Variable {
                                     if (operand == null) {
                                         throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated dereference", parser.ctx.errorUtil);
                                     }
-                                    parser.ctx.logDebug("str operand " + operand);
+                                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("str operand " + operand);
                                 }
                                 default -> {
                                     // Not a dereference we can handle
@@ -412,7 +414,7 @@ public class Variable {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing bracket", parser.ctx.errorUtil);
                         }
                         operand = result;
-                        parser.ctx.logDebug("str operand " + operand);
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("str operand " + operand);
                     }
                     case "{" -> {
                         // Hash access
@@ -429,7 +431,7 @@ public class Variable {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing brace", parser.ctx.errorUtil);
                         }
                         operand = result;
-                        parser.ctx.logDebug("str operand " + operand);
+                        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("str operand " + operand);
                     }
                     case "->" -> {
                         // Method call or dereference
@@ -446,7 +448,7 @@ public class Variable {
                                         throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated dereference", parser.ctx.errorUtil);
                                     }
                                     operand = result;
-                                    parser.ctx.logDebug("str operand " + operand);
+                                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("str operand " + operand);
                                 }
                                 default -> {
                                     // Not a dereference we can handle
@@ -597,7 +599,7 @@ public class Variable {
             return node;
         }
 
-        parser.ctx.logDebug("parse & node: " + node);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parse & node: " + node);
 
         // Check if the node is an OperatorNode with a BinaryOperatorNode operand
         if (node instanceof OperatorNode operatorNode) {

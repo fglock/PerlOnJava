@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -47,7 +49,7 @@ public class EmitLiteral {
      * @param node           The ArrayLiteralNode representing the array literal in the AST
      */
     public static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
-        emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Perl semantics: array literal elements are always evaluated in LIST context
@@ -60,7 +62,7 @@ public class EmitLiteral {
                 // Pop the list result since we don't need it
                 mv.visitInsn(Opcodes.POP);
             }
-            emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
             return;
         }
 
@@ -97,7 +99,7 @@ public class EmitLiteral {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "createReference", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
-        emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
 
     /**
@@ -117,7 +119,7 @@ public class EmitLiteral {
      * @param node           The HashLiteralNode representing the hash literal in the AST
      */
     public static void emitHashLiteral(EmitterVisitor emitterVisitor, HashLiteralNode node) {
-        emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Optimization: In VOID context, evaluate elements for side effects only
@@ -128,7 +130,7 @@ public class EmitLiteral {
                 // Pop the list result since we don't need it
                 mv.visitInsn(Opcodes.POP);
             }
-            emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
             return;
         }
 
@@ -143,7 +145,7 @@ public class EmitLiteral {
                 "createHashRef",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
-        emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
 
     /**
@@ -315,7 +317,7 @@ public class EmitLiteral {
      * @param node           The ListNode representing the list literal in the AST
      */
     public static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
-        emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int contextType = emitterVisitor.ctx.contextType;
 
@@ -324,7 +326,7 @@ public class EmitLiteral {
             for (Node element : node.elements) {
                 element.accept(emitterVisitor);
             }
-            emitterVisitor.ctx.logDebug("visit(ListNode) end");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ListNode) end");
             return;
         }
 
@@ -347,7 +349,7 @@ public class EmitLiteral {
                 node.elements.getLast().accept(emitterVisitor);
                 // The last element's value remains on stack as the result
             }
-            emitterVisitor.ctx.logDebug("visit(ListNode) end");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ListNode) end");
             return;
         }
 
@@ -380,7 +382,7 @@ public class EmitLiteral {
 
         emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, listRef);
         emitterVisitor.ctx.javaClassInfo.releaseSpillRef(listRef);
-        emitterVisitor.ctx.logDebug("visit(ListNode) end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 
     /**
@@ -401,7 +403,7 @@ public class EmitLiteral {
      * @param node The NumberNode containing the numeric value as a string
      */
     public static void emitNumber(EmitterContext ctx, NumberNode node) {
-        ctx.logDebug("visit(NumberNode) in context " + ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) in context " + ctx.contextType);
 
         // Skip code generation in void context
         if (ctx.contextType == RuntimeContextType.VOID) {
@@ -422,7 +424,7 @@ public class EmitLiteral {
         if (ctx.isBoxed) {
             // Boxed context: create a RuntimeScalar object
             if (isInteger) {
-                ctx.logDebug("visit(NumberNode) emit boxed integer");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit boxed integer");
                 // Use cached RuntimeScalar for common integer values
                 mv.visitLdcInsn(Integer.valueOf(value));
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -432,7 +434,7 @@ public class EmitLiteral {
             } else if (isLargeInteger) {
                 // Store large integers as strings to preserve precision
                 // This emulates 32-bit Perl behavior
-                ctx.logDebug("visit(NumberNode) emit large integer as string");
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit large integer as string");
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(value);

@@ -942,6 +942,7 @@ public class ArgumentParser {
             case "--debug":
                 // Enable debugging mode
                 parsedArgs.debugEnabled = true;
+                CompilerOptions.DEBUG_ENABLED = true;
                 break;
             case "--tokenize":
                 // Enable tokenize-only mode
@@ -1193,6 +1194,7 @@ public class ArgumentParser {
         // Store debug flags for potential future use
         parsedArgs.debugFlags = debugFlags;
         parsedArgs.debugEnabled = true;
+        CompilerOptions.DEBUG_ENABLED = true;
 
         return index;
     }

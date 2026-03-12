@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -20,7 +22,7 @@ public class EmitOperatorNode {
      * @param node           The operator node to process
      */
     public static void emitOperatorNode(EmitterVisitor emitterVisitor, OperatorNode node) {
-        emitterVisitor.ctx.logDebug("visit(OperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(OperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
 
         switch (node.operator) {
             // Subroutine related

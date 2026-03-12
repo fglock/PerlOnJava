@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
@@ -45,7 +47,7 @@ public class SubroutineParser {
         int currentIndex = parser.tokenIndex;
 
         String subName = IdentifierParser.parseSubroutineIdentifier(parser);
-        parser.ctx.logDebug("SubroutineCall subName `" + subName + "` package " + parser.ctx.symbolTable.getCurrentPackage());
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("SubroutineCall subName `" + subName + "` package " + parser.ctx.symbolTable.getCurrentPackage());
         if (subName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
@@ -187,7 +189,7 @@ public class SubroutineParser {
         if (!subExists && !isNewMethod && !isMethod) {
             subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
-        parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
+        if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
 
@@ -466,11 +468,11 @@ public class SubroutineParser {
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek(parser).text.equals("(")) {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
-                parser.ctx.logDebug("Signatures feature enabled");
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signatures feature enabled");
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser, subName);
-                parser.ctx.logDebug("Signature AST: " + signature);
-                parser.ctx.logDebug("next token " + peek(parser));
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signature AST: " + signature);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("next token " + peek(parser));
             } else {
                 // If the signatures feature is not enabled, we just parse the prototype as a string.
                 // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.

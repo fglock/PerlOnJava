@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -31,7 +33,7 @@ public class ParseMapGrepSort {
                     new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex);
             operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
             operand.handle = var;
-            parser.ctx.logDebug("parseSort identifier: " + operand.handle + " : " + operand);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort identifier: " + operand.handle + " : " + operand);
         } else {
             try {
                 operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
@@ -53,7 +55,7 @@ public class ParseMapGrepSort {
                 if (paren) {
                     TokenUtils.consume(parser, OPERATOR, ")");
                 }
-                parser.ctx.logDebug("parseSort: " + operand.handle + " : " + operand);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort: " + operand.handle + " : " + operand);
             }
         }
 
@@ -106,7 +108,7 @@ public class ParseMapGrepSort {
             if (paren) {
                 TokenUtils.consume(parser, OPERATOR, ")");
             }
-            parser.ctx.logDebug("parseMap: " + operand.handle + " : " + operand);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseMap: " + operand.handle + " : " + operand);
         }
 
         // transform:   { 123 }

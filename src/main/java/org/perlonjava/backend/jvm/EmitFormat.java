@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -23,7 +25,7 @@ public class EmitFormat {
         EmitterContext ctx = emitterVisitor.ctx;
         MethodVisitor mv = ctx.mv;
 
-        ctx.logDebug("FORMAT start: " + node.formatName);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("FORMAT start: " + node.formatName);
 
         // Always generate format bytecode, even in VOID context
         // The side effect of storing the format is important
@@ -81,7 +83,7 @@ public class EmitFormat {
             mv.visitInsn(Opcodes.POP);
         }
 
-        ctx.logDebug("FORMAT end: " + node.formatName);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("FORMAT end: " + node.formatName);
     }
 
     /**

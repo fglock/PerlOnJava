@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
@@ -9,7 +11,7 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 public class EmitBinaryOperatorNode {
 
     public static void emitBinaryOperatorNode(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %s in context %s"
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %s in context %s"
                 .formatted(node.operator, emitterVisitor.ctx.contextType));
 
         switch (node.operator) {

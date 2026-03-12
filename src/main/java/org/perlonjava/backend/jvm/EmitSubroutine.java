@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -78,7 +80,7 @@ public class EmitSubroutine {
      * @param node The subroutine node representing the subroutine.
      */
     public static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
-        ctx.logDebug("SUB start");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -109,7 +111,7 @@ public class EmitSubroutine {
             });
         }
 
-        ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
@@ -131,7 +133,7 @@ public class EmitSubroutine {
         newSymbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
 
         String[] newEnv = newSymbolTable.getVariableNames();
-        ctx.logDebug("AnonSub " + newSymbolTable);
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub " + newSymbolTable);
 
         // Reset the index counter to start after the closure variables
         // This prevents allocateLocalVariable() from creating slots that overlap with uninitialized slots
@@ -169,8 +171,8 @@ public class EmitSubroutine {
                             subCtx, node.block, node.useTryCatch
                     );
             String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
-            ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
-            ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
             RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
             // Direct instantiation approach - no reflection needed!
@@ -223,7 +225,7 @@ public class EmitSubroutine {
             }
         } catch (InterpreterFallbackException fallback) {
             // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
-            ctx.logDebug("Using interpreter fallback for subroutine");
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using interpreter fallback for subroutine");
             
             // Store the InterpretedCode in the interpretedSubs map with a unique key
             String fallbackKey = "interpreted_" + System.identityHashCode(fallback.interpretedCode);
@@ -314,7 +316,7 @@ public class EmitSubroutine {
 
         // If the context is not VOID, the stack should contain [RuntimeScalar] (the CODE variable)
         // If the context is VOID, the stack should be empty
-        ctx.logDebug("SUB end");
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB end");
     }
 
     /**
@@ -324,7 +326,7 @@ public class EmitSubroutine {
      * @param node           The binary operator node representing the apply operation.
      */
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Capture the call context into a local slot early.
@@ -340,7 +342,7 @@ public class EmitSubroutine {
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
             if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                 subroutineName = NameNormalizer.normalizeVariableName(identifierNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
-                emitterVisitor.ctx.logDebug("handleApplyElementOperator subroutine " + subroutineName);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleApplyElementOperator subroutine " + subroutineName);
             }
         }
 
@@ -632,7 +634,7 @@ public class EmitSubroutine {
      * @param node           The operator node representing the `__SUB__` operation.
      */
     static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 

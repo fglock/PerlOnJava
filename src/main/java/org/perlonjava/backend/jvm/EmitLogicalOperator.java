@@ -1,5 +1,7 @@
 package org.perlonjava.backend.jvm;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -387,7 +389,7 @@ public class EmitLogicalOperator {
      * @param node           The ternary operator node representing the operation.
      */
     public static void emitTernaryOperator(EmitterVisitor emitterVisitor, TernaryOperatorNode node) {
-        emitterVisitor.ctx.logDebug("TERNARY_OP start");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("TERNARY_OP start");
 
         // Create labels for the else and end branches
         Label elseLabel = new Label();
@@ -417,7 +419,7 @@ public class EmitLogicalOperator {
             // Visit the end label
             mv.visitLabel(endLabel);
 
-            emitterVisitor.ctx.logDebug("TERNARY_OP end");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("TERNARY_OP end");
             return;
         }
 
@@ -448,6 +450,6 @@ public class EmitLogicalOperator {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        emitterVisitor.ctx.logDebug("TERNARY_OP end");
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("TERNARY_OP end");
     }
 }

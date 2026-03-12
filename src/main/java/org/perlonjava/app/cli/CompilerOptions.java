@@ -33,6 +33,11 @@ import java.util.List;
  * - unicodeStdin/Stdout/Stderr/etc.: Unicode/encoding flags for different I/O streams.
  */
 public class CompilerOptions implements Cloneable {
+    /**
+     * Global static flag to gate debug logging. Set once at CLI parsing time.
+     * Use this for fast short-circuit evaluation before calling logDebug().
+     */
+    public static boolean DEBUG_ENABLED = false;
     public boolean debugEnabled = false;
     public boolean disassembleEnabled = false;
     public boolean useInterpreter = false;

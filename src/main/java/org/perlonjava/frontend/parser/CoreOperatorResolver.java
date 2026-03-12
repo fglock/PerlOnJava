@@ -1,5 +1,7 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.app.cli.CompilerOptions;
+
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -118,7 +120,7 @@ public class CoreOperatorResolver {
         String prototype = CORE_PROTOTYPES.get(operator);
 
         if (prototype != null) {
-            parser.ctx.logDebug("CORE operator " + operator + " with prototype " + prototype);
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("CORE operator " + operator + " with prototype " + prototype);
             // Set the operator name as the subroutine name for better error messages
             String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
             parser.ctx.symbolTable.setCurrentSubroutine(operator);
