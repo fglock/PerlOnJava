@@ -1880,6 +1880,28 @@ public class Opcodes {
      */
     public static final short KILL = 380;
 
+    // =================================================================
+    // SUPEROPERATORS (381+) - Combined instruction sequences
+    // =================================================================
+
+    /**
+     * Hash dereference + string key + fetch in one operation.
+     * Pattern replaced: DEREF_HASH + LOAD_STRING + HASH_GET
+     * Format: HASH_DEREF_FETCH rd hashref_reg key_string_index
+     * Effect: rd = hashref_reg->hashDeref().get(stringPool[key_string_index])
+     * Equivalent to: $hashref->{key}
+     */
+    public static final short HASH_DEREF_FETCH = 381;
+
+    /**
+     * Array dereference + integer index + fetch in one operation.
+     * Pattern replaced: DEREF_ARRAY + LOAD_INT + ARRAY_GET
+     * Format: ARRAY_DEREF_FETCH rd arrayref_reg index_immediate
+     * Effect: rd = arrayref_reg->arrayDeref().get(index_immediate)
+     * Equivalent to: $arrayref->[n]
+     */
+    public static final short ARRAY_DEREF_FETCH = 382;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

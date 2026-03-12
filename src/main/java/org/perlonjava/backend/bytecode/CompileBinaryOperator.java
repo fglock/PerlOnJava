@@ -134,28 +134,50 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int scalarRefReg = bytecodeCompiler.lastResultReg;
 
+                if (keyNode.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("Hash dereference requires key");
+                }
+
+                Node keyElement = keyNode.elements.get(0);
+
+                // SUPEROPERATOR: Check if we can use HASH_DEREF_FETCH
+                // Conditions: single bareword or string literal key
+                if (keyElement instanceof IdentifierNode idNode) {
+                    // Bareword key - use superoperator
+                    String keyString = idNode.name;
+                    int keyIdx = bytecodeCompiler.addToStringPool(keyString);
+
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.HASH_DEREF_FETCH);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(scalarRefReg);
+                    bytecodeCompiler.emit(keyIdx);
+
+                    bytecodeCompiler.lastResultReg = rd;
+                    return;
+                } else if (keyElement instanceof StringNode strNode) {
+                    // String literal key - use superoperator
+                    String keyString = strNode.value;
+                    int keyIdx = bytecodeCompiler.addToStringPool(keyString);
+
+                    int rd = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.HASH_DEREF_FETCH);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(scalarRefReg);
+                    bytecodeCompiler.emit(keyIdx);
+
+                    bytecodeCompiler.lastResultReg = rd;
+                    return;
+                }
+
+                // General case: expression key - use separate opcodes
                 int hashReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                 bytecodeCompiler.emitReg(hashReg);
                 bytecodeCompiler.emitReg(scalarRefReg);
 
-                if (keyNode.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("Hash dereference requires key");
-                }
-
-                int keyReg;
-                Node keyElement = keyNode.elements.get(0);
-                if (keyElement instanceof IdentifierNode) {
-                    String keyString = ((IdentifierNode) keyElement).name;
-                    keyReg = bytecodeCompiler.allocateRegister();
-                    int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                    bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                    bytecodeCompiler.emitReg(keyReg);
-                    bytecodeCompiler.emit(keyIdx);
-                } else {
-                    bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
-                    keyReg = bytecodeCompiler.lastResultReg;
-                }
+                bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                int keyReg = bytecodeCompiler.lastResultReg;
 
                 // Access hash element
                 int rd = bytecodeCompiler.allocateOutputRegister();
@@ -174,16 +196,41 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
                 int scalarRefReg = bytecodeCompiler.lastResultReg;
 
+                if (indexNode.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("Array dereference requires index");
+                }
+
+                Node indexElement = indexNode.elements.get(0);
+
+                // SUPEROPERATOR: Check if we can use ARRAY_DEREF_FETCH
+                // Conditions: integer literal index
+                if (indexElement instanceof NumberNode numNode) {
+                    String value = numNode.value.replace("_", "");
+                    try {
+                        if (org.perlonjava.runtime.runtimetypes.ScalarUtils.isInteger(value)) {
+                            int intValue = Integer.parseInt(value);
+                            // Use superoperator for integer literal index
+                            int rd = bytecodeCompiler.allocateOutputRegister();
+                            bytecodeCompiler.emit(Opcodes.ARRAY_DEREF_FETCH);
+                            bytecodeCompiler.emitReg(rd);
+                            bytecodeCompiler.emitReg(scalarRefReg);
+                            bytecodeCompiler.emitInt(intValue);
+
+                            bytecodeCompiler.lastResultReg = rd;
+                            return;
+                        }
+                    } catch (NumberFormatException e) {
+                        // Fall through to general case
+                    }
+                }
+
+                // General case: use separate opcodes
                 int arrayReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 bytecodeCompiler.emitReg(arrayReg);
                 bytecodeCompiler.emitReg(scalarRefReg);
 
-                if (indexNode.elements.isEmpty()) {
-                    bytecodeCompiler.throwCompilerException("Array dereference requires index");
-                }
-
-                bytecodeCompiler.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
+                bytecodeCompiler.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
                 int indexReg = bytecodeCompiler.lastResultReg;
 
                 // Access array element

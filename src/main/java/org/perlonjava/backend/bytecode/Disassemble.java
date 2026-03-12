@@ -2098,6 +2098,33 @@ public class Disassemble {
                         break;
                     }
 
+                    // =================================================================
+                    // SUPEROPERATORS
+                    // =================================================================
+
+                    case Opcodes.HASH_DEREF_FETCH: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int hashrefReg = interpretedCode.bytecode[pc++];
+                        int keyIdx = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_DEREF_FETCH r").append(rd)
+                                .append(" = r").append(hashrefReg).append("->{\"");
+                        if (interpretedCode.stringPool != null && keyIdx < interpretedCode.stringPool.length) {
+                            sb.append(interpretedCode.stringPool[keyIdx]);
+                        }
+                        sb.append("\"}\n");
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_DEREF_FETCH: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int arrayrefReg = interpretedCode.bytecode[pc++];
+                        int index = InterpretedCode.readInt(interpretedCode.bytecode, pc);
+                        pc += 1;
+                        sb.append("ARRAY_DEREF_FETCH r").append(rd)
+                                .append(" = r").append(arrayrefReg).append("->[").append(index).append("]\n");
+                        break;
+                    }
+
                     default:
                         sb.append("UNKNOWN(").append(opcode).append(")\n");
                         break;

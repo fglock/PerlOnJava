@@ -1765,7 +1765,32 @@ public class BytecodeCompiler implements Visitor {
         // Handle single element access
         if (indexNode.elements.size() == 1) {
             Node indexExpr = indexNode.elements.get(0);
-            // Compile index in SCALAR context to ensure RuntimeScalar
+
+            // Check if we can use the ARRAY_DEREF_FETCH superoperator
+            // Conditions: index is a small integer literal and strict refs is enabled
+            if (indexExpr instanceof NumberNode numNode && isStrictRefsEnabled()) {
+                String value = numNode.value.replace("_", "");
+                try {
+                    // Check if it's a small integer (fits in 16-bit)
+                    if (ScalarUtils.isInteger(value)) {
+                        int intValue = Integer.parseInt(value);
+                        // SUPEROPERATOR: Integer literal index with strict refs - use ARRAY_DEREF_FETCH
+                        // This combines DEREF_ARRAY + LOAD_INT + ARRAY_GET into one opcode
+                        int rd = allocateOutputRegister();
+                        emit(Opcodes.ARRAY_DEREF_FETCH);
+                        emitReg(rd);
+                        emitReg(baseReg);
+                        emitInt(intValue);
+
+                        lastResultReg = rd;
+                        return;
+                    }
+                } catch (NumberFormatException e) {
+                    // Fall through to general case
+                }
+            }
+
+            // General case: Compile index in SCALAR context to ensure RuntimeScalar
             compileNode(indexExpr, -1, RuntimeContextType.SCALAR);
             int indexReg = lastResultReg;
 
@@ -1825,29 +1850,25 @@ public class BytecodeCompiler implements Visitor {
         if (keyNode.elements.size() == 1) {
             Node keyExpr = keyNode.elements.get(0);
 
-            // Compile the key
-            int keyReg;
-            if (keyExpr instanceof IdentifierNode) {
-                // Bareword key - autoquote it
-                String keyString = ((IdentifierNode) keyExpr).name;
-                keyReg = allocateRegister();
-                int keyIdx = addToStringPool(keyString);
-                emit(Opcodes.LOAD_STRING);
-                emitReg(keyReg);
-                emit(keyIdx);
-            } else {
-                // Expression key - compile it in SCALAR context to ensure RuntimeScalar
-                compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
-                keyReg = lastResultReg;
-            }
-
             // Check if this is a glob slot access: *X{key}
             // In this case, node.left is an OperatorNode with operator "*"
             boolean isGlobSlotAccess = (node.left instanceof OperatorNode) &&
                     ((OperatorNode) node.left).operator.equals("*");
 
             if (isGlobSlotAccess) {
-                // For glob slot access, call hashDerefGetNonStrict directly
+                // For glob slot access, compile the key and call hashDerefGetNonStrict directly
+                int keyReg;
+                if (keyExpr instanceof IdentifierNode) {
+                    String keyString = ((IdentifierNode) keyExpr).name;
+                    keyReg = allocateRegister();
+                    int keyIdx = addToStringPool(keyString);
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(keyReg);
+                    emit(keyIdx);
+                } else {
+                    compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
+                    keyReg = lastResultReg;
+                }
                 // This uses RuntimeGlob's override which accesses the slot without dereferencing
                 int rd = allocateOutputRegister();
                 emit(Opcodes.GLOB_SLOT_GET);
@@ -1856,7 +1877,49 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(keyReg);
 
                 lastResultReg = rd;
+            } else if (keyExpr instanceof IdentifierNode && isStrictRefsEnabled()) {
+                // SUPEROPERATOR: Bareword key with strict refs - use HASH_DEREF_FETCH
+                // This combines DEREF_HASH + LOAD_STRING + HASH_GET into one opcode
+                String keyString = ((IdentifierNode) keyExpr).name;
+                int keyIdx = addToStringPool(keyString);
+
+                int rd = allocateOutputRegister();
+                emit(Opcodes.HASH_DEREF_FETCH);
+                emitReg(rd);
+                emitReg(baseReg);
+                emit(keyIdx);
+
+                lastResultReg = rd;
+            } else if (keyExpr instanceof StringNode && isStrictRefsEnabled()) {
+                // SUPEROPERATOR: String literal key with strict refs - use HASH_DEREF_FETCH
+                // This combines DEREF_HASH + LOAD_STRING + HASH_GET into one opcode
+                String keyString = ((StringNode) keyExpr).value;
+                int keyIdx = addToStringPool(keyString);
+
+                int rd = allocateOutputRegister();
+                emit(Opcodes.HASH_DEREF_FETCH);
+                emitReg(rd);
+                emitReg(baseReg);
+                emit(keyIdx);
+
+                lastResultReg = rd;
             } else {
+                // General case: compile the key and use separate opcodes
+                int keyReg;
+                if (keyExpr instanceof IdentifierNode) {
+                    // Bareword key - autoquote it (non-strict refs case)
+                    String keyString = ((IdentifierNode) keyExpr).name;
+                    keyReg = allocateRegister();
+                    int keyIdx = addToStringPool(keyString);
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(keyReg);
+                    emit(keyIdx);
+                } else {
+                    // Expression key - compile it in SCALAR context to ensure RuntimeScalar
+                    compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
+                    keyReg = lastResultReg;
+                }
+
                 // Normal hash access: dereference first, then get element
                 // The base might be either:
                 // 1. A RuntimeHash (from %hash which was a hash variable)
