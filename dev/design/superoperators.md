@@ -405,3 +405,10 @@ grep -E '^\s+[0-9]+:' bytecode.txt | sed 's/^[^:]*: //' | \
 ### Resolved Questions
 - Superoperators are emitted at compile time (pattern detection during bytecode generation)
 - Autovivification and tied variables: handled by hashDeref()/arrayDeref() calls in handler
+
+### Phase 3.1: Code Refactoring (2025-03-12)
+- Added `emitHashDerefGet()` and `emitArrayDerefGet()` helpers in BytecodeCompiler.java
+- Refactored `handleGeneralHashAccess()` and `handleGeneralArrayAccess()` to use helpers
+- Refactored CompileBinaryOperator.java `->` operator handling to use helpers
+- **Result**: Superoperators now work for both `$h->{a}{b}` (implicit arrows) and `$h->{a}->{b}` (explicit arrows)
+- Code duplication reduced across 3 call sites
