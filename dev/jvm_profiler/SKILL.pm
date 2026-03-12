@@ -10,6 +10,7 @@ This guide documents how to profile and analyze performance issues in PerlOnJava
 4. [Analysis Techniques](#analysis-techniques)
 5. [Case Study: EVAL_USE_INTERPRETER Performance](#case-study)
 6. [External Profiling Tools](#external-profiling-tools)
+7. [PerlOnJava-Specific Optimization Patterns](#perlonjava-specific-optimization-patterns)
 
 ---
 
@@ -444,8 +445,134 @@ Common pitfalls:
 
 ---
 
+## PerlOnJava-Specific Optimization Patterns
+
+### Using JFR with jperl and Analyzing Results
+
+```bash
+# Run with JFR profiling via JPERL_OPTS
+JPERL_OPTS="-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:StartFlightRecording=duration=30s,filename=/tmp/profile.jfr,settings=profile" ./jperl --interpreter script.pl
+
+# Find jfr command location
+$(/usr/libexec/java_home)/bin/jfr print --events jdk.ExecutionSample /tmp/profile.jfr
+
+# Get method hotspots (sorted by sample count)
+$(/usr/libexec/java_home)/bin/jfr print --events jdk.ExecutionSample /tmp/profile.jfr 2>&1 | \
+  grep -E "^\s+org\.perlonjava" | sed 's/(.*//' | sort | uniq -c | sort -rn | head -30
+```
+
+### Common Interpreter Overhead Sources
+
+Based on profiling experience, these are common bottlenecks in the bytecode interpreter:
+
+1. **Synchronized Collections**
+   - `java.util.Stack` is synchronized (legacy design)
+   - Replace with `ArrayDeque` or `ArrayList` for single-threaded code
+   - Example: DynamicVariableManager, InterpreterState stacks
+
+2. **Unnecessary DynamicVariableManager Calls**
+   - `getLocalLevel()`/`popToLocalLevel()` called on every subroutine entry/exit
+   - Only needed when code uses `local` variables
+   - Add `usesLocalization` flag to skip these for code without `local`
+
+3. **Object Allocations Per Call**
+   - Creating `InterpreterFrame` on every subroutine call
+   - Creating `int[]` holders for PC tracking
+   - Solution: Cache/pre-create objects in InterpretedCode
+
+4. **ThreadLocal Lookups in Hot Loops**
+   - `ThreadLocal.get()` has overhead
+   - Cache the value at method entry, update via direct reference
+   - Example: PC holder returned from `InterpreterState.push()`
+
+5. **Regex State Save/Restore**
+   - `RegexState.save()` allocates and copies state on every call
+   - Only needed when code might modify regex variables ($1, $2, etc.)
+   - Can be skipped for simple subroutines
+
+### Optimization Flag Pattern
+
+When adding compile-time optimization flags:
+
+```java
+// In InterpretedCode
+public boolean usesLocalization = true;  // Default conservative
+
+// In BytecodeCompiler - track when flag should be true
+private boolean usesLocalization;  // Default false
+
+void emit(short opcode) {
+    if (opcode == Opcodes.LOCAL_SCALAR || ...) {
+        usesLocalization = true;
+    }
+    bytecode.add((int) opcode);
+}
+
+// At end of compile()
+code.usesLocalization = this.usesLocalization;
+
+// IMPORTANT: Preserve flag when copying!
+public InterpretedCode withCapturedVars(RuntimeBase[] vars) {
+    InterpretedCode copy = new InterpretedCode(...);
+    copy.usesLocalization = this.usesLocalization;  // Don't forget!
+    return copy;
+}
+```
+
+### Pre-allocation Pattern
+
+For objects reused across calls:
+
+```java
+// In InterpretedCode
+public volatile InterpreterState.InterpreterFrame cachedFrame;
+
+public InterpreterFrame getOrCreateFrame(String pkg, String sub) {
+    InterpreterFrame frame = cachedFrame;
+    if (frame != null && frame.packageName().equals(pkg) && 
+        Objects.equals(frame.subroutineName(), sub)) {
+        return frame;  // Reuse cached
+    }
+    frame = new InterpreterFrame(this, pkg, sub);
+    // Cache if matches defaults
+    if (pkg.equals(defaultPkg) && Objects.equals(sub, defaultSub)) {
+        cachedFrame = frame;
+    }
+    return frame;
+}
+```
+
+### Profiler-Guided Optimization Workflow
+
+1. **Establish baseline**: Run benchmark, note iterations/second
+2. **Collect profile**: Use JFR with `settings=profile`
+3. **Extract hotspots**: Use jfr command to get sample counts
+4. **Identify patterns**: Look for:
+   - Synchronized collections (Stack, Hashtable, Vector)
+   - ThreadLocal access in hot methods
+   - Object allocations (constructor calls)
+   - Unnecessary work for simple cases
+5. **Implement optimization**: Add flags, caching, or skip unnecessary work
+6. **Verify with profiler**: Re-run and confirm hotspot is gone
+7. **Measure improvement**: Compare iterations/second
+
+### Example: Interpreter Optimization Results
+
+From Phase 4 superoperators work:
+
+| Change | Impact |
+|--------|--------|
+| Stack → ArrayDeque | Removes synchronization overhead |
+| usesLocalization flag | Skips DynamicVariableManager for 90%+ of calls |
+| Cached InterpreterFrame | Eliminates allocation per call |
+| Fix withCapturedVars | Closures now get optimization benefits |
+
+**Result**: 274/s → 430/s (+57% improvement)
+
+---
+
 ## Contributing
 
 Found better profiling techniques? Add them here! This document should evolve as we learn more about PerlOnJava performance.
 
-Last updated: 2026-02-17
+Last updated: 2026-03-12
