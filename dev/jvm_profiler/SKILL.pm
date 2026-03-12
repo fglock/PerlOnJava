@@ -461,60 +461,59 @@ $(/usr/libexec/java_home)/bin/jfr print --events jdk.ExecutionSample /tmp/profil
   grep -E "^\s+org\.perlonjava" | sed 's/(.*//' | sort | uniq -c | sort -rn | head -30
 ```
 
-### Common Interpreter Overhead Sources
+### What to Look For in Profiler Output
 
-Based on profiling experience, these are common bottlenecks in the bytecode interpreter:
+When analyzing JFR samples, look for these patterns that often indicate optimization opportunities:
 
-1. **Synchronized Collections**
-   - `java.util.Stack` is synchronized (legacy design)
-   - Replace with `ArrayDeque` or `ArrayList` for single-threaded code
-   - Example: DynamicVariableManager, InterpreterState stacks
+1. **Synchronized Collections** - Methods like `Stack.pop()`, `Hashtable.get()`, `Vector.add()`
+   - These have synchronization overhead even in single-threaded code
+   - Consider replacing with unsynchronized alternatives (ArrayDeque, HashMap, ArrayList)
 
-2. **Unnecessary DynamicVariableManager Calls**
-   - `getLocalLevel()`/`popToLocalLevel()` called on every subroutine entry/exit
-   - Only needed when code uses `local` variables
-   - Add `usesLocalization` flag to skip these for code without `local`
+2. **Repeated Object Allocations** - Constructor calls (`<init>`) in hot methods
+   - Consider caching or pre-allocating reusable objects
+   - Look for objects created per-call that could be created once
 
-3. **Object Allocations Per Call**
-   - Creating `InterpreterFrame` on every subroutine call
-   - Creating `int[]` holders for PC tracking
-   - Solution: Cache/pre-create objects in InterpretedCode
+3. **ThreadLocal Access** - `ThreadLocal.get()` in frequently-called methods
+   - Cache the value at method entry if accessed multiple times
+   - Return mutable holders for direct updates
 
-4. **ThreadLocal Lookups in Hot Loops**
-   - `ThreadLocal.get()` has overhead
-   - Cache the value at method entry, update via direct reference
-   - Example: PC holder returned from `InterpreterState.push()`
+4. **Conditional Work** - Methods called unconditionally that could be skipped
+   - Add flags to skip work when not needed
+   - Track at compile time whether features are actually used
 
-5. **Regex State Save/Restore**
-   - `RegexState.save()` allocates and copies state on every call
-   - Only needed when code might modify regex variables ($1, $2, etc.)
-   - Can be skipped for simple subroutines
+5. **Copy Operations** - Methods that copy/clone objects
+   - Ensure optimization flags and cached state are preserved
+   - Missing flag preservation can silently disable optimizations
 
-### Optimization Flag Pattern
+### Optimization Techniques
+
+Once you identify a hotspot, consider these techniques:
+
+#### Optimization Flag Pattern
 
 When adding compile-time optimization flags:
 
 ```java
 // In InterpretedCode
-public boolean usesLocalization = true;  // Default conservative
+public boolean usesFeatureX = true;  // Default conservative
 
 // In BytecodeCompiler - track when flag should be true
-private boolean usesLocalization;  // Default false
+private boolean usesFeatureX;  // Default false
 
 void emit(short opcode) {
-    if (opcode == Opcodes.LOCAL_SCALAR || ...) {
-        usesLocalization = true;
+    if (opcode == Opcodes.FEATURE_X_OPCODE || ...) {
+        usesFeatureX = true;
     }
     bytecode.add((int) opcode);
 }
 
 // At end of compile()
-code.usesLocalization = this.usesLocalization;
+code.usesFeatureX = this.usesFeatureX;
 
 // IMPORTANT: Preserve flag when copying!
 public InterpretedCode withCapturedVars(RuntimeBase[] vars) {
     InterpretedCode copy = new InterpretedCode(...);
-    copy.usesLocalization = this.usesLocalization;  // Don't forget!
+    copy.usesFeatureX = this.usesFeatureX;  // Don't forget!
     return copy;
 }
 ```
