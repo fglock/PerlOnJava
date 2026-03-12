@@ -425,3 +425,14 @@ grep -E '^\s+[0-9]+:' bytecode.txt | sed 's/^[^:]*: //' | \
 - **Superoperators remain in**: CompileBinaryOperator.java `->` operator handler, where
   the left side is always compiled in SCALAR context and thus guaranteed to be a scalar reference
 - This fix resolves the Getopt::Long / life_bitpacked.pl regression
+
+### Phase 3.3: NONSTRICT Variants (2025-03-12)
+- Added `HASH_DEREF_FETCH_NONSTRICT` (opcode 383) and `ARRAY_DEREF_FETCH_NONSTRICT` (opcode 384)
+- These handle symbolic references when `no strict 'refs'` is in effect
+- Format includes package name for symbolic ref resolution:
+  - `HASH_DEREF_FETCH_NONSTRICT rd hashref_reg key_string_idx pkg_string_idx`
+  - `ARRAY_DEREF_FETCH_NONSTRICT rd arrayref_reg index_immediate pkg_string_idx`
+- Updated `emitHashDerefGet()` and `emitArrayDerefGet()` to choose between strict/nonstrict variants
+- Added disassembler support for NONSTRICT variants
+- Fixed `(expr)[index]` compilation: Added ListNode-to-ArrayLiteralNode transformation in
+  CompileBinaryOperator.java (matching JVM backend in Dereference.java)
