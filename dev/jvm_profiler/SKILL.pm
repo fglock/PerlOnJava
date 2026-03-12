@@ -10,6 +10,7 @@ This guide documents how to profile and analyze performance issues in PerlOnJava
 4. [Analysis Techniques](#analysis-techniques)
 5. [Case Study: EVAL_USE_INTERPRETER Performance](#case-study)
 6. [External Profiling Tools](#external-profiling-tools)
+7. [PerlOnJava-Specific Optimization Patterns](#perlonjava-specific-optimization-patterns)
 
 ---
 
@@ -444,8 +445,133 @@ Common pitfalls:
 
 ---
 
+## PerlOnJava-Specific Optimization Patterns
+
+### Using JFR with jperl and Analyzing Results
+
+```bash
+# Run with JFR profiling via JPERL_OPTS
+JPERL_OPTS="-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:StartFlightRecording=duration=30s,filename=/tmp/profile.jfr,settings=profile" ./jperl --interpreter script.pl
+
+# Find jfr command location
+$(/usr/libexec/java_home)/bin/jfr print --events jdk.ExecutionSample /tmp/profile.jfr
+
+# Get method hotspots (sorted by sample count)
+$(/usr/libexec/java_home)/bin/jfr print --events jdk.ExecutionSample /tmp/profile.jfr 2>&1 | \
+  grep -E "^\s+org\.perlonjava" | sed 's/(.*//' | sort | uniq -c | sort -rn | head -30
+```
+
+### What to Look For in Profiler Output
+
+When analyzing JFR samples, look for these patterns that often indicate optimization opportunities:
+
+1. **Synchronized Collections** - Methods like `Stack.pop()`, `Hashtable.get()`, `Vector.add()`
+   - These have synchronization overhead even in single-threaded code
+   - Consider replacing with unsynchronized alternatives (ArrayDeque, HashMap, ArrayList)
+
+2. **Repeated Object Allocations** - Constructor calls (`<init>`) in hot methods
+   - Consider caching or pre-allocating reusable objects
+   - Look for objects created per-call that could be created once
+
+3. **ThreadLocal Access** - `ThreadLocal.get()` in frequently-called methods
+   - Cache the value at method entry if accessed multiple times
+   - Return mutable holders for direct updates
+
+4. **Conditional Work** - Methods called unconditionally that could be skipped
+   - Add flags to skip work when not needed
+   - Track at compile time whether features are actually used
+
+5. **Copy Operations** - Methods that copy/clone objects
+   - Ensure optimization flags and cached state are preserved
+   - Missing flag preservation can silently disable optimizations
+
+### Optimization Techniques
+
+Once you identify a hotspot, consider these techniques:
+
+#### Optimization Flag Pattern
+
+When adding compile-time optimization flags:
+
+```java
+// In InterpretedCode
+public boolean usesFeatureX = true;  // Default conservative
+
+// In BytecodeCompiler - track when flag should be true
+private boolean usesFeatureX;  // Default false
+
+void emit(short opcode) {
+    if (opcode == Opcodes.FEATURE_X_OPCODE || ...) {
+        usesFeatureX = true;
+    }
+    bytecode.add((int) opcode);
+}
+
+// At end of compile()
+code.usesFeatureX = this.usesFeatureX;
+
+// IMPORTANT: Preserve flag when copying!
+public InterpretedCode withCapturedVars(RuntimeBase[] vars) {
+    InterpretedCode copy = new InterpretedCode(...);
+    copy.usesFeatureX = this.usesFeatureX;  // Don't forget!
+    return copy;
+}
+```
+
+### Pre-allocation Pattern
+
+For objects reused across calls:
+
+```java
+// In InterpretedCode
+public volatile InterpreterState.InterpreterFrame cachedFrame;
+
+public InterpreterFrame getOrCreateFrame(String pkg, String sub) {
+    InterpreterFrame frame = cachedFrame;
+    if (frame != null && frame.packageName().equals(pkg) && 
+        Objects.equals(frame.subroutineName(), sub)) {
+        return frame;  // Reuse cached
+    }
+    frame = new InterpreterFrame(this, pkg, sub);
+    // Cache if matches defaults
+    if (pkg.equals(defaultPkg) && Objects.equals(sub, defaultSub)) {
+        cachedFrame = frame;
+    }
+    return frame;
+}
+```
+
+### Profiler-Guided Optimization Workflow
+
+1. **Establish baseline**: Run benchmark, note iterations/second
+2. **Collect profile**: Use JFR with `settings=profile`
+3. **Extract hotspots**: Use jfr command to get sample counts
+4. **Identify patterns**: Look for:
+   - Synchronized collections (Stack, Hashtable, Vector)
+   - ThreadLocal access in hot methods
+   - Object allocations (constructor calls)
+   - Unnecessary work for simple cases
+5. **Implement optimization**: Add flags, caching, or skip unnecessary work
+6. **Verify with profiler**: Re-run and confirm hotspot is gone
+7. **Measure improvement**: Compare iterations/second
+
+### Example: Interpreter Optimization Results
+
+From Phase 4 superoperators work:
+
+| Change | Impact |
+|--------|--------|
+| Stack → ArrayDeque | Removes synchronization overhead |
+| usesLocalization flag | Skips DynamicVariableManager for 90%+ of calls |
+| Cached InterpreterFrame | Eliminates allocation per call |
+| Fix withCapturedVars | Closures now get optimization benefits |
+
+**Result**: 274/s → 430/s (+57% improvement)
+
+---
+
 ## Contributing
 
 Found better profiling techniques? Add them here! This document should evolve as we learn more about PerlOnJava performance.
 
-Last updated: 2026-02-17
+Last updated: 2026-03-12
