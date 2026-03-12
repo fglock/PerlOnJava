@@ -244,8 +244,6 @@ public class InterpretedCode extends RuntimeCode {
         copy.attributes = this.attributes;
         copy.subName = this.subName;
         copy.packageName = this.packageName;
-        copy.usesLocalization = this.usesLocalization;  // Preserve optimization flag
-        copy.cachedFrame = this.cachedFrame;            // Reuse cached frame
         return copy;
     }
 
