@@ -4072,9 +4072,14 @@ public class BytecodeCompiler implements Visitor {
     public void visit(ArrayLiteralNode node) {
         // Array literal: [expr1, expr2, ...]
         // In Perl, [..] creates an ARRAY REFERENCE (RuntimeScalar containing RuntimeArray)
+        // Perl semantics: array literal elements are always evaluated in LIST context
         // Implementation:
-        //   1. Create a list with all elements
+        //   1. Create a list with all elements (in LIST context)
         //   2. Convert list to array reference using CREATE_ARRAY (which now returns reference)
+
+        // Save current context and use LIST context for elements
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.LIST;
 
         // Fast path: empty array
         if (node.elements.isEmpty()) {
@@ -4091,15 +4096,19 @@ public class BytecodeCompiler implements Visitor {
             emitReg(listReg);
 
             lastResultReg = refReg;
+            currentCallContext = savedContext;
             return;
         }
 
-        // General case: evaluate all elements
+        // General case: evaluate all elements in LIST context
         int[] elementRegs = new int[node.elements.size()];
         for (int i = 0; i < node.elements.size(); i++) {
-            node.elements.get(i).accept(this);
+            compileNode(node.elements.get(i), -1, RuntimeContextType.LIST);
             elementRegs[i] = lastResultReg;
         }
+
+        // Restore context
+        currentCallContext = savedContext;
 
         // Create RuntimeList with all elements
         int listReg = allocateRegister();
