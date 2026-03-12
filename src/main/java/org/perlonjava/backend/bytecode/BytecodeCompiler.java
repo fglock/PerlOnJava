@@ -3999,10 +3999,11 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void emit(short opcode) {
-        // Track if any localization opcodes are emitted
+        // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
-                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL) {
+                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
+                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
         }
         bytecode.add((int) opcode);
@@ -4013,10 +4014,11 @@ public class BytecodeCompiler implements Visitor {
      * Use this for opcodes that may throw exceptions (DIE, method calls, etc.)
      */
     void emitWithToken(short opcode, int tokenIndex) {
-        // Track if any localization opcodes are emitted
+        // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
-                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL) {
+                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
+                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
         }
         int pc = bytecode.size();
