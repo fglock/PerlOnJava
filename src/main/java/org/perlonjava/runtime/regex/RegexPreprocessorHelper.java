@@ -19,18 +19,42 @@ public class RegexPreprocessorHelper {
         char nextChar = s.charAt(offset);
 
         // Check for numeric backreferences vs octal escapes
-        // In Perl:
-        // - \1 through \9 (single digit) are ALWAYS backreferences
-        // - \10 and above with all octal digits (0-7) are ALWAYS octal escapes
-        // - \10 and above with non-octal digits (8 or 9) become partial match
+        // Perl disambiguation rules (from perlrebackslash):
+        // 1. If the backslash is followed by a single digit, it's a backreference.
+        // 2. If the first digit following the backslash is a 0, it's an octal escape.
+        // 3. If the number N (in decimal) and Perl has already seen N capture groups,
+        //    it's a backreference. Otherwise, it's an octal escape.
+        //
+        // Examples:
+        //   \100 with 100 capture groups -> backreference to group 100
+        //   \100 with 0 capture groups   -> octal 100 = '@'
+        //   \037 with 0 capture groups   -> octal 037 = unit separator (used in Archive::Tar)
+        //   \9 is always a backreference (single digit rule)
         boolean isOctalNotBackref = false;
-        if (nextChar >= '1' && nextChar <= '7' && offset + 1 < length) {
-            // Check if this is a multi-digit sequence with all octal digits
-            char c2 = s.charAt(offset + 1);
-            if (c2 >= '0' && c2 <= '7') {
-                // At least 2 octal digits - this is an octal escape, not a backreference
-                // Examples: \10, \77, \123, \213, \377 are all octal
-                isOctalNotBackref = true;
+        if (nextChar >= '1' && nextChar <= '9') {
+            // Parse all consecutive digits to get the full number
+            int endDigits = offset;
+            while (endDigits < length && s.charAt(endDigits) >= '0' && s.charAt(endDigits) <= '9') {
+                endDigits++;
+            }
+            String digitStr = s.substring(offset, endDigits);
+            int refNum = Integer.parseInt(digitStr);
+            
+            // Rule 3: If refNum > captureGroupCount, it's an octal escape (if valid octal)
+            if (refNum > RegexPreprocessor.captureGroupCount) {
+                // Check if all digits are octal (0-7)
+                boolean allOctal = true;
+                for (int i = 0; i < digitStr.length(); i++) {
+                    char d = digitStr.charAt(i);
+                    if (d > '7') {
+                        allOctal = false;
+                        break;
+                    }
+                }
+                if (allOctal && digitStr.length() >= 2) {
+                    // This is an octal escape, not a backreference
+                    isOctalNotBackref = true;
+                }
             }
         }
 
