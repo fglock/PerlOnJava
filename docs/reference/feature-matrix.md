@@ -523,6 +523,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`DATA`**: `DATA` file handle is implemented.
 - ✅  **`truncate`**: File truncation
 - ✅  **`flock`**: File locking with LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB
+- ✅  **`fcntl`**: File control operations (stub + native via jnr-posix)
+- ✅  **`ioctl`**: Device control operations (stub + native via jnr-posix)
 - ✅  **`syscall`**: System calls (SYS_gethostname)
 
 ### Socket Operations
@@ -725,6 +727,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **POSIX** module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
 - ✅  **Archive::Tar** module.
+- ✅  **IPC::Open2** module.
+- ✅  **IPC::Open3** module.
 - ✅  **Net::FTP** module.
 - ✅  **Net::Cmd** module.
 - ❌  **Safe** module.

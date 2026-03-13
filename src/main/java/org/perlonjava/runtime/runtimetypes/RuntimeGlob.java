@@ -38,6 +38,47 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
+     * Checks if this glob has any defined content in any slot.
+     * Used for `defined *glob` which returns true if any slot (scalar, array, hash, code, io, format) is initialized.
+     * Note: For arrays/hashes, existence of the slot = defined (even if empty).
+     *
+     * @return RuntimeScalar true if any slot has content, false otherwise.
+     */
+    public RuntimeScalar defined() {
+        // Check if the glob has been assigned (any slot has content)
+        if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        // Check scalar slot - must have defined value
+        if (GlobalVariable.globalVariables.containsKey(this.globName)) {
+            RuntimeScalar scalar = GlobalVariable.globalVariables.get(this.globName);
+            if (scalar != null && scalar.getDefinedBoolean()) {
+                return RuntimeScalarCache.scalarTrue;
+            }
+        }
+        // Check array slot - exists = defined (even if empty)
+        if (GlobalVariable.globalArrays.containsKey(this.globName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        // Check hash slot - exists = defined (even if empty)
+        if (GlobalVariable.globalHashes.containsKey(this.globName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        // Check code slot - must have defined value
+        if (GlobalVariable.globalCodeRefs.containsKey(this.globName)) {
+            RuntimeScalar code = GlobalVariable.globalCodeRefs.get(this.globName);
+            if (code != null && code.getDefinedBoolean()) {
+                return RuntimeScalarCache.scalarTrue;
+            }
+        }
+        // Check IO slot
+        if (this.IO != null && this.IO.getDefinedBoolean()) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        return RuntimeScalarCache.scalarFalse;
+    }
+
+    /**
      * Sets the value of the typeglob based on the type of the provided RuntimeScalar.
      * Supports setting CODE and GLOB types, with special handling for IO objects.
      *

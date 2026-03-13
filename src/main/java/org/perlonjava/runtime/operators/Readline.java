@@ -20,7 +20,9 @@ public class Readline {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh == null) {
-            throw new PerlCompilerException("Cannot readline from undefined filehandle");
+            // Perl warns and returns undef for unopened filehandle, doesn't die
+            WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
+            return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
 
         if (fh instanceof TieHandle tieHandle) {

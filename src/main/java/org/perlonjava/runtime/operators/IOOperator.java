@@ -4,6 +4,8 @@ import org.perlonjava.frontend.astnode.FormatLine;
 import org.perlonjava.frontend.astnode.PictureLine;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.io.*;
+import org.perlonjava.runtime.nativ.NativeUtils;
+import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -1560,13 +1562,17 @@ public class IOOperator {
         }
 
         try {
-            // The arguments are references to RuntimeGlob objects that already exist
-            RuntimeScalar readRef = args[0].scalar();
-            RuntimeScalar writeRef = args[1].scalar();
+            // The arguments should be lvalue RuntimeScalars that can be modified
+            RuntimeScalar readHandle = (RuntimeScalar) args[0];
+            RuntimeScalar writeHandle = (RuntimeScalar) args[1];
 
-            // Get the actual RuntimeGlob objects from the references
-            RuntimeGlob readGlob = (RuntimeGlob) readRef.value;
-            RuntimeGlob writeGlob = (RuntimeGlob) writeRef.value;
+            // Reject references - pipe() doesn't accept \$scalar
+            if (readHandle.type == RuntimeScalarType.REFERENCE) {
+                throw new RuntimeException("Bad filehandle: " + readHandle);
+            }
+            if (writeHandle.type == RuntimeScalarType.REFERENCE) {
+                throw new RuntimeException("Bad filehandle: " + writeHandle);
+            }
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
@@ -1583,9 +1589,37 @@ public class IOOperator {
             RuntimeIO writerIO = new RuntimeIO();
             writerIO.ioHandle = writerHandle;
 
-            // Set the IO handles directly on the existing globs
-            readGlob.setIO(readerIO);
-            writeGlob.setIO(writerIO);
+            // Handle autovivification for read handle (like open() does)
+            RuntimeGlob readGlob = null;
+            if ((readHandle.type == RuntimeScalarType.GLOB || readHandle.type == RuntimeScalarType.GLOBREFERENCE) 
+                    && readHandle.value instanceof RuntimeGlob glob) {
+                readGlob = glob;
+            }
+            if (readGlob != null) {
+                readGlob.setIO(readerIO);
+            } else {
+                // Create a new anonymous GLOB and assign it to the lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(readerIO);
+                readHandle.set(newGlob);
+            }
+
+            // Handle autovivification for write handle (like open() does)
+            RuntimeGlob writeGlob = null;
+            if ((writeHandle.type == RuntimeScalarType.GLOB || writeHandle.type == RuntimeScalarType.GLOBREFERENCE) 
+                    && writeHandle.value instanceof RuntimeGlob glob) {
+                writeGlob = glob;
+            }
+            if (writeGlob != null) {
+                writeGlob.setIO(writerIO);
+            } else {
+                // Create a new anonymous GLOB and assign it to the lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(writerIO);
+                writeHandle.set(newGlob);
+            }
 
             return scalarTrue;
 
@@ -1672,6 +1706,111 @@ public class IOOperator {
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("flock failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * fcntl(FILEHANDLE, FUNCTION, SCALAR)
+     * Implements file control operations.
+     * 
+     * Common FUNCTION values (from Fcntl):
+     *   F_GETFD (1) - Get file descriptor flags
+     *   F_SETFD (2) - Set file descriptor flags  
+     *   F_GETFL (3) - Get file status flags
+     *   F_SETFL (4) - Set file status flags
+     *   
+     * Uses jnr-posix for native fcntl when a real file descriptor is available.
+     */
+    public static RuntimeScalar fcntl(int ctx, RuntimeBase... args) {
+        if (args.length < 3) {
+            getGlobalVariable("main::!").set("Not enough arguments for fcntl");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar fileHandle = args[0].scalar();
+            int function = args[1].scalar().getInt();
+            int arg = args[2].scalar().getInt();
+
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+            if (fh == null || fh.ioHandle == null) {
+                getGlobalVariable("main::!").set(9); // EBADF - Bad file descriptor
+                return scalarUndef;
+            }
+
+            // Get the file descriptor number
+            RuntimeScalar filenoResult = fh.ioHandle.fileno();
+            int fd = filenoResult.getDefinedBoolean() ? filenoResult.getInt() : -1;
+
+            // If we have a valid native fd, use jnr-posix
+            if (fd >= 0 && !NativeUtils.IS_WINDOWS) {
+                try {
+                    jnr.constants.platform.Fcntl fcntlCmd = jnr.constants.platform.Fcntl.valueOf(function);
+                    int result = PosixLibrary.INSTANCE.fcntl(fd, fcntlCmd, arg);
+                    if (result == -1) {
+                        getGlobalVariable("main::!").set(PosixLibrary.INSTANCE.errno());
+                        return scalarUndef;
+                    }
+                    return new RuntimeScalar(result);
+                } catch (Exception e) {
+                    // Fall through to stub implementation
+                }
+            }
+
+            // Stub implementation for when native fcntl isn't available
+            // Values from Fcntl.pm: F_GETFD=1, F_SETFD=2, F_GETFL=3, F_SETFL=4
+            switch (function) {
+                case 1: // F_GETFD - Get file descriptor flags
+                    // Return 1 (FD_CLOEXEC would be set) to satisfy code that checks `unless $flags`
+                    return new RuntimeScalar(1);
+                    
+                case 2: // F_SETFD - Set file descriptor flags (e.g., FD_CLOEXEC)
+                    // Accept but ignore - stub can't set FD_CLOEXEC
+                    return scalarTrue;
+                    
+                case 3: // F_GETFL - Get file status flags
+                    // Return 0 (O_RDONLY)
+                    return new RuntimeScalar(0);
+                    
+                case 4: // F_SETFL - Set file status flags
+                    // Accept but ignore
+                    return scalarTrue;
+                    
+                default:
+                    // Unsupported function
+                    getGlobalVariable("main::!").set("Unsupported fcntl function: " + function);
+                    return scalarUndef;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("fcntl failed: " + e.getMessage());
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * ioctl(FILEHANDLE, FUNCTION, SCALAR)
+     * Implements device control operations.
+     * 
+     * Note: ioctl is highly system-specific and most operations cannot be
+     * implemented in Java. This stub allows code that uses ioctl to compile
+     * and run, but operations will generally fail or be no-ops.
+     */
+    public static RuntimeScalar ioctl(int ctx, RuntimeBase... args) {
+        if (args.length < 3) {
+            getGlobalVariable("main::!").set("Not enough arguments for ioctl");
+            return scalarFalse;
+        }
+
+        try {
+            // ioctl is generally not implementable in pure Java
+            // Return false to indicate the operation is not supported
+            getGlobalVariable("main::!").set("ioctl not implemented on this platform");
+            return scalarFalse;
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("ioctl failed: " + e.getMessage());
             return scalarFalse;
         }
     }

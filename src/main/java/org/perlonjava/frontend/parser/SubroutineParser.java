@@ -177,7 +177,8 @@ public class SubroutineParser {
             if (codeRef.value instanceof RuntimeCode runtimeCode) {
                 prototype = runtimeCode.prototype;
                 attributes = runtimeCode.attributes;
-                subExists = runtimeCode.methodHandle != null
+                subExists = runtimeCode.subroutine != null
+                        || runtimeCode.methodHandle != null
                         || runtimeCode.compilerSupplier != null
                         || runtimeCode.isBuiltin
                         || prototype != null
@@ -212,7 +213,8 @@ public class SubroutineParser {
             if (GlobalVariable.existsGlobalCodeRef(fullName1)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName1);
                 if (codeRef.value instanceof RuntimeCode runtimeCode) {
-                    isKnownSub = runtimeCode.methodHandle != null
+                    isKnownSub = runtimeCode.subroutine != null
+                            || runtimeCode.methodHandle != null
                             || runtimeCode.compilerSupplier != null
                             || runtimeCode.isBuiltin
                             || runtimeCode.prototype != null
@@ -818,8 +820,8 @@ public class SubroutineParser {
                     Object[] parameters = paramList.toArray();
                     placeholder.codeObject = constructor.newInstance(parameters);
 
-                    // Retrieve the 'apply' method from the generated class
-                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+                    // Set the PerlSubroutine interface for direct invocation
+                    placeholder.subroutine = (PerlSubroutine) placeholder.codeObject;
 
                     // Set the __SUB__ instance field to codeRef
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
@@ -829,7 +831,7 @@ public class SubroutineParser {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
                     // This is critical: hash assignments copy RuntimeScalar but share the same
                     // RuntimeCode value object. If we replace codeRef.value, hash copies won't see
-                    // the update. By setting methodHandle/codeObject on the placeholder, ALL
+                    // the update. By setting subroutine/codeObject on the placeholder, ALL
                     // references (including hash copies) will see the compiled code.
 
                     // Set captured variables if there are any
@@ -852,9 +854,9 @@ public class SubroutineParser {
                     // Set the __SUB__ field for self-reference
                     interpretedCode.__SUB__ = codeRef;
 
-                    // Update placeholder in-place: set methodHandle to delegate to InterpretedCode
-                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(
-                            InterpretedCode.class, "apply", RuntimeCode.methodType);
+                    // Set PerlSubroutine interface for direct invocation
+                    // InterpretedCode implements PerlSubroutine, so we can use it directly
+                    placeholder.subroutine = interpretedCode;
                     placeholder.codeObject = interpretedCode;
                 }
             } catch (Exception e) {

@@ -127,6 +127,8 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("select", "select", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("truncate", "truncate", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("flock", "flock", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("fcntl", "fcntl", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("ioctl", "ioctl", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("syscall", "syscall", "org/perlonjava/runtime/operators/SyscallOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("sysread", "sysread", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("syswrite", "syswrite", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");

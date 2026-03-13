@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.runtimetypes.PerlSignalQueue;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
@@ -56,17 +57,39 @@ public class InternalPipeHandle implements IOHandle {
         }
 
         try {
-            byte[] buffer = new byte[maxBytes];
-            int bytesRead = inputStream.read(buffer, 0, maxBytes);
+            // Always use polling for pipe reads to allow signal interruption
+            // PipedInputStream.read() uses Object.wait() which doesn't respond well to Thread.interrupt()
+            while (true) {
+                // Check for interrupt/signal first
+                if (Thread.interrupted()) {
+                    PerlSignalQueue.checkPendingSignals();
+                    return new RuntimeScalar("");
+                }
 
-            if (bytesRead == -1) {
-                isEOF = true;
-                return new RuntimeScalar("");
+                // Check if data is available
+                int available = inputStream.available();
+                if (available > 0) {
+                    byte[] buffer = new byte[Math.min(maxBytes, available)];
+                    int bytesRead = inputStream.read(buffer, 0, buffer.length);
+
+                    if (bytesRead == -1) {
+                        isEOF = true;
+                        return new RuntimeScalar("");
+                    }
+
+                    String result = new String(buffer, 0, bytesRead, charset);
+                    return new RuntimeScalar(result);
+                }
+
+                // No data available - short sleep to avoid busy-wait
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    // Interrupted by alarm - process the signal
+                    PerlSignalQueue.checkPendingSignals();
+                    return new RuntimeScalar("");
+                }
             }
-
-            // Convert bytes to string using the specified charset
-            String result = new String(buffer, 0, bytesRead, charset);
-            return new RuntimeScalar(result);
         } catch (IOException e) {
             isEOF = true;
             return handleIOException(e, "Read from pipe failed");
@@ -159,6 +182,29 @@ public class InternalPipeHandle implements IOHandle {
     }
 
     @Override
+    public RuntimeScalar syswrite(String data) {
+        if (isReader) {
+            getGlobalVariable("main::!").set("Cannot syswrite to read end of pipe");
+            return new RuntimeScalar(); // undef
+        }
+
+        if (isClosed) {
+            getGlobalVariable("main::!").set("Cannot syswrite to closed pipe");
+            return new RuntimeScalar(); // undef
+        }
+
+        try {
+            byte[] bytes = data.getBytes(StandardCharsets.ISO_8859_1);
+            outputStream.write(bytes);
+            outputStream.flush();
+            return new RuntimeScalar(bytes.length);
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(); // undef
+        }
+    }
+
+    @Override
     public RuntimeScalar sysread(int length) {
         if (!isReader) {
             getGlobalVariable("main::!").set("Cannot sysread from write end of pipe");
@@ -170,21 +216,37 @@ public class InternalPipeHandle implements IOHandle {
         }
 
         try {
-            byte[] buffer = new byte[length];
-            int bytesRead = inputStream.read(buffer);
+            // Always use polling for pipe reads to allow signal interruption
+            while (true) {
+                if (Thread.interrupted()) {
+                    PerlSignalQueue.checkPendingSignals();
+                    return new RuntimeScalar("");
+                }
 
-            if (bytesRead == -1) {
-                isEOF = true;
-                return new RuntimeScalar("");
+                int available = inputStream.available();
+                if (available > 0) {
+                    byte[] buffer = new byte[Math.min(length, available)];
+                    int bytesRead = inputStream.read(buffer);
+
+                    if (bytesRead == -1) {
+                        isEOF = true;
+                        return new RuntimeScalar("");
+                    }
+
+                    StringBuilder result = new StringBuilder(bytesRead);
+                    for (int i = 0; i < bytesRead; i++) {
+                        result.append((char) (buffer[i] & 0xFF));
+                    }
+                    return new RuntimeScalar(result.toString());
+                }
+
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    PerlSignalQueue.checkPendingSignals();
+                    return new RuntimeScalar("");
+                }
             }
-
-            // Convert bytes to string representation
-            StringBuilder result = new StringBuilder(bytesRead);
-            for (int i = 0; i < bytesRead; i++) {
-                result.append((char) (buffer[i] & 0xFF));
-            }
-
-            return new RuntimeScalar(result.toString());
         } catch (IOException e) {
             isEOF = true;
             getGlobalVariable("main::!").set(e.getMessage());

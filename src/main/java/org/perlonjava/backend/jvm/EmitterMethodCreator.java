@@ -434,7 +434,9 @@ public class EmitterMethodCreator implements Opcodes {
             ByteCodeSourceMapper.setDebugInfoFileName(ctx);
 
             // Define the class with version, access flags, name, signature, superclass, and interfaces
-            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, className, null, "java/lang/Object", null);
+            // Implement PerlSubroutine interface for direct method calls (no MethodHandle conversion needed)
+            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, className, null, "java/lang/Object",
+                    new String[]{"org/perlonjava/runtime/runtimetypes/PerlSubroutine"});
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Create class: " + className);
 
             // Add instance fields to the class for closure variables

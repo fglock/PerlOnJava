@@ -217,6 +217,13 @@ public class EmitOperatorDeleteExists {
                             return;
                         }
                     }
+                    // Handle defined *$var - Perl allows this even under strict refs
+                    // as a way to probe whether a glob exists without autovivifying
+                    if (operator.equals("defined") && operatorNode.operator.equals("*")) {
+                        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("defined * " + operatorNode.operand);
+                        handleDefinedGlob(emitterVisitor, operatorNode);
+                        return;
+                    }
                 }
             }
         }
@@ -322,6 +329,29 @@ public class EmitOperatorDeleteExists {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/GlobalVariable", operator + "GlobalCodeRefAsScalar", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             EmitOperator.handleVoidContext(emitterVisitor);
         }
+    }
+
+    /**
+     * Handles `defined *$var` - Perl allows this even under strict refs.
+     * Uses GlobalVariable.definedGlob to check without auto-vivifying.
+     */
+    private static void handleDefinedGlob(EmitterVisitor emitterVisitor, OperatorNode operatorNode) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        
+        // Emit the operand (the expression after *)
+        operatorNode.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Push current package for name resolution
+        emitterVisitor.pushCurrentPackage();
+        
+        // Call GlobalVariable.definedGlob(scalar, packageName)
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "definedGlob",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
 }

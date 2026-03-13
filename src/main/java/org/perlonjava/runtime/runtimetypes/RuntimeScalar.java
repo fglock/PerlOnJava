@@ -845,11 +845,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public int getIntRef() {
-        return value.hashCode();
+        return this.hashCode();
     }
 
     public double getDoubleRef() {
-        return value.hashCode();
+        return this.hashCode();
     }
 
     public boolean getBooleanRef() {
@@ -1428,7 +1428,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // just clear the code from the global symbol table
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode) {
             // Clear the code value but keep the type as CODE
-            this.value = new RuntimeCode(null, null);
+            this.value = new RuntimeCode((String) null, null);
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
             return this;

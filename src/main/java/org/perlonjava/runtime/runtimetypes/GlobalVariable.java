@@ -262,7 +262,7 @@ public class GlobalVariable {
         if (var == null) {
             var = new RuntimeScalar();
             var.type = RuntimeScalarType.CODE;  // value is null
-            RuntimeCode runtimeCode = new RuntimeCode(null, null);
+            RuntimeCode runtimeCode = new RuntimeCode((String) null, null);
 
             // Parse the key to extract package and subroutine names
             // key format is typically "Package::SubroutineName"
@@ -433,6 +433,71 @@ public class GlobalVariable {
      */
     public static boolean existsGlobalIO(String key) {
         return globalIORefs.containsKey(key);
+    }
+
+    /**
+     * Checks if a glob is defined (has any slot initialized).
+     * Used for `defined *$var` which should not throw strict refs and not auto-vivify.
+     *
+     * @param scalar      The scalar containing the glob name or glob reference.
+     * @param packageName The current package name for resolving unqualified names.
+     * @return RuntimeScalar true if the glob is defined, false otherwise.
+     */
+    public static RuntimeScalar definedGlob(RuntimeScalar scalar, String packageName) {
+        // Handle glob references directly
+        if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
+            if (scalar.value instanceof RuntimeGlob glob) {
+                return glob.defined();
+            }
+            return RuntimeScalarCache.scalarFalse;
+        }
+
+        // For strings, check if any slot exists without auto-vivifying
+        String varName = NameNormalizer.normalizeVariableName(scalar.toString(), packageName);
+        
+        // Numeric capture variables (like $1, $42, $12345) are always defined in Perl
+        // Use the same pattern as getGlobalVariable for consistency
+        if (regexVariablePattern.matcher(varName).matches() && !varName.equals("main::0")) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check if glob was explicitly assigned
+        if (globalGlobs.getOrDefault(varName, false)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check scalar slot - slot existence makes glob defined (not value definedness)
+        // In Perl, `defined *FOO` is true if $FOO exists, even if $FOO is undef
+        if (globalVariables.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check array slot - exists = defined (even if empty)
+        if (globalArrays.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check hash slot - exists = defined (even if empty)
+        if (globalHashes.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check code slot - slot existence makes glob defined
+        if (globalCodeRefs.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check IO slot (via globalIORefs)
+        if (globalIORefs.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check format slot
+        if (globalFormatRefs.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        return RuntimeScalarCache.scalarFalse;
     }
 
     /**

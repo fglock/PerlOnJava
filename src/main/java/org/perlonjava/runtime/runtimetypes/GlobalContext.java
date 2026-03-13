@@ -108,6 +108,19 @@ public class GlobalContext {
 
         GlobalVariable.getGlobalVariable(encodeSpecialVar("SAFE_LOCALES"));  // TODO
 
+        // Initialize additional magic scalar variables that tests expect to exist at startup
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8LOCALE"));  // ${^UTF8LOCALE}
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("WARNING_BITS"));  // ${^WARNING_BITS}
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8CACHE")).set(0);  // ${^UTF8CACHE}
+        GlobalVariable.getGlobalVariable("main::[").set(0);  // $[ (array base, deprecated)
+        GlobalVariable.getGlobalVariable("main::~");  // $~ (current format name)
+        GlobalVariable.getGlobalVariable("main::%").set(0);  // $% (page number)
+        
+        // Initialize capture variables $1-$9 (these are read-only and return undef until a match)
+        for (int i = 1; i <= 9; i++) {
+            GlobalVariable.getGlobalVariable("main::" + i);
+        }
+
         // Initialize arrays
         RuntimeArray matchEnd = GlobalVariable.getGlobalArray("main::+");
         matchEnd.type = RuntimeArray.READONLY_ARRAY;

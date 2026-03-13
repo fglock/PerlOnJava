@@ -549,7 +549,7 @@ public class BytecodeInterpreter {
                             // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                             // =================================================================
 
-                            case Opcodes.DEFINED, Opcodes.REF, Opcodes.BLESS, Opcodes.ISA, Opcodes.PROTOTYPE,
+                            case Opcodes.DEFINED, Opcodes.DEFINED_GLOB, Opcodes.REF, Opcodes.BLESS, Opcodes.ISA, Opcodes.PROTOTYPE,
                                  Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
@@ -2014,7 +2014,7 @@ public class BytecodeInterpreter {
 
     /**
      * Execute type and reference operations.
-     * Handles: DEFINED, REF, BLESS, ISA, PROTOTYPE, QUOTE_REGEX
+     * Handles: DEFINED, DEFINED_GLOB, REF, BLESS, ISA, PROTOTYPE, QUOTE_REGEX
      */
     private static int executeTypeOps(int opcode, int[] bytecode, int pc,
                                       RuntimeBase[] registers, InterpretedCode code) {
@@ -2025,6 +2025,17 @@ public class BytecodeInterpreter {
                 RuntimeBase v = registers[rs];
                 boolean defined = v != null && v.scalar().getDefinedBoolean();
                 registers[rd] = defined ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+            case Opcodes.DEFINED_GLOB -> {
+                // defined *$var - check if glob is defined without throwing strict refs
+                // Format: DEFINED_GLOB rd scalar_reg pkg_string_idx
+                int rd = bytecode[pc++];
+                int scalarReg = bytecode[pc++];
+                int pkgIdx = bytecode[pc++];
+                String pkg = code.stringPool[pkgIdx];
+                RuntimeScalar scalar = registers[scalarReg].scalar();
+                registers[rd] = GlobalVariable.definedGlob(scalar, pkg);
                 return pc;
             }
             case Opcodes.REF -> {

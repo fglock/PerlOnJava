@@ -37,7 +37,7 @@ CPAN.pm has deep dependencies that make it challenging to port. The main blocker
 | **Archive::Tar** | ✅ Done | Medium | Imported via sync.pl |
 | **Archive::Zip** | ❌ Missing | Medium | Zip handling - Java has built-in support |
 | **Net::FTP** | ✅ Done | Medium | Imported via sync.pl |
-| **IPC::Open3** | ❌ Missing | Medium | Process I/O - needs Java ProcessBuilder |
+| **IPC::Open3** | ✅ Done | Medium | Custom implementation using Java ProcessBuilder |
 | **IO::Socket** | ✅ Done | Medium | Imported via sync.pl |
 | **Dumpvalue** | ✅ Done | Low | Imported via sync.pl |
 
@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 2 complete
+### Current Status: Phase 3 complete
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -248,6 +248,16 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
   - Parser fix: `@{${...}}` nested dereference now works in push/unshift
   - SysHostname.java XS module - provides ghname() via InetAddress.getLocalHost()
   - XSLoader caller() support - load() now uses caller() when no argument provided
+- [x] **Phase 3: Process Control** (2024-03-13)
+  - IPC::Open2, IPC::Open3 - custom implementation using Java ProcessBuilder
+  - IPCOpen3.java XS module loaded via XSLoader
+  - ProcessInputHandle.java, ProcessOutputHandle.java for process stream I/O
+  - Works on both Windows (WaitpidOperator) and POSIX (RuntimeIO)
+  - pipe() - fixed autovivification to handle undefined variables (like open())
+  - fcntl() - implemented with jnr-posix native support and fallback stub
+  - ioctl() - implemented with jnr-posix native support and fallback stub
+  - Prototype parsing fix - typeglob arguments now use =~ precedence level
+  - Reference comparison fix - `\$x == \undef` no longer crashes (NPE in getDoubleRef)
 
 ### Files Changed (Phase 2)
 - `dev/import-perl5/config.yaml` - Added IO::Socket, IO::Zlib, Archive::Tar, Net::*, Tie::StdHandle, File::Spec imports
@@ -257,11 +267,26 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/runtime/perlmodule/SysHostname.java` - New XS module for Sys::Hostname
 - `src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java` - Added caller() support for no-argument load()
 
+### Files Changed (Phase 3)
+- `src/main/java/org/perlonjava/runtime/perlmodule/IPCOpen3.java` - XS module for open2/open3
+- `src/main/java/org/perlonjava/runtime/io/ProcessInputHandle.java` - IOHandle for process stdout/stderr
+- `src/main/java/org/perlonjava/runtime/io/ProcessOutputHandle.java` - IOHandle for process stdin
+- `src/main/perl/lib/IPC/Open2.pm`, `src/main/perl/lib/IPC/Open3.pm` - Custom wrappers using XSLoader
+- `src/main/java/org/perlonjava/runtime/operators/IOOperator.java` - pipe() autovivification, fcntl(), ioctl()
+- `src/main/java/org/perlonjava/runtime/operators/OperatorHandler.java` - Added fcntl/ioctl descriptors
+- `src/main/java/org/perlonjava/frontend/parser/PrototypeArgs.java` - Fixed typeglob prototype parsing
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` - Fixed getIntRef()/getDoubleRef() NPE
+- `dev/import-perl5/config.yaml` - Removed IPC::Open2/Open3 imports (custom implementation)
+
 ### Next Steps
-1. Phase 3: Process control (IPC::Open3)
-2. Evaluate cpanm as alternative to CPAN.pm
+1. Phase 4: Evaluate cpanm as alternative to CPAN.pm
+2. Consider Archive::Zip implementation using java.util.zip
+3. Document "how to add a CPAN module" for users
 
 ### Open Questions
 - Is cpanm lighter on dependencies than CPAN.pm?
 - Should we create a PerlOnJava-specific minimal CPAN client?
 - How important is Safe compartmentalization for users?
+
+### Resolved Questions
+- ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
