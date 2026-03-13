@@ -87,7 +87,7 @@ use constant XZ             => do { !$ENV{'PERL5_AT_NO_XZ'} and
                                     $ENV{'PERL5_AT_NO_XZ'} || $@ ? 0 : 1
                                 };
 
-use constant GZIP_MAGIC_NUM => qr/^(?:\x1F\x8B|\x1F\x9D)/;
+use constant GZIP_MAGIC_NUM => qr/^(?:\037\213|\037\235)/;
 
                            # ASCII:  B   Z   h    0    9
 use constant BZIP_MAGIC_NUM => qr/^\x42\x5A\x68[\x30-\x39]/;
