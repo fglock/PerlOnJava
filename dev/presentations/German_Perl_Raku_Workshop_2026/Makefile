@@ -1,4 +1,4 @@
-.PHONY: help serve open clean slides part1 part2
+.PHONY: help serve open clean slides part1 part2 part3
 
 # Which slides file to present (default: original combined deck)
 SLIDES ?= slides.md
@@ -10,6 +10,7 @@ help:
 	@echo "  make slides   - Present original combined deck (slides.md)"
 	@echo "  make part1    - Present Part 1: Introduction & Demo (20 min)"
 	@echo "  make part2    - Present Part 2: Technical Deep-Dive (40 min)"
+	@echo "  make part3    - Present Part 3: Integration & Future"
 	@echo "  make serve    - Present with custom file: make serve SLIDES=myfile.md"
 	@echo "  make open     - Just open browser (server must be running)"
 	@echo "  make stats    - Collect statistics and benchmarks for slide numbers"
@@ -26,6 +27,9 @@ part1:
 
 part2:
 	@$(MAKE) serve SLIDES=slides-part2-technical.md
+
+part3:
+	@$(MAKE) serve SLIDES=slides-part3-integration.md
 
 # Start web server and open browser (use SLIDES variable to choose deck)
 serve:

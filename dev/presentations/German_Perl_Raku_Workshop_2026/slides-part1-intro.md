@@ -107,9 +107,9 @@ Each prior attempt informed this implementation. JPL showed embedding was possib
 ## By the Numbers
 
 - <span class="metric">~200,000 tests</span> in the suite
-- <span class="metric">392 Java source files</span>
-- <span class="metric">5,741 commits</span> since June 2024
-- <span class="metric">2x faster</span> than Perl 5 on loop benchmarks
+- <span class="metric">~400 Java source files</span>
+- <span class="metric">~6,000 commits</span> since June 2024
+- <span class="metric">JIT-optimized</span> hot paths via HotSpot
 
 No formal Perl spec exists — the test suite **is** the specification.
 
@@ -125,22 +125,6 @@ DBI, HTTP::Tiny, JSON, YAML, Text::CSV, Digest::MD5, MIME::Base64…
 - **XS modules** use Java equivalents (many bundled)
 - Modern Perl `class` features (OOP)
 - Dual execution backend (JVM + Internal VM)
-
----
-
-## Real-World Validation: Image::ExifTool
-
-The most widely-used Perl photo metadata library — running on PerlOnJava **unmodified**.
-
-- <span class="metric">239 Perl source files</span> · <span class="metric">296,000 lines of code</span>
-- Largest modules exceed **10,000 lines** (Nikon.pm, Sony.pm, Canon.pm)
-- Subroutines over **1,000 lines** (SetNewValue, WriteInfo, ExtractInfo)
-- <span class="metric">600 tests</span> in 113 files — **all pass**
-
-**Why this matters:** Large methods exceed the JVM's 64KB bytecode limit — the compiler automatically falls back to the Internal VM. ExifTool proves PerlOnJava handles production-scale Perl reliably, not just toy examples.
-
-Note:
-Image::ExifTool 13.44 by Phil Harvey. Modules like TagLookup.pm (13,840 LOC), Nikon.pm (12,843 LOC), and Writer.pl (5,849 LOC) stress-test every part of the compilation pipeline. The automatic dual-backend fallback is transparent — ExifTool doesn't know which backend runs each method.
 
 ---
 
@@ -180,18 +164,37 @@ Add Maven dependencies with: `./Configure.pl --search mysql-connector-java`. Pur
 ```perl
 use DBI;
 my $dbh = DBI->connect(
-    "dbi:SQLite:dbname=test.db", "", "",
+    "jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",
+    "sa", "",
     { RaiseError => 1 }
 );
-my $sth = $dbh->prepare("SELECT * FROM users");
-$sth->execute();
+$dbh->do("INSERT INTO users (name, age) VALUES (?, ?)",
+    undef, "Alice", 30);
+my $sth = $dbh->prepare("SELECT * FROM users WHERE age > ?");
+$sth->execute(20);
 while (my $row = $sth->fetchrow_hashref) {
-    say "User: $row->{name}";
+    say "$row->{name}, age $row->{age}";
 }
 ```
 
 Note:
 Supports PostgreSQL, MySQL, Oracle, SQLite, H2 — any JDBC driver.
+
+---
+
+## Live Demo: Image::ExifTool
+
+The most widely-used Perl photo metadata library — running on PerlOnJava **unmodified**.
+
+- <span class="metric">239 Perl source files</span> · <span class="metric">296,000 lines of code</span>
+- Largest modules exceed **10,000 lines** (Nikon.pm, Sony.pm, Canon.pm)
+- Subroutines over **1,000 lines** (SetNewValue, WriteInfo, ExtractInfo)
+- <span class="metric">600 tests</span> in 113 files — **all pass**
+
+**Why this matters:** Large methods exceed the JVM's 64KB bytecode limit — the compiler automatically falls back to the Internal VM.
+
+Note:
+Image::ExifTool 13.44 by Phil Harvey. Modules like TagLookup.pm (13,840 LOC), Nikon.pm (12,843 LOC), and Writer.pl (5,849 LOC) stress-test every part of the compilation pipeline. The automatic dual-backend fallback is transparent — ExifTool doesn't know which backend runs each method.
 
 ---
 
@@ -292,14 +295,24 @@ Register-based, ~300 opcodes — much more compact.
 
 ---
 
+## Key Takeaways
+
+- **One JAR, zero dependencies** — drop-in Perl runtime for the JVM
+- **Run existing Perl unchanged** — 200,000+ tests, ExifTool passes unmodified
+- **Full JVM integration** — JDBC, JSR-223, Docker/Kubernetes ready
+- **Two backends, one runtime** — performance where it matters, flexibility where it's needed
+
+---
+
 ## What's Next: Part 2
 
-**Technical deep-dive (40 minutes):**
+**Technical deep-dive (40 minutes)**
 
 - The compilation pipeline in detail
 - Why two backends — and when each one wins
 - JVM optimization techniques applied to Perl
 - Implementing complex Perl semantics on the JVM
-- Integration and future plans
+
+**Integration and future plans**
 
 ---
