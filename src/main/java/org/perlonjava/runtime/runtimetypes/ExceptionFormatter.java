@@ -56,7 +56,13 @@ public class ExceptionFormatter {
         // level; consuming them in order gives the correct nested call stack.
         var interpreterFrames = InterpreterState.getStack();
         var interpreterPcs = InterpreterState.getPcStack();
+        // Start at index 0 - caller() will skip this (the current function)
         int interpreterFrameIndex = 0;
+        
+        // Track whether we've added a frame for the current Perl call level.
+        // Multiple execute() frames can occur for the same call level (for internal ops).
+        // InterpretedCode.apply marks the END of a call level, so we reset after seeing it.
+        boolean addedFrameForCurrentLevel = false;
 
         for (var element : t.getStackTrace()) {
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
@@ -73,12 +79,18 @@ public class ExceptionFormatter {
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
                     callerStackIndex++;
                 }
+            } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.InterpretedCode") &&
+                    element.getMethodName().equals("apply")) {
+                // InterpretedCode.apply marks the END of a Perl call level.
+                // After this, the next execute frame starts a new call level.
+                if (addedFrameForCurrentLevel) {
+                    interpreterFrameIndex++;
+                    addedFrameForCurrentLevel = false;
+                }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
                     element.getMethodName().equals("execute")) {
-                // Consume the next interpreter frame in order.
-                // Using current() always returned the same topmost frame; consuming
-                // in order correctly maps each JVM execute() frame to its Perl level.
-                if (interpreterFrameIndex < interpreterFrames.size()) {
+                // Only add an entry for the current Perl call level once
+                if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
                         // For the innermost frame (index 0), use the runtime current package
@@ -87,8 +99,6 @@ public class ExceptionFormatter {
                         String pkg = (interpreterFrameIndex == 0)
                                 ? InterpreterState.currentPackage.get().toString()
                                 : frame.packageName();
-                        int currentInterpreterFrameIndex = interpreterFrameIndex;
-                        interpreterFrameIndex++;
 
                         String subName = frame.subroutineName();
                         if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
@@ -99,9 +109,9 @@ public class ExceptionFormatter {
                         entry.add(pkg);
                         String filename = frame.code().sourceName;
                         String line = String.valueOf(frame.code().sourceLine);
-                        if (currentInterpreterFrameIndex < interpreterPcs.size()) {
+                        if (interpreterFrameIndex < interpreterPcs.size()) {
                             Integer tokenIndex = null;
-                            int pc = interpreterPcs.get(currentInterpreterFrameIndex);
+                            int pc = interpreterPcs.get(interpreterFrameIndex);
                             if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
                                 var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
                                 if (entryPc != null) {
@@ -119,6 +129,7 @@ public class ExceptionFormatter {
                         entry.add(subName);
                         stackTrace.add(entry);
                         lastFileName = filename != null ? filename : "";
+                        addedFrameForCurrentLevel = true;
                     }
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||

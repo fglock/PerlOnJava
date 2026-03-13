@@ -14,8 +14,10 @@ public class CompileAssignment {
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
-        if (localOperand instanceof BinaryOperatorNode hashAccess && hashAccess.operator.equals("{")) {
-            bc.compileNode(hashAccess, -1, rhsContext);
+        // General fallback for any BinaryOperatorNode lvalue (matches JVM backend behavior)
+        // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
+        if (localOperand instanceof BinaryOperatorNode binOp) {
+            bc.compileNode(binOp, -1, rhsContext);
             int elemReg = bc.lastResultReg;
             bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
             bc.emitReg(elemReg);
