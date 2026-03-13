@@ -234,11 +234,11 @@ public class OperatorParser {
                 String name = ((IdentifierNode) identifierNode).name;
                 String var = sigil + name;
                 if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                    String message = operator.equals("our")
+                            ? "\"" + operator + "\" variable " + var + " redeclared"
+                            : "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope";
                     System.err.println(
-                            ctx.errorUtil.errorMessage(node.getIndex(),
-                                    "Warning: \"" + operator + "\" variable "
-                                            + var
-                                            + " masks earlier declaration in same ctx.symbolTable"));
+                            ctx.errorUtil.errorMessage(node.getIndex(), message));
                 }
                 int varIndex = ctx.symbolTable.addVariable(var, operator, node);
                 // Note: the isDeclaredReference flag is stored in node.annotations

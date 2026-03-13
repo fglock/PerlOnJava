@@ -1109,11 +1109,12 @@ public class EmitVariable {
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
                     if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                            String message = operator.equals("our")
+                                    ? "\"" + operator + "\" variable " + var + " redeclared"
+                                    : "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope";
                             System.err.println(
                                     emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
-                                            "Warning: \"" + operator + "\" variable "
-                                                    + var
-                                                    + " masks earlier declaration in same ctx.symbolTable"));
+                                            message));
                         }
                     }
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
