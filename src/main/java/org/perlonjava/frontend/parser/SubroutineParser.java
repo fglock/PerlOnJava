@@ -820,11 +820,8 @@ public class SubroutineParser {
                     Object[] parameters = paramList.toArray();
                     placeholder.codeObject = constructor.newInstance(parameters);
 
-                    // Set the PerlSubroutine interface for direct invocation (no MethodHandle needed)
+                    // Set the PerlSubroutine interface for direct invocation
                     placeholder.subroutine = (PerlSubroutine) placeholder.codeObject;
-
-                    // Retrieve the 'apply' method from the generated class (kept for compatibility)
-                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
 
                     // Set the __SUB__ instance field to codeRef
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
@@ -834,7 +831,7 @@ public class SubroutineParser {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
                     // This is critical: hash assignments copy RuntimeScalar but share the same
                     // RuntimeCode value object. If we replace codeRef.value, hash copies won't see
-                    // the update. By setting methodHandle/codeObject on the placeholder, ALL
+                    // the update. By setting subroutine/codeObject on the placeholder, ALL
                     // references (including hash copies) will see the compiled code.
 
                     // Set captured variables if there are any
@@ -858,11 +855,8 @@ public class SubroutineParser {
                     interpretedCode.__SUB__ = codeRef;
 
                     // Set PerlSubroutine interface for direct invocation
+                    // InterpretedCode implements PerlSubroutine, so we can use it directly
                     placeholder.subroutine = interpretedCode;
-
-                    // Update placeholder in-place: set methodHandle to delegate to InterpretedCode
-                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(
-                            InterpretedCode.class, "apply", RuntimeCode.methodType);
                     placeholder.codeObject = interpretedCode;
                 }
             } catch (Exception e) {
