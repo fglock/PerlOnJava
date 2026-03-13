@@ -338,10 +338,10 @@ public class CustomFileChannel implements IOHandle {
      */
     @Override
     public RuntimeScalar fileno() {
-        // Return a synthetic fd based on object identity, starting from 3
-        // (0=stdin, 1=stdout, 2=stderr are reserved)
-        int syntheticFd = 3 + (System.identityHashCode(this) & 0x7FFFFFFF) % 1000000;
-        return new RuntimeScalar(syntheticFd);
+        // Java's FileChannel does not expose the underlying OS file descriptor.
+        // Return undef to match Perl's behavior for handles without a real fd.
+        // Note: Validity checks should be done in the Java backend, not via fileno().
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**

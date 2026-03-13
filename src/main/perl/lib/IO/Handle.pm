@@ -361,7 +361,8 @@ sub clearerr {
 
 sub sync {
     my $fh = shift;
-    return undef unless defined fileno($fh);
+    # Note: Don't check fileno() here - Java's FileChannel returns undef for fileno
+    # but the Java backend handles invalid handles internally in _sync()
 
     if ($has_java_backend) {
         return _sync($fh);
@@ -375,8 +376,8 @@ sub sync {
 sub flush {
     my $fh = shift;
 
-    # First check if handle is valid
-    return undef unless defined fileno($fh);
+    # Note: Don't check fileno() here - Java's FileChannel returns undef for fileno
+    # The flush implementation works regardless of fileno value
 
     # Save and restore selected handle
     my $old_fh = select($fh);
