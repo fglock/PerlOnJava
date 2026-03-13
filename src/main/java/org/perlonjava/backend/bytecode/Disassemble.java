@@ -991,6 +991,13 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("DEFINED r").append(rd).append(" = defined(r").append(rs).append(")\n");
                         break;
+                    case Opcodes.DEFINED_GLOB:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        int definedGlobPkgIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DEFINED_GLOB r").append(rd).append(" = defined(*r").append(rs)
+                          .append(") pkg=").append(interpretedCode.stringPool[definedGlobPkgIdx]).append("\n");
+                        break;
                     case Opcodes.REF:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

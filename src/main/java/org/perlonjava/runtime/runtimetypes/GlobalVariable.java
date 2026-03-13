@@ -436,6 +436,72 @@ public class GlobalVariable {
     }
 
     /**
+     * Checks if a glob is defined (has any slot with content).
+     * Used for `defined *$var` which should not throw strict refs and not auto-vivify.
+     *
+     * @param scalar      The scalar containing the glob name or glob reference.
+     * @param packageName The current package name for resolving unqualified names.
+     * @return RuntimeScalar true if the glob is defined, false otherwise.
+     */
+    public static RuntimeScalar definedGlob(RuntimeScalar scalar, String packageName) {
+        // Handle glob references directly
+        if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
+            if (scalar.value instanceof RuntimeGlob glob) {
+                return glob.defined();
+            }
+            return RuntimeScalarCache.scalarFalse;
+        }
+
+        // For strings, check if any slot exists without auto-vivifying
+        String varName = NameNormalizer.normalizeVariableName(scalar.toString(), packageName);
+        
+        // Check if glob was explicitly assigned
+        if (globalGlobs.getOrDefault(varName, false)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check scalar slot
+        if (globalVariables.containsKey(varName)) {
+            RuntimeScalar sv = globalVariables.get(varName);
+            if (sv != null && sv.getDefinedBoolean()) {
+                return RuntimeScalarCache.scalarTrue;
+            }
+        }
+        
+        // Check array slot
+        if (globalArrays.containsKey(varName)) {
+            RuntimeArray arr = globalArrays.get(varName);
+            if (arr != null && !arr.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarTrue;
+            }
+        }
+        
+        // Check hash slot
+        if (globalHashes.containsKey(varName)) {
+            RuntimeHash hash = globalHashes.get(varName);
+            if (hash != null && !hash.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarTrue;
+            }
+        }
+        
+        // Check code slot
+        if (globalCodeRefs.containsKey(varName)) {
+            RuntimeScalar code = globalCodeRefs.get(varName);
+            if (code != null && code.getDefinedBoolean()) {
+                return RuntimeScalarCache.scalarTrue;
+            }
+        }
+        
+        // Check IO slot (via globalIORefs)
+        RuntimeGlob glob = globalIORefs.get(varName);
+        if (glob != null && glob.IO != null && glob.IO.getDefinedBoolean()) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        return RuntimeScalarCache.scalarFalse;
+    }
+
+    /**
      * Retrieves a global format reference by its key, initializing it if necessary.
      *
      * @param key The key of the global format reference.

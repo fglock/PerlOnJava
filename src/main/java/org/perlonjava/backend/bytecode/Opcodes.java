@@ -1924,6 +1924,14 @@ public class Opcodes {
      */
     public static final short ARRAY_DEREF_FETCH_NONSTRICT = 384;
 
+    /**
+     * Defined glob check (for `defined *$var`).
+     * Perl allows this even under strict refs, without auto-vivifying.
+     * Format: DEFINED_GLOB rd scalar_reg pkg_string_idx
+     * Effect: rd = GlobalVariable.definedGlob(scalar_reg, pkg)
+     */
+    public static final short DEFINED_GLOB = 386;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

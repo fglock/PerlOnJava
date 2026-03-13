@@ -438,6 +438,36 @@ public class CompileOperator {
         }
     }
 
+    /**
+     * Handles `defined` operator with special case for `defined *$var`.
+     * Perl allows `defined *$var` even under strict refs without auto-vivifying.
+     */
+    private static void visitDefined(BytecodeCompiler bc, OperatorNode node) {
+        // Check for special case: defined *$var
+        if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            Node operand = listNode.elements.getFirst();
+            // Handle defined(+expr) by unwrapping the +
+            if (operand instanceof OperatorNode opNode && opNode.operator.equals("+")) {
+                operand = opNode.operand;
+            }
+            if (operand instanceof OperatorNode opNode && opNode.operator.equals("*")) {
+                // defined *$var - use special handling that doesn't throw strict refs
+                opNode.operand.accept(bc);
+                int scalarReg = bc.lastResultReg;
+                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.DEFINED_GLOB);
+                bc.emitReg(rd);
+                bc.emitReg(scalarReg);
+                bc.emit(pkgIdx);
+                bc.lastResultReg = rd;
+                return;
+            }
+        }
+        // Default case: regular defined
+        emitSimpleUnary(bc, node, Opcodes.DEFINED);
+    }
+
     private static void visitPopShiftOp(BytecodeCompiler bc, OperatorNode node, short opcode) {
         int arrayReg = resolveArrayOperand(bc, node, node.operator);
         int rd = bc.allocateOutputRegister();
@@ -590,7 +620,7 @@ public class CompileOperator {
                     bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_BITWISE_NOT : Opcodes.BITWISE_NOT);
             case "binary~" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
             case "~." -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
-            case "defined" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.DEFINED);
+            case "defined" -> visitDefined(bytecodeCompiler, node);
             case "wantarray" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WANTARRAY); bytecodeCompiler.emitReg(rd); bytecodeCompiler.emitReg(2); bytecodeCompiler.lastResultReg = rd; }
             case "time" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.TIME_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "getppid" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex()); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
