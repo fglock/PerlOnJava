@@ -451,12 +451,8 @@ imports:
   - source: perl5/lib/Symbol.pm
     target: src/main/perl/lib/Symbol.pm
 
-  # Phase 3: IPC::Open2 and IPC::Open3 - Process control
-  - source: perl5/ext/IPC-Open3/lib/IPC/Open2.pm
-    target: src/main/perl/lib/IPC/Open2.pm
-
-  - source: perl5/ext/IPC-Open3/lib/IPC/Open3.pm
-    target: src/main/perl/lib/IPC/Open3.pm
+  # Note: IPC::Open2 and IPC::Open3 are NOT imported - we use custom
+  # implementations with Java ProcessBuilder (see IPCOpen3.java)
 
   # Add more imports below as needed
   # Example with minimal fields:
