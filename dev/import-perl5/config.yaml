@@ -446,6 +446,11 @@ imports:
     target: src/main/perl/lib/Net
     type: directory
 
+  # Symbol - manipulate Perl symbols and their names (pure Perl)
+  # Required by constant.pm which is used by File::Spec::Unix
+  - source: perl5/lib/Symbol.pm
+    target: src/main/perl/lib/Symbol.pm
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
