@@ -47,13 +47,9 @@ use constant _IOFBF => 0;  # Fully buffered
 use constant _IOLBF => 1;  # Line buffered
 use constant _IONBF => 2;  # Unbuffered
 
-# Try to load Java backend if available
-my $has_java_backend = 0;
-eval {
-    require 'org.perlonjava.runtime.perlmodule.IOHandleModule';
-    IOHandleInit();
-    $has_java_backend = 1;
-};
+# Check if Java backend methods are available (registered by IOHandle.initialize())
+# The _sync function is registered directly into IO::Handle namespace by Java code
+our $has_java_backend = defined &IO::Handle::_sync;
 
 # Constructor
 sub new {

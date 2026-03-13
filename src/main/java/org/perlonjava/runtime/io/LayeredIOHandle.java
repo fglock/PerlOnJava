@@ -381,6 +381,20 @@ public class LayeredIOHandle implements IOHandle {
     }
 
     /**
+     * Synchronizes data to physical storage (fsync).
+     *
+     * <p>This method passes through to the delegate's sync method.
+     * Use this only when you need guaranteed disk durability.</p>
+     *
+     * @return the result from the delegate's sync operation
+     * @see IOHandle#sync()
+     */
+    @Override
+    public RuntimeScalar sync() {
+        return delegate.sync();
+    }
+
+    /**
      * Closes the handle and cleans up all layers.
      *
      * <p>This method:</p>

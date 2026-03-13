@@ -85,7 +85,16 @@ public class IOHandle extends PerlModuleBase {
     }
 
     /**
-     * Sync file's in-memory state with physical medium
+     * Sync file's in-memory state with physical medium (fsync).
+     *
+     * <p>This synchronizes a file's in-memory state with that on the physical medium.
+     * It operates at the file descriptor level (like sysread, sysseek), not at the
+     * perlio API level. Data buffered at the perlio level must be flushed first
+     * with flush().</p>
+     *
+     * <p>Returns "0 but true" on success, undef on error or invalid handle.</p>
+     *
+     * @see <a href="https://perldoc.perl.org/IO::Handle#$io-%3Esync">IO::Handle->sync</a>
      */
     public static RuntimeList _sync(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
@@ -94,26 +103,25 @@ public class IOHandle extends PerlModuleBase {
 
         RuntimeIO fh = RuntimeIO.getRuntimeIO(args.get(0));
         if (fh == null || fh.ioHandle == null) {
-            return new RuntimeList();
+            return new RuntimeList(); // undef for invalid handle
         }
 
         try {
-            // First flush any buffered data
+            // First flush any perlio-level buffered data
             fh.flush();
 
-            // For file handles, we've done what we can with flush()
-            // The JVM doesn't provide a portable way to force fsync
-            // Most implementations will sync on flush anyway
-
-            // Note: If you need true fsync behavior, you would need to:
-            // 1. Add a sync() method to the IOHandle interface
-            // 2. Implement it in CustomFileChannel using FileChannel.force(true)
-            // 3. Call it here: fh.ioHandle.sync();
-
-            return new RuntimeList(new RuntimeScalar("0 but true"));
+            // Now call sync() to force fsync on the file descriptor
+            RuntimeScalar result = fh.ioHandle.sync();
+            
+            if (result.getBoolean()) {
+                // Return "0 but true" on success per Perl convention
+                return new RuntimeList(new RuntimeScalar("0 but true"));
+            } else {
+                return new RuntimeList(); // undef on error
+            }
         } catch (Exception e) {
             RuntimeIO.handleIOError("sync failed: " + e.getMessage());
-            return new RuntimeList();
+            return new RuntimeList(); // undef on error
         }
     }
 

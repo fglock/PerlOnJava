@@ -194,6 +194,7 @@ public class GlobalContext {
         Encode.initialize();
         JavaSystem.initialize();
         PerlIO.initialize();
+        IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
         Version.initialize();   // Initialize version module for version objects
         DynaLoader.initialize();
         XSLoader.initialize();  // XSLoader will load other classes on-demand
