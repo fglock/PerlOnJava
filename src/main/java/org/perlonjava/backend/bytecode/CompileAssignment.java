@@ -183,7 +183,7 @@ public class CompileAssignment {
                 }
                 bc.compileNode(node.right, -1, rhsContext);
                 int valueReg = bc.lastResultReg;
-                String globalVarName = bc.getCurrentPackage() + "::" + idNode.name;
+                String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(globalVarName);
                 int localReg = bc.allocateRegister();
                 bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
@@ -207,7 +207,7 @@ public class CompileAssignment {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
-                String globalVarName = bc.getCurrentPackage() + "::" + idNode.name;
+                String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(globalVarName);
                 int localReg = bc.allocateRegister();
                 bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());

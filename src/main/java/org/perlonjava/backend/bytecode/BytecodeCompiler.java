@@ -3731,12 +3731,9 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("*")) {
             // Glob variable dereference: *x
             if (node.operand instanceof IdentifierNode idNode) {
-                String varName = idNode.name;
-
-                // Add package prefix if not present
-                if (!varName.contains("::")) {
-                    varName = getCurrentPackage() + "::" + varName;
-                }
+                // Use NameNormalizer to properly handle special handles (STDOUT, STDERR, STDIN, etc.)
+                // which must always be in the "main" package, regardless of current package.
+                String varName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
 
                 // Allocate register for glob
                 int rd = allocateOutputRegister();
@@ -3750,10 +3747,8 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             } else if (node.operand instanceof StringNode strNode) {
                 // Symbolic ref: *{'name'} or 'name'->** — load global glob by string name
-                String varName = strNode.value;
-                if (!varName.contains("::")) {
-                    varName = getCurrentPackage() + "::" + varName;
-                }
+                // Use NameNormalizer to properly handle special handles (STDOUT, STDERR, etc.)
+                String varName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
                 int rd = allocateOutputRegister();
                 int nameIdx = addToStringPool(varName);
                 emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
