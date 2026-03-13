@@ -287,4 +287,6 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - Is cpanm lighter on dependencies than CPAN.pm?
 - Should we create a PerlOnJava-specific minimal CPAN client?
 - How important is Safe compartmentalization for users?
-- Can we implement a Java-based alternative to fork() for process spawning?
+
+### Resolved Questions
+- ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
