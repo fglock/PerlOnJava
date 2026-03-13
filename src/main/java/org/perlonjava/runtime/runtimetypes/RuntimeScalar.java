@@ -845,11 +845,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public int getIntRef() {
-        return value.hashCode();
+        return this.hashCode();
     }
 
     public double getDoubleRef() {
-        return value.hashCode();
+        return this.hashCode();
     }
 
     public boolean getBooleanRef() {

@@ -420,8 +420,10 @@ public class PrototypeArgs {
             return;
         }
 
-        // Parse the expression
-        Node expr = parser.parseExpression(parser.getPrecedence(","));
+        // Parse with precedence 20 (=~ level) which allows subscripts ([],{},->)
+        // but excludes binary operators like &&, ||, !=, etc.
+        // This is the same precedence used for scalar/keys/values/each operators.
+        Node expr = parser.parseExpression(parser.getPrecedence("=~"));
         if (expr == null) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
