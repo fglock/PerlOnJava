@@ -1522,6 +1522,8 @@ public class CompileAssignment {
                 
             } else if (node.left instanceof ListNode listNode) {
                 // List assignment: ($a, $b) = ... or () = ...
+                // Follow the JVM backend approach: compile LHS as a list of lvalues,
+                // then call setFromList() on it.
                 // In scalar context, returns the number of elements on RHS
                 // In list context, returns the RHS list
                 LValueVisitor.getContext(node.left);
@@ -1536,80 +1538,6 @@ public class CompileAssignment {
                 bytecodeCompiler.emitReg(rhsListReg);
                 bytecodeCompiler.emitReg(rhsReg);
 
-                // Resolve all LHS variables and collect their registers
-                List<Integer> varRegs = new ArrayList<>();
-                for (Node lhsElement : listNode.elements) {
-                    if (lhsElement instanceof OperatorNode lhsOp && lhsOp.operand instanceof IdentifierNode idNode) {
-                        String sigil = lhsOp.operator;
-                        String varName = sigil + idNode.name;
-
-                        if (sigil.equals("$")) {
-                            if (bytecodeCompiler.hasVariable(varName)) {
-                                int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                                if (!((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
-                                        || bytecodeCompiler.closureCapturedVarNames.contains(varName))) {
-                                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                                    bytecodeCompiler.emitReg(targetReg);
-                                }
-                                varRegs.add(targetReg);
-                            } else {
-                                if (bytecodeCompiler.shouldBlockGlobalUnderStrictVars(varName)) {
-                                    bytecodeCompiler.throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-                                }
-                                String normalizedName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
-                                int nameIdx = bytecodeCompiler.addToStringPool(normalizedName);
-                                int globalReg = bytecodeCompiler.allocateRegister();
-                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                                bytecodeCompiler.emitReg(globalReg);
-                                bytecodeCompiler.emit(nameIdx);
-                                varRegs.add(globalReg);
-                            }
-                        } else if (sigil.equals("@")) {
-                            int arrayReg;
-                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
-                                arrayReg = bytecodeCompiler.allocateRegister();
-                                int nameIdx = bytecodeCompiler.addToStringPool(varName);
-                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
-                                bytecodeCompiler.emitReg(arrayReg);
-                                bytecodeCompiler.emit(nameIdx);
-                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                            } else if (bytecodeCompiler.hasVariable(varName)) {
-                                arrayReg = bytecodeCompiler.getVariableRegister(varName);
-                            } else {
-                                arrayReg = bytecodeCompiler.allocateRegister();
-                                String globalName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
-                                int nameIdx = bytecodeCompiler.addToStringPool(globalName);
-                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                bytecodeCompiler.emitReg(arrayReg);
-                                bytecodeCompiler.emit(nameIdx);
-                            }
-                            varRegs.add(arrayReg);
-                        } else if (sigil.equals("%")) {
-                            int hashReg;
-                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
-                                hashReg = bytecodeCompiler.allocateRegister();
-                                int nameIdx = bytecodeCompiler.addToStringPool(varName);
-                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
-                                bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emit(nameIdx);
-                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                            } else if (bytecodeCompiler.hasVariable(varName)) {
-                                hashReg = bytecodeCompiler.getVariableRegister(varName);
-                            } else {
-                                hashReg = bytecodeCompiler.allocateRegister();
-                                String globalName = NameNormalizer.normalizeVariableName(idNode.name, bytecodeCompiler.getCurrentPackage());
-                                int nameIdx = bytecodeCompiler.addToStringPool(globalName);
-                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_HASH);
-                                bytecodeCompiler.emitReg(hashReg);
-                                bytecodeCompiler.emit(nameIdx);
-                            }
-                            varRegs.add(hashReg);
-                        }
-                    }
-                }
-
                 int countReg = -1;
                 if (outerContext == RuntimeContextType.SCALAR) {
                     countReg = bytecodeCompiler.allocateRegister();
@@ -1618,22 +1546,17 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(rhsListReg);
                 }
 
-                // Build LHS list and assign via SET_FROM_LIST
-                if (!varRegs.isEmpty()) {
-                    int lhsListReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                    bytecodeCompiler.emitReg(lhsListReg);
-                    bytecodeCompiler.emit(varRegs.size());
-                    for (int reg : varRegs) {
-                        bytecodeCompiler.emitReg(reg);
-                    }
+                // Compile LHS ListNode in LIST context - this produces a RuntimeList of lvalues
+                // This follows the JVM backend approach (EmitVariable.java line 837)
+                bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LIST);
+                int lhsListReg = bytecodeCompiler.lastResultReg;
 
-                    int resultReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.SET_FROM_LIST);
-                    bytecodeCompiler.emitReg(resultReg);
-                    bytecodeCompiler.emitReg(lhsListReg);
-                    bytecodeCompiler.emitReg(rhsListReg);
-                }
+                // Call SET_FROM_LIST to assign RHS values to LHS lvalues
+                int resultReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.SET_FROM_LIST);
+                bytecodeCompiler.emitReg(resultReg);
+                bytecodeCompiler.emitReg(lhsListReg);
+                bytecodeCompiler.emitReg(rhsListReg);
 
                 if (countReg >= 0) {
                     bytecodeCompiler.lastResultReg = countReg;
