@@ -110,11 +110,15 @@ Benefits:
 - [x] No MethodHandle conversion errors observed
 - [x] Basic subroutine calls, closures, and method calls work correctly
 
-### Phase 10: Cleanup (Optional, can be deferred)
-- [ ] Remove `methodHandle` field after confirming all tests pass
-- [ ] Remove `codeObject` field (subroutine IS the object)
-- [ ] Remove `methodHandleCache`
-- [ ] Remove `isStatic` field
+### Phase 10: Cleanup (PARTIAL - 2024-03-13)
+- [x] Remove redundant `methodHandle` lookups in SubroutineParser deferred compilation
+- [ ] Remove `methodHandle` field from RuntimeCode (blocked: PerlModuleBase still uses it)
+- [ ] Remove `codeObject` field (blocked: still needed for __SUB__ field access)
+- [ ] Remove `methodHandleCache` (low priority - not causing issues)
+- [ ] Remove `isStatic` field (blocked: PerlModuleBase uses it)
+
+Note: Full cleanup is blocked because PerlModuleBase uses methodHandle for static Java
+methods. This is intentional to preserve caller() stack behavior for built-in modules.
 
 ## File Change Summary
 
@@ -122,10 +126,11 @@ Benefits:
 |------|---------|
 | PerlSubroutine.java | NEW - functional interface |
 | EmitterMethodCreator.java | Add interface to generated classes |
+| InterpretedCode.java | Implements PerlSubroutine interface |
 | RuntimeCode.java | Add subroutine field, update apply(), makeCodeObject(), callCached() |
-| PerlModuleBase.java | Use lambdas for static methods |
-| CompiledCode.java | Update constructor if needed |
-| SubroutineParser.java | Update methodHandle references |
+| SubroutineParser.java | Set subroutine field, removed redundant methodHandle lookups |
+| RuntimeScalar.java | Constructor disambiguation |
+| GlobalVariable.java | Constructor disambiguation |
 
 ## Backward Compatibility
 
