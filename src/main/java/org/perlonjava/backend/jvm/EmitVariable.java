@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -766,6 +767,18 @@ public class EmitVariable {
                         // `\\$b = \\$a` requires "refaliasing"
                         if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                             throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
+                        }
+                        // Emit experimental warning if warnings are enabled
+                        if (ctx.symbolTable.isWarningCategoryEnabled("experimental::refaliasing")) {
+                            try {
+                                WarnDie.warn(
+                                        new RuntimeScalar("Aliasing via reference is experimental"),
+                                        new RuntimeScalar(ctx.errorUtil.warningLocation(node.tokenIndex))
+                                );
+                            } catch (Exception e) {
+                                // If warning system isn't initialized yet, fall back to System.err
+                                System.err.println("Aliasing via reference is experimental" + ctx.errorUtil.warningLocation(node.tokenIndex) + ".");
+                            }
                         }
                         // TODO: Implement proper reference aliasing
                         // For now, we just assign the reference value without creating an alias
