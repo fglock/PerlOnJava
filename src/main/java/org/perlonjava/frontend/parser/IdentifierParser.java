@@ -331,10 +331,12 @@ public class IdentifierParser {
                     return prefix;
                 }
                 if (token.text.equals("$") && (nextToken.text.equals("$")
+                        || nextToken.text.equals("{")
                         || nextToken.type == LexerTokenType.IDENTIFIER
                         || nextToken.type == LexerTokenType.NUMBER)
                         || nextToken.text.equals("::")) {
-                    // `@$` can't be followed by `$`, `::`, name or number
+                    // `@$` can't be followed by `$`, `{`, `::`, name or number
+                    // `@{${...}` should fall back to block parsing
                     return null;
                 }
                 if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
@@ -393,6 +395,7 @@ public class IdentifierParser {
                     nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
                     // After ::, only identifiers or another :: are allowed (or ' as package separator)
+                    // Note: Keywords CAN be valid identifier parts after :: (e.g., $Foo::and, &UNIVERSAL::isa)
                     if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::") && !token.text.equals("'")) {
                         // Nothing valid follows ::, so return what we have
                         return variableName.toString();

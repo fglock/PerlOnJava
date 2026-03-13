@@ -250,13 +250,16 @@ public class SlowOpcodeHandler {
         int numberReg = bytecode[pc++];
         int argCount = bytecode[pc++];
 
-        // Skip argument registers
+        // Collect arguments
+        RuntimeBase[] args = new RuntimeBase[argCount + 1];
+        args[0] = registers[numberReg]; // syscall number
         for (int i = 0; i < argCount; i++) {
-            pc++; // Skip each argument register
+            args[i + 1] = registers[bytecode[pc++]];
         }
 
-        // TODO: Implement via JNI or Panama FFM API
-        throw new UnsupportedOperationException("syscall() not yet implemented");
+        // Call SyscallOperator
+        registers[rd] = SyscallOperator.syscall(RuntimeContextType.SCALAR, args);
+        return pc;
     }
 
     /**

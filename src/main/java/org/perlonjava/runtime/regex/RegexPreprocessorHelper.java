@@ -19,27 +19,41 @@ public class RegexPreprocessorHelper {
         char nextChar = s.charAt(offset);
 
         // Check for numeric backreferences vs octal escapes
-        // In Perl: \400, \600, \777 are octals (> 255), not backreferences
-        // But \1-\9 followed by non-octal digits are backreferences
+        // Perl disambiguation rules (from perlrebackslash):
+        // 1. If the backslash is followed by a single digit, it's a backreference.
+        // 2. If the first digit following the backslash is a 0, it's an octal escape.
+        // 3. If the number N (in decimal) and Perl has already seen N capture groups,
+        //    it's a backreference. Otherwise, it's an octal escape.
+        //
+        // Examples:
+        //   \100 with 100 capture groups -> backreference to group 100
+        //   \100 with 0 capture groups   -> octal 100 = '@'
+        //   \037 with 0 capture groups   -> octal 037 = unit separator (used in Archive::Tar)
+        //   \9 is always a backreference (single digit rule)
         boolean isOctalNotBackref = false;
         if (nextChar >= '1' && nextChar <= '9') {
-            // Check if this might be a 3-digit octal > 255
-            if (nextChar >= '1' && nextChar <= '7' && offset + 2 < length) {
-                int d1 = nextChar - '0';
-                char c2 = s.charAt(offset + 1);
-                char c3 = offset + 2 < length ? s.charAt(offset + 2) : '\0';
-
-                if (c2 >= '0' && c2 <= '7' && c3 >= '0' && c3 <= '7') {
-                    int octalValue = d1 * 64 + (c2 - '0') * 8 + (c3 - '0');
-                    if (octalValue > 255) {
-                        // This is an octal escape, not a backreference
-                        // Fall through to octal handling below at line ~320
-                        // Leave the backslash in sb for the octal handler to manage
-                        // offset stays pointing to the first octal digit ('4' in \400)
-                        isOctalNotBackref = true;
+            // Parse all consecutive digits to get the full number
+            int endDigits = offset;
+            while (endDigits < length && s.charAt(endDigits) >= '0' && s.charAt(endDigits) <= '9') {
+                endDigits++;
+            }
+            String digitStr = s.substring(offset, endDigits);
+            int refNum = Integer.parseInt(digitStr);
+            
+            // Rule 3: If refNum > captureGroupCount, it's an octal escape (if valid octal)
+            if (refNum > RegexPreprocessor.captureGroupCount) {
+                // Check if all digits are octal (0-7)
+                boolean allOctal = true;
+                for (int i = 0; i < digitStr.length(); i++) {
+                    char d = digitStr.charAt(i);
+                    if (d > '7') {
+                        allOctal = false;
+                        break;
                     }
-                    // else: It's a 3-digit octal <= 255, treat as backreference
-                    // (Perl's behavior: \1-\377 are backreferences if groups exist)
+                }
+                if (allOctal && digitStr.length() >= 2) {
+                    // This is an octal escape, not a backreference
+                    isOctalNotBackref = true;
                 }
             }
         }

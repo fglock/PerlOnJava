@@ -9,6 +9,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -56,6 +58,12 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  */
 public class CustomFileChannel implements IOHandle {
 
+    // Perl flock constants
+    private static final int LOCK_SH = 1;  // Shared lock
+    private static final int LOCK_EX = 2;  // Exclusive lock
+    private static final int LOCK_NB = 4;  // Non-blocking
+    private static final int LOCK_UN = 8;  // Unlock
+
     /**
      * The underlying Java NIO FileChannel for actual I/O operations
      */
@@ -67,6 +75,11 @@ public class CustomFileChannel implements IOHandle {
 
     // When true, writes should always occur at end-of-file (Perl's append semantics).
     private boolean appendMode;
+
+    /**
+     * Current file lock, if any
+     */
+    private FileLock currentLock;
 
     /**
      * Helper for handling multi-byte character decoding across read boundaries
@@ -363,6 +376,76 @@ public class CustomFileChannel implements IOHandle {
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "truncate failed");
+        }
+    }
+
+    /**
+     * Applies or removes an advisory lock on the file.
+     *
+     * <p>This implements Perl's flock() function using Java's FileLock API.
+     * The operation is a bitmask of:
+     * <ul>
+     *   <li>LOCK_SH (1) - Shared lock (for reading, multiple processes can hold)</li>
+     *   <li>LOCK_EX (2) - Exclusive lock (for writing, only one process can hold)</li>
+     *   <li>LOCK_UN (8) - Unlock (release any held lock)</li>
+     *   <li>LOCK_NB (4) - Non-blocking (can be OR'd with SH or EX)</li>
+     * </ul>
+     *
+     * @param operation the lock operation bitmask
+     * @return RuntimeScalar with true on success, false on failure
+     */
+    @Override
+    public RuntimeScalar flock(int operation) {
+        try {
+            boolean nonBlocking = (operation & LOCK_NB) != 0;
+            boolean unlock = (operation & LOCK_UN) != 0;
+            boolean shared = (operation & LOCK_SH) != 0;
+            boolean exclusive = (operation & LOCK_EX) != 0;
+
+            if (unlock) {
+                // Release any existing lock
+                if (currentLock != null) {
+                    currentLock.release();
+                    currentLock = null;
+                }
+                return scalarTrue;
+            }
+
+            // Release any existing lock before acquiring a new one
+            if (currentLock != null) {
+                currentLock.release();
+                currentLock = null;
+            }
+
+            if (exclusive || shared) {
+                // shared=true for LOCK_SH, shared=false for LOCK_EX
+                boolean isShared = shared && !exclusive;
+
+                if (nonBlocking) {
+                    // Non-blocking: use tryLock
+                    currentLock = fileChannel.tryLock(0, Long.MAX_VALUE, isShared);
+                    if (currentLock == null) {
+                        // Would block - return false
+                        getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                        return RuntimeScalarCache.scalarFalse;
+                    }
+                } else {
+                    // Blocking: use lock (will wait until lock is available)
+                    currentLock = fileChannel.lock(0, Long.MAX_VALUE, isShared);
+                }
+                return scalarTrue;
+            }
+
+            // Invalid operation (neither lock nor unlock specified)
+            getGlobalVariable("main::!").set(22); // EINVAL
+            return RuntimeScalarCache.scalarFalse;
+
+        } catch (OverlappingFileLockException e) {
+            // This happens when trying to lock a region already locked by this JVM
+            getGlobalVariable("main::!").set(11); // EAGAIN
+            return RuntimeScalarCache.scalarFalse;
+        } catch (IOException e) {
+            return handleIOException(e, "flock failed");
         }
     }
 

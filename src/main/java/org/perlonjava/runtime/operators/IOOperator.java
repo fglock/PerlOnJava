@@ -1636,6 +1636,47 @@ public class IOOperator {
     }
 
     /**
+     * flock(FILEHANDLE, OPERATION)
+     * Applies or removes an advisory lock on a file.
+     *
+     * OPERATION is a bitmask:
+     *   LOCK_SH (1) - Shared lock (for reading)
+     *   LOCK_EX (2) - Exclusive lock (for writing)
+     *   LOCK_UN (8) - Unlock
+     *   LOCK_NB (4) - Non-blocking (can be OR'd with SH or EX)
+     *
+     * Returns true on success, false on failure.
+     */
+    public static RuntimeScalar flock(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for flock");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar fileHandle = args[0].scalar();
+            int operation = args[1].scalar().getInt();
+
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+            if (fh == null) {
+                getGlobalVariable("main::!").set(9); // EBADF - Bad file descriptor
+                return scalarFalse;
+            }
+
+            if (fh.ioHandle == null) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return scalarFalse;
+            }
+
+            return fh.ioHandle.flock(operation);
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("flock failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
      * getsockname(SOCKET)
      * Returns the packed sockaddr structure for the local end of the socket.
      */

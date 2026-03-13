@@ -1598,6 +1598,10 @@ public class Opcodes {
      */
     public static final short TRUNCATE = 326;
     /**
+     * flock FILEHANDLE,OPERATION: Format: FLOCK rd argsReg ctx
+     */
+    public static final short FLOCK = 385;
+    /**
      * read FILEHANDLE,SCALAR,LENGTH: Format: READ rd argsReg ctx
      */
     public static final short READ = 327;

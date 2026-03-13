@@ -224,6 +224,25 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("Truncate operation is not supported.");
     }
 
+    /**
+     * Applies or removes an advisory lock on a file.
+     *
+     * <p>This is equivalent to Perl's {@code flock(FILEHANDLE, OPERATION)}.
+     * The operation is a bitmask of:</p>
+     * <ul>
+     *   <li>LOCK_SH (1) - Shared lock (for reading)</li>
+     *   <li>LOCK_EX (2) - Exclusive lock (for writing)</li>
+     *   <li>LOCK_UN (8) - Unlock</li>
+     *   <li>LOCK_NB (4) - Non-blocking (can be OR'd with SH or EX)</li>
+     * </ul>
+     *
+     * @param operation the lock operation bitmask
+     * @return RuntimeScalar with true on success, false on failure
+     */
+    default RuntimeScalar flock(int operation) {
+        return RuntimeIO.handleIOError("flock operation is not supported on this handle type.");
+    }
+
     // System-level I/O operations
     default RuntimeScalar sysread(int length) {
         return RuntimeIO.handleIOError("sysread operation is not supported.");

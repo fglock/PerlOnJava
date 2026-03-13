@@ -522,6 +522,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Tied Handles**: Tied file handles are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Hashes](#arrays-hashes-and-lists).
 - ✅  **`DATA`**: `DATA` file handle is implemented.
 - ✅  **`truncate`**: File truncation
+- ✅  **`flock`**: File locking with LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB
+- ✅  **`syscall`**: System calls (SYS_gethostname)
 
 ### Socket Operations
 - ✅  **`socket`**: Socket creation with domain, type, and protocol support
@@ -669,6 +671,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Config** module.
 - ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
+- ✅  **DirHandle** module.
+- ✅  **Dumpvalue** module.
 - ✅  **Digest** module
 - ✅  **Digest::MD5** module
 - ✅  **Digest::SHA** module
@@ -688,6 +692,10 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ✅  **IO::File** module.
 - ✅  **IO::Seekable** module.
+- ✅  **IO::Socket** module.
+- ✅  **IO::Socket::INET** module.
+- ✅  **IO::Socket::UNIX** module.
+- ✅  **IO::Zlib** module.
 - ✅  **List::Util**: module.
 - ✅  **MIME::Base64** module
 - ✅  **MIME::QuotedPrint** module
@@ -695,6 +703,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **SelectSaver**: module.
 - ✅  **Storable**: module.
+- ✅  **Sys::Hostname** module.
 - ✅  **Symbol**: `gensym`, `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.
 - ✅  **Test** module.
@@ -715,7 +724,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **POSIX** module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
-- ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
+- ✅  **Archive::Tar** module.
+- ✅  **Net::FTP** module.
+- ✅  **Net::Cmd** module.
 - ❌  **Safe** module.
 
 ### Non-core modules

@@ -1,110 +1,68 @@
 package File::Spec::Functions;
 
-use strict;
-use warnings;
-use Exporter 'import';
 use File::Spec;
+use strict;
 
-# Default exported functions
+our $VERSION = '3.94';
+$VERSION =~ tr/_//d;
+
+require Exporter;
+
+our @ISA = qw(Exporter);
+
 our @EXPORT = qw(
-    canonpath
-    catdir
-    catfile
-    curdir
-    rootdir
-    updir
-    no_upwards
-    file_name_is_absolute
-    path
+	canonpath
+	catdir
+	catfile
+	curdir
+	rootdir
+	updir
+	no_upwards
+	file_name_is_absolute
+	path
 );
 
-# Functions exported on request
 our @EXPORT_OK = qw(
-    devnull
-    tmpdir
-    splitpath
-    splitdir
-    catpath
-    abs2rel
-    rel2abs
-    case_tolerant
+	devnull
+	tmpdir
+	splitpath
+	splitdir
+	catpath
+	abs2rel
+	rel2abs
+	case_tolerant
 );
 
-# Export all functions with :ALL tag
-our %EXPORT_TAGS = (
-    ALL => [ @EXPORT, @EXPORT_OK ],
+our %EXPORT_TAGS = ( ALL => [ @EXPORT_OK, @EXPORT ] );
+
+require File::Spec::Unix;
+my %udeps = (
+    canonpath => [],
+    catdir => [qw(canonpath)],
+    catfile => [qw(canonpath catdir)],
+    case_tolerant => [],
+    curdir => [],
+    devnull => [],
+    rootdir => [],
+    updir => [],
 );
 
-sub canonpath {
-    return File::Spec->canonpath(@_);
+foreach my $meth (@EXPORT, @EXPORT_OK) {
+    my $sub = File::Spec->can($meth);
+    no strict 'refs';
+    if (exists($udeps{$meth}) && $sub == File::Spec::Unix->can($meth) &&
+	    !(grep {
+		File::Spec->can($_) != File::Spec::Unix->can($_)
+	    } @{$udeps{$meth}}) &&
+	    defined(&{"File::Spec::Unix::_fn_$meth"})) {
+	*{$meth} = \&{"File::Spec::Unix::_fn_$meth"};
+    } else {
+	*{$meth} = sub {&$sub('File::Spec', @_)};
+    }
 }
 
-sub catdir {
-    return File::Spec->catdir(@_);
-}
-
-sub catfile {
-    return File::Spec->catfile(@_);
-}
-
-sub curdir {
-    return File::Spec->curdir(@_);
-}
-
-sub rootdir {
-    return File::Spec->rootdir(@_);
-}
-
-sub updir {
-    return File::Spec->updir(@_);
-}
-
-sub no_upwards {
-    return File::Spec->no_upwards(@_);
-}
-
-sub file_name_is_absolute {
-    return File::Spec->file_name_is_absolute(@_);
-}
-
-sub path {
-    return File::Spec->path(@_);
-}
-
-sub devnull {
-    return File::Spec->devnull(@_);
-}
-
-sub tmpdir {
-    return File::Spec->tmpdir(@_);
-}
-
-sub splitpath {
-    return File::Spec->splitpath(@_);
-}
-
-sub splitdir {
-    return File::Spec->splitdir(@_);
-}
-
-sub catpath {
-    return File::Spec->catpath(@_);
-}
-
-sub abs2rel {
-    return File::Spec->abs2rel(@_);
-}
-
-sub rel2abs {
-    return File::Spec->rel2abs(@_);
-}
-
-sub case_tolerant {
-    return File::Spec->case_tolerant(@_);
-}
 
 1;
-
 __END__
 
 =head1 NAME
@@ -113,61 +71,58 @@ File::Spec::Functions - portably perform operations on file names
 
 =head1 SYNOPSIS
 
-    use File::Spec::Functions;
-    
-    $x = catfile('a', 'b');
+	use File::Spec::Functions;
+	my $x = catfile('a', 'b');
 
 =head1 DESCRIPTION
 
-This module exports convenience functions for all of the class methods provided by File::Spec.
+This module exports convenience functions for all of the class methods
+provided by File::Spec.
 
-=head2 Default Exported Functions
+For a reference of available functions, please consult L<File::Spec::Unix>,
+which contains the entire set, and which is inherited by the modules for
+other platforms. For further information, please see L<File::Spec::Mac>,
+L<File::Spec::OS2>, L<File::Spec::Win32>, or L<File::Spec::VMS>.
 
-=over 4
+=head2 Exports
 
-=item * canonpath
+The following functions are exported by default.
 
-=item * catdir
+	canonpath
+	catdir
+	catfile
+	curdir
+	rootdir
+	updir
+	no_upwards
+	file_name_is_absolute
+	path
 
-=item * catfile
 
-=item * curdir
+The following functions are exported only by request.
 
-=item * rootdir
-
-=item * updir
-
-=item * no_upwards
-
-=item * file_name_is_absolute
-
-=item * path
-
-=back
-
-=head2 Functions Exported on Request
-
-=over 4
-
-=item * devnull
-
-=item * tmpdir
-
-=item * splitpath
-
-=item * splitdir
-
-=item * catpath
-
-=item * abs2rel
-
-=item * rel2abs
-
-=item * case_tolerant
-
-=back
+	devnull
+	tmpdir
+	splitpath
+	splitdir
+	catpath
+	abs2rel
+	rel2abs
+	case_tolerant
 
 All the functions may be imported using the C<:ALL> tag.
+
+=head1 COPYRIGHT
+
+Copyright (c) 2004 by the Perl 5 Porters.  All rights reserved.
+
+This program is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+File::Spec, File::Spec::Unix, File::Spec::Mac, File::Spec::OS2,
+File::Spec::Win32, File::Spec::VMS, ExtUtils::MakeMaker
 
 =cut
 
