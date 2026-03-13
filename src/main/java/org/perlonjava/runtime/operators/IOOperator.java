@@ -1566,6 +1566,14 @@ public class IOOperator {
             RuntimeScalar readHandle = (RuntimeScalar) args[0];
             RuntimeScalar writeHandle = (RuntimeScalar) args[1];
 
+            // Reject references - pipe() doesn't accept \$scalar
+            if (readHandle.type == RuntimeScalarType.REFERENCE) {
+                throw new RuntimeException("Bad filehandle: " + readHandle);
+            }
+            if (writeHandle.type == RuntimeScalarType.REFERENCE) {
+                throw new RuntimeException("Bad filehandle: " + writeHandle);
+            }
+
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
