@@ -1993,6 +1993,7 @@ public class Disassemble {
                     case Opcodes.ACCEPT:
                     case Opcodes.SYSSEEK:
                     case Opcodes.TRUNCATE:
+                    case Opcodes.FLOCK:
                     case Opcodes.READ:
                     case Opcodes.OPENDIR:
                     case Opcodes.READDIR:
@@ -2019,6 +2020,7 @@ public class Disassemble {
                             case Opcodes.ACCEPT -> "accept";
                             case Opcodes.SYSSEEK -> "sysseek";
                             case Opcodes.TRUNCATE -> "truncate";
+                            case Opcodes.FLOCK -> "flock";
                             case Opcodes.READ -> "read";
                             case Opcodes.OPENDIR -> "opendir";
                             case Opcodes.READDIR -> "readdir";

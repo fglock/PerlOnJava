@@ -522,6 +522,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Tied Handles**: Tied file handles are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Hashes](#arrays-hashes-and-lists).
 - ✅  **`DATA`**: `DATA` file handle is implemented.
 - ✅  **`truncate`**: File truncation
+- ✅  **`flock`**: File locking with LOCK_SH, LOCK_EX, LOCK_UN, LOCK_NB
+- ✅  **`syscall`**: System calls (SYS_gethostname)
 
 ### Socket Operations
 - ✅  **`socket`**: Socket creation with domain, type, and protocol support
@@ -669,6 +671,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Config** module.
 - ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
+- ✅  **DirHandle** module.
+- ✅  **Dumpvalue** module.
 - ✅  **Digest** module
 - ✅  **Digest::MD5** module
 - ✅  **Digest::SHA** module
@@ -695,6 +699,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **SelectSaver**: module.
 - ✅  **Storable**: module.
+- ✅  **Sys::Hostname** module.
 - ✅  **Symbol**: `gensym`, `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.
 - ✅  **Test** module.

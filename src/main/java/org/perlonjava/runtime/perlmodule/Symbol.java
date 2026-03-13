@@ -42,16 +42,24 @@ public class Symbol extends PerlModuleBase {
     }
 
     /**
-     * Placeholder for the gensym functionality.
+     * Creates a new anonymous glob and returns a reference to it.
+     * This is equivalent to Perl's Symbol::gensym().
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
-     * @return A RuntimeList.
-     * @throws PerlCompilerException if the method is not implemented.
+     * @return A RuntimeList containing a reference to a new anonymous glob.
      */
     public static RuntimeList gensym(RuntimeArray args, int ctx) {
-        return qualify_to_ref(
-                new RuntimeArray(new RuntimeScalar("PerlOnJava::__symbol" + EmitterMethodCreator.classCounter++)), SCALAR);
+        // Create a unique anonymous glob
+        String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter++;
+        RuntimeGlob glob = new RuntimeGlob(globName);
+        
+        // Return a reference to the glob (not the glob itself)
+        RuntimeScalar globRef = new RuntimeScalar();
+        globRef.type = RuntimeScalarType.GLOBREFERENCE;
+        globRef.value = glob;
+        
+        return globRef.getList();
     }
 
     /**

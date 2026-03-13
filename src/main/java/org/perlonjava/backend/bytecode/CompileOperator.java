@@ -678,6 +678,8 @@ public class CompileOperator {
             case "accept" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ACCEPT);
             case "sysseek" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSSEEK);
             case "truncate" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.TRUNCATE);
+            case "flock" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.FLOCK);
+            case "syscall" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSCALL);
             case "read" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.READ);
             case "chown" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CHOWN);
             case "waitpid" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.WAITPID);

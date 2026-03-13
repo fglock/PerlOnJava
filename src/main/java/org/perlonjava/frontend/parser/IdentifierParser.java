@@ -393,8 +393,17 @@ public class IdentifierParser {
                     nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
                     // After ::, only identifiers or another :: are allowed (or ' as package separator)
+                    // But if the identifier is a keyword (like 'and', 'or', 'if', etc.), we should stop
                     if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::") && !token.text.equals("'")) {
                         // Nothing valid follows ::, so return what we have
+                        return variableName.toString();
+                    }
+                    // Check if the identifier is actually a keyword that should terminate the variable
+                    if (token.type == LexerTokenType.IDENTIFIER && 
+                        (ParserTables.LIST_TERMINATORS.contains(token.text) || 
+                         ParserTables.TERMINATORS.contains(token.text) ||
+                         ParserTables.INFIX_OP.contains(token.text))) {
+                        // This is a keyword like 'and', 'or', 'if', etc. - stop parsing the variable
                         return variableName.toString();
                     }
                     // Continue the loop to process the next token
