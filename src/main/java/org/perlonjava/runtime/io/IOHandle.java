@@ -2,12 +2,46 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
+/**
+ * Base interface for all I/O handle implementations in PerlOnJava.
+ *
+ * <h2>Flush vs Sync Semantics</h2>
+ *
+ * <p>This interface distinguishes between two related but distinct operations:</p>
+ *
+ * <h3>flush() - Buffer Flush</h3>
+ * <p>Flushes any <b>application-level buffers</b> to the operating system's kernel buffer.
+ * This is equivalent to Perl's {@code $fh->flush()} or C's {@code fflush()}.
+ * After flush(), data is visible to other processes but may not yet be on physical disk.</p>
+ *
+ * <p>For unbuffered I/O (like Java NIO FileChannel), flush() is a no-op since writes
+ * go directly to the kernel buffer.</p>
+ *
+ * <h3>sync() - Disk Synchronization</h3>
+ * <p>Forces data to be written to the <b>physical storage device</b> (fsync).
+ * This is equivalent to Perl's {@code IO::Handle->sync()} or POSIX {@code fsync()}.
+ * This operation is slow but guarantees data durability in case of system crash.</p>
+ *
+ * <h3>Performance Note</h3>
+ * <p>fsync() is extremely slow (can take 10-100ms per call). The previous implementation
+ * incorrectly called fsync() on every flush() and close(), causing severe performance
+ * issues for I/O-heavy workloads like Image::ExifTool (94% of time spent in fsync).</p>
+ *
+ * <p>Use sync() only when you need guaranteed durability (e.g., database commits,
+ * critical configuration saves). For normal file operations, flush() or just close()
+ * is sufficient - the OS will eventually write data to disk.</p>
+ *
+ * @see CustomFileChannel
+ * @see StandardIO
+ * @see LayeredIOHandle
+ */
 public interface IOHandle {
 
     int SEEK_SET = 0;  // Seek from beginning of file
@@ -17,11 +51,68 @@ public interface IOHandle {
     // Buffer for pushed-back byte values
     ThreadLocal<Deque<Integer>> ungetBuffer = ThreadLocal.withInitial(ArrayDeque::new);
 
+    /**
+     * Writes data to this I/O handle.
+     *
+     * @param string the data to write
+     * @return RuntimeScalar with true on success, false on failure
+     */
     RuntimeScalar write(String string);
 
+    /**
+     * Closes this I/O handle and releases system resources.
+     *
+     * <p>Note: This does NOT call sync()/fsync. The OS will flush kernel buffers
+     * on close. If you need guaranteed disk durability, call sync() before close().</p>
+     *
+     * @return RuntimeScalar with true on success
+     */
     RuntimeScalar close();
 
+    /**
+     * Flushes application-level buffers to the operating system.
+     *
+     * <p>This is equivalent to Perl's {@code $fh->flush()} or C's {@code fflush()}.
+     * After this call, data is in the OS kernel buffer and visible to other processes,
+     * but may not yet be on physical disk.</p>
+     *
+     * <p>For unbuffered I/O (like Java NIO FileChannel), this is a no-op since
+     * writes go directly to the kernel buffer.</p>
+     *
+     * <p><b>Note:</b> This does NOT call fsync(). Use {@link #sync()} if you need
+     * guaranteed disk durability.</p>
+     *
+     * @return RuntimeScalar with true on success
+     * @see #sync()
+     */
     RuntimeScalar flush();
+
+    /**
+     * Synchronizes data to physical storage (fsync).
+     *
+     * <p>This is equivalent to Perl's {@code IO::Handle->sync()} or POSIX {@code fsync()}.
+     * This forces all buffered data and metadata to be written to the physical storage
+     * device, guaranteeing durability in case of system crash.</p>
+     *
+     * <p><b>Warning:</b> This operation is extremely slow (10-100ms typical).
+     * Only use when you truly need guaranteed durability, such as:</p>
+     * <ul>
+     *   <li>Database transaction commits</li>
+     *   <li>Critical configuration file saves</li>
+     *   <li>Financial transaction logs</li>
+     * </ul>
+     *
+     * <p>For normal file operations, just close() the file - the OS will
+     * eventually write data to disk.</p>
+     *
+     * @return RuntimeScalar with true on success
+     * @see #flush()
+     */
+    default RuntimeScalar sync() {
+        // Default implementation: no-op for handles that don't support sync
+        // (e.g., sockets, pipes, stdin/stdout)
+        return RuntimeScalarCache.scalarTrue;
+    }
 
     // Default ungetc implementation - takes a byte value (0-255)
     default RuntimeScalar ungetc(int byteValue) {

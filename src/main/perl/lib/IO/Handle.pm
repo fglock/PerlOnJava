@@ -47,13 +47,9 @@ use constant _IOFBF => 0;  # Fully buffered
 use constant _IOLBF => 1;  # Line buffered
 use constant _IONBF => 2;  # Unbuffered
 
-# Try to load Java backend if available
-my $has_java_backend = 0;
-eval {
-    require 'org.perlonjava.runtime.perlmodule.IOHandleModule';
-    IOHandleInit();
-    $has_java_backend = 1;
-};
+# Check if Java backend methods are available (registered by IOHandle.initialize())
+# The _sync function is registered directly into IO::Handle namespace by Java code
+our $has_java_backend = defined &IO::Handle::_sync;
 
 # Constructor
 sub new {
@@ -365,7 +361,8 @@ sub clearerr {
 
 sub sync {
     my $fh = shift;
-    return undef unless defined fileno($fh);
+    # Note: Don't check fileno() here - Java's FileChannel returns undef for fileno
+    # but the Java backend handles invalid handles internally in _sync()
 
     if ($has_java_backend) {
         return _sync($fh);
@@ -379,8 +376,8 @@ sub sync {
 sub flush {
     my $fh = shift;
 
-    # First check if handle is valid
-    return undef unless defined fileno($fh);
+    # Note: Don't check fileno() here - Java's FileChannel returns undef for fileno
+    # The flush implementation works regardless of fileno value
 
     # Save and restore selected handle
     my $old_fh = select($fh);

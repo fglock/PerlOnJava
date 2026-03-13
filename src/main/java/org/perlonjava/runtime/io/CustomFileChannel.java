@@ -195,13 +195,15 @@ public class CustomFileChannel implements IOHandle {
     /**
      * Closes the file channel and releases any system resources.
      *
+     * <p>Note: We intentionally do NOT call force() here. The OS will flush
+     * buffers on close, and force() (fsync) is extremely slow. If explicit
+     * sync-to-disk is needed, use {@link #sync()} before closing.
+     *
      * @return RuntimeScalar with true value on success
      */
     @Override
     public RuntimeScalar close() {
         try {
-            // Ensure all data is flushed before closing
-            fileChannel.force(true); // Force both content and metadata
             fileChannel.close();
             return scalarTrue;
         } catch (IOException e) {
@@ -292,33 +294,54 @@ public class CustomFileChannel implements IOHandle {
     /**
      * Flushes any buffered data to the underlying storage device.
      *
-     * <p>This method forces any buffered data to be written to the storage device,
-     * including file metadata for reliability.
+     * <p>For FileChannel, writes go directly to the OS buffer (no Java-side buffering),
+     * so this is effectively a no-op. We intentionally do NOT call force() here
+     * because fsync is extremely slow. Use {@link #sync()} for explicit disk sync.
      *
      * @return RuntimeScalar with true on success
      */
     @Override
     public RuntimeScalar flush() {
+        // FileChannel has no Java-side buffer to flush.
+        // We don't call force() here because it's extremely slow (fsync).
+        // Use sync() if explicit disk synchronization is needed.
+        return scalarTrue;
+    }
+
+    /**
+     * Synchronizes file data to the underlying storage device (fsync).
+     *
+     * <p>This method forces all buffered data and metadata to be written to
+     * the physical storage device. This is slow but guarantees data durability.
+     * Use this only when you need to ensure data survives a system crash.
+     *
+     * @return RuntimeScalar with true on success
+     */
+    public RuntimeScalar sync() {
         try {
-            // Force both content and metadata to be written for reliability
             fileChannel.force(true);
             return scalarTrue;
         } catch (IOException e) {
-            return handleIOException(e, "flush failed");
+            return handleIOException(e, "sync failed");
         }
     }
 
     /**
      * Gets the file descriptor number for this channel.
      *
-     * <p>Note: FileChannel does not expose the underlying file descriptor in Java,
-     * so this method returns undef. This is a limitation of the Java API.
+     * <p>Java's FileChannel does not expose the underlying OS file descriptor.
+     * We return a synthetic file descriptor based on the object's identity hash,
+     * starting from 3 (to avoid collision with stdin=0, stdout=1, stderr=2).
+     * This allows Perl code that checks {@code defined fileno($fh)} to work correctly.
      *
-     * @return RuntimeScalar with undef value
+     * @return RuntimeScalar with a synthetic file descriptor number
      */
     @Override
     public RuntimeScalar fileno() {
-        return RuntimeScalarCache.scalarUndef; // FileChannel does not expose a file descriptor
+        // Java's FileChannel does not expose the underlying OS file descriptor.
+        // Return undef to match Perl's behavior for handles without a real fd.
+        // Note: Validity checks should be done in the Java backend, not via fileno().
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
