@@ -3413,9 +3413,9 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
-            // local $hash{key} or local $array[index] - localize a hash/array element
-            if (node.operand instanceof BinaryOperatorNode binOp
-                    && (binOp.operator.equals("{") || binOp.operator.equals("["))) {
+            // General fallback for any lvalue expression (matches JVM backend behavior)
+            // Handles: local $hash{key}, local $array[index], local $obj->method->{key}, etc.
+            if (node.operand instanceof BinaryOperatorNode binOp) {
                 compileNode(binOp, -1, RuntimeContextType.SCALAR);
                 int elemReg = lastResultReg;
                 emit(Opcodes.PUSH_LOCAL_VARIABLE);
