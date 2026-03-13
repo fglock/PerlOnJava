@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -767,6 +768,18 @@ public class EmitVariable {
                         if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                             throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
                         }
+                        // Emit experimental warning if warnings are enabled
+                        if (ctx.symbolTable.isWarningCategoryEnabled("experimental::refaliasing")) {
+                            try {
+                                WarnDie.warn(
+                                        new RuntimeScalar("Aliasing via reference is experimental"),
+                                        new RuntimeScalar(ctx.errorUtil.warningLocation(node.tokenIndex))
+                                );
+                            } catch (Exception e) {
+                                // If warning system isn't initialized yet, fall back to System.err
+                                System.err.println("Aliasing via reference is experimental" + ctx.errorUtil.warningLocation(node.tokenIndex) + ".");
+                            }
+                        }
                         // TODO: Implement proper reference aliasing
                         // For now, we just assign the reference value without creating an alias
                         // This is not fully correct but allows tests to progress
@@ -1096,11 +1109,12 @@ public class EmitVariable {
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
                     if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                            String message = operator.equals("our")
+                                    ? "\"" + operator + "\" variable " + var + " redeclared"
+                                    : "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope";
                             System.err.println(
                                     emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
-                                            "Warning: \"" + operator + "\" variable "
-                                                    + var
-                                                    + " masks earlier declaration in same ctx.symbolTable"));
+                                            message));
                         }
                     }
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);

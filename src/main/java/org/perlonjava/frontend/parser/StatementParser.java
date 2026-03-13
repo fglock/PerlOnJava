@@ -10,6 +10,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.VersionHelper;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -351,6 +352,19 @@ public class StatementParser {
         int index = parser.tokenIndex;
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "defer"
 
+        // Emit experimental warning if warnings are enabled
+        if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::defer")) {
+            try {
+                WarnDie.warn(
+                        new RuntimeScalar("defer is experimental"),
+                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(index))
+                );
+            } catch (Exception e) {
+                // If warning system isn't initialized yet, fall back to System.err
+                System.err.println("defer is experimental" + parser.ctx.errorUtil.warningLocation(index) + ".");
+            }
+        }
+
         // Parse the defer block
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node deferBlock = ParseBlock.parseBlock(parser);
@@ -679,6 +693,20 @@ public class StatementParser {
         packageExistsCache.put(packageName, true);
 
         boolean isClass = token.text.equals("class");
+
+        // Emit experimental warning for 'class' if warnings are enabled
+        if (isClass && parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::class")) {
+            try {
+                WarnDie.warn(
+                        new RuntimeScalar("class is experimental"),
+                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(parser.tokenIndex))
+                );
+            } catch (Exception e) {
+                // If warning system isn't initialized yet, fall back to System.err
+                System.err.println("class is experimental" + parser.ctx.errorUtil.warningLocation(parser.tokenIndex) + ".");
+            }
+        }
+
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
         packageNode.setAnnotation("isClass", isClass);
