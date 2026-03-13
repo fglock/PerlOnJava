@@ -112,7 +112,6 @@ Returns a string representation of the current directory.  "." on UNIX.
 =cut
 
 sub curdir { '.' }
-use constant _fn_curdir => ".";
 
 =item devnull
 
@@ -121,7 +120,6 @@ Returns a string representation of the null device. "/dev/null" on UNIX.
 =cut
 
 sub devnull { '/dev/null' }
-use constant _fn_devnull => "/dev/null";
 
 =item rootdir
 
@@ -130,7 +128,6 @@ Returns a string representation of the root directory.  "/" on UNIX.
 =cut
 
 sub rootdir { '/' }
-use constant _fn_rootdir => "/";
 
 =item tmpdir
 
@@ -206,7 +203,6 @@ Returns a string representation of the parent directory.  ".." on UNIX.
 =cut
 
 sub updir { '..' }
-use constant _fn_updir => "..";
 
 =item no_upwards
 
@@ -228,7 +224,6 @@ is not or is significant when comparing file specifications.
 =cut
 
 sub case_tolerant { 0 }
-use constant _fn_case_tolerant => 0;
 
 =item file_name_is_absolute
 
