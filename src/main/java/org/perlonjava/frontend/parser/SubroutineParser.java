@@ -177,7 +177,8 @@ public class SubroutineParser {
             if (codeRef.value instanceof RuntimeCode runtimeCode) {
                 prototype = runtimeCode.prototype;
                 attributes = runtimeCode.attributes;
-                subExists = runtimeCode.methodHandle != null
+                subExists = runtimeCode.subroutine != null
+                        || runtimeCode.methodHandle != null
                         || runtimeCode.compilerSupplier != null
                         || runtimeCode.isBuiltin
                         || prototype != null
@@ -212,7 +213,8 @@ public class SubroutineParser {
             if (GlobalVariable.existsGlobalCodeRef(fullName1)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName1);
                 if (codeRef.value instanceof RuntimeCode runtimeCode) {
-                    isKnownSub = runtimeCode.methodHandle != null
+                    isKnownSub = runtimeCode.subroutine != null
+                            || runtimeCode.methodHandle != null
                             || runtimeCode.compilerSupplier != null
                             || runtimeCode.isBuiltin
                             || runtimeCode.prototype != null
@@ -818,7 +820,10 @@ public class SubroutineParser {
                     Object[] parameters = paramList.toArray();
                     placeholder.codeObject = constructor.newInstance(parameters);
 
-                    // Retrieve the 'apply' method from the generated class
+                    // Set the PerlSubroutine interface for direct invocation (no MethodHandle needed)
+                    placeholder.subroutine = (PerlSubroutine) placeholder.codeObject;
+
+                    // Retrieve the 'apply' method from the generated class (kept for compatibility)
                     placeholder.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
 
                     // Set the __SUB__ instance field to codeRef
@@ -851,6 +856,9 @@ public class SubroutineParser {
 
                     // Set the __SUB__ field for self-reference
                     interpretedCode.__SUB__ = codeRef;
+
+                    // Set PerlSubroutine interface for direct invocation
+                    placeholder.subroutine = interpretedCode;
 
                     // Update placeholder in-place: set methodHandle to delegate to InterpretedCode
                     placeholder.methodHandle = RuntimeCode.lookup.findVirtual(

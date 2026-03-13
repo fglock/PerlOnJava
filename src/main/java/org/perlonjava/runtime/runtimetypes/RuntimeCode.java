@@ -179,11 +179,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
     // Runtime eval counter for generating unique filenames when $^P is set
     private static int runtimeEvalCounter = 1;
-    // Method object representing the compiled subroutine
+    // Method object representing the compiled subroutine (legacy - used by PerlModuleBase)
     public MethodHandle methodHandle;
+    // Functional interface for direct subroutine invocation (preferred for generated classes)
+    public PerlSubroutine subroutine;
     public boolean isStatic;
     public String autoloadVariableName = null;
-    // Code object instance used during execution
+    // Code object instance used during execution (legacy - used with methodHandle)
     public Object codeObject;
     // Prototype of the subroutine
     public String prototype;
@@ -223,6 +225,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeCode(MethodHandle methodObject, Object codeObject, String prototype) {
         this.methodHandle = methodObject;
         this.codeObject = codeObject;
+        this.prototype = prototype;
+    }
+
+    /**
+     * Constructs a RuntimeCode instance with a PerlSubroutine functional interface.
+     * This is the preferred constructor for generated Perl code.
+     *
+     * @param subroutine the functional interface implementation
+     * @param prototype  the prototype of the subroutine
+     */
+    public RuntimeCode(PerlSubroutine subroutine, String prototype) {
+        this.subroutine = subroutine;
         this.prototype = prototype;
     }
 
@@ -303,6 +317,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.prototype = codeFrom.prototype;
         code.attributes = codeFrom.attributes;
         code.methodHandle = codeFrom.methodHandle;
+        code.subroutine = codeFrom.subroutine;
         code.isStatic = codeFrom.isStatic;
         code.codeObject = codeFrom.codeObject;
     }
@@ -1167,23 +1182,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
-        // Check if the method handle is already cached
-        MethodHandle methodHandle;
-        synchronized (methodHandleCache) {
-            if (methodHandleCache.containsKey(clazz)) {
-                methodHandle = methodHandleCache.get(clazz);
-            } else {
-                // Get the 'apply' method from the class.
-                methodHandle = RuntimeCode.lookup.findVirtual(clazz, "apply", RuntimeCode.methodType);
-                // Cache the method handle
-                methodHandleCache.put(clazz, methodHandle);
-            }
-        }
+        // Cast to PerlSubroutine - generated classes implement this interface
+        // This allows direct interface calls without MethodHandle conversion errors
+        PerlSubroutine subroutine = (PerlSubroutine) codeObject;
 
-        // Wrap the method and the code object in a RuntimeCode instance
-        // This allows us to store both the method and the object it belongs to
-        // Create a new RuntimeScalar instance to hold the CODE object
-        RuntimeScalar codeRef = new RuntimeScalar(new RuntimeCode(methodHandle, codeObject, prototype));
+        // Create a new RuntimeCode using the functional interface
+        RuntimeCode code = new RuntimeCode(subroutine, prototype);
+        RuntimeScalar codeRef = new RuntimeScalar(code);
 
         // Set the __SUB__ instance field
         Field field = clazz.getDeclaredField("__SUB__");
@@ -1247,15 +1252,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (inlineCacheBlessId[cacheIndex] == blessId && 
                         inlineCacheMethodHash[cacheIndex] == methodHash) {
                         RuntimeCode cachedCode = inlineCacheCode[cacheIndex];
-                        if (cachedCode != null && cachedCode.methodHandle != null) {
-                            // Cache hit - ultra fast path: directly invoke method handle
+                        if (cachedCode != null && (cachedCode.subroutine != null || cachedCode.methodHandle != null)) {
+                            // Cache hit - ultra fast path: directly invoke method
                             try {
                                 RuntimeArray a = new RuntimeArray();
                                 a.elements.add(runtimeScalar);
                                 for (RuntimeBase arg : args) {
                                     arg.setArrayOfAlias(a);
                                 }
-                                if (cachedCode.isStatic) {
+                                // Prefer PerlSubroutine interface over MethodHandle
+                                if (cachedCode.subroutine != null) {
+                                    return cachedCode.subroutine.apply(a, callContext);
+                                } else if (cachedCode.isStatic) {
                                     return (RuntimeList) cachedCode.methodHandle.invoke(a, callContext);
                                 } else {
                                     return (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, callContext);
@@ -1281,8 +1289,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 code = (RuntimeCode) resolvedMethod.value;
                             }
                             
-                            // Only cache if method is defined and has a method handle
-                            if (code.methodHandle != null) {
+                            // Only cache if method is defined and has a subroutine or method handle
+                            if (code.subroutine != null || code.methodHandle != null) {
                                 // Update cache
                                 inlineCacheBlessId[cacheIndex] = blessId;
                                 inlineCacheMethodHash[cacheIndex] = methodHash;
@@ -1950,7 +1958,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (this.isBuiltin) {
             return true;
         }
-        return this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
+        return this.constantValue != null || this.compilerSupplier != null 
+                || this.subroutine != null || this.methodHandle != null;
     }
 
     /**
@@ -1972,7 +1981,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get();
             }
 
-            if (this.methodHandle == null) {
+            // Check if subroutine is defined (prefer functional interface over methodHandle)
+            if (this.subroutine == null && this.methodHandle == null) {
                 String fullSubName = "";
                 if (this.packageName != null && this.subName != null) {
                     fullSubName = this.packageName + "::" + this.subName;
@@ -2008,7 +2018,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             try {
                 RuntimeList result;
-                if (isStatic) {
+                // Prefer functional interface over MethodHandle for better performance
+                if (this.subroutine != null) {
+                    result = this.subroutine.apply(a, callContext);
+                } else if (isStatic) {
                     result = (RuntimeList) this.methodHandle.invoke(a, callContext);
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
@@ -2042,7 +2055,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get();
             }
 
-            if (this.methodHandle == null) {
+            // Check if subroutine is defined (prefer functional interface over methodHandle)
+            if (this.subroutine == null && this.methodHandle == null) {
                 String fullSubName = (this.packageName != null && this.subName != null)
                         ? this.packageName + "::" + this.subName
                         : subroutineName;
@@ -2082,7 +2096,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             try {
                 RuntimeList result;
-                if (isStatic) {
+                // Prefer functional interface over MethodHandle for better performance
+                if (this.subroutine != null) {
+                    result = this.subroutine.apply(a, callContext);
+                } else if (isStatic) {
                     result = (RuntimeList) this.methodHandle.invoke(a, callContext);
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);

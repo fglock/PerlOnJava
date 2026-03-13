@@ -21,7 +21,7 @@ import java.util.TreeMap;
  * - Compiled RuntimeCode uses MethodHandle to invoke JVM bytecode
  * - InterpretedCode overrides apply() to dispatch to BytecodeInterpreter
  */
-public class InterpretedCode extends RuntimeCode {
+public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Bytecode and metadata
     public final int[] bytecode;           // Instruction stream (opcodes + operands as ints)
     public final Object[] constants;       // Constant pool (RuntimeBase objects)
