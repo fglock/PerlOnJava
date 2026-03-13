@@ -39,7 +39,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Checks if this glob has any defined content in any slot.
-     * Used for `defined *glob` which returns true if any slot (scalar, array, hash, code, io, format) is defined.
+     * Used for `defined *glob` which returns true if any slot (scalar, array, hash, code, io, format) is initialized.
+     * Note: For arrays/hashes, existence of the slot = defined (even if empty).
      *
      * @return RuntimeScalar true if any slot has content, false otherwise.
      */
@@ -48,25 +49,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
             return RuntimeScalarCache.scalarTrue;
         }
-        // Check individual slots
+        // Check scalar slot - must have defined value
         if (GlobalVariable.globalVariables.containsKey(this.globName)) {
             RuntimeScalar scalar = GlobalVariable.globalVariables.get(this.globName);
             if (scalar != null && scalar.getDefinedBoolean()) {
                 return RuntimeScalarCache.scalarTrue;
             }
         }
+        // Check array slot - exists = defined (even if empty)
         if (GlobalVariable.globalArrays.containsKey(this.globName)) {
-            RuntimeArray arr = GlobalVariable.globalArrays.get(this.globName);
-            if (arr != null && !arr.elements.isEmpty()) {
-                return RuntimeScalarCache.scalarTrue;
-            }
+            return RuntimeScalarCache.scalarTrue;
         }
+        // Check hash slot - exists = defined (even if empty)
         if (GlobalVariable.globalHashes.containsKey(this.globName)) {
-            RuntimeHash hash = GlobalVariable.globalHashes.get(this.globName);
-            if (hash != null && !hash.elements.isEmpty()) {
-                return RuntimeScalarCache.scalarTrue;
-            }
+            return RuntimeScalarCache.scalarTrue;
         }
+        // Check code slot - must have defined value
         if (GlobalVariable.globalCodeRefs.containsKey(this.globName)) {
             RuntimeScalar code = GlobalVariable.globalCodeRefs.get(this.globName);
             if (code != null && code.getDefinedBoolean()) {

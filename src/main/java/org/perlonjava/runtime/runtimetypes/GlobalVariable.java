@@ -436,7 +436,7 @@ public class GlobalVariable {
     }
 
     /**
-     * Checks if a glob is defined (has any slot with content).
+     * Checks if a glob is defined (has any slot initialized).
      * Used for `defined *$var` which should not throw strict refs and not auto-vivify.
      *
      * @param scalar      The scalar containing the glob name or glob reference.
@@ -455,46 +455,45 @@ public class GlobalVariable {
         // For strings, check if any slot exists without auto-vivifying
         String varName = NameNormalizer.normalizeVariableName(scalar.toString(), packageName);
         
+        // Numeric capture variables (like $1, $42, $12345) are always defined in Perl
+        // Use the same pattern as getGlobalVariable for consistency
+        if (regexVariablePattern.matcher(varName).matches() && !varName.equals("main::0")) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
         // Check if glob was explicitly assigned
         if (globalGlobs.getOrDefault(varName, false)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
-        // Check scalar slot
+        // Check scalar slot - slot existence makes glob defined (not value definedness)
+        // In Perl, `defined *FOO` is true if $FOO exists, even if $FOO is undef
         if (globalVariables.containsKey(varName)) {
-            RuntimeScalar sv = globalVariables.get(varName);
-            if (sv != null && sv.getDefinedBoolean()) {
-                return RuntimeScalarCache.scalarTrue;
-            }
+            return RuntimeScalarCache.scalarTrue;
         }
         
-        // Check array slot
+        // Check array slot - exists = defined (even if empty)
         if (globalArrays.containsKey(varName)) {
-            RuntimeArray arr = globalArrays.get(varName);
-            if (arr != null && !arr.elements.isEmpty()) {
-                return RuntimeScalarCache.scalarTrue;
-            }
+            return RuntimeScalarCache.scalarTrue;
         }
         
-        // Check hash slot
+        // Check hash slot - exists = defined (even if empty)
         if (globalHashes.containsKey(varName)) {
-            RuntimeHash hash = globalHashes.get(varName);
-            if (hash != null && !hash.elements.isEmpty()) {
-                return RuntimeScalarCache.scalarTrue;
-            }
+            return RuntimeScalarCache.scalarTrue;
         }
         
-        // Check code slot
+        // Check code slot - slot existence makes glob defined
         if (globalCodeRefs.containsKey(varName)) {
-            RuntimeScalar code = globalCodeRefs.get(varName);
-            if (code != null && code.getDefinedBoolean()) {
-                return RuntimeScalarCache.scalarTrue;
-            }
+            return RuntimeScalarCache.scalarTrue;
         }
         
         // Check IO slot (via globalIORefs)
-        RuntimeGlob glob = globalIORefs.get(varName);
-        if (glob != null && glob.IO != null && glob.IO.getDefinedBoolean()) {
+        if (globalIORefs.containsKey(varName)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
+        // Check format slot
+        if (globalFormatRefs.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
