@@ -30,22 +30,22 @@ CPAN.pm has deep dependencies that make it challenging to port. The main blocker
 |--------|--------|------------|-------|
 | **Safe** | ❌ Missing | High | Sandbox/compartment module - requires Opcode |
 | **Opcode** | ❌ Missing | Very High | Core opcodes restriction - deeply tied to Perl internals |
-| **DirHandle** | ❌ Missing | Low | OO interface to opendir/readdir - pure Perl possible |
-| **Sys::Hostname** | ❌ Missing | Low | `hostname()` function - easy Java implementation |
+| **DirHandle** | ✅ Done | Low | OO interface to opendir/readdir - imported via sync.pl |
+| **Sys::Hostname** | ✅ Done | Low | `hostname()` function - SysHostname.java XS module |
 | **ExtUtils::MakeMaker** | ❌ Missing | Very High | Build system - huge module with many dependencies |
 | **LWP::UserAgent** | ❌ Missing | Medium | Web client (HTTP::Tiny exists as alternative) |
-| **Archive::Tar** | ❌ Missing | Medium | Tar extraction - Java has built-in support |
+| **Archive::Tar** | ✅ Done | Medium | Imported via sync.pl |
 | **Archive::Zip** | ❌ Missing | Medium | Zip handling - Java has built-in support |
-| **Net::FTP** | ❌ Missing | Medium | FTP client - Java has FTP support |
+| **Net::FTP** | ✅ Done | Medium | Imported via sync.pl |
 | **IPC::Open3** | ❌ Missing | Medium | Process I/O - needs Java ProcessBuilder |
-| **IO::Socket** | ❌ Missing | Medium | Socket I/O - Java has native support |
-| **Dumpvalue** | ❌ Missing | Low | Debug output - pure Perl possible |
+| **IO::Socket** | ✅ Done | Medium | Imported via sync.pl |
+| **Dumpvalue** | ✅ Done | Low | Imported via sync.pl |
 
 ### Built-in Functions Missing
 
 | Function | Status | Notes |
 |----------|--------|-------|
-| `flock()` | ❌ Not implemented | File locking - Java has FileLock API |
+| `flock()` | ✅ Implemented | File locking - using java.nio.channels.FileLock |
 
 ---
 
@@ -246,12 +246,16 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
   - File::Spec platform modules - added for Archive::Tar dependency
   - Socket.pm - added $VERSION and additional constants (INADDR_*, IPPROTO_*, SHUT_*, etc.)
   - Parser fix: `@{${...}}` nested dereference now works in push/unshift
+  - SysHostname.java XS module - provides ghname() via InetAddress.getLocalHost()
+  - XSLoader caller() support - load() now uses caller() when no argument provided
 
 ### Files Changed (Phase 2)
 - `dev/import-perl5/config.yaml` - Added IO::Socket, IO::Zlib, Archive::Tar, Net::*, Tie::StdHandle, File::Spec imports
 - `src/main/java/org/perlonjava/runtime/perlmodule/Socket.java` - Added 20+ socket constants
 - `src/main/perl/lib/Socket.pm` - Added $VERSION and expanded exports
 - `src/main/java/org/perlonjava/frontend/parser/IdentifierParser.java` - Fixed `$` followed by `{` in braced variable parsing
+- `src/main/java/org/perlonjava/runtime/perlmodule/SysHostname.java` - New XS module for Sys::Hostname
+- `src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java` - Added caller() support for no-argument load()
 
 ### Next Steps
 1. Phase 3: Process control (IPC::Open3)
