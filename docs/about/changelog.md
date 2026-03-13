@@ -12,6 +12,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add modules: `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Net::FTP`, `Net::Cmd`.
 - Add operators: `flock`, `syscall`.
 - Bugfix: parser now handles `@{${...}}` nested dereference in push/unshift.
+- Bugfix: regex octal escapes `\10`-`\377` now work correctly.
 - Bugfix: operator override in Time::Hires now works.
 - Bugfix: internal temp variables are now pre-initialized.
 - Optimization: faster list assignment.
