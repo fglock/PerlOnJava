@@ -284,11 +284,11 @@ public class OperatorParser {
                 try {
                     WarnDie.warn(
                             new RuntimeScalar("Declaring references is experimental"),
-                            new RuntimeScalar(parser.ctx.errorUtil.errorMessage(currentIndex, ""))
+                            new RuntimeScalar(parser.ctx.errorUtil.warningLocation(currentIndex))
                     );
                 } catch (Exception e) {
                     // If warning system isn't initialized yet, fall back to System.err
-                    System.err.println(parser.ctx.errorUtil.errorMessage(currentIndex, "Declaring references is experimental"));
+                    System.err.println("Declaring references is experimental" + parser.ctx.errorUtil.warningLocation(currentIndex) + ".");
                 }
             }
 
@@ -328,11 +328,11 @@ public class OperatorParser {
                             try {
                                 WarnDie.warn(
                                         new RuntimeScalar("Declaring references is experimental"),
-                                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, ""))
+                                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(operandNode.tokenIndex))
                                 );
                             } catch (Exception e) {
                                 // If warning system isn't initialized yet, fall back to System.err
-                                System.err.println(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, "Declaring references is experimental"));
+                                System.err.println("Declaring references is experimental" + parser.ctx.errorUtil.warningLocation(operandNode.tokenIndex) + ".");
                             }
                         }
 
@@ -862,11 +862,11 @@ public class OperatorParser {
                 try {
                     WarnDie.warn(
                             new RuntimeScalar("Declaring references is experimental"),
-                            new RuntimeScalar(parser.ctx.errorUtil.errorMessage(currentIndex, ""))
+                            new RuntimeScalar(parser.ctx.errorUtil.warningLocation(currentIndex))
                     );
                 } catch (Exception e) {
                     // If warning system isn't initialized yet, fall back to System.err
-                    System.err.println(parser.ctx.errorUtil.errorMessage(currentIndex, "Declaring references is experimental"));
+                    System.err.println("Declaring references is experimental" + parser.ctx.errorUtil.warningLocation(currentIndex) + ".");
                 }
             }
 
@@ -905,11 +905,11 @@ public class OperatorParser {
                             try {
                                 WarnDie.warn(
                                         new RuntimeScalar("Declaring references is experimental"),
-                                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, ""))
+                                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(operandNode.tokenIndex))
                                 );
                             } catch (Exception e) {
                                 // If warning system isn't initialized yet, fall back to System.err
-                                System.err.println(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, "Declaring references is experimental"));
+                                System.err.println("Declaring references is experimental" + parser.ctx.errorUtil.warningLocation(operandNode.tokenIndex) + ".");
                             }
                         }
 

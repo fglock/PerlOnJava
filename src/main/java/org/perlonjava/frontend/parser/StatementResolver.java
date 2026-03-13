@@ -8,8 +8,10 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -121,6 +123,19 @@ public class StatementResolver {
 
                 case "method" -> {
                     if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        // Emit experimental warning for 'method' if warnings are enabled
+                        if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::class")) {
+                            try {
+                                WarnDie.warn(
+                                        new RuntimeScalar("method is experimental"),
+                                        new RuntimeScalar(parser.ctx.errorUtil.warningLocation(currentIndex))
+                                );
+                            } catch (Exception e) {
+                                // If warning system isn't initialized yet, fall back to System.err
+                                System.err.println("method is experimental" + parser.ctx.errorUtil.warningLocation(currentIndex) + ".");
+                            }
+                        }
+
                         // Parse method more directly
                         parser.tokenIndex++;  // consume "method"
 

@@ -209,6 +209,18 @@ public class ErrorMessageUtil {
         return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + errorMessageQuote(nearString) + "\n";
     }
 
+    /**
+     * Gets a simple warning location string in the format " at filename line N".
+     * This matches system Perl's warning format without the ", near" suffix.
+     *
+     * @param index the index of the token where the warning occurred
+     * @return the location string (e.g., " at script.pl line 42")
+     */
+    public String warningLocation(int index) {
+        SourceLocation loc = getSourceLocationAccurate(index);
+        return " at " + loc.fileName() + " line " + loc.lineNumber();
+    }
+
     private String buildNearString(int index) {
         int end = Math.min(tokens.size() - 1, index + 5);
         StringBuilder sb = new StringBuilder();
