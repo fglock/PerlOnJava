@@ -412,6 +412,40 @@ imports:
   - source: perl5/ext/Sys-Hostname/Hostname.pm
     target: src/main/perl/lib/Sys/Hostname.pm
 
+  # Phase 2: IO::Socket - OO socket interface
+  - source: perl5/dist/IO/lib/IO/Socket.pm
+    target: src/main/perl/lib/IO/Socket.pm
+
+  - source: perl5/dist/IO/lib/IO/Socket
+    target: src/main/perl/lib/IO/Socket
+    type: directory
+
+  # Phase 2: IO::Zlib - Compressed I/O (for Archive::Tar)
+  - source: perl5/cpan/IO-Zlib/Zlib.pm
+    target: src/main/perl/lib/IO/Zlib.pm
+
+  # Tie::StdHandle - Required by IO::Zlib
+  - source: perl5/lib/Tie/StdHandle.pm
+    target: src/main/perl/lib/Tie/StdHandle.pm
+
+  # File::Spec platform modules - Required by Archive::Tar
+  - source: perl5/dist/PathTools/lib/File/Spec
+    target: src/main/perl/lib/File/Spec
+    type: directory
+
+  # Phase 2: Archive::Tar - Tar archive handling
+  - source: perl5/cpan/Archive-Tar/lib/Archive/Tar.pm
+    target: src/main/perl/lib/Archive/Tar.pm
+
+  - source: perl5/cpan/Archive-Tar/lib/Archive/Tar
+    target: src/main/perl/lib/Archive/Tar
+    type: directory
+
+  # Phase 2: Net::FTP and libnet modules
+  - source: perl5/cpan/libnet/lib/Net
+    target: src/main/perl/lib/Net
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm

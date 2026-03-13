@@ -9,8 +9,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add `defer` feature
 - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
-- Add modules: `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`.
+- Add modules: `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Net::FTP`, `Net::Cmd`.
 - Add operators: `flock`, `syscall`.
+- Bugfix: parser now handles `@{${...}}` nested dereference in push/unshift.
 - Bugfix: operator override in Time::Hires now works.
 - Bugfix: internal temp variables are now pre-initialized.
 - Optimization: faster list assignment.

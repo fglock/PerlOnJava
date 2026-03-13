@@ -13,44 +13,34 @@ use Exporter "import";
 use warnings;
 use strict;
 
+our $VERSION = '2.038';
+
 XSLoader::load('Socket');
 
 # NOTE: The rest of the implementation is in file:
 #       src/main/java/org/perlonjava/perlmodule/Socket.java
 
-# Define constants as subroutines for proper bareword usage
-use constant {
-    AF_INET      => 2,
-    PF_INET      => 2,
-    SOCK_STREAM  => 1,
-    SOCK_DGRAM   => 2,
-    SOL_SOCKET   => 1,
-    SO_REUSEADDR => 2,
-};
-
 our @EXPORT = qw(
     pack_sockaddr_in unpack_sockaddr_in
     inet_aton inet_ntoa
     sockaddr_in
-    AF_INET PF_INET SOCK_STREAM SOCK_DGRAM
-    SOL_SOCKET SO_REUSEADDR
+    AF_INET AF_INET6 AF_UNIX
+    PF_INET PF_INET6 PF_UNIX
+    SOCK_STREAM SOCK_DGRAM SOCK_RAW
+    SOL_SOCKET SO_REUSEADDR SO_KEEPALIVE SO_BROADCAST SO_LINGER
+    INADDR_ANY INADDR_LOOPBACK INADDR_BROADCAST
+    IPPROTO_TCP IPPROTO_UDP IPPROTO_ICMP
+    TCP_NODELAY
+    SHUT_RD SHUT_WR SHUT_RDWR
 );
 
-our @EXPORT_OK = qw(
-    pack_sockaddr_in unpack_sockaddr_in
-    inet_aton inet_ntoa
-    sockaddr_in
-    AF_INET PF_INET SOCK_STREAM SOCK_DGRAM
-    SOL_SOCKET SO_REUSEADDR
-);
+our @EXPORT_OK = @EXPORT;
 
 our %EXPORT_TAGS = (
+    all => \@EXPORT,
     DEFAULT => [qw(pack_sockaddr_in unpack_sockaddr_in inet_aton inet_ntoa)],
     crlf => [qw(CR LF CRLF)],
 );
-
-# Constants are provided by the Java implementation
-# AF_INET = 2, SOCK_STREAM = 1, SOCK_DGRAM = 2, etc.
 
 1;
 

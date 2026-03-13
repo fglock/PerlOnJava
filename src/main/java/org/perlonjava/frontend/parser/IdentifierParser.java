@@ -331,10 +331,12 @@ public class IdentifierParser {
                     return prefix;
                 }
                 if (token.text.equals("$") && (nextToken.text.equals("$")
+                        || nextToken.text.equals("{")
                         || nextToken.type == LexerTokenType.IDENTIFIER
                         || nextToken.type == LexerTokenType.NUMBER)
                         || nextToken.text.equals("::")) {
-                    // `@$` can't be followed by `$`, `::`, name or number
+                    // `@$` can't be followed by `$`, `{`, `::`, name or number
+                    // `@{${...}` should fall back to block parsing
                     return null;
                 }
                 if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {

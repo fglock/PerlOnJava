@@ -692,6 +692,10 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ✅  **IO::File** module.
 - ✅  **IO::Seekable** module.
+- ✅  **IO::Socket** module.
+- ✅  **IO::Socket::INET** module.
+- ✅  **IO::Socket::UNIX** module.
+- ✅  **IO::Zlib** module.
 - ✅  **List::Util**: module.
 - ✅  **MIME::Base64** module
 - ✅  **MIME::QuotedPrint** module
@@ -720,7 +724,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **POSIX** module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
-- ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
+- ✅  **Archive::Tar** module.
+- ✅  **Net::FTP** module.
+- ✅  **Net::Cmd** module.
 - ❌  **Safe** module.
 
 ### Non-core modules

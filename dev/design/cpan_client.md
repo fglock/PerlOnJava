@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete
+### Current Status: Phase 2 complete
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -237,25 +237,25 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
   - Sys::Hostname - imported via sync.pl, implemented syscall() operator
   - flock() - implemented in CustomFileChannel.java using java.nio.channels.FileLock
   - syscall() - implemented in SyscallOperator.java with gethostname support
+- [x] **Phase 2: Archive/Network modules** (2024-03-13)
+  - IO::Socket, IO::Socket::INET, IO::Socket::UNIX - imported via sync.pl
+  - IO::Zlib - imported via sync.pl
+  - Archive::Tar - imported via sync.pl, patched GZIP_MAGIC_NUM regex (octal to hex)
+  - Net::FTP, Net::Cmd, Net::* - imported via sync.pl
+  - Tie::StdHandle - added for IO::Zlib dependency
+  - File::Spec platform modules - added for Archive::Tar dependency
+  - Socket.pm - added $VERSION and additional constants (INADDR_*, IPPROTO_*, SHUT_*, etc.)
+  - Parser fix: `@{${...}}` nested dereference now works in push/unshift
 
-### Files Changed (Phase 1)
-- `dev/import-perl5/config.yaml` - Added DirHandle, Dumpvalue, Sys::Hostname imports
-- `src/main/java/org/perlonjava/runtime/io/IOHandle.java` - Added flock() interface method
-- `src/main/java/org/perlonjava/runtime/io/CustomFileChannel.java` - Implemented flock()
-- `src/main/java/org/perlonjava/runtime/operators/IOOperator.java` - Added flock() operator
-- `src/main/java/org/perlonjava/runtime/operators/SyscallOperator.java` - New file for syscall()
-- `src/main/java/org/perlonjava/runtime/operators/OperatorHandler.java` - Registered flock, syscall
-- `src/main/java/org/perlonjava/backend/bytecode/Opcodes.java` - Added FLOCK opcode
-- `src/main/java/org/perlonjava/backend/bytecode/CompileOperator.java` - Wired flock
-- `src/main/java/org/perlonjava/backend/bytecode/Disassemble.java` - Added flock disassembly
-- `src/main/java/org/perlonjava/backend/bytecode/SlowOpcodeHandler.java` - Implemented syscall handler
-- `src/main/java/org/perlonjava/runtime/perlmodule/Symbol.java` - Fixed gensym() to return reference
-- `src/main/java/org/perlonjava/frontend/parser/IdentifierParser.java` - Fixed %pkg:: and parsing
+### Files Changed (Phase 2)
+- `dev/import-perl5/config.yaml` - Added IO::Socket, IO::Zlib, Archive::Tar, Net::*, Tie::StdHandle, File::Spec imports
+- `src/main/java/org/perlonjava/runtime/perlmodule/Socket.java` - Added 20+ socket constants
+- `src/main/perl/lib/Socket.pm` - Added $VERSION and expanded exports
+- `src/main/java/org/perlonjava/frontend/parser/IdentifierParser.java` - Fixed `$` followed by `{` in braced variable parsing
 
 ### Next Steps
-1. Phase 2: Archive/Network modules (Archive::Tar, IO::Socket)
-2. Phase 3: Process control (IPC::Open3)
-3. Evaluate cpanm as alternative to CPAN.pm
+1. Phase 3: Process control (IPC::Open3)
+2. Evaluate cpanm as alternative to CPAN.pm
 
 ### Open Questions
 - Is cpanm lighter on dependencies than CPAN.pm?
