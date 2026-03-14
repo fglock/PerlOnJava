@@ -19,21 +19,21 @@ Java equivalents are easier to write and maintain than C/XS. The same API surfac
 
 ---
 
-## CPAN Installation Challenges
+## CPAN Installation
 
-**ExtUtils::MakeMaker assumes a C toolchain.**
+**ExtUtils::MakeMaker reimplemented for PerlOnJava:**
 
-What breaks without C:
-- `Makefile.PL` → generates C build rules
-- XS modules → need compiler + linker
-- Shared libraries → not produced
+```bash
+tar xzf Some-Module-1.00.tar.gz
+cd Some-Module-1.00
+jperl Makefile.PL   # installs to ~/.perlonjava/lib/
+```
 
-**What works today:**
-- 300+ modules bundled in JAR
-- Pure-Perl CPAN modules run unmodified
-- Hand-written Java replacements for XS
+- **Pure Perl modules:** copied directly, no `make` needed
+- **XS modules:** detected, guidance provided for Java porting
+- **300+ modules** bundled in JAR
 
-**Open question:** cpanm integration, automated XS→Java
+**Open question:** automated XS→Java via LLM
 
 ---
 

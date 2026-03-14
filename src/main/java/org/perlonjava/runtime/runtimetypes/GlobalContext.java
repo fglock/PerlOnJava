@@ -153,6 +153,7 @@ public class GlobalContext {
             - "-I" argument
             - JAR_PERLLIB, the jar directory: src/main/perl/lib
             - PERL5LIB env
+            - ~/.perlonjava/lib (user installed modules)
            See also: https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
          */
         List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
@@ -163,6 +164,15 @@ public class GlobalContext {
         for (String directory : directories) {
             if (!directory.isEmpty()) {
                 inc.add(new RuntimeScalar(directory)); // add from env PERL5LIB
+            }
+        }
+        // Add user library path (~/.perlonjava/lib) for ExtUtils::MakeMaker installed modules
+        String userHome = System.getProperty("user.home");
+        if (userHome != null && !userHome.isEmpty()) {
+            String userLib = userHome + "/.perlonjava/lib";
+            java.io.File userLibDir = new java.io.File(userLib);
+            if (userLibDir.isDirectory()) {
+                inc.add(new RuntimeScalar(userLib));
             }
         }
 

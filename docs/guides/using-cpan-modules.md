@@ -2,7 +2,24 @@
 
 ## Overview
 
-PerlOnJava includes many common CPAN modules and supports adding additional pure Perl modules to your projects.
+PerlOnJava includes many common CPAN modules and supports adding additional pure Perl modules to your projects. It also includes a custom `ExtUtils::MakeMaker` that allows you to install pure Perl CPAN modules directly without needing `make` or native compilation.
+
+## Quick Start: Installing a CPAN Module
+
+For pure Perl modules with a standard `Makefile.PL`:
+
+```bash
+# Download and extract the module
+curl -O https://cpan.metacpan.org/authors/id/X/XX/AUTHOR/Module-Name-1.00.tar.gz
+tar xzf Module-Name-1.00.tar.gz
+cd Module-Name-1.00
+
+# Install with jperl (no make needed!)
+jperl Makefile.PL
+
+# The module is now installed to ~/.perlonjava/lib/
+# and automatically available in @INC
+```
 
 ## Checking Module Availability
 
@@ -20,8 +37,16 @@ PerlOnJava includes:
 - `strict`, `warnings`, `utf8`, `feature`
 - `Carp`, `Config`, `Cwd`, `Exporter`
 - `File::Spec`, `File::Basename`, `File::Copy`, `File::Find`, `File::Path`, `File::Temp`
-- `IO::File`, `IO::Handle`, `FileHandle`
+- `IO::File`, `IO::Handle`, `FileHandle`, `DirHandle`
 - `Getopt::Long`, `Getopt::Std`
+- `Sys::Hostname` - System hostname
+- `Symbol` - Symbol manipulation
+
+### Process Control
+- `IPC::Open2`, `IPC::Open3` - Bi-directional process communication
+
+### Build Tools
+- `ExtUtils::MakeMaker` - Module installation (PerlOnJava version)
 
 ### Data Processing
 - `JSON` - JSON encoding/decoding
@@ -39,8 +64,11 @@ PerlOnJava includes:
 ### Network & Web
 - `HTTP::Tiny` - HTTP client
 - `Socket` - Low-level socket support
-- `IO::Socket::INET` - TCP/IP sockets
+- `IO::Socket::INET`, `IO::Socket::UNIX` - TCP/IP and Unix sockets
 - `Net::FTP` - FTP client
+- `Net::SMTP` - SMTP client
+- `Net::POP3` - POP3 client
+- `Net::NNTP` - NNTP client
 
 ### Archives
 - `Archive::Tar` - Tar file handling
@@ -63,7 +91,32 @@ PerlOnJava includes:
 
 If you need a CPAN module that's not included, you can often add pure Perl modules directly.
 
-### Method 1: Local lib Directory
+### Method 1: ExtUtils::MakeMaker (Recommended)
+
+PerlOnJava includes a custom `ExtUtils::MakeMaker` that installs pure Perl modules directly:
+
+```bash
+# Download and extract
+tar xzf Some-Module-1.00.tar.gz
+cd Some-Module-1.00
+
+# Run Makefile.PL with jperl
+jperl Makefile.PL
+```
+
+**What happens:**
+- For **pure Perl modules**: `.pm` files are copied to `~/.perlonjava/lib/`
+- For **XS modules**: You'll see guidance on porting options
+
+**Customizing the install location:**
+```bash
+# Install to a specific directory
+PERLONJAVA_LIB=/path/to/my/libs jperl Makefile.PL
+```
+
+The default `~/.perlonjava/lib/` directory is automatically included in `@INC`, so installed modules work immediately.
+
+### Method 2: Local lib Directory
 
 Create a `lib` directory in your project and add modules there:
 
@@ -78,7 +131,7 @@ Run with:
 ./jperl -Imyproject/lib myscript.pl
 ```
 
-### Method 2: PERL5LIB Environment Variable
+### Method 3: PERL5LIB Environment Variable
 
 ```bash
 export PERL5LIB=/path/to/your/modules
@@ -108,7 +161,25 @@ cp -r Module-Name-1.00/lib/* myproject/lib/
 
 ## Modules with XS Components
 
-Some CPAN modules have XS (C/C++) components that won't work directly. For these modules:
+Some CPAN modules have XS (C/C++) components that won't work directly. PerlOnJava's `ExtUtils::MakeMaker` automatically detects XS modules and provides guidance:
+
+```
+XS MODULE DETECTED: Some::XS::Module
+============================================================
+
+This module contains XS/C code that cannot be used directly.
+PerlOnJava compiles to JVM bytecode, not native code.
+
+XS/C files found:
+  - Module.xs
+
+Options:
+  1. Check if PerlOnJava already has a Java implementation
+  2. Look for a pure Perl alternative module on CPAN
+  3. Port the XS code to Java
+```
+
+For XS modules, your options are:
 
 1. **Check if PerlOnJava has a Java port** - Many common XS modules have Java implementations
 2. **Look for pure Perl alternatives** - e.g., use `JSON` instead of `JSON::XS`
