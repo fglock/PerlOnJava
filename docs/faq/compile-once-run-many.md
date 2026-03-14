@@ -160,11 +160,9 @@ for (String image : images) {
 }
 ```
 
-If you're seeing comparable speed to command-line execution, there might be something else going on - the module approach should be significantly faster because there's no process startup overhead.
-
 ### Option 2: ExifTool's `-stay_open` Mode
 
-If you prefer working with command lines, ExifTool has a built-in daemon mode designed for batch processing:
+If you prefer working with command lines, ExifTool has a built-in daemon mode designed for batch processing. See the [ExifTool documentation for -stay_open](https://exiftool.org/exiftool_pod.html#stay_open).
 
 ```bash
 exiftool -stay_open True -@ commands.txt
