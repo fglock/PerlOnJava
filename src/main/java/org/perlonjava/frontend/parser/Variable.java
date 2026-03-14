@@ -874,10 +874,11 @@ public class Variable {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             if (block.elements.size() == 1 && block.elements.getFirst() instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
                 // ${*F} is a fancy way to say $Package::F
+                // But ${*{expr}} or @{*{expr}} should remain as glob dereference
                 if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                     identifierNode.name = NameNormalizer.normalizeVariableName(identifierNode.name, parser.ctx.symbolTable.getCurrentPackage());
+                    return new OperatorNode(sigil, operatorNode.operand, parser.tokenIndex);
                 }
-                return new OperatorNode(sigil, operatorNode.operand, parser.tokenIndex);
             }
             return new OperatorNode(sigil, block, parser.tokenIndex);
         } catch (Exception e) {
