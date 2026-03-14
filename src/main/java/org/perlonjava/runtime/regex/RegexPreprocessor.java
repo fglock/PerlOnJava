@@ -753,26 +753,35 @@ public class RegexPreprocessor {
                     // Only treat '{' as a quantifier if the previous item is quantifiable.
                     // Otherwise, '{' must be a literal (Perl allows literal braces).
                     if (!lastWasQuantifiable) {
-                        // Literal '{' (not a quantifier), append as-is
-                        sb.append(Character.toChars(c));
+                        // Literal '{' (not a quantifier), escape for Java regex
+                        sb.append("\\{");
                         lastWasQuantifiable = true;
                     } else {
-                        // Parse as quantifier
-                        offset = handleQuantifier(s, offset, sb);
+                        // Parse as quantifier (may return literal braces if invalid quantifier)
+                        int[] quantResult = handleQuantifier(s, offset, sb);
+                        offset = quantResult[0];
+                        boolean wasLiteral = quantResult[1] != 0;
+                        
+                        if (wasLiteral) {
+                            // Braces were treated as literal (e.g., {} or {,})
+                            // The escaped \} is quantifiable
+                            lastWasQuantifiable = true;
+                        } else {
+                            // Valid quantifier
+                            // Check for possessive quantifier {n,m}+
+                            if (offset + 1 < length && s.charAt(offset + 1) == '+') {
+                                sb.append('+');
+                                offset++; // Skip the extra +
+                            }
+                            // Check for non-greedy quantifier {n,m}?
+                            else if (offset + 1 < length && s.charAt(offset + 1) == '?') {
+                                sb.append('?');
+                                offset++; // Skip the extra ?
+                            }
 
-                        // Check for possessive quantifier {n,m}+
-                        if (offset + 1 < length && s.charAt(offset + 1) == '+') {
-                            sb.append('+');
-                            offset++; // Skip the extra +
+                            isQuantifier = true;
+                            lastWasQuantifiable = false; // Can't quantify a quantifier
                         }
-                        // Check for non-greedy quantifier {n,m}?
-                        else if (offset + 1 < length && s.charAt(offset + 1) == '?') {
-                            sb.append('?');
-                            offset++; // Skip the extra ?
-                        }
-
-                        isQuantifier = true;
-                        lastWasQuantifiable = false; // Can't quantify a quantifier
                     }
                     break;
 
@@ -798,7 +807,11 @@ public class RegexPreprocessor {
                 // Don't flag *+, ++, ?+ as nested quantifiers (they're possessive)
                 // Don't flag *?, +?, ??, }? as nested quantifiers (they're non-greedy)
                 boolean isModifier = (nextChar == '+' || nextChar == '?');
-                if (!isModifier && (nextChar == '*' || nextChar == '+' || nextChar == '?' || nextChar == '{')) {
+                if (!isModifier && (nextChar == '*' || nextChar == '+' || nextChar == '?')) {
+                    regexError(s, offset + 2, "Nested quantifiers");
+                }
+                // For '{', only flag as nested if it's actually a valid quantifier
+                if (nextChar == '{' && isValidQuantifierAt(s, offset + 1)) {
                     regexError(s, offset + 2, "Nested quantifiers");
                 }
             }
@@ -1649,18 +1662,28 @@ public class RegexPreprocessor {
         return pos + 1; // Skip past the closing ) of the conditional
     }
 
-    private static int handleQuantifier(String s, int offset, StringBuilder sb) {
+    /**
+     * Handle a potential quantifier starting with '{'.
+     * Returns int[2]: [0] = new offset, [1] = 1 if literal braces (not a quantifier), 0 if valid quantifier
+     */
+    private static int[] handleQuantifier(String s, int offset, StringBuilder sb) {
         int start = offset; // Position of '{'
         int end = s.indexOf('}', start);
 
         if (end == -1) {
-            // Let it through - Java will handle the error
-            sb.append('{');
-            return offset;
+            // No closing brace - treat as literal (escape for Java regex)
+            sb.append("\\{");
+            return new int[]{offset, 1}; // literal
         }
 
         String quantifier = s.substring(start + 1, end);
         String[] parts = quantifier.split(",", -1);
+
+        // A valid quantifier must have at least one number: {n}, {n,}, or {n,m}
+        // Perl treats {}, {,}, and non-numeric content as literal braces
+        boolean hasFirstNumber = false;
+        boolean hasSecondNumber = false;
+        boolean isValid = true;
 
         try {
             // Check first number
@@ -1674,6 +1697,7 @@ public class RegexPreprocessor {
                 if (n > Integer.MAX_VALUE) {
                     regexError(s, start + 1, "Quantifier in {,} bigger than " + Integer.MAX_VALUE);
                 }
+                hasFirstNumber = true;
             }
 
             // Check second number if present
@@ -1689,14 +1713,66 @@ public class RegexPreprocessor {
                     int commaPos = quantifier.indexOf(',');
                     regexError(s, start + 1 + commaPos, "Quantifier in {,} bigger than " + Integer.MAX_VALUE);
                 }
+                hasSecondNumber = true;
             }
         } catch (NumberFormatException e) {
-            // Not a valid quantifier, let it through
+            // Not a valid quantifier - contains non-numeric content
+            isValid = false;
         }
 
-        // If we get here, it's valid
+        // Valid quantifier forms: {n}, {n,}, {n,m}, {,m}
+        // Invalid (literal): {}, {,}, {abc}, etc.
+        if (!isValid || (!hasFirstNumber && !hasSecondNumber)) {
+            // Not a valid quantifier - treat braces as literal (escape for Java regex)
+            sb.append("\\{");
+            sb.append(quantifier);
+            sb.append("\\}");
+            return new int[]{end, 1}; // literal
+        }
+
+        // Valid quantifier - pass through to Java
         sb.append(s, start, end + 1);
-        return end;
+        return new int[]{end, 0}; // valid quantifier
+    }
+
+    /**
+     * Check if position offset in string s starts a valid quantifier (for nested quantifier detection).
+     * A valid quantifier is {n}, {n,}, {n,m}, or {,m} where n and m are numbers.
+     */
+    private static boolean isValidQuantifierAt(String s, int offset) {
+        if (offset >= s.length() || s.charAt(offset) != '{') {
+            return false;
+        }
+        
+        int end = s.indexOf('}', offset);
+        if (end == -1) {
+            return false;
+        }
+        
+        String content = s.substring(offset + 1, end);
+        if (content.isEmpty()) {
+            return false; // {} is not a valid quantifier
+        }
+        
+        String[] parts = content.split(",", -1);
+        boolean hasFirstNumber = false;
+        boolean hasSecondNumber = false;
+        
+        try {
+            if (!parts[0].isEmpty()) {
+                Long.parseLong(parts[0]);
+                hasFirstNumber = true;
+            }
+            if (parts.length > 1 && !parts[1].isEmpty()) {
+                Long.parseLong(parts[1]);
+                hasSecondNumber = true;
+            }
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        
+        // Valid if at least one number is present
+        return hasFirstNumber || hasSecondNumber;
     }
 
 
