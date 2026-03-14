@@ -28,6 +28,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("is_initialized_state_variable", "isInitializedStateVariable", "$$");
             internals.registerMethod("stack_refcounted", null);
             internals.registerMethod("V", "V", null);
+            internals.registerMethod("getcwd", "getcwd", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -156,5 +157,18 @@ public class Internals extends PerlModuleBase {
                 args.get(1).toString(),
                 args.get(2).getInt());
         return var.getList();
+    }
+
+    /**
+     * Returns the current working directory.
+     * This provides a native Java implementation that works on all platforms,
+     * which Cwd.pm will use instead of shell-based fallbacks.
+     *
+     * @param args Unused arguments
+     * @param ctx  The context in which the method is called
+     * @return RuntimeScalar with the current working directory path
+     */
+    public static RuntimeList getcwd(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(System.getProperty("user.dir")).getList();
     }
 }
