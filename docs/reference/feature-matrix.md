@@ -683,6 +683,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Errno** module.
 - ✅  **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
   - ❌ Missing: export `*glob`.
+- ✅  **ExtUtils::MakeMaker** module: PerlOnJava version installs pure Perl modules directly.
 - ✅  **Fcntl** module
 - ✅  **FileHandle** module
 - ✅  **File::Basename** use the same version as Perl.
