@@ -352,6 +352,9 @@ public class ListParser {
                 // In Perl, /pattern/ at the start of a list context is a regex match
                 // Note: // is the defined-or operator, not a regex, so we don't include it here
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
+            } else if (token.text.equals("x") && nextToken.text.equals("=>")) {
+                // Special case: `x =>` is autoquoted as bareword, not the repetition operator
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like autoquoted x");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");

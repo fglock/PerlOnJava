@@ -2,6 +2,7 @@ package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -763,6 +764,135 @@ public class Dereference {
                     "callCached",
                     "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
+
+            // Tagged returns control-flow handling for method calls:
+            // If RuntimeCode.callCached() returned a RuntimeControlFlowList marker (TAILCALL), handle it here.
+            if (emitterVisitor.ctx.javaClassInfo.returnLabel != null
+                    && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
+
+                // Get or create a block-level dispatcher for the current loop state
+                String loopStateSignature = emitterVisitor.ctx.javaClassInfo.getLoopStateSignature();
+                Label blockDispatcher = emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.get(loopStateSignature);
+                boolean isFirstUse = (blockDispatcher == null);
+
+                if (isFirstUse) {
+                    blockDispatcher = new Label();
+                    emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.put(loopStateSignature, blockDispatcher);
+                }
+
+                Label notControlFlow = new Label();
+
+                // Store result in temp slot
+                mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+                // Load and check if it's a control flow marker
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "isNonLocalGoto",
+                        "()Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
+
+                // Marked: check if TAILCALL (handle locally with trampoline)
+                Label tailcallLoop = new Label();
+                Label notTailcall = new Label();
+
+                // Check if type is TAILCALL
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                        "getControlFlowType",
+                        "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
+                        false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/ControlFlowType",
+                        "ordinal",
+                        "()I",
+                        false);
+                mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
+                mv.visitJumpInsn(Opcodes.IF_ICMPNE, notTailcall);
+
+                // TAILCALL trampoline loop - handle tail calls at the call site
+                mv.visitLabel(tailcallLoop);
+
+                // Extract codeRef and args from the marker
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                        "getTailCallCodeRef",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
+
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                        "getTailCallArgs",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
+
+                // Call target: RuntimeCode.apply(codeRef, "tailcall", args, context)
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
+                mv.visitLdcInsn("tailcall");
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
+                mv.visitVarInsn(Opcodes.ILOAD, 2);  // context parameter (passed to current sub)
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "apply",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                        false);
+
+                // Store result to controlFlowTempSlot
+                mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+                // Check if result is still a control flow marker
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "isNonLocalGoto",
+                        "()Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);  // Not marked, done
+
+                // Marked: check if still TAILCALL
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                        "getControlFlowType",
+                        "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
+                        false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/ControlFlowType",
+                        "ordinal",
+                        "()I",
+                        false);
+                mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, tailcallLoop);  // Still TAILCALL, loop
+
+                // Not TAILCALL - different marker (LAST/NEXT/REDO/GOTO), dispatch it
+                mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
+
+                // Not TAILCALL initially - jump to block dispatcher
+                mv.visitLabel(notTailcall);
+                mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
+
+                // Not a control flow marker - load it back and continue
+                mv.visitLabel(notControlFlow);
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+                // If this is the first use of this dispatcher, emit it now
+                if (isFirstUse) {
+                    Label skipDispatcher = new Label();
+                    mv.visitJumpInsn(Opcodes.GOTO, skipDispatcher);
+                    EmitSubroutine.emitBlockDispatcher(mv, emitterVisitor, blockDispatcher, new JavaClassInfo.SpillRef[0]);
+                    mv.visitLabel(skipDispatcher);
+                }
+            }
 
             if (pooledArgsArray) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();

@@ -179,6 +179,11 @@ public class Parser {
             // This handles cases where 'x=' is used as an operator.
             // The token combination is also used in assignments like '$x=3'.
             if (token.text.equals("x") && tokens.get(tokenIndex + 1).text.equals("=")) {
+                // Check if this is actually 'x =>' (fat comma autoquoting)
+                // In that case, 'x' should be treated as a bareword, not as the repetition operator
+                if (tokens.get(tokenIndex + 2).text.equals(">")) {
+                    break; // Stop parsing infix, let 'x' be parsed as a bareword argument
+                }
                 // Combine 'x' and '=' into a single token 'x='
                 token.text = "x=";
                 // Set the token type to OPERATOR to reflect its usage
