@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 6 mostly complete - CPAN.pm functional for pure Perl modules
+### Current Status: Phase 7 complete - CPAN.pm functional for pure Perl modules
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -397,32 +397,34 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` - Use same-package check for warning
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java` - Literal `{}` braces support
 
-### Next Steps (Phase 7 Remaining)
-1. **Core module detection** (Medium priority)
-   - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
-   - Need to either provide version stubs or configure CPAN.pm to skip core modules
-   - Option: Add core module versions to a metadata file
+### Next Steps
 
-2. **Test running** (Medium priority)
+#### Phase 8: User Experience (Recommended Next)
+1. **jcpan wrapper script** - High priority, easy win
+   - User-friendly `jcpan install Module` command
+   - Sets up paths and invokes CPAN.pm with notest option
+   - Example: `jcpan install Try::Tiny`
+
+#### Phase 9: Extended Compatibility
+2. **Module::Build support** - Medium priority
+   - Some CPAN modules use Module::Build instead of MakeMaker
+   - Needs stub similar to ExtUtils::MakeMaker
+   - Blocks: modules that only provide Build.PL
+
+3. **Core module detection** - Medium priority
+   - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
+   - Option A: Add version stubs to built-in modules
+   - Option B: Configure CPAN.pm to skip core modules
+   - Option C: Add core module versions to a metadata file
+
+4. **Test running improvements** - Low priority
    - `make test` uses fork which isn't supported in PerlOnJava
    - Current workaround: `notest("install", "Module")`
    - Long-term: Consider IPC::Open3 for test harness
 
-3. **YAML.pm improvements** (Low priority)
+5. **YAML.pm improvements** - Low priority
    - Warning: "YAML version '0.01' is too low"
    - Current stub is minimal; better YAML parsing would help with META.yml
-
-4. ~~**CPAN::Meta::Requirements warnings** (Low priority)~~
-   - ~~`"our" variable @ISA redeclared` warnings~~ **FIXED in Phase 7**
-   - Warning now only appears when redeclaring in same package
-
-5. **Module::Build support** (Phase 6b)
-   - Some CPAN modules use Module::Build instead of MakeMaker
-   - Needs stub similar to ExtUtils::MakeMaker
-
-6. **jcpan wrapper script** (Phase 6e)
-   - User-friendly `jcpan install Module` command
-   - Sets up paths and invokes CPAN.pm with notest option
 
 ### Open Questions
 - Should we create a PerlOnJava-specific minimal CPAN download tool?
