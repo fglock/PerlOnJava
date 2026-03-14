@@ -142,6 +142,12 @@ our %EXPORT_TAGS = (
         WSTOPSIG WTERMSIG WUNTRACED wait waitpid
     )],
 
+    # Alias for sys_wait_h (used by some modules)
+    sys_wait_h => [qw(
+        WEXITSTATUS WIFEXITED WIFSIGNALED WIFSTOPPED WNOHANG
+        WSTOPSIG WTERMSIG WUNTRACED wait waitpid
+    )],
+
     unistd_h => [qw(
         _exit access alarm chdir chmod chown close ctermid dup dup2
         execl execle execlp execv execve execvp fork fpathconf
