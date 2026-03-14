@@ -23,6 +23,10 @@ import java.net.URL;
  */
 public class Jar {
 
+    // Cached path prefixes to avoid string concatenation on every call
+    private static final String JAR_PERLLIB_PREFIX = GlobalContext.JAR_PERLLIB + "/";
+    private static final String JAR_PERLBIN_PREFIX = GlobalContext.JAR_PERLBIN + "/";
+
     /**
      * Checks if a filename is a JAR virtual directory marker.
      * These appear in @INC as "jar:PERL5LIB" or in $Config{scriptdirexp} as "jar:PERL5BIN".
@@ -37,8 +41,8 @@ public class Jar {
      * E.g., "jar:PERL5LIB/DBI.pm" or "jar:PERL5BIN/cpan"
      */
     public static boolean isJarPath(String filename) {
-        return filename.startsWith(GlobalContext.JAR_PERLLIB + "/")
-            || filename.startsWith(GlobalContext.JAR_PERLBIN + "/");
+        return filename.startsWith(JAR_PERLLIB_PREFIX)
+            || filename.startsWith(JAR_PERLBIN_PREFIX);
     }
 
     /**
@@ -55,12 +59,12 @@ public class Jar {
      * @return The resource path (e.g., "/lib/DBI.pm" or "/bin/cpan"), or null if not a JAR path
      */
     public static String toResourcePath(String filename) {
-        if (filename.startsWith(GlobalContext.JAR_PERLLIB + "/")) {
+        if (filename.startsWith(JAR_PERLLIB_PREFIX)) {
             // "jar:PERL5LIB/DBI.pm" -> "/lib/DBI.pm"
             String relativePath = filename.substring(GlobalContext.JAR_PERLLIB.length());
             return "/lib" + relativePath;
         }
-        if (filename.startsWith(GlobalContext.JAR_PERLBIN + "/")) {
+        if (filename.startsWith(JAR_PERLBIN_PREFIX)) {
             // "jar:PERL5BIN/cpan" -> "/bin/cpan"
             String relativePath = filename.substring(GlobalContext.JAR_PERLBIN.length());
             return "/bin" + relativePath;

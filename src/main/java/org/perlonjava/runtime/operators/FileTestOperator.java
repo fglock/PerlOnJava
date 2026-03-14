@@ -302,7 +302,9 @@ public class FileTestOperator {
         }
 
         // Handle JAR virtual directory and JAR resource paths
-        if (Jar.isJarAny(filename)) {
+        // Note: Check filename != null first to avoid NPE
+        // Also use simple string check to avoid loading Jar class early
+        if (filename != null && filename.startsWith("jar:")) {
             if (Jar.isJarDirectory(filename)) {
                 // "jar:PERL5LIB" - the virtual directory
                 updateLastStat(fileHandle, true, 0);

@@ -272,19 +272,152 @@ public class StringParser {
         return ast;
     }
 
-    static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser) {
+    static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser, String modifiers) {
         Node parsed;
 
         if (rawStr.startDelim == '\'') {
             // single quote delimiter, use the string as-is
             parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
         } else {
+            // Check if /x modifier is present
+            boolean hasXModifier = modifiers != null && modifiers.contains("x");
+            
+            String patternStr = rawStr.buffers.getFirst();
+            if (hasXModifier) {
+                // With /x modifier, strip comments before variable interpolation
+                // Comments start with # and extend to newline (but not inside [...] or escaped)
+                patternStr = stripRegexComments(patternStr);
+                // Create a modified ParsedString with comments stripped
+                ArrayList<String> modifiedBuffers = new ArrayList<>(rawStr.buffers);
+                modifiedBuffers.set(0, patternStr);
+                rawStr = new ParsedString(rawStr.index, rawStr.next, modifiedBuffers,
+                        rawStr.startDelim, rawStr.endDelim,
+                        rawStr.secondBufferStartDelim, rawStr.secondBufferEndDelim);
+            }
+            
             // interpolate variables, but ignore the escapes, keep `\$` if present
             // Pass shared heredoc nodes to handle heredocs inside regex patterns
             parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true,
                     parser != null ? parser.getHeredocNodes() : null);
         }
         return parsed;
+    }
+
+    /**
+     * Strip comments from a regex pattern for /x mode.
+     * Comments start with # and extend to newline.
+     * But # is NOT a comment when:
+     * - Inside [...] character classes
+     * - Escaped as \#
+     * - Inside (?{...}) or (??{...}) code blocks
+     * - Part of (?#...) inline comments (these are preserved)
+     */
+    private static String stripRegexComments(String pattern) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        int len = pattern.length();
+        boolean inCharClass = false;
+        int codeBlockDepth = 0;  // Track nested (?{...}) code blocks
+        
+        while (i < len) {
+            char c = pattern.charAt(i);
+            
+            if (c == '\\' && i + 1 < len) {
+                // Escaped character - copy both chars
+                result.append(c);
+                result.append(pattern.charAt(i + 1));
+                i += 2;
+                continue;
+            }
+            
+            if (c == '[' && !inCharClass && codeBlockDepth == 0) {
+                inCharClass = true;
+                result.append(c);
+                i++;
+                continue;
+            }
+            
+            if (c == ']' && inCharClass) {
+                inCharClass = false;
+                result.append(c);
+                i++;
+                continue;
+            }
+            
+            // Check for special (?...) sequences
+            if (c == '(' && !inCharClass && codeBlockDepth == 0 && i + 1 < len && pattern.charAt(i + 1) == '?') {
+                // Check what follows (?
+                if (i + 2 < len) {
+                    char afterQ = pattern.charAt(i + 2);
+                    
+                    // (?#...) is an inline comment - copy until closing )
+                    if (afterQ == '#') {
+                        result.append(c);  // (
+                        i++;
+                        result.append(pattern.charAt(i));  // ?
+                        i++;
+                        result.append(pattern.charAt(i));  // #
+                        i++;
+                        // Copy until closing )
+                        while (i < len && pattern.charAt(i) != ')') {
+                            result.append(pattern.charAt(i));
+                            i++;
+                        }
+                        if (i < len) {
+                            result.append(pattern.charAt(i));  // )
+                            i++;
+                        }
+                        continue;
+                    }
+                    
+                    // (?{ or (??{ starts a code block
+                    if (afterQ == '{' || (afterQ == '?' && i + 3 < len && pattern.charAt(i + 3) == '{')) {
+                        result.append(c);  // (
+                        i++;
+                        result.append(pattern.charAt(i));  // ?
+                        i++;
+                        if (pattern.charAt(i) == '?') {
+                            result.append(pattern.charAt(i));  // second ? for (??{
+                            i++;
+                        }
+                        result.append(pattern.charAt(i));  // {
+                        i++;
+                        codeBlockDepth++;
+                        continue;
+                    }
+                }
+            }
+            
+            // Track brace nesting inside code blocks
+            if (codeBlockDepth > 0) {
+                if (c == '{') {
+                    codeBlockDepth++;
+                } else if (c == '}') {
+                    codeBlockDepth--;
+                }
+                result.append(c);
+                i++;
+                continue;
+            }
+            
+            if (c == '#' && !inCharClass && codeBlockDepth == 0) {
+                // Start of /x comment - skip until newline
+                while (i < len && pattern.charAt(i) != '\n') {
+                    i++;
+                }
+                // Keep the newline if present (it's significant in regex)
+                if (i < len && pattern.charAt(i) == '\n') {
+                    result.append('\n');
+                    i++;
+                }
+                continue;
+            }
+            
+            result.append(c);
+            i++;
+        }
+        
+        return result.toString();
     }
 
 
@@ -329,9 +462,9 @@ public class StringParser {
 
     public static OperatorNode parseRegexReplace(EmitterContext ctx, ParsedString rawStr, Parser parser) {
         String operator = "replaceRegex";
-        Node parsed = parseRegexString(ctx, rawStr, parser);
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
+        Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;
         if (modifierStr.contains("e")) {
@@ -374,8 +507,8 @@ public class StringParser {
 
     public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
-        Node parsed = parseRegexString(ctx, rawStr, parser);
         String modStr = rawStr.buffers.get(1);
+        Node parsed = parseRegexString(ctx, rawStr, parser, modStr);
         if (rawStr.startDelim == '?') {
             // `m?PAT?` matches exactly once
             // save the internal flag in the modifier string
