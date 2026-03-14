@@ -44,6 +44,7 @@ make
 ### Guides
 - **[Database Access](docs/guides/database-access.md)** - Using DBI with JDBC drivers
 - **[Java Integration](docs/guides/java-integration.md)** - Call Perl from Java (JSR-223)
+- **[Using CPAN Modules](docs/guides/using-cpan-modules.md)** - Install and use CPAN modules
 - **[Module Porting](docs/guides/module-porting.md)** - Port Perl modules
 
 ### Reference
