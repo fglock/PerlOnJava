@@ -241,14 +241,39 @@ Moo is now fully functional in PerlOnJava!
   - Fixed Parser.parseExpression() to handle `x=` + `>` as fat comma
 - [x] Phase 5: Test Moo end-to-end (2024-03-14)
   - All Moo features working: has, ro, rw, default, new
+- [x] Phase 6: Fix jcpan and Storable YAML limit (2024-03-14)
+  - Fixed jcpan Unix wrapper to use standard cpan script
+  - Fixed Storable.java codePointLimit (was 3MB, now 50MB)
+
+### Current Objectives (In Progress)
+
+1. **Moo tests run inside jcpan** - Get `jcpan -t Moo` to actually run tests
+   - Currently MakeMaker skips tests when module is already installed
+   - Need to implement `make test` in ExtUtils::MakeMaker
+   
+2. **Moo tests pass** - Fix remaining test failures
+   - Current status: 40 passed, 31 failed
+   - Main blockers: `extends`, roles, modifiers
+   - See test failure analysis below
+
+### Test Failure Analysis
+
+**Tests passing (40)**: Basic attribute functionality works
+- accessor-pred-clear.t, accessor-default.t, accessor-shortcuts.t, etc.
+
+**Tests failing (31)**: Mainly due to:
+1. **`extends` keyword** - Uses `@{*{_getglob(...)}}` syntax
+2. **Moo::Role** - Role composition not fully working
+3. **Class::Method::Modifiers** - `before`, `after`, `around` modifiers
 
 ### Next Steps (Future Enhancements)
 
-1. **Test Moo::Role support** - Verify role composition works
-2. **Test more attribute options** - `required`, `builder`, `lazy`, `trigger`, `coerce`
-3. **Performance testing** - Benchmark Moo object creation vs native Perl
-4. **Add Moo to test suite** - Create unit tests for Moo functionality
-5. **Document in README** - Add Moo support to feature list
+1. **Fix `extends` keyword** - Debug `@{*{_getglob(...)}}` typeglob assignment
+2. **Test Moo::Role support** - Verify role composition works
+3. **Test more attribute options** - `required`, `builder`, `lazy`, `trigger`, `coerce`
+4. **Performance testing** - Benchmark Moo object creation vs native Perl
+5. **Add Moo to test suite** - Create unit tests for Moo functionality
+6. **Document in README** - Add Moo support to feature list
 
 ### PR Information
 - **Branch**: `feature/moo-support`
@@ -256,6 +281,8 @@ Moo is now fully functional in PerlOnJava!
 - **Commits**:
   - `66bfe37a6` - Initial Moo support (Carp.pm, @; fix)
   - `150bc23e8` - Fix x => autoquoting and goto &$coderef
+  - `9188c3d76` - Fix jcpan Unix wrapper
+  - `f4bc5594e` - Fix Storable YAML codePointLimit
 
 ## Related Documents
 
