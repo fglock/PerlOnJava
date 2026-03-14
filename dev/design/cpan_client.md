@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 7 complete - CPAN.pm functional for pure Perl modules
+### Current Status: Phase 8 complete - jcpan wrapper script for easy module installation
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -397,40 +397,48 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` - Use same-package check for warning
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java` - Literal `{}` braces support
 
+- [x] **Phase 8: User Experience - jcpan wrapper script** (2024-03-14)
+  - **jcpan.pl**: Pure Perl CPAN client script using CPAN.pm
+  - **jcpan**: Unix bash wrapper that calls `jperl jcpan.pl`
+  - **jcpan.bat**: Windows batch wrapper that calls `jperl.bat jcpan.pl`
+  - Commands: `install`, `test`, `search`, `info`, `help`
+  - Features: colored output, `--force` option, multiple modules
+  - Tests skipped by default (use `jcpan test` to run them)
+  - Example: `jcpan install Moo`
+
+### Files Changed (Phase 8)
+- `jcpan.pl` - Pure Perl CPAN client script
+- `jcpan` - Unix wrapper script
+- `jcpan.bat` - Windows wrapper script
+
 ### Next Steps
 
-#### Phase 8: User Experience (Recommended Next)
-1. **jcpan wrapper script** - High priority, easy win
-   - User-friendly `jcpan install Module` command
-   - Sets up paths and invokes CPAN.pm with notest option
-   - Example: `jcpan install Try::Tiny`
-
 #### Phase 9: Extended Compatibility
-2. **Module::Build support** - Medium priority
+1. **Module::Build support** - Medium priority
    - Some CPAN modules use Module::Build instead of MakeMaker
    - Needs stub similar to ExtUtils::MakeMaker
    - Blocks: modules that only provide Build.PL
 
-3. **Core module detection** - Medium priority
+2. **Core module detection** - Medium priority
    - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
    - Option A: Add version stubs to built-in modules
    - Option B: Configure CPAN.pm to skip core modules
    - Option C: Add core module versions to a metadata file
 
-4. **Test running improvements** - Low priority
+3. **Test running improvements** - Low priority
    - `make test` uses fork which isn't supported in PerlOnJava
    - Current workaround: `notest("install", "Module")`
    - Long-term: Consider IPC::Open3 for test harness
 
-5. **YAML.pm improvements** - Low priority
+4. **YAML.pm improvements** - Low priority
    - Warning: "YAML version '0.01' is too low"
    - Current stub is minimal; better YAML parsing would help with META.yml
 
 ### Open Questions
-- Should we create a PerlOnJava-specific minimal CPAN download tool?
 - How important is Safe compartmentalization for users?
 
 ### Resolved Questions
+- ✅ User-friendly installer: `jcpan` wrapper script provides `jcpan install Module` command
 - ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
 - ✅ cpanm feasibility: cpanm requires ExtUtils::MakeMaker which needs `make` - not suitable for PerlOnJava
 - ✅ Archive::Zip: Implemented using java.util.zip
