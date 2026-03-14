@@ -451,9 +451,9 @@ imports:
   - source: perl5/lib/Symbol.pm
     target: src/main/perl/lib/Symbol.pm
 
-  # Cwd - get pathname of current working directory (pure Perl fallbacks)
-  - source: perl5/dist/PathTools/Cwd.pm
-    target: src/main/perl/lib/Cwd.pm
+  # Note: Cwd.pm is NOT imported - we use a customized version that integrates
+  # with Internals::getcwd and Internals::abs_path for cross-platform support.
+  # The upstream version would try to load XSLoader which doesn't exist.
 
   # Note: IPC::Open2 and IPC::Open3 are NOT imported - we use custom
   # implementations with Java ProcessBuilder (see IPCOpen3.java)
