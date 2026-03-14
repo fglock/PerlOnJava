@@ -640,15 +640,30 @@ sub _qnx_abs_path {
 if (exists $METHOD_MAP{$^O}) {
   my $map = $METHOD_MAP{$^O};
   foreach my $name (keys %$map) {
+    # Skip cwd/getcwd assignments - we'll handle these specially below
+    # because shell-based fallbacks on Windows don't work in PerlOnJava
+    next if $name =~ /^(?:fast)?(?:get)?cwd$/;
     local $^W = 0;  # assignments trigger 'subroutine redefined' warning
     no strict 'refs';
     *{$name} = \&{$map->{$name}};
   }
 }
 
-# built-in from 5.30
-*getcwd = \&Internals::getcwd
-  if !defined &getcwd && defined &Internals::getcwd;
+# PerlOnJava provides Internals::getcwd which uses Java's System.getProperty("user.dir")
+# This is more reliable than shell-based fallbacks across all platforms
+# Try to use Internals::getcwd if available, otherwise fall back to Perl implementations
+BEGIN {
+  # Check early if Internals::getcwd is available
+  eval { require Internals; };
+}
+
+# Set up getcwd - prefer Internals::getcwd if available
+if (eval { Internals::getcwd(); 1 }) {
+  *getcwd = \&Internals::getcwd;
+  *cwd = sub { Internals::getcwd() };
+  *fastcwd = \&cwd;
+  *fastgetcwd = \&cwd;
+}
 
 # In case the XS version doesn't load.
 *abs_path = \&_perl_abs_path unless defined &abs_path;
