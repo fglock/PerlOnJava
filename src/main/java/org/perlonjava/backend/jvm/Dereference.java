@@ -756,7 +756,7 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-            mv.visitLdcInsn(emitterVisitor.ctx.contextType);   // push call context to stack
+            emitterVisitor.pushCallContext();   // push call context to stack (handles RUNTIME)
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",

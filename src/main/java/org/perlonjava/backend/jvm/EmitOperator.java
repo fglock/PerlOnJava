@@ -883,8 +883,8 @@ public class EmitOperator {
     static void handleDoFileOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand (filename) in scalar context
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        // Push the context type
-        emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.contextType);
+        // Push the context type (handles RUNTIME context properly)
+        emitterVisitor.pushCallContext();
         // Call doFile with context
         emitOperator(node, emitterVisitor);
     }
