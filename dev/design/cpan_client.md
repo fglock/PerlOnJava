@@ -35,7 +35,7 @@ CPAN.pm has deep dependencies that make it challenging to port. The main blocker
 | **ExtUtils::MakeMaker** | ❌ Missing | Very High | Build system - huge module with many dependencies |
 | **LWP::UserAgent** | ❌ Missing | Medium | Web client (HTTP::Tiny exists as alternative) |
 | **Archive::Tar** | ✅ Done | Medium | Imported via sync.pl |
-| **Archive::Zip** | ❌ Missing | Medium | Zip handling - Java has built-in support |
+| **Archive::Zip** | ✅ Done | Medium | Java implementation using java.util.zip |
 | **Net::FTP** | ✅ Done | Medium | Imported via sync.pl |
 | **IPC::Open3** | ✅ Done | Medium | Custom implementation using Java ProcessBuilder |
 | **IO::Socket** | ✅ Done | Medium | Imported via sync.pl |
@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 3 complete
+### Current Status: Phase 4 complete
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -258,6 +258,20 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
   - ioctl() - implemented with jnr-posix native support and fallback stub
   - Prototype parsing fix - typeglob arguments now use =~ precedence level
   - Reference comparison fix - `\$x == \undef` no longer crashes (NPE in getDoubleRef)
+- [x] **Phase 4: CPAN Client Evaluation & Archive::Zip** (2024-03-13)
+  - **cpanm analysis complete**: cpanm bundles (fatpacks) its dependencies but requires ExtUtils::MakeMaker
+  - ExtUtils::MakeMaker is the critical blocker - it's the CPAN build system that runs `make`
+  - Since PerlOnJava doesn't use native compilation, a traditional CPAN client isn't feasible
+  - **Archive::Zip implemented**: Full Java implementation using java.util.zip
+    - Read/write zip files
+    - Add files, strings, and directories
+    - Extract individual members or entire archive
+    - Works with system `unzip` command for verification
+  - Created user documentation: `docs/guides/using-cpan-modules.md`
+    - How to check module availability
+    - List of included modules
+    - How to add pure Perl modules
+    - Example scripts for downloading CPAN modules
 
 ### Files Changed (Phase 2)
 - `dev/import-perl5/config.yaml` - Added IO::Socket, IO::Zlib, Archive::Tar, Net::*, Tie::StdHandle, File::Spec imports
@@ -278,15 +292,21 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` - Fixed getIntRef()/getDoubleRef() NPE
 - `dev/import-perl5/config.yaml` - Removed IPC::Open2/Open3 imports (custom implementation)
 
+### Files Changed (Phase 4)
+- `src/main/java/org/perlonjava/runtime/perlmodule/ArchiveZip.java` - New Java implementation
+- `src/main/perl/lib/Archive/Zip.pm` - Perl wrapper with XSLoader
+- `docs/guides/using-cpan-modules.md` - User documentation for adding CPAN modules
+
 ### Next Steps
-1. Phase 4: Evaluate cpanm as alternative to CPAN.pm
-2. Consider Archive::Zip implementation using java.util.zip
-3. Document "how to add a CPAN module" for users
+1. Consider a minimal CPAN download helper (pure Perl, no build step)
+2. Expand user documentation with more examples
+3. Add more commonly-needed pure Perl modules
 
 ### Open Questions
-- Is cpanm lighter on dependencies than CPAN.pm?
-- Should we create a PerlOnJava-specific minimal CPAN client?
+- Should we create a PerlOnJava-specific minimal CPAN download tool?
 - How important is Safe compartmentalization for users?
 
 ### Resolved Questions
 - ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
+- ✅ cpanm feasibility: cpanm requires ExtUtils::MakeMaker which needs `make` - not suitable for PerlOnJava
+- ✅ Archive::Zip: Implemented using java.util.zip

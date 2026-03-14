@@ -727,6 +727,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **POSIX** module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
 - ✅  **Archive::Tar** module.
+- ✅  **Archive::Zip** module.
 - ✅  **IPC::Open2** module.
 - ✅  **IPC::Open3** module.
 - ✅  **Net::FTP** module.
