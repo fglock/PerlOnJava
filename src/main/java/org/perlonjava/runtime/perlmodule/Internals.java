@@ -29,6 +29,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("stack_refcounted", null);
             internals.registerMethod("V", "V", null);
             internals.registerMethod("getcwd", "getcwd", null);
+            internals.registerMethod("abs_path", "abs_path", ";$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
