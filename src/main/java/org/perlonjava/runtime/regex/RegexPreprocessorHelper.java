@@ -508,6 +508,18 @@ public class RegexPreprocessorHelper {
 
                         // Skip if next is ], then it's a literal -
                         if (nextChar != ']') {
+                            // Check if next is start of POSIX class like [:alpha:]
+                            // In that case, the hyphen is literal, not a range
+                            if (nextChar == '[' && nextPos + 1 < length && s.charAt(nextPos + 1) == ':') {
+                                // Next is a POSIX class, hyphen is literal
+                                sb.append(Character.toChars(c));
+                                first = false;
+                                afterCaret = false;
+                                lastChar = -1;
+                                wasEscape = false;
+                                break;
+                            }
+                            
                             // Handle escaped next character
                             int rangeEndCharCount = 1;  // How many chars to skip for range end
                             if (nextChar == '\\' && nextPos + 1 < length) {
@@ -554,14 +566,18 @@ public class RegexPreprocessorHelper {
                     if (offset + 1 < length && s.charAt(offset + 1) == ':') {
                         // This might be a POSIX character class
                         offset = RegexPreprocessor.handleCharacterClass(offset, s, sb, length);
+                        first = false;
+                        afterCaret = false;
+                        lastChar = -1;  // POSIX classes can't be range endpoints
+                        wasEscape = false;
                     } else {
                         // It's just a literal [ inside a character class
                         sb.append("\\[");  // Escape it for Java regex
+                        first = false;
+                        afterCaret = false;
+                        lastChar = '[';
+                        wasEscape = false;
                     }
-                    first = false;
-                    afterCaret = false;
-                    lastChar = '[';
-                    wasEscape = false;
                     break;
                 case '\\':  // Handle escape sequences
                     sb.append(Character.toChars(c));
