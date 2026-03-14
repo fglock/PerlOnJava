@@ -104,8 +104,9 @@ $os_name =~ s/\s+/_/g;
     vendorarchexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0/' . "java-$java_version-$os_arch",
     vendorlibexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0',
 
-    # Script directory
-    scriptdir => 'perlonjava/bin',
+    # Script directory (empty - scripts are bundled in JAR)
+    scriptdir => '',
+    scriptdirexp => '',
 
     # Dynamic loading (Java uses classloading)
     dlext => 'jar',
