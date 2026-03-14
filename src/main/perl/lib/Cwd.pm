@@ -76,6 +76,21 @@ sub _vms_efs {
 }
 
 
+# PerlOnJava provides Internals::getcwd/abs_path which work on all platforms
+# Check early to prevent XSLoader from being loaded (which would fail)
+if (eval { Internals::getcwd(); 1 }) {
+    *getcwd = \&Internals::getcwd;
+    *cwd = sub { Internals::getcwd() };
+    *fastcwd = \&cwd;
+    *fastgetcwd = \&cwd;
+}
+if (eval { Internals::abs_path('.'); 1 }) {
+    *abs_path = \&Internals::abs_path;
+    *realpath = \&Internals::abs_path;
+    *fast_abs_path = \&Internals::abs_path;
+    *fast_realpath = \&Internals::abs_path;
+}
+
 # If loading the XS stuff doesn't work, we can fall back to pure perl
 if(! defined &getcwd && defined &DynaLoader::boot_DynaLoader) { # skipped on miniperl
     require XSLoader;
@@ -643,34 +658,12 @@ if (exists $METHOD_MAP{$^O}) {
     # Skip cwd/getcwd assignments - we'll handle these specially below
     # because shell-based fallbacks on Windows don't work in PerlOnJava
     next if $name =~ /^(?:fast)?(?:get)?cwd$/;
+    # Also skip abs_path-related if Internals::abs_path is available
+    next if $name =~ /^(?:fast_)?(?:abs_path|realpath)$/ && defined &Internals::abs_path;
     local $^W = 0;  # assignments trigger 'subroutine redefined' warning
     no strict 'refs';
     *{$name} = \&{$map->{$name}};
   }
-}
-
-# PerlOnJava provides Internals::getcwd which uses Java's System.getProperty("user.dir")
-# This is more reliable than shell-based fallbacks across all platforms
-# Try to use Internals::getcwd if available, otherwise fall back to Perl implementations
-BEGIN {
-  # Check early if Internals::getcwd is available
-  eval { require Internals; };
-}
-
-# Set up getcwd - prefer Internals::getcwd if available
-if (eval { Internals::getcwd(); 1 }) {
-  *getcwd = \&Internals::getcwd;
-  *cwd = sub { Internals::getcwd() };
-  *fastcwd = \&cwd;
-  *fastgetcwd = \&cwd;
-}
-
-# Set up abs_path - prefer Internals::abs_path if available
-if (eval { Internals::abs_path('.'); 1 }) {
-  *abs_path = \&Internals::abs_path;
-  *realpath = \&Internals::abs_path;
-  *fast_abs_path = \&Internals::abs_path;
-  *fast_realpath = \&Internals::abs_path;
 }
 
 # In case the XS version doesn't load.

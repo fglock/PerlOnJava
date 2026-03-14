@@ -475,10 +475,16 @@ public class ParsePrimary {
             operand = new IdentifierNode("_", parser.tokenIndex);
         } else if (hasParenthesis) {
             // Inside parentheses, parse full expression (allows assignment like -f ($x = $path))
-            operand = parser.parseExpression(0);
-            if (operand == null) {
-                // No argument provided, use $_ as default
+            // But first check for empty parens -f()
+            if (nextToken.text.equals(")")) {
+                // Empty parentheses -f() uses $_ as default
                 operand = scalarUnderscore(parser);
+            } else {
+                operand = parser.parseExpression(0);
+                if (operand == null) {
+                    // No argument provided, use $_ as default
+                    operand = scalarUnderscore(parser);
+                }
             }
         } else {
             // Parse the filename/handle argument
