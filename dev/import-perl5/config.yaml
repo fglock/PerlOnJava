@@ -451,8 +451,45 @@ imports:
   - source: perl5/lib/Symbol.pm
     target: src/main/perl/lib/Symbol.pm
 
+  # Cwd - get pathname of current working directory (pure Perl fallbacks)
+  - source: perl5/dist/PathTools/Cwd.pm
+    target: src/main/perl/lib/Cwd.pm
+
   # Note: IPC::Open2 and IPC::Open3 are NOT imported - we use custom
   # implementations with Java ProcessBuilder (see IPCOpen3.java)
+
+  # Phase 6: CPAN.pm and dependencies
+  # CPAN.pm - Main CPAN client
+  - source: perl5/cpan/CPAN/lib/CPAN.pm
+    target: src/main/perl/lib/CPAN.pm
+
+  - source: perl5/cpan/CPAN/lib/CPAN
+    target: src/main/perl/lib/CPAN
+    type: directory
+
+  # CPAN::Meta - Metadata handling for CPAN distributions
+  - source: perl5/cpan/CPAN-Meta/lib/CPAN/Meta.pm
+    target: src/main/perl/lib/CPAN/Meta.pm
+
+  - source: perl5/cpan/CPAN-Meta/lib/CPAN/Meta
+    target: src/main/perl/lib/CPAN/Meta
+    type: directory
+
+  # Parse::CPAN::Meta - Parse META.yml and META.json
+  - source: perl5/cpan/CPAN-Meta/lib/Parse/CPAN/Meta.pm
+    target: src/main/perl/lib/Parse/CPAN/Meta.pm
+
+  # CPAN::Meta::YAML - Read and write CPAN metadata YAML files
+  - source: perl5/cpan/CPAN-Meta-YAML/lib/CPAN/Meta/YAML.pm
+    target: src/main/perl/lib/CPAN/Meta/YAML.pm
+
+  # CPAN::Meta::Requirements - Version requirements handling
+  - source: perl5/cpan/CPAN-Meta-Requirements/lib/CPAN/Meta/Requirements.pm
+    target: src/main/perl/lib/CPAN/Meta/Requirements.pm
+
+  - source: perl5/cpan/CPAN-Meta-Requirements/lib/CPAN/Meta/Requirements
+    target: src/main/perl/lib/CPAN/Meta/Requirements
+    type: directory
 
   # Add more imports below as needed
   # Example with minimal fields:

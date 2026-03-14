@@ -468,6 +468,13 @@ public class ParsePrimary {
             // Special case: -f _ uses the stat buffer from the last file test
             TokenUtils.consume(parser);
             operand = new IdentifierNode("_", parser.tokenIndex);
+        } else if (hasParenthesis) {
+            // Inside parentheses, parse full expression (allows assignment like -f ($x = $path))
+            operand = parser.parseExpression(0);
+            if (operand == null) {
+                // No argument provided, use $_ as default
+                operand = scalarUnderscore(parser);
+            }
         } else {
             // Parse the filename/handle argument
             ListNode listNode = ListParser.parseZeroOrOneList(parser, 0);
