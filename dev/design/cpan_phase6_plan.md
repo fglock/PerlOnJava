@@ -179,125 +179,77 @@ jperl -MCPAN -e 'install "Moo"'
 
 ## Alternative: Minimal jcpan Tool
 
-If full CPAN.pm is too complex, create a simpler tool:
+~~If full CPAN.pm is too complex, create a simpler tool:~~
 
-```perl
-#!/usr/bin/env jperl
-# jcpan - minimal CPAN installer for PerlOnJava
+**Update**: With the Safe.pm stub, we can use the **original CPAN.pm** directly:
 
-use strict;
-use warnings;
-use HTTP::Tiny;
-use JSON;
-use Archive::Tar;
-use File::Temp qw(tempdir);
-use File::Find;
-use File::Copy;
-use File::Path qw(make_path);
-use Cwd;
+```bash
+# Use original cpan command
+jperl -MCPAN -e 'install "Path::Tiny"'
 
-my $action = shift // 'help';
-my $module = shift;
-
-if ($action eq 'install' && $module) {
-    install_module($module);
-}
-elsif ($action eq 'search' && $module) {
-    search_module($module);
-}
-else {
-    print "Usage: jcpan install Module::Name\n";
-    print "       jcpan search keyword\n";
-}
-
-sub install_module {
-    my ($module) = @_;
-    
-    # 1. Query MetaCPAN
-    my $http = HTTP::Tiny->new;
-    my $resp = $http->get("https://fastapi.metacpan.org/v1/download_url/$module");
-    die "Module not found: $module\n" unless $resp->{success};
-    
-    my $data = decode_json($resp->{content});
-    my $url = $data->{download_url};
-    my $version = $data->{version};
-    
-    print "Installing $module ($version)...\n";
-    print "Downloading $url\n";
-    
-    # 2. Download
-    my $tarball = $http->get($url);
-    die "Download failed\n" unless $tarball->{success};
-    
-    # 3. Extract to temp dir
-    my $tmpdir = tempdir(CLEANUP => 1);
-    my $tarfile = "$tmpdir/module.tar.gz";
-    open my $fh, '>', $tarfile or die $!;
-    binmode $fh;
-    print $fh $tarball->{content};
-    close $fh;
-    
-    my $tar = Archive::Tar->new($tarfile);
-    $tar->setcwd($tmpdir);
-    $tar->extract();
-    
-    # 4. Find and run Makefile.PL or Build.PL
-    my ($distdir) = glob("$tmpdir/*");
-    chdir $distdir or die "Cannot chdir: $!";
-    
-    if (-f 'Makefile.PL') {
-        system('jperl', 'Makefile.PL') == 0 or die "Makefile.PL failed\n";
-    }
-    elsif (-f 'Build.PL') {
-        system('jperl', 'Build.PL') == 0 or die "Build.PL failed\n";
-        system('./Build', 'install') == 0 or die "Build install failed\n";
-    }
-    else {
-        die "No Makefile.PL or Build.PL found\n";
-    }
-    
-    print "Done!\n";
-}
-
-sub search_module {
-    my ($query) = @_;
-    my $http = HTTP::Tiny->new;
-    my $resp = $http->get("https://fastapi.metacpan.org/v1/module/_search?q=$query&size=10");
-    return unless $resp->{success};
-    
-    my $data = decode_json($resp->{content});
-    for my $hit (@{$data->{hits}{hits}}) {
-        my $m = $hit->{_source};
-        printf "%-40s %s\n", $m->{name}, $m->{abstract} // '';
-    }
-}
+# Or interactive shell
+jperl -MCPAN -e shell
 ```
 
+This ensures 100% compatibility with the standard `cpan` tool.
+
+### Why Not a Custom jcpan?
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Original CPAN.pm | 100% compatible, well-tested, familiar | Larger dependency set |
+| Custom jcpan | Minimal, simple | Different behavior, maintenance burden |
+
+**Recommendation**: Use original CPAN.pm. The Safe.pm stub is the only missing piece.
+
+### Minimal Wrapper Script (Optional)
+
+For convenience, create a `jcpan` wrapper:
+
+```bash
+#!/bin/bash
+# jcpan - CPAN client for PerlOnJava
+exec jperl -MCPAN -e "CPAN::shell()" -- "$@"
+```
+
+Or for non-interactive use:
+
+```bash
+#!/bin/bash
+# jcpan install Module::Name
+ACTION=${1:-help}
+MODULE=$2
+
+case $ACTION in
+    install)
+        jperl -MCPAN -e "install '$MODULE'"
+        ;;
+    search)
+        jperl -MCPAN -e "CPAN::Shell->m('/$MODULE/')"
+        ;;
+    *)
+        echo "Usage: jcpan install Module::Name"
+        echo "       jcpan search keyword"
+        ;;
+esac
+```
+
+This gives users the familiar `jcpan install Foo` syntax while using the original CPAN.pm underneath.
+
 ---
 
-## Comparison: Full CPAN.pm vs jcpan
+## Revised Implementation Order
 
-| Feature | Full CPAN.pm | jcpan |
-|---------|-------------|-------|
-| Complexity | High | Low |
-| Dependencies | ~40 modules | ~10 modules |
-| Configuration | ~/.cpan/ | None |
-| Dependency resolution | Automatic | Manual |
-| Mirror support | Yes | MetaCPAN only |
-| Bundle support | Yes | No |
-| Compatibility | Standard | Custom |
-
-**Recommendation**: Start with **jcpan** for quick wins, then work toward full CPAN.pm support.
-
----
-
-## Implementation Order
+With the Safe.pm stub approach, we can use the original CPAN.pm:
 
 1. **Safe.pm stub** - 1 hour, unlocks CPAN.pm
-2. **jcpan tool** - 2 hours, immediate user value
-3. **Module::Build stub** - 2 hours, supports more modules
-4. **Import CPAN.pm** - 4 hours, test and fix issues
-5. **Documentation** - 1 hour
+2. **Import CPAN.pm** - 2 hours, add to sync.pl config
+3. **Module::Build stub** - 2 hours, supports Build.PL modules
+4. **Try::Tiny shim** - 1 hour, compatibility for common module
+5. **jcpan wrapper script** - 30 min, convenience wrapper
+6. **Testing & documentation** - 2 hours
+
+**Total**: ~8.5 hours for full CPAN support
 
 ---
 
@@ -306,10 +258,11 @@ sub search_module {
 | File | Purpose |
 |------|---------|
 | `src/main/perl/lib/Safe.pm` | Stub for CPAN.pm |
+| `src/main/perl/lib/Try/Tiny.pm` | Compatibility shim |
 | `src/main/perl/lib/Module/Build.pm` | Build.PL support |
 | `src/main/perl/lib/Module/Build/Base.pm` | Base class stub |
-| `bin/jcpan` | Simple CPAN installer |
-| `docs/guides/installing-cpan-modules.md` | User guide |
+| `bin/jcpan` | Wrapper script for `jperl -MCPAN` |
+| `dev/import-perl5/config.yaml` | Add CPAN.pm imports |
 
 ---
 
@@ -317,12 +270,14 @@ sub search_module {
 
 - [ ] `jperl -MSafe -e 'print Safe->new->reval("1+1")'` prints 2
 - [ ] `jperl -MCPAN -e 'print $CPAN::VERSION'` works
-- [ ] `jcpan install Path::Tiny` installs successfully
+- [ ] `jperl -MCPAN -e 'install "Path::Tiny"'` installs successfully
+- [ ] `jperl -MTry::Tiny -e 'try { die "x" } catch { print "caught" }'` works
 - [ ] Module::Build based modules can be installed
 
 **Note**: Some modules won't work due to unsupported features:
-- `Try::Tiny` - uses `DESTROY` (not implemented)
-- Use native `try`/`catch` instead: `use feature 'try';`
+- Modules using `DESTROY` for cleanup (use `defer` or explicit cleanup)
+- Modules using `fork` (use IPC::Open2/Open3)
+- Modules using `threads` (not implemented)
 
 ---
 
