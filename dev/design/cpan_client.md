@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 4 complete
+### Current Status: Phase 5 complete
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -272,6 +272,18 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
     - List of included modules
     - How to add pure Perl modules
     - Example scripts for downloading CPAN modules
+- [x] **Phase 5: ExtUtils::MakeMaker for PerlOnJava** (2024-03-14)
+  - **ExtUtils::MakeMaker implemented**: Direct module installation without `make`
+    - WriteMakefile() intercepts the standard Makefile.PL flow
+    - Pure Perl modules: copies .pm files directly to install directory
+    - XS modules: detects .xs/.c files and provides porting guidance
+    - PREREQ_PM: checks dependencies and reports missing modules
+  - **User library path**: `~/.perlonjava/lib`
+    - Default installation directory for MakeMaker
+    - Automatically added to @INC when directory exists
+    - Configurable via `PERLONJAVA_LIB` environment variable
+  - **Compatibility stubs**: ExtUtils::MM, ExtUtils::MY, ExtUtils::MakeMaker::Config
+  - See detailed design: `dev/design/makemaker_perlonjava.md`
 
 ### Files Changed (Phase 2)
 - `dev/import-perl5/config.yaml` - Added IO::Socket, IO::Zlib, Archive::Tar, Net::*, Tie::StdHandle, File::Spec imports
@@ -297,10 +309,18 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/perl/lib/Archive/Zip.pm` - Perl wrapper with XSLoader
 - `docs/guides/using-cpan-modules.md` - User documentation for adding CPAN modules
 
+### Files Changed (Phase 5)
+- `src/main/perl/lib/ExtUtils/MakeMaker.pm` - PerlOnJava MakeMaker implementation
+- `src/main/perl/lib/ExtUtils/MM.pm` - Compatibility stub
+- `src/main/perl/lib/ExtUtils/MY.pm` - Compatibility stub
+- `src/main/perl/lib/ExtUtils/MakeMaker/Config.pm` - Config wrapper
+- `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` - Added ~/.perlonjava/lib to @INC
+
 ### Next Steps
 1. Consider a minimal CPAN download helper (pure Perl, no build step)
 2. Expand user documentation with more examples
 3. Add more commonly-needed pure Perl modules
+4. Test with real CPAN modules (pure Perl ones)
 
 ### Open Questions
 - Should we create a PerlOnJava-specific minimal CPAN download tool?
@@ -310,3 +330,4 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
 - ✅ cpanm feasibility: cpanm requires ExtUtils::MakeMaker which needs `make` - not suitable for PerlOnJava
 - ✅ Archive::Zip: Implemented using java.util.zip
+- ✅ ExtUtils::MakeMaker: Reimplemented for PerlOnJava to skip `make` and install pure Perl modules directly
