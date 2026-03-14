@@ -317,9 +317,12 @@ sub search_module {
 
 - [ ] `jperl -MSafe -e 'print Safe->new->reval("1+1")'` prints 2
 - [ ] `jperl -MCPAN -e 'print $CPAN::VERSION'` works
-- [ ] `jcpan install Try::Tiny` installs successfully
-- [ ] `jcpan install Path::Tiny` with dependencies works
+- [ ] `jcpan install Path::Tiny` installs successfully
 - [ ] Module::Build based modules can be installed
+
+**Note**: Some modules won't work due to unsupported features:
+- `Try::Tiny` - uses `DESTROY` (not implemented)
+- Use native `try`/`catch` instead: `use feature 'try';`
 
 ---
 

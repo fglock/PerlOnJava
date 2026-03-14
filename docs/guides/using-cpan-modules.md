@@ -319,6 +319,39 @@ unlink $filename;
 print "Done!\n";
 ```
 
+## Unsupported Perl Features
+
+Some CPAN modules use Perl features that are not yet implemented in PerlOnJava:
+
+| Feature | Status | Affected Modules |
+|---------|--------|------------------|
+| `DESTROY` | Not implemented | Try::Tiny, Scope::Guard, Guard |
+| `fork` | Not available on JVM | Parallel::*, POE, AnyEvent::Fork |
+| `threads` | Not implemented | threads, Thread::Queue |
+| XS/C code | Requires Java port | JSON::XS, Cpanel::JSON::XS |
+
+### Workarounds
+
+- **DESTROY**: Use `defer` blocks (Perl 5.36+) or explicit cleanup
+- **fork**: Use `IPC::Open2`/`IPC::Open3` for subprocess communication
+- **threads**: Use Java threading via inline Java (advanced)
+- **XS modules**: Check if PerlOnJava has a Java port, or use pure Perl alternatives
+
+### Example: Try::Tiny Alternative
+
+`Try::Tiny` uses `DESTROY` for scope guards. Use native `try`/`catch` instead:
+
+```perl
+use feature 'try';
+
+try {
+    risky_operation();
+}
+catch ($e) {
+    warn "Error: $e";
+}
+```
+
 ## Troubleshooting
 
 ### "Can't locate Module.pm in @INC"
