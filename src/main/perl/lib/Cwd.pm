@@ -665,6 +665,14 @@ if (eval { Internals::getcwd(); 1 }) {
   *fastgetcwd = \&cwd;
 }
 
+# Set up abs_path - prefer Internals::abs_path if available
+if (eval { Internals::abs_path('.'); 1 }) {
+  *abs_path = \&Internals::abs_path;
+  *realpath = \&Internals::abs_path;
+  *fast_abs_path = \&Internals::abs_path;
+  *fast_realpath = \&Internals::abs_path;
+}
+
 # In case the XS version doesn't load.
 *abs_path = \&_perl_abs_path unless defined &abs_path;
 *getcwd = \&_perl_getcwd unless defined &getcwd;

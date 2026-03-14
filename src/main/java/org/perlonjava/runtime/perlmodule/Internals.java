@@ -171,4 +171,29 @@ public class Internals extends PerlModuleBase {
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
         return new RuntimeScalar(System.getProperty("user.dir")).getList();
     }
+
+    /**
+     * Gets the absolute path of a file or directory, resolving . and .. components.
+     * This provides a reliable, platform-independent way to get absolute paths,
+     * which Cwd.pm will use instead of Perl-based implementations.
+     *
+     * @param args The path to resolve (first argument), or "." if not provided
+     * @param ctx  The context in which the method is called
+     * @return RuntimeScalar with the absolute path, or undef if the path doesn't exist
+     */
+    public static RuntimeList abs_path(RuntimeArray args, int ctx) {
+        String path = args.size() > 0 ? args.get(0).toString() : ".";
+        try {
+            java.io.File file = new java.io.File(path);
+            if (!file.isAbsolute()) {
+                file = new java.io.File(System.getProperty("user.dir"), path);
+            }
+            if (!file.exists()) {
+                return new RuntimeScalar().getList();  // return undef
+            }
+            return new RuntimeScalar(file.getCanonicalPath()).getList();
+        } catch (java.io.IOException e) {
+            return new RuntimeScalar().getList();  // return undef on error
+        }
+    }
 }
