@@ -365,8 +365,8 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 2. **Dependency resolution**: CPAN.pm tries to install core modules (Exporter, strict, warnings)
    - These are built-in but CPAN.pm doesn't detect them
    - May need to stub module versions or configure CPAN.pm to skip core
-3. **YAML size limit**: Large YAML metadata exceeds SnakeYAML's 3MB limit
-   - Warning: "The incoming YAML document exceeds the limit: 3145728 code points"
+3. ~~**YAML size limit**: Large YAML metadata exceeds SnakeYAML's 3MB limit~~ **FIXED**
+   - Increased YAML::PP code point limit to 50MB
 4. **parse_version warnings**: "Error while parsing version" appears but doesn't affect functionality
    - May be related to alarm/eval interaction in CPAN::Module
 

@@ -60,6 +60,13 @@ public class JavaClassInfo {
     public int dynamicLevelSlot;
 
     /**
+     * Flag indicating if this subroutine uses 'local' variables.
+     * Used to optimize return statements - if true, return values must be cloned
+     * to prevent aliasing issues with local variable teardown.
+     */
+    public boolean usesLocal;
+
+    /**
      * Flag indicating if this subroutine is a defer block.
      * Control flow statements (last, next, redo, return, goto) are prohibited in defer blocks.
      */

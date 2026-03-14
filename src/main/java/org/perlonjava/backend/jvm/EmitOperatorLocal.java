@@ -16,6 +16,10 @@ public class EmitOperatorLocal {
     static void handleLocal(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // Mark that this subroutine uses local variables.
+        // This is used by return to clone values before local teardown.
+        emitterVisitor.ctx.javaClassInfo.usesLocal = true;
+
         // Check if this is a declared reference (local \$x)
         boolean isDeclaredReference = node.annotations != null &&
                 Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));

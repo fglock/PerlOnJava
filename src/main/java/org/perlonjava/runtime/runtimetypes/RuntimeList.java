@@ -72,6 +72,26 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Creates a new RuntimeList with cloned scalar elements.
+     * This is used by return statements to ensure return values are copied,
+     * not aliased, before local variable teardown happens.
+     *
+     * @return A new RuntimeList with cloned scalar elements
+     */
+    public RuntimeList cloneScalars() {
+        RuntimeList result = new RuntimeList();
+        for (RuntimeBase elem : this.elements) {
+            if (elem instanceof RuntimeScalar scalar) {
+                result.elements.add(scalar.clone());
+            } else {
+                // Arrays, hashes, etc. are added as-is
+                result.elements.add(elem);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Adds the elements of this list to another RuntimeList.
      *
      * @param list The RuntimeList to which elements will be added.

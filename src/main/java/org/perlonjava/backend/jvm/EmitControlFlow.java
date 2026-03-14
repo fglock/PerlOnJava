@@ -180,6 +180,27 @@ public class EmitControlFlow {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         }
 
+        // Clone scalar elements to prevent aliasing issues with local variable teardown.
+        // Without this, returning a symbolic dereference like ${$name} with local *{$name}
+        // would return the restored (empty) value instead of the value at return time.
+        // Only needed when the subroutine uses 'local'.
+        if (ctx.javaClassInfo.usesLocal) {
+            // First ensure we have a RuntimeList (the stack may have RuntimeScalar in some cases),
+            // then clone the scalar elements.
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    "getList",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "cloneScalars",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+        }
+
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
