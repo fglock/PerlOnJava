@@ -398,18 +398,34 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java` - Literal `{}` braces support
 
 - [x] **Phase 8: User Experience - jcpan wrapper script** (2024-03-14)
-  - **jcpan.pl**: Pure Perl CPAN client script using CPAN.pm
+  - **jcpan.pl**: Thin wrapper using App::Cpan (reuses standard Perl module)
   - **jcpan**: Unix bash wrapper that calls `jperl jcpan.pl`
   - **jcpan.bat**: Windows batch wrapper that calls `jperl.bat jcpan.pl`
-  - Commands: `install`, `test`, `search`, `info`, `help`
-  - Features: colored output, `--force` option, multiple modules
-  - Tests skipped by default (use `jcpan test` to run them)
-  - Example: `jcpan install Moo`
+  - Same interface as standard `cpan` command (`jcpan -h` for help)
+  - Imported dependencies: App::Cpan, autouse, Getopt::Std, Pod::Perldoc
 
 ### Files Changed (Phase 8)
-- `jcpan.pl` - Pure Perl CPAN client script
+- `jcpan.pl` - Thin wrapper using App::Cpan
 - `jcpan` - Unix wrapper script
 - `jcpan.bat` - Windows wrapper script
+- `dev/import-perl5/config.yaml` - Added App::Cpan, autouse, Getopt::Std, Pod::Perldoc
+- `src/main/perl/lib/App/Cpan.pm` - Imported
+- `src/main/perl/lib/autouse.pm` - Imported
+- `src/main/perl/lib/Getopt/Std.pm` - Imported
+- `src/main/perl/lib/Pod/Perldoc.pm` - Imported
+- `src/main/perl/lib/Pod/Perldoc/` - Imported (directory)
+
+### Phase 8 Resolved: Parser bug with `@{ shift->... }` - FIXED
+
+**Bug**: `@{ shift->{"key"} }` was parsed incorrectly.
+
+PerlOnJava was parsing this as `@shift->{"key"}` (array `@shift` with method call), but Perl parses it as `@{ shift()->{"key"} }` (dereference result of `shift()` function call).
+
+**Fix**: In `Variable.java`, added `isBuiltinFunctionFollowedByArrow()` check in `parseBracedVariable()`.
+When a built-in function like `shift`, `pop`, `caller`, etc. is followed by `->`, it's now parsed as an expression (function call) rather than a variable name.
+
+**Files changed**:
+- `src/main/java/org/perlonjava/frontend/parser/Variable.java` - Added check for built-in functions followed by `->`
 
 ### Next Steps
 
