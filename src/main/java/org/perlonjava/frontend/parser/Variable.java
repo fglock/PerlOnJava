@@ -766,6 +766,10 @@ public class Variable {
             if (isMaybeOperator(bracedVarName, parser)) {
                 // Reset and parse as expression
                 parser.tokenIndex = savedIndex;
+            } else if (isBuiltinFunctionFollowedByArrow(bracedVarName, parser)) {
+                // Built-in function followed by -> should be parsed as expression, not variable
+                // Example: @{ shift->{'pagers'} } should be @{ (shift)->{'pagers'} }
+                parser.tokenIndex = savedIndex;
             } else {
                 Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
 
@@ -914,6 +918,30 @@ public class Variable {
         return "s".equals(identifier) || "m".equals(identifier) || "q".equals(identifier) ||
                 "qx".equals(identifier) || "qr".equals(identifier) || "y".equals(identifier) ||
                 "tr".equals(identifier) || "qq".equals(identifier) || "qw".equals(identifier);
+    }
+
+    /**
+     * Checks if the identifier is a built-in function that returns a value and is followed by '->'.
+     * In contexts like @{ shift->{'key'} }, 'shift' should be parsed as a function call, not as @shift.
+     * <p>
+     * Example:
+     * - @{ shift->{'pagers'} } should be @{ (shift)->{'pagers'} }, not @shift->{'pagers'}
+     * - %{ caller(1)->[3] } should be %{ (caller(1))->[3] }, not %caller(1)->[3]
+     */
+    private static boolean isBuiltinFunctionFollowedByArrow(String identifier, Parser parser) {
+        // List of built-in functions that commonly return objects/references
+        // and might be used with -> for method calls or dereferences
+        switch (identifier) {
+            case "shift", "pop", "caller", "bless", "ref", "tied", "prototype",
+                 "localtime", "gmtime", "stat", "lstat", "each", "keys", "values" -> {
+                // Check if followed by ->
+                if (parser.tokenIndex < parser.tokens.size()) {
+                    var nextToken = parser.tokens.get(parser.tokenIndex);
+                    return "->".equals(nextToken.text);
+                }
+            }
+        }
+        return false;
     }
 
     /**

@@ -1,0 +1,6 @@
+#!/bin/bash
+#
+# jcpan - CPAN Client for PerlOnJava (Unix wrapper)
+#
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+exec "$SCRIPT_DIR/jperl" "$SCRIPT_DIR/jcpan.pl" "$@"

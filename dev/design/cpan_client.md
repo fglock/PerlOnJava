@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 7 complete - CPAN.pm functional for pure Perl modules
+### Current Status: Phase 8 complete - jcpan wrapper script for easy module installation
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -397,40 +397,64 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` - Use same-package check for warning
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java` - Literal `{}` braces support
 
+- [x] **Phase 8: User Experience - jcpan wrapper script** (2024-03-14)
+  - **jcpan.pl**: Thin wrapper using App::Cpan (reuses standard Perl module)
+  - **jcpan**: Unix bash wrapper that calls `jperl jcpan.pl`
+  - **jcpan.bat**: Windows batch wrapper that calls `jperl.bat jcpan.pl`
+  - Same interface as standard `cpan` command (`jcpan -h` for help)
+  - Imported dependencies: App::Cpan, autouse, Getopt::Std, Pod::Perldoc
+
+### Files Changed (Phase 8)
+- `jcpan.pl` - Thin wrapper using App::Cpan
+- `jcpan` - Unix wrapper script
+- `jcpan.bat` - Windows wrapper script
+- `dev/import-perl5/config.yaml` - Added App::Cpan, autouse, Getopt::Std, Pod::Perldoc
+- `src/main/perl/lib/App/Cpan.pm` - Imported
+- `src/main/perl/lib/autouse.pm` - Imported
+- `src/main/perl/lib/Getopt/Std.pm` - Imported
+- `src/main/perl/lib/Pod/Perldoc.pm` - Imported
+- `src/main/perl/lib/Pod/Perldoc/` - Imported (directory)
+
+### Phase 8 Resolved: Parser bug with `@{ shift->... }` - FIXED
+
+**Bug**: `@{ shift->{"key"} }` was parsed incorrectly.
+
+PerlOnJava was parsing this as `@shift->{"key"}` (array `@shift` with method call), but Perl parses it as `@{ shift()->{"key"} }` (dereference result of `shift()` function call).
+
+**Fix**: In `Variable.java`, added `isBuiltinFunctionFollowedByArrow()` check in `parseBracedVariable()`.
+When a built-in function like `shift`, `pop`, `caller`, etc. is followed by `->`, it's now parsed as an expression (function call) rather than a variable name.
+
+**Files changed**:
+- `src/main/java/org/perlonjava/frontend/parser/Variable.java` - Added check for built-in functions followed by `->`
+
 ### Next Steps
 
-#### Phase 8: User Experience (Recommended Next)
-1. **jcpan wrapper script** - High priority, easy win
-   - User-friendly `jcpan install Module` command
-   - Sets up paths and invokes CPAN.pm with notest option
-   - Example: `jcpan install Try::Tiny`
-
 #### Phase 9: Extended Compatibility
-2. **Module::Build support** - Medium priority
+1. **Module::Build support** - Medium priority
    - Some CPAN modules use Module::Build instead of MakeMaker
    - Needs stub similar to ExtUtils::MakeMaker
    - Blocks: modules that only provide Build.PL
 
-3. **Core module detection** - Medium priority
+2. **Core module detection** - Medium priority
    - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
    - Option A: Add version stubs to built-in modules
    - Option B: Configure CPAN.pm to skip core modules
    - Option C: Add core module versions to a metadata file
 
-4. **Test running improvements** - Low priority
+3. **Test running improvements** - Low priority
    - `make test` uses fork which isn't supported in PerlOnJava
    - Current workaround: `notest("install", "Module")`
    - Long-term: Consider IPC::Open3 for test harness
 
-5. **YAML.pm improvements** - Low priority
+4. **YAML.pm improvements** - Low priority
    - Warning: "YAML version '0.01' is too low"
    - Current stub is minimal; better YAML parsing would help with META.yml
 
 ### Open Questions
-- Should we create a PerlOnJava-specific minimal CPAN download tool?
 - How important is Safe compartmentalization for users?
 
 ### Resolved Questions
+- ✅ User-friendly installer: `jcpan` wrapper script provides `jcpan install Module` command
 - ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
 - ✅ cpanm feasibility: cpanm requires ExtUtils::MakeMaker which needs `make` - not suitable for PerlOnJava
 - ✅ Archive::Zip: Implemented using java.util.zip

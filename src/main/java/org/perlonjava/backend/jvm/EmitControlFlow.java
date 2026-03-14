@@ -405,6 +405,17 @@ public class EmitControlFlow {
                         handleGotoSubroutineBlock(emitterVisitor, blockNode, callNode.right, node.tokenIndex);
                         return;
                     }
+                    // Handle goto &$sub - variable code dereference
+                    // The parser transforms &$sub into $sub(@_), so callTarget is OperatorNode("$", ...)
+                    if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto &$var tail call");
+                        // Create a BlockNode wrapper so handleGotoSubroutineBlock can handle it
+                        java.util.List<Node> elements = new java.util.ArrayList<>();
+                        elements.add(callTarget);
+                        BlockNode blockWrapper = new BlockNode(elements, node.tokenIndex);
+                        handleGotoSubroutineBlock(emitterVisitor, blockWrapper, callNode.right, node.tokenIndex);
+                        return;
+                    }
                 }
 
                 // Check if this is a tail call (goto EXPR where EXPR is a coderef)

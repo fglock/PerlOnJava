@@ -104,13 +104,18 @@ $os_name =~ s/\s+/_/g;
     vendorarchexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0/' . "java-$java_version-$os_arch",
     vendorlibexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0',
 
-    # Script directory
-    scriptdir => 'perlonjava/bin',
+    # Script directory (JAR-embedded scripts at /bin/)
+    scriptdir => 'jar:PERL5BIN',
+    scriptdirexp => 'jar:PERL5BIN',
 
     # Dynamic loading (Java uses classloading)
     dlext => 'jar',
     dlsrc => 'classloader',
     so => 'jar',
+
+    # File locking (supported via Java's FileLock API)
+    d_flock => 'define',
+    d_fcntl_can_lock => 'define',
 
     ## # Threading
     ## useithreads => 'define',

@@ -301,6 +301,39 @@ public class FileTestOperator {
             // Don't return error here, as it could be a legitimate uppercase filename
         }
 
+        // Handle JAR virtual directory and JAR resource paths
+        // Note: Check filename != null first to avoid NPE
+        // Also use simple string check to avoid loading Jar class early
+        if (filename != null && filename.startsWith("jar:")) {
+            if (Jar.isJarDirectory(filename)) {
+                // "jar:PERL5LIB" - the virtual directory
+                updateLastStat(fileHandle, true, 0);
+                return switch (operator) {
+                    case "-d", "-e", "-r", "-x" -> scalarTrue;  // It's a readable, executable directory
+                    case "-f", "-l", "-w", "-z" -> scalarFalse;  // Not a file, link, writable, or empty
+                    case "-s" -> RuntimeScalarCache.scalarZero;  // Size 0
+                    default -> scalarUndef;
+                };
+            }
+            // JAR resource path (e.g., "jar:PERL5LIB/DBI.pm")
+            if (Jar.exists(filename)) {
+                updateLastStat(fileHandle, true, 0);
+                return switch (operator) {
+                    case "-e", "-f", "-r" -> scalarTrue;  // Exists, is a file, is readable
+                    case "-d", "-l", "-w", "-z" -> scalarFalse;  // Not a dir, link, writable, or empty
+                    case "-s" -> {
+                        long size = Jar.getSize(filename);
+                        yield size > 0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
+                    }
+                    default -> scalarUndef;
+                };
+            } else {
+                getGlobalVariable("main::!").set(2);  // ENOENT
+                updateLastStat(fileHandle, false, 2);
+                return scalarUndef;
+            }
+        }
+
         // Handle string filenames
         Path path = resolvePath(filename);
 

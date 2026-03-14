@@ -463,6 +463,25 @@ imports:
   - source: perl5/cpan/CPAN/lib/CPAN.pm
     target: src/main/perl/lib/CPAN.pm
 
+  # App::Cpan - Command-line interface for CPAN.pm (used by jcpan)
+  - source: perl5/cpan/CPAN/lib/App/Cpan.pm
+    target: src/main/perl/lib/App/Cpan.pm
+
+  # autouse - Postpone loading of modules until a function is used
+  - source: perl5/dist/autouse/lib/autouse.pm
+    target: src/main/perl/lib/autouse.pm
+
+  # Getopt::Std - Process single-character options
+  - source: perl5/lib/Getopt/Std.pm
+    target: src/main/perl/lib/Getopt/Std.pm
+
+  # Pod::Perldoc - Look up Perl documentation (for jcpan -h)
+  - source: perl5/cpan/Pod-Perldoc/lib/Pod/Perldoc.pm
+    target: src/main/perl/lib/Pod/Perldoc.pm
+  - source: perl5/cpan/Pod-Perldoc/lib/Pod/Perldoc
+    target: src/main/perl/lib/Pod/Perldoc
+    type: directory
+
   # CPAN/Distribution.pm - protected because we added fork fallback for PerlOnJava
   - source: perl5/cpan/CPAN/lib/CPAN/Distribution.pm
     target: src/main/perl/lib/CPAN/Distribution.pm

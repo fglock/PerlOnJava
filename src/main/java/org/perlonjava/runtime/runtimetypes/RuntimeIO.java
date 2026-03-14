@@ -15,6 +15,7 @@ import org.perlonjava.runtime.perlmodule.Warnings;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -420,6 +421,29 @@ public class RuntimeIO extends RuntimeScalar {
                 // For 2-argument open with dup mode, delegate to IOOperator
                 // This handles: open(my $fh, ">&1") where ">&1" is parsed as mode=">&", fileName="1"
                 return IOOperator.openFileHandleDup(fileName, mode);
+            }
+
+            // Handle JAR resource paths (e.g., "jar:PERL5LIB/DBI.pm")
+            if (Jar.isJarPath(fileName)) {
+                if (!mode.equals("<") && !mode.isEmpty()) {
+                    // JAR resources are read-only
+                    handleIOError("Cannot write to JAR resource: " + fileName);
+                    return null;
+                }
+                try {
+                    InputStream is = Jar.openInputStream(fileName);
+                    if (is == null) {
+                        getGlobalVariable("main::!").set(2);  // ENOENT
+                        return null;
+                    }
+                    fh.ioHandle = new ProcessInputHandle(is);
+                    addHandle(fh.ioHandle);
+                    fh.binmode(ioLayers);
+                    return fh;
+                } catch (IOException e) {
+                    handleIOException(e, "open failed");
+                    return null;
+                }
             }
 
             Path filePath = resolvePath(fileName, "open");

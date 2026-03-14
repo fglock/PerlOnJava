@@ -22,8 +22,10 @@ public class GlobalContext {
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
     public static final String OPEN = encodeSpecialVar("OPEN"); // $^OPEN
 
-    // Internal name of the "./src/main/perl/lib" directory
-    public static final String JAR_PERLLIB = "jar:PERL5LIB";
+    // Virtual directory names for JAR-embedded Perl resources
+    // E.g., @INC contains "jar:PERL5LIB", %INC contains "jar:PERL5LIB/DBI.pm"
+    public static final String JAR_PERLLIB = "jar:PERL5LIB";   // maps to /lib/ in JAR
+    public static final String JAR_PERLBIN = "jar:PERL5BIN";   // maps to /bin/ in JAR
 
     /**
      * Initializes global variables, arrays, hashes, internal modules, file handles, and other entities.

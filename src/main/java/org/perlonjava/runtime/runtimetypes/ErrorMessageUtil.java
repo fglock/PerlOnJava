@@ -107,6 +107,10 @@ public class ErrorMessageUtil {
         // t.printStackTrace();
 
         String message1 = t.getMessage();
+        // Check if the original message ends with \n - Perl skips stack trace in that case
+        boolean suppressStackTrace = (message != null && message.endsWith("\n"))
+                || (message1 != null && message1.endsWith("\n"));
+
         if (message1 != null && !message1.equals(message)) {
             sb.append(message1);
             if (!message1.endsWith("\n")) {
@@ -123,6 +127,11 @@ public class ErrorMessageUtil {
         sb.append(message);
         if (!message.endsWith("\n")) {
             sb.append("\n");
+        }
+
+        // When die message ends with \n, Perl doesn't print stack trace
+        if (suppressStackTrace) {
+            return sb.toString();
         }
 
         ArrayList<ArrayList<String>> formattedLines = ExceptionFormatter.formatException(t);

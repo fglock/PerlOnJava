@@ -1356,6 +1356,27 @@ public class CompileOperator {
                     bc.lastResultReg = -1;
                     return;
                 }
+                // Handle goto &$sub - variable code dereference
+                // The parser transforms &$sub into $sub(@_), so callTarget is OperatorNode("$", ...)
+                if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                    int outerContext = bc.currentCallContext;
+                    // Evaluate the $sub variable to get the CODE reference
+                    bc.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
+                    int codeRefReg = bc.lastResultReg;
+                    // Compile the args
+                    bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
+                    int argsReg = bc.lastResultReg;
+                    int rd = bc.allocateOutputRegister();
+                    bc.emit(Opcodes.GOTO_TAILCALL);
+                    bc.emitReg(rd);
+                    bc.emitReg(codeRefReg);
+                    bc.emitReg(argsReg);
+                    bc.emit(outerContext);
+                    bc.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bc.emitReg(rd);
+                    bc.lastResultReg = -1;
+                    return;
+                }
             }
             
             if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;
