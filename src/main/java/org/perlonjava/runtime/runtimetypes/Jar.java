@@ -5,33 +5,40 @@ import java.io.InputStream;
 import java.net.URL;
 
 /**
- * Helper class for handling JAR-embedded Perl library resources.
+ * Helper class for handling JAR-embedded Perl resources.
  * 
- * PerlOnJava bundles Perl modules inside the JAR at /lib/. This class provides
- * utilities for:
+ * PerlOnJava bundles Perl modules and scripts inside the JAR:
+ * - /lib/ contains modules (accessed via jar:PERL5LIB)
+ * - /bin/ contains scripts (accessed via jar:PERL5BIN)
+ * 
+ * This class provides utilities for:
  * - Checking if a path refers to a JAR resource
  * - Converting between path formats
  * - Opening JAR resources for reading
  * - File test operations on JAR resources
  * 
- * Path format: "jar:PERL5LIB/Module.pm" maps to JAR resource "/lib/Module.pm"
+ * Path formats:
+ * - "jar:PERL5LIB/DBI.pm" maps to JAR resource "/lib/DBI.pm"
+ * - "jar:PERL5BIN/cpan" maps to JAR resource "/bin/cpan"
  */
 public class Jar {
 
     /**
-     * Checks if a filename is the JAR virtual directory marker.
-     * This appears in @INC as "jar:PERL5LIB".
+     * Checks if a filename is a JAR virtual directory marker.
+     * These appear in @INC as "jar:PERL5LIB" or in $Config{scriptdirexp} as "jar:PERL5BIN".
      */
     public static boolean isJarDirectory(String filename) {
-        return GlobalContext.JAR_PERLLIB.equals(filename);
+        return GlobalContext.JAR_PERLLIB.equals(filename) 
+            || GlobalContext.JAR_PERLBIN.equals(filename);
     }
 
     /**
-     * Checks if a filename is a path under the JAR virtual directory.
-     * E.g., "jar:PERL5LIB/DBI.pm" or "jar:PERL5LIB/DBI/DBD/SQLite.pm"
+     * Checks if a filename is a path under a JAR virtual directory.
+     * E.g., "jar:PERL5LIB/DBI.pm" or "jar:PERL5BIN/cpan"
      */
     public static boolean isJarPath(String filename) {
-        return filename.startsWith(GlobalContext.JAR_PERLLIB + "/");
+        return filename.startsWith(GlobalContext.JAR_PERLLIB + "/")
+            || filename.startsWith(GlobalContext.JAR_PERLBIN + "/");
     }
 
     /**
@@ -44,14 +51,19 @@ public class Jar {
     /**
      * Converts a JAR path to a resource path that can be used with getResource().
      * 
-     * @param filename The JAR path (e.g., "jar:PERL5LIB/DBI.pm")
-     * @return The resource path (e.g., "/lib/DBI.pm"), or null if not a JAR path
+     * @param filename The JAR path (e.g., "jar:PERL5LIB/DBI.pm" or "jar:PERL5BIN/cpan")
+     * @return The resource path (e.g., "/lib/DBI.pm" or "/bin/cpan"), or null if not a JAR path
      */
     public static String toResourcePath(String filename) {
-        if (isJarPath(filename)) {
+        if (filename.startsWith(GlobalContext.JAR_PERLLIB + "/")) {
             // "jar:PERL5LIB/DBI.pm" -> "/lib/DBI.pm"
             String relativePath = filename.substring(GlobalContext.JAR_PERLLIB.length());
             return "/lib" + relativePath;
+        }
+        if (filename.startsWith(GlobalContext.JAR_PERLBIN + "/")) {
+            // "jar:PERL5BIN/cpan" -> "/bin/cpan"
+            String relativePath = filename.substring(GlobalContext.JAR_PERLBIN.length());
+            return "/bin" + relativePath;
         }
         return null;
     }
@@ -78,7 +90,7 @@ public class Jar {
      */
     public static boolean exists(String filename) {
         if (isJarDirectory(filename)) {
-            return true;  // The virtual directory always "exists"
+            return true;  // Virtual directories always "exist"
         }
         return getResource(filename) != null;
     }
