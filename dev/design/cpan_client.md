@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 6 in progress (CPAN.pm works, polishing remaining)
+### Current Status: Phase 6 mostly complete - CPAN.pm functional for pure Perl modules
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -342,18 +342,40 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/frontend/parser/ParsePrimary.java` - File test with qualified names, try/catch gating
 - `src/main/java/org/perlonjava/runtime/regex/ExtendedCharClass.java` - Character class range fix
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessorHelper.java` - Character class range fix
+- `src/main/perl/lib/ExtUtils/MM.pm` - Platform selection and MM alias, inherits from MM_Unix/MM_Win32
+- `src/main/perl/lib/ExtUtils/MM_Unix.pm` - parse_version and maybe_command for Unix
+- `src/main/perl/lib/ExtUtils/MM_Win32.pm` - Windows-specific maybe_command
+- `src/main/perl/lib/ExtUtils/MakeMaker.pm` - Added stub Makefile generation
+
+### Phase 6 Continued (2024-03-14)
+- **MM->parse_version() implemented**: Required by CPAN.pm to check installed module versions
+  - Uses regex extraction for common VERSION patterns (avoids package block scoping issues)
+  - Platform-specific modules: MM_Unix.pm (Unix/macOS), MM_Win32.pm (Windows)
+  - MM alias: `package MM; @ISA = qw(ExtUtils::MM);` for CPAN.pm compatibility
+- **Stub Makefile generation**: MakeMaker now creates minimal Makefile that CPAN.pm recognizes
+  - CPAN.pm reports "Makefile.PL -- OK" and "make -- OK"
+  - make targets: all, test, install, clean (no-ops since files installed directly)
+- **maybe_command() implemented**: Checks if file is executable (Unix: -x, Windows: .exe/.com/.bat/.cmd)
+
+### Known Issues (Phase 6)
+1. **fork() not supported**: CPAN.pm's `make test` tries to fork, causes contention loop
+   - Workaround: Use `CPAN::Shell->notest("install", "Module")` to skip tests
+2. **Dependency resolution**: CPAN.pm tries to install core modules (Exporter, strict, warnings)
+   - These are built-in but CPAN.pm doesn't detect them
+   - May need to stub module versions or configure CPAN.pm to skip core
+3. **YAML size limit**: Large YAML metadata exceeds SnakeYAML's 3MB limit
+   - Warning: "The incoming YAML document exceeds the limit: 3145728 code points"
 
 ### Next Steps (Phase 6 Remaining)
-1. **Version parsing** (Medium priority)
-   - Error: "Error while parsing version number in file"
-   - Occurs when CPAN checks if module is already installed
-   - Likely issue with parsing `$VERSION` from installed .pm files
+1. **Core module detection** (Medium priority)
+   - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
+   - Need to either provide version stubs or configure CPAN.pm to skip core modules
+   - Option: Add core module versions to a metadata file
 
-2. **ExtUtils::MakeMaker Makefile output** (Medium priority)
-   - CPAN.pm expects `Makefile` to be created
-   - Current stub installs files directly without creating Makefile
-   - CPAN reports "No 'Makefile' created ... NOT OK" even though installation succeeds
-   - Options: Create dummy Makefile, or suppress CPAN.pm warning
+2. **Test running** (Medium priority)
+   - `make test` uses fork which isn't supported in PerlOnJava
+   - Current workaround: `notest("install", "Module")`
+   - Long-term: Consider IPC::Open3 for test harness
 
 3. **YAML.pm improvements** (Low priority)
    - Warning: "YAML version '0.01' is too low"
@@ -369,7 +391,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 6. **jcpan wrapper script** (Phase 6e)
    - User-friendly `jcpan install Module` command
-   - Sets up paths and invokes CPAN.pm
+   - Sets up paths and invokes CPAN.pm with notest option
 
 ### Open Questions
 - Should we create a PerlOnJava-specific minimal CPAN download tool?
@@ -382,3 +404,5 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - ✅ ExtUtils::MakeMaker: Reimplemented for PerlOnJava to skip `make` and install pure Perl modules directly
 - ✅ Safe.pm: Stub implementation using `eval` with `no strict 'vars'` - sufficient for trusted CPAN metadata
 - ✅ Try::Tiny compatibility: `try`/`catch` now feature-gated, module works correctly
+- ✅ parse_version: Implemented using regex extraction to avoid package block scoping issues in compiled modules
+- ✅ Makefile creation: Stub Makefile satisfies CPAN.pm's checks
