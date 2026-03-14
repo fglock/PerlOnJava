@@ -3821,6 +3821,10 @@ sub test {
         }
     }
 
+    # Check if fork is available (PerlOnJava and some other platforms don't have it)
+    my $can_fork = $Config::Config{d_fork};
+    
+    if ($can_fork) {
  FORK: {
         my $pid = fork;
         if (! defined $pid) { # contention
@@ -3858,6 +3862,10 @@ sub test {
             exit !$c_ok;
         }
     } # FORK
+    } else {
+        # No fork available - run tests directly via system()
+        $tests_ok = system($system) == 0;
+    }
 
     $self->introduce_myself;
     my $but = $self->_make_test_illuminate_prereqs();

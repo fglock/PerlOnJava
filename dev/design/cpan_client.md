@@ -346,6 +346,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/perl/lib/ExtUtils/MM_Unix.pm` - parse_version and maybe_command for Unix
 - `src/main/perl/lib/ExtUtils/MM_Win32.pm` - Windows-specific maybe_command
 - `src/main/perl/lib/ExtUtils/MakeMaker.pm` - Added stub Makefile generation
+- `src/main/perl/lib/CPAN/Distribution.pm` - Fork fallback using system() when d_fork is false
 
 ### Phase 6 Continued (2024-03-14)
 - **MM->parse_version() implemented**: Required by CPAN.pm to check installed module versions
@@ -358,13 +359,16 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - **maybe_command() implemented**: Checks if file is executable (Unix: -x, Windows: .exe/.com/.bat/.cmd)
 
 ### Known Issues (Phase 6)
-1. **fork() not supported**: CPAN.pm's `make test` tries to fork, causes contention loop
-   - Workaround: Use `CPAN::Shell->notest("install", "Module")` to skip tests
+1. **fork() fallback implemented**: CPAN::Distribution patched to use system() when $Config{d_fork} is false
+   - Tests run without fork, losing timeout and signal handling
+   - Works for normal test scenarios
 2. **Dependency resolution**: CPAN.pm tries to install core modules (Exporter, strict, warnings)
    - These are built-in but CPAN.pm doesn't detect them
    - May need to stub module versions or configure CPAN.pm to skip core
 3. **YAML size limit**: Large YAML metadata exceeds SnakeYAML's 3MB limit
    - Warning: "The incoming YAML document exceeds the limit: 3145728 code points"
+4. **parse_version warnings**: "Error while parsing version" appears but doesn't affect functionality
+   - May be related to alarm/eval interaction in CPAN::Module
 
 ### Next Steps (Phase 6 Remaining)
 1. **Core module detection** (Medium priority)
