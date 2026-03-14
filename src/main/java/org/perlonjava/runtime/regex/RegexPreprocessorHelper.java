@@ -509,8 +509,10 @@ public class RegexPreprocessorHelper {
                         // Skip if next is ], then it's a literal -
                         if (nextChar != ']') {
                             // Handle escaped next character
+                            int rangeEndCharCount = 1;  // How many chars to skip for range end
                             if (nextChar == '\\' && nextPos + 1 < length) {
                                 nextChar = s.codePointAt(nextPos + 1);
+                                rangeEndCharCount = 2;  // Escaped char is 2 chars
                                 // Special handling for escape sequences
                                 if (nextChar == 'b' || nextChar == 'N' || nextChar == 'p' || nextChar == 'P') {
                                     // These are special escapes, can't be in range
@@ -518,11 +520,26 @@ public class RegexPreprocessorHelper {
                                 }
                             }
 
-                            if (nextChar != -1 && nextChar < lastChar) {
-                                String rangeStart = Character.toString(lastChar);
-                                String rangeEnd = Character.toString(nextChar);
-                                RegexPreprocessor.regexError(s, offset + 2,
-                                        "Invalid [] range \"" + rangeStart + "-" + rangeEnd + "\" in regex");
+                            if (nextChar != -1) {
+                                if (nextChar < lastChar) {
+                                    String rangeStart = Character.toString(lastChar);
+                                    String rangeEnd = Character.toString(nextChar);
+                                    RegexPreprocessor.regexError(s, offset + 2,
+                                            "Invalid [] range \"" + rangeStart + "-" + rangeEnd + "\" in regex");
+                                }
+                                // Valid range - append the dash and range end, then skip past range end
+                                sb.append(Character.toChars(c));  // Append the '-'
+                                // Append and skip the range end character so it won't be processed again
+                                // This prevents the range end from being used as a range start
+                                for (int i = 0; i < rangeEndCharCount; i++) {
+                                    sb.append(s.charAt(nextPos + i));
+                                }
+                                offset += rangeEndCharCount;  // Skip past range end
+                                first = false;
+                                afterCaret = false;
+                                lastChar = -1;  // Range complete, next dash is literal or starts new range
+                                wasEscape = false;
+                                break;
                             }
                         }
                     }

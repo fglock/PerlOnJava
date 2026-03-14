@@ -33,18 +33,15 @@ sub reval {
     # For PerlOnJava, we trust CPAN metadata - no sandboxing needed
     # The $strict parameter is ignored (would enable 'use strict' in real Safe)
     
-    my $result;
-    my $ok = eval {
-        $result = eval $code;
-        1;
-    };
+    # Wrap code to disable strict vars - CHECKSUMS files use $cksum without declaration
+    # The 'no strict "vars"' must be part of the eval'd code itself
+    my $wrapped = qq{no strict 'vars'; $code};
     
-    if (!$ok || $@) {
-        # Preserve the error in $@
-        return undef;
-    }
+    # Simple eval - just return the result
+    my $result = eval $wrapped;
     
-    return $result;
+    # If there was an error, return undef (caller can check $@)
+    return $@ ? undef : $result;
 }
 
 # Evaluate and return list context
