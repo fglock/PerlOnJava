@@ -518,13 +518,9 @@ public class ModuleOperators {
                         String resourcePath = "/lib/" + fileName;
                         URL resource = RuntimeScalar.class.getResource(resourcePath);
                         if (resource != null) {
-                            String path = resource.getPath();
-                            // Remove leading slash if on Windows
-                            if (SystemUtils.osIsWindows() && path.startsWith("/")) {
-                                path = path.substring(1);
-                            }
-                            fullName = Paths.get(path);
-                            actualFileName = fullName.toString();
+                            // Use "jar:PERL5LIB/DBI.pm" format for %INC - matches catfile output
+                            actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;
+                            fullName = Paths.get(resourcePath);  // Just for compatibility
 
                             try (InputStream is = resource.openStream();
                                  BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
