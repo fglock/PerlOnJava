@@ -719,6 +719,7 @@ public class RegexPreprocessor {
 
                 case '[':   // Handle character classes
                     offset = handleCharacterClass(s, regexFlags.isExtendedWhitespace(), sb, c, offset);
+                    lastWasQuantifiable = true; // Character classes can be quantified
                     break;
 
                 case '(':
