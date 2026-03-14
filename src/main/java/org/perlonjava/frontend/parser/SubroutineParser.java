@@ -297,7 +297,10 @@ public class SubroutineParser {
                     && nextTok.type != LexerTokenType.IDENTIFIER
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
-                ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                // If the next token is "{", treat it as a block argument (like grep/map).
+                // This matches Perl5's behavior: func { ... } @args treats { } as a block.
+                String proto = nextTok.text.equals("{") ? "&@" : "@";
+                ListNode arguments = consumeArgsWithPrototype(parser, proto);
 
                 // Check if this is indirect object syntax like "s2 $f"
                 if (arguments.elements.size() > 0) {
