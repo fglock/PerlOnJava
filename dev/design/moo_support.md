@@ -2,7 +2,13 @@
 
 ## Overview
 
-This document describes the plan to support the [Moo](https://metacpan.org/pod/Moo) object system in PerlOnJava, demonstrating CPAN module installation via `jcpan`.
+This document describes using [Moo](https://metacpan.org/pod/Moo) as a test case for CPAN integration in PerlOnJava. **Moo is not a goal in itself** - it's being used to verify that:
+
+1. `jcpan` can install CPAN modules correctly
+2. `jcpan` can run module tests
+3. Complex pure-Perl CPAN modules work correctly in PerlOnJava
+
+**Success criteria: All Moo tests MUST pass.**
 
 ## Current Status
 
@@ -214,17 +220,18 @@ Moo's dependency tree (installed via jcpan):
 
 ## Success Criteria
 
-1. `jperl -e 'use Moo; print "OK\n"'` works ✓
-2. `has x => (is => "ro")` syntax parses correctly ✓
-3. Moo class with attributes works ✓
-4. `croak` and `carp` work with proper stack traces ✓
-5. No version mismatch warnings ✓
+1. `jcpan -t Moo` runs Moo tests ❌ (tests skipped)
+2. **All Moo tests pass** ❌ (40/71 passing)
+3. `jperl -e 'use Moo; print "OK\n"'` works ✓
+4. `has x => (is => "ro")` syntax parses correctly ✓
+5. Moo class with attributes works ✓
+6. `croak` and `carp` work with proper stack traces ✓
 
 ## Progress Tracking
 
-### Current Status: ✅ ALL PHASES COMPLETE
+### Current Status: 🔴 BLOCKING - Moo tests must pass
 
-Moo is now fully functional in PerlOnJava!
+Basic Moo functionality works, but 31/71 tests still failing.
 
 ### Completed Phases
 - [x] Phase 1: Replace Carp.java with Carp.pm (2024-03-14)
@@ -245,15 +252,15 @@ Moo is now fully functional in PerlOnJava!
   - Fixed jcpan Unix wrapper to use standard cpan script
   - Fixed Storable.java codePointLimit (was 3MB, now 50MB)
 
-### Current Objectives (In Progress)
+### Current Objectives (MUST COMPLETE)
 
-1. **Moo tests run inside jcpan** - Get `jcpan -t Moo` to actually run tests
+1. **Moo tests run inside jcpan** - `jcpan -t Moo` must execute tests
    - Currently MakeMaker skips tests when module is already installed
    - Need to implement `make test` in ExtUtils::MakeMaker
    
-2. **Moo tests pass** - Fix remaining test failures
+2. **All Moo tests pass** - Fix remaining test failures
    - Current status: 40 passed, 31 failed
-   - Main blockers: `extends`, roles, modifiers
+   - **This is a blocker** - Moo tests validate CPAN integration
    - See test failure analysis below
 
 ### Test Failure Analysis
