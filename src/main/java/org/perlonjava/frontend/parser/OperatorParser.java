@@ -233,13 +233,24 @@ public class OperatorParser {
             if (identifierNode instanceof IdentifierNode) { // my $a
                 String name = ((IdentifierNode) identifierNode).name;
                 String var = sigil + name;
-                if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                    String message = operator.equals("our")
-                            ? "\"" + operator + "\" variable " + var + " redeclared"
-                            : "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope";
-                    System.err.println(
-                            ctx.errorUtil.errorMessage(node.getIndex(), message));
+                
+                // Check for redeclaration warnings
+                if (operator.equals("our")) {
+                    // For 'our', only warn if redeclared in the same package (matching Perl behavior)
+                    if (ctx.symbolTable.isOurVariableRedeclaredInSamePackage(var)) {
+                        System.err.println(
+                                ctx.errorUtil.errorMessage(node.getIndex(),
+                                        "\"our\" variable " + var + " redeclared"));
+                    }
+                } else {
+                    // For 'my'/'local', warn if redeclared in the same scope
+                    if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                        System.err.println(
+                                ctx.errorUtil.errorMessage(node.getIndex(),
+                                        "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope"));
+                    }
                 }
+                
                 int varIndex = ctx.symbolTable.addVariable(var, operator, node);
                 // Note: the isDeclaredReference flag is stored in node.annotations
                 // and will be used during code generation

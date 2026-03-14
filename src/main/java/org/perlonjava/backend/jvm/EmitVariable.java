@@ -1107,16 +1107,26 @@ public class EmitVariable {
                     String name = ((IdentifierNode) identifierNode).name;
                     String var = sigil + name;
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
-                    if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                        if (Warnings.warningManager.isWarningEnabled("redefine")) {
-                            String message = operator.equals("our")
-                                    ? "\"" + operator + "\" variable " + var + " redeclared"
-                                    : "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope";
-                            System.err.println(
-                                    emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
-                                            message));
+                    
+                    // Check for redeclaration warnings
+                    if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                        if (operator.equals("our")) {
+                            // For 'our', only warn if redeclared in the same package (matching Perl behavior)
+                            if (emitterVisitor.ctx.symbolTable.isOurVariableRedeclaredInSamePackage(var)) {
+                                System.err.println(
+                                        emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
+                                                "\"our\" variable " + var + " redeclared"));
+                            }
+                        } else {
+                            // For 'my'/'local', warn if redeclared in the same scope
+                            if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                                System.err.println(
+                                        emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
+                                                "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope"));
+                            }
                         }
                     }
+                    
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined
 
