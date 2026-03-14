@@ -224,7 +224,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 
 ## Progress Tracking
 
-### Current Status: Phase 5 complete
+### Current Status: Phase 6 in progress (CPAN.pm works, polishing remaining)
 
 ### Completed
 - [x] Analyze CPAN.pm dependencies (2024-03-13)
@@ -316,11 +316,60 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/perl/lib/ExtUtils/MakeMaker/Config.pm` - Config wrapper
 - `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` - Added ~/.perlonjava/lib to @INC
 
-### Next Steps
-1. Consider a minimal CPAN download helper (pure Perl, no build step)
-2. Expand user documentation with more examples
-3. Add more commonly-needed pure Perl modules
-4. Test with real CPAN modules (pure Perl ones)
+- [x] **Phase 6: CPAN.pm Support** (2024-03-14, in progress)
+  - **Safe.pm stub created**: Minimal implementation for CPAN.pm metadata evaluation
+    - `reval()` uses `eval` with `no strict 'vars'` (CPAN metadata is trusted)
+    - Supports CHECKSUMS file evaluation ($cksum hash)
+  - **CPAN.pm imported**: Added to config.yaml with CPAN/*, CPAN::Meta::*, Parse::CPAN::Meta
+  - **Parser fixes for CPAN.pm compatibility**:
+    - File test operators with function call operands (`-f func()`)
+    - Block argument parsing for undefined functions (`func { } @args`)
+    - File test with qualified package names (`-f CPAN::find_perl`)
+  - **Regex fix**: Character class ranges like `[A-Z-0-9]` now parse correctly
+  - **try/catch feature gating**: `try` and `catch` only keywords when `use feature 'try'` enabled
+    - Allows Try::Tiny to work correctly without feature flag
+  - **CPAN.pm now loads and can install pure Perl modules**:
+    ```bash
+    ./jperl -MCPAN -e 'CPAN::Shell->install("Try::Tiny")'
+    # Downloads, validates checksums, installs to ~/.perlonjava/lib/
+    ```
+
+### Files Changed (Phase 6)
+- `src/main/perl/lib/Safe.pm` - New stub for CPAN.pm metadata evaluation
+- `dev/import-perl5/config.yaml` - Added CPAN.pm, CPAN/*, CPAN::Meta::*, Parse::CPAN::Meta
+- `src/main/java/org/perlonjava/backend/jvm/EmitOperatorFileTest.java` - Fixed file test with function calls
+- `src/main/java/org/perlonjava/frontend/parser/SubroutineParser.java` - Block args for undefined functions
+- `src/main/java/org/perlonjava/frontend/parser/ParsePrimary.java` - File test with qualified names, try/catch gating
+- `src/main/java/org/perlonjava/runtime/regex/ExtendedCharClass.java` - Character class range fix
+- `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessorHelper.java` - Character class range fix
+
+### Next Steps (Phase 6 Remaining)
+1. **Version parsing** (Medium priority)
+   - Error: "Error while parsing version number in file"
+   - Occurs when CPAN checks if module is already installed
+   - Likely issue with parsing `$VERSION` from installed .pm files
+
+2. **ExtUtils::MakeMaker Makefile output** (Medium priority)
+   - CPAN.pm expects `Makefile` to be created
+   - Current stub installs files directly without creating Makefile
+   - CPAN reports "No 'Makefile' created ... NOT OK" even though installation succeeds
+   - Options: Create dummy Makefile, or suppress CPAN.pm warning
+
+3. **YAML.pm improvements** (Low priority)
+   - Warning: "YAML version '0.01' is too low"
+   - Current stub is minimal; better YAML parsing would help with META.yml
+
+4. **CPAN::Meta::Requirements warnings** (Low priority)
+   - `"our" variable @ISA redeclared` warnings
+   - Cosmetic issue in imported CPAN module
+
+5. **Module::Build support** (Phase 6b)
+   - Some CPAN modules use Module::Build instead of MakeMaker
+   - Needs stub similar to ExtUtils::MakeMaker
+
+6. **jcpan wrapper script** (Phase 6e)
+   - User-friendly `jcpan install Module` command
+   - Sets up paths and invokes CPAN.pm
 
 ### Open Questions
 - Should we create a PerlOnJava-specific minimal CPAN download tool?
@@ -331,3 +380,5 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - ✅ cpanm feasibility: cpanm requires ExtUtils::MakeMaker which needs `make` - not suitable for PerlOnJava
 - ✅ Archive::Zip: Implemented using java.util.zip
 - ✅ ExtUtils::MakeMaker: Reimplemented for PerlOnJava to skip `make` and install pure Perl modules directly
+- ✅ Safe.pm: Stub implementation using `eval` with `no strict 'vars'` - sufficient for trusted CPAN metadata
+- ✅ Try::Tiny compatibility: `try`/`catch` now feature-gated, module works correctly
