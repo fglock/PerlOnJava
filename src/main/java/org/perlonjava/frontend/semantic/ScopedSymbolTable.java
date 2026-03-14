@@ -302,6 +302,24 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Checks if an 'our' variable was previously declared in the same package.
+     * This is used to generate the "our variable redeclared" warning only when
+     * the redeclaration occurs in the same package (matching Perl behavior).
+     *
+     * @param name The name of the variable to check.
+     * @return true if the variable was previously declared with 'our' in the same package.
+     */
+    public boolean isOurVariableRedeclaredInSamePackage(String name) {
+        String currentPackage = getCurrentPackage();
+        SymbolTable.SymbolEntry entry = symbolTableStack.peek().getSymbolEntry(name);
+        if (entry != null && "our".equals(entry.decl())) {
+            // Check if the previous declaration was in the same package
+            return currentPackage.equals(entry.perlPackage());
+        }
+        return false;
+    }
+
+    /**
      * Retrieves all visible variables from the current scope to the outermost scope.
      * This method is used to track closure variables.
      * The returned TreeMap is sorted by variable index.

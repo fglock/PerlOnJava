@@ -66,7 +66,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
         GlobalVariable.getGlobalVariable("main::a");    // initialize $a to "undef"
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
-        GlobalVariable.getGlobalVariable("main::!");    // initialize $! to "undef"
+        GlobalVariable.globalVariables.put("main::!", new ErrnoVariable());    // initialize $! with dualvar support
         GlobalVariable.getGlobalVariable("main::,").set("");    // initialize $, to ""
         GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
         GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\

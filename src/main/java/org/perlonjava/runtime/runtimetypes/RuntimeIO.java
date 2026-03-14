@@ -209,25 +209,80 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Handles I/O errors by setting the Perl $! variable with errno.
+     *
+     * @param errno the errno number to set in $!
+     * @return RuntimeScalar false value for error indication
+     */
+    public static RuntimeScalar handleIOError(int errno) {
+        getGlobalVariable("main::!").set(errno);
+        return scalarFalse;
+    }
+
+    /**
      * Handles I/O errors by setting the Perl $! variable.
+     * This is a legacy method that sets errno to 0 with a custom message.
      *
      * @param message the error message to set in $!
      * @return RuntimeScalar false value for error indication
      */
     public static RuntimeScalar handleIOError(String message) {
+        // For backward compatibility, set to EIO with custom message via string
         getGlobalVariable("main::!").set(message);
         return scalarFalse;
     }
 
     /**
-     * Handles IOException by extracting the message and setting $!.
+     * Handles IOException by detecting the error type and setting appropriate errno.
      *
      * @param e       the IOException that occurred
-     * @param message additional context about the operation that failed
+     * @param message additional context about the operation that failed (unused, kept for compatibility)
      * @return RuntimeScalar false value for error indication
      */
     public static RuntimeScalar handleIOException(Exception e, String message) {
-        return handleIOError(message + ": " + e.getMessage());
+        return handleIOException(e, message, 5); // Default to EIO
+    }
+
+    /**
+     * Handles IOException by detecting the error type and setting appropriate errno.
+     *
+     * @param e           the IOException that occurred
+     * @param message     additional context about the operation that failed (unused, kept for compatibility)
+     * @param defaultErrno the errno to use if exception type is not recognized
+     * @return RuntimeScalar false value for error indication
+     */
+    public static RuntimeScalar handleIOException(Exception e, String message, int defaultErrno) {
+        int errno = defaultErrno;
+        
+        // Detect specific exception types
+        if (e instanceof java.nio.file.AccessDeniedException) {
+            errno = 13; // EACCES
+        } else if (e instanceof java.nio.file.NoSuchFileException) {
+            errno = 2; // ENOENT
+        } else if (e instanceof java.nio.file.FileAlreadyExistsException) {
+            errno = 17; // EEXIST
+        } else if (e instanceof java.nio.file.DirectoryNotEmptyException) {
+            errno = 39; // ENOTEMPTY
+        } else if (e instanceof java.io.FileNotFoundException) {
+            errno = 2; // ENOENT
+        } else if (e != null && e.getMessage() != null) {
+            String msg = e.getMessage().toLowerCase();
+            if (msg.contains("is a directory")) {
+                errno = 21; // EISDIR
+            } else if (msg.contains("no such file")) {
+                errno = 2; // ENOENT
+            } else if (msg.contains("permission denied") || msg.contains("access denied")) {
+                errno = 13; // EACCES
+            } else if (msg.contains("file exists")) {
+                errno = 17; // EEXIST
+            } else if (msg.contains("directory not empty")) {
+                errno = 39; // ENOTEMPTY
+            } else if (msg.contains("invalid argument")) {
+                errno = 22; // EINVAL
+            }
+        }
+        
+        return handleIOError(errno);
     }
 
     /**

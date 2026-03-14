@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PerlOnJava: Perl on the JVM - German Perl/Raku Workshop 2026</title>
 
+    <!-- Custom fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
     <!-- reveal.js CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reset.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.css">
@@ -14,23 +19,176 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/monokai.css">
 
     <style>
-        /* Custom styles for the presentation */
-        .reveal h1 { font-size: 2.0em; }
-        .reveal h2 { font-size: 1.5em; }
-        .reveal h3 { font-size: 1.2em; }
-        .reveal { font-size: 38px; }  /* Increase base font size */
-        .reveal code { font-size: 0.9em; }  /* Inline code - slightly smaller than normal text */
-        .reveal pre code { font-size: 1.0em; line-height: 1.5; max-height: 500px; }  /* Code blocks */
+        /* ── Base theme overrides ── */
+        .reveal {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 36px;
+            font-weight: 400;
+            color: #e0e6ed;
+        }
+
+        /* Dark-navy gradient background */
+        body {
+            background: linear-gradient(135deg, #0a0e1a 0%, #141b2d 50%, #1a2240 100%) !important;
+        }
+        .reveal .slide-background {
+            background: transparent !important;
+        }
+
+        /* ── Typography ── */
+        .reveal h1 {
+            font-family: 'Inter', sans-serif;
+            font-size: 2.2em;
+            font-weight: 700;
+            color: #ffffff;
+            text-shadow: 0 2px 12px rgba(66, 175, 250, 0.15);
+            letter-spacing: -0.02em;
+        }
+        .reveal h2 {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #ffffff;
+            text-shadow: 0 1px 8px rgba(66, 175, 250, 0.12);
+            border-left: 4px solid #42affa;
+            padding-left: 0.5em;
+            margin-bottom: 0.6em;
+        }
+        .reveal h3 {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #c8d6e5;
+        }
+
+        /* Section divider slides (h1 only) */
+        .reveal section > h1:only-child,
+        .reveal section > h1:first-child + em {
+            border-left: none;
+            text-align: center;
+        }
+
+        /* ── Lists ── */
+        .reveal ul, .reveal ol {
+            margin-left: 0.4em;
+        }
+        .reveal li {
+            margin-bottom: 0.45em;
+            line-height: 1.5;
+        }
+        .reveal li strong {
+            color: #ffffff;
+        }
+
+        /* ── Code ── */
+        .reveal code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85em;
+        }
+        .reveal pre {
+            background: rgba(10, 14, 30, 0.6);
+            border: 1px solid rgba(66, 175, 250, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            padding: 2px;
+        }
+        .reveal pre code {
+            font-size: 0.88em;
+            line-height: 1.55;
+            max-height: 480px;
+            padding: 0.8em 1em;
+            border-radius: 7px;
+        }
+        /* Inline code */
+        .reveal p code, .reveal li code {
+            background: rgba(66, 175, 250, 0.1);
+            border: 1px solid rgba(66, 175, 250, 0.15);
+            border-radius: 4px;
+            padding: 0.1em 0.35em;
+            font-size: 0.85em;
+        }
+
+        /* ── Tables ── */
+        .reveal table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            margin: 0.8em 0;
+            font-size: 0.9em;
+        }
+        .reveal table th {
+            background: rgba(66, 175, 250, 0.15);
+            color: #42affa;
+            font-weight: 600;
+            padding: 0.5em 0.8em;
+            border-bottom: 2px solid rgba(66, 175, 250, 0.3);
+            text-align: left;
+        }
+        .reveal table td {
+            padding: 0.45em 0.8em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .reveal table tr:nth-child(even) td {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .reveal table tr:hover td {
+            background: rgba(66, 175, 250, 0.06);
+        }
+
+        /* ── Metrics emphasis (pill badges) ── */
+        .metric {
+            color: #42affa;
+            font-weight: 700;
+            font-size: 1.1em;
+            background: rgba(66, 175, 250, 0.12);
+            border: 1px solid rgba(66, 175, 250, 0.25);
+            border-radius: 6px;
+            padding: 0.1em 0.45em;
+            display: inline-block;
+            line-height: 1.4;
+        }
+
+        /* ── Fragment highlights ── */
         .reveal .slides section .fragment.highlight-current-blue { opacity: 1; }
         .reveal .slides section .fragment.highlight-current-blue.current-fragment { color: #42affa; }
 
-        /* Speaker notes styling */
+        /* ── Speaker notes ── */
         .reveal aside.notes { font-size: 1em; }
 
-        /* Metrics emphasis */
-        .metric { color: #42affa; font-weight: bold; font-size: 1.2em; }
+        /* ── Controls & UI ── */
+        .reveal .controls {
+            color: #42affa;
+            opacity: 0.4;
+        }
+        .reveal .controls:hover {
+            opacity: 0.8;
+        }
+        .reveal .slide-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.3);
+            background: transparent;
+        }
+        .reveal .progress {
+            height: 3px;
+            color: #42affa;
+        }
 
-        /* Three-column layout */
+        /* ── Blockquotes / italic emphasis ── */
+        .reveal em {
+            color: #8bb8d6;
+            font-style: italic;
+        }
+
+        /* ── Links ── */
+        .reveal a {
+            color: #42affa;
+        }
+        .reveal a:hover {
+            color: #6dc4ff;
+        }
+
+        /* ── Three-column layout ── */
         .three-columns {
             display: flex;
             justify-content: space-between;
@@ -39,7 +197,7 @@
         .three-columns > div {
             flex: 1;
             text-align: center;
-            font-size: 0.9em;  /* Slightly smaller for three-column to fit */
+            font-size: 0.9em;
         }
     </style>
 </head>
@@ -80,7 +238,7 @@
             slideNumber: 'c/t',
 
             // Transitions
-            transition: 'slide', // none/fade/slide/convex/concave/zoom
+            transition: 'fade', // none/fade/slide/convex/concave/zoom
 
             // Code highlighting
             highlight: {
