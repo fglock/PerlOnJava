@@ -3,15 +3,32 @@ use strict;
 use warnings;
 
 our $VERSION = '7.70_perlonjava';
+our @ISA;
 
 # MM is a compatibility shim that some modules expect.
 # In traditional MakeMaker, MM is the platform-specific Makefile generator.
-# In PerlOnJava, we don't generate Makefiles, so this is a stub.
+# In PerlOnJava, we don't generate Makefiles, but we provide the methods
+# needed by CPAN.pm (parse_version, maybe_command).
+
+# Load platform-specific module and set up inheritance
+BEGIN {
+    if ($^O eq 'MSWin32') {
+        require ExtUtils::MM_Win32;
+        push @ISA, 'ExtUtils::MM_Win32';
+    } else {
+        require ExtUtils::MM_Unix;
+        push @ISA, 'ExtUtils::MM_Unix';
+    }
+}
 
 use ExtUtils::MakeMaker;
 
-# Inherit from the installed module stub
-our @ISA = ('PerlOnJava::MM::Installed');
+# Convenient alias - allows MM->method() syntax
+{
+    package MM;
+    our @ISA = qw(ExtUtils::MM);
+    sub DESTROY {}
+}
 
 # Provide any methods that Makefile.PL might call on MM
 sub new {
@@ -51,5 +68,8 @@ ExtUtils::MM - PerlOnJava stub
 
 This is a compatibility stub for modules that reference ExtUtils::MM directly.
 In PerlOnJava, the MakeMaker functionality is handled by ExtUtils::MakeMaker.
+
+On Unix-like systems, inherits from ExtUtils::MM_Unix.
+On Windows, inherits from ExtUtils::MM_Win32.
 
 =cut

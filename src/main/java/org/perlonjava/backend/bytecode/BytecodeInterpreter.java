@@ -1594,6 +1594,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeLocalGlob(bytecode, pc, registers, code);
                             }
 
+                            case Opcodes.LOCAL_GLOB_DYNAMIC -> {
+                                pc = InlineOpcodeHandler.executeLocalGlobDynamic(bytecode, pc, registers);
+                            }
+
                             case Opcodes.GET_LOCAL_LEVEL -> {
                                 pc = InlineOpcodeHandler.executeGetLocalLevel(bytecode, pc, registers);
                             }

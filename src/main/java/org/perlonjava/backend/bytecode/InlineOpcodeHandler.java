@@ -1206,6 +1206,18 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    public static int executeLocalGlobDynamic(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int nameReg = bytecode[pc++];
+        RuntimeScalar nameScalar = registers[nameReg].scalar();
+        String pkg = InterpreterState.currentPackage.get().toString();
+        String normalizedName = NameNormalizer.normalizeVariableName(nameScalar.toString(), pkg);
+        RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
+        DynamicVariableManager.pushLocalVariable(glob);
+        registers[rd] = glob;
+        return pc;
+    }
+
     public static int executeGetLocalLevel(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         registers[rd] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());

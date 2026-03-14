@@ -1452,6 +1452,12 @@ public class Disassemble {
                     case Opcodes.LOCAL_GLOB:
                         sb.append("LOCAL_GLOB r").append(interpretedCode.bytecode[pc++]).append(" = pushLocalVariable(glob '").append(interpretedCode.stringPool[interpretedCode.bytecode[pc++]]).append("')\n");
                         break;
+                    case Opcodes.LOCAL_GLOB_DYNAMIC: {
+                        int lgdRd = interpretedCode.bytecode[pc++];
+                        int lgdNameReg = interpretedCode.bytecode[pc++];
+                        sb.append("LOCAL_GLOB_DYNAMIC r").append(lgdRd).append(" = pushLocalVariable(glob r").append(lgdNameReg).append(")\n");
+                        break;
+                    }
                     case Opcodes.GET_LOCAL_LEVEL:
                         sb.append("GET_LOCAL_LEVEL r").append(interpretedCode.bytecode[pc++]).append("\n");
                         break;

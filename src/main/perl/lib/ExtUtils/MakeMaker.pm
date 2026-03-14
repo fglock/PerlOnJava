@@ -233,6 +233,9 @@ sub _install_pure_perl {
     print "Installation complete! ($installed files installed)\n";
     print "=" x 60, "\n\n";
     
+    # Create a stub Makefile to satisfy CPAN.pm's check
+    _create_stub_makefile($name, $version, $args);
+    
     return PerlOnJava::MM::Installed->new($args);
 }
 
@@ -254,6 +257,51 @@ sub _extract_version {
     }
     close $fh;
     return '0';
+}
+
+sub _create_stub_makefile {
+    my ($name, $version, $args) = @_;
+    
+    # Create a minimal Makefile that CPAN.pm can parse
+    # This allows CPAN.pm to proceed through its make/test/install workflow
+    my $makefile = 'Makefile';
+    
+    open my $fh, '>', $makefile or do {
+        warn "Note: Could not create stub Makefile: $!\n";
+        return;
+    };
+    
+    # Minimal Makefile that works with CPAN.pm
+    print $fh <<"MAKEFILE";
+# Stub Makefile for PerlOnJava
+# This module was installed directly without 'make'
+
+NAME = $name
+VERSION = $version
+PERL = $^X
+INSTALLDIRS = site
+
+# PerlOnJava installs modules directly - these are no-ops
+all:
+\t\@echo "PerlOnJava: Module already installed"
+
+test:
+\t\@echo "PerlOnJava: Tests skipped (module already installed)"
+
+install:
+\t\@echo "PerlOnJava: Module already installed to $INSTALL_BASE"
+
+clean:
+\t\@echo "PerlOnJava: Nothing to clean"
+
+realclean: clean
+
+distclean: clean
+
+.PHONY: all test install clean realclean distclean
+MAKEFILE
+
+    close $fh;
 }
 
 sub prompt {

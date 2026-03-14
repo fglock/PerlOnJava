@@ -145,6 +145,7 @@ public class ParsePrimary {
                 case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                 case "__CLASS__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
                 case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
+                case "try", "catch" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("try");
                 default -> true; // Most operators are always enabled
             };
         }
@@ -449,9 +450,13 @@ public class ParsePrimary {
 
         // File tests accept bareword filehandles; parse them before generic expression parsing
         // can turn them into subroutine calls. But '_' is special: it refers to the last stat buffer.
+        // Don't treat as filehandle if followed by :: (qualified package name like CPAN::find_perl)
         if (nextToken.type == LexerTokenType.IDENTIFIER) {
             String name = nextToken.text;
-            if (!name.equals("_") && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+            LexerToken afterName = parser.tokens.size() > parser.tokenIndex + 1 
+                ? parser.tokens.get(parser.tokenIndex + 1) : null;
+            boolean isQualifiedName = afterName != null && afterName.text.equals("::");
+            if (!isQualifiedName && !name.equals("_") && name.matches("^[A-Z_][A-Z0-9_]*$")) {
                 TokenUtils.consume(parser);
                 // autovivify filehandle and convert to globref
                 GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
@@ -468,6 +473,19 @@ public class ParsePrimary {
             // Special case: -f _ uses the stat buffer from the last file test
             TokenUtils.consume(parser);
             operand = new IdentifierNode("_", parser.tokenIndex);
+        } else if (hasParenthesis) {
+            // Inside parentheses, parse full expression (allows assignment like -f ($x = $path))
+            // But first check for empty parens -f()
+            if (nextToken.text.equals(")")) {
+                // Empty parentheses -f() uses $_ as default
+                operand = scalarUnderscore(parser);
+            } else {
+                operand = parser.parseExpression(0);
+                if (operand == null) {
+                    // No argument provided, use $_ as default
+                    operand = scalarUnderscore(parser);
+                }
+            }
         } else {
             // Parse the filename/handle argument
             ListNode listNode = ListParser.parseZeroOrOneList(parser, 0);

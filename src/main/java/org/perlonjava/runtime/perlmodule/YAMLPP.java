@@ -109,6 +109,7 @@ public class YAMLPP extends PerlModuleBase {
         LoadSettings loadSettings = LoadSettings.builder()
                 .setAllowDuplicateKeys(options.containsKey("duplicate_keys") && options.get("duplicate_keys").getBoolean())
                 .setSchema(schema)
+                .setCodePointLimit(50 * 1024 * 1024)  // 50MB limit for large CPAN metadata files
                 .build();
 
         instance.put("_dump", new RuntimeScalar(new Dump(dumpSettings)));

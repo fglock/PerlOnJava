@@ -471,9 +471,15 @@ public class ExtendedCharClass {
                 inEscape = true;
             } else if (c == '-' && lastChar != -1 && i + 1 < content.length()) {
                 char nextChar = content.charAt(i + 1);
-                if (!Character.isWhitespace(nextChar) && nextChar != ']' && nextChar != '\\' && nextChar < lastChar) {
-                    RegexPreprocessor.regexError(originalRegex, classStart + i + 3,
-                            String.format("Invalid [] range \"%c-%c\" in regex", lastChar, nextChar));
+                if (!Character.isWhitespace(nextChar) && nextChar != ']' && nextChar != '\\') {
+                    if (nextChar < lastChar) {
+                        RegexPreprocessor.regexError(originalRegex, classStart + i + 3,
+                                String.format("Invalid [] range \"%c-%c\" in regex", lastChar, nextChar));
+                    }
+                    // Valid range: skip over the end character and reset lastChar
+                    // so the next '-' will be treated as literal or start a new range
+                    i++; // Skip the range end character
+                    lastChar = -1;
                 }
             } else if (c != '-' && c != '^' && c != '[' && c != ':') {
                 lastChar = c;

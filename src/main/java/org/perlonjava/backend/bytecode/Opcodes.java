@@ -975,6 +975,14 @@ public class Opcodes {
     public static final short LOCAL_GLOB = 340;
 
     /**
+     * Localize a typeglob with dynamic name: rd = DynamicVariableManager.pushLocalVariable(LOAD_GLOB(normalize(rs)))
+     * Like LOCAL_GLOB but the name comes from a register instead of the string pool.
+     * Used for: local *{$name}
+     * Format: LOCAL_GLOB_DYNAMIC rd rs
+     */
+    public static final short LOCAL_GLOB_DYNAMIC = 387;
+
+    /**
      * Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
      * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive

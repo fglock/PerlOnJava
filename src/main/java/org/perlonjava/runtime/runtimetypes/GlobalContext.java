@@ -206,7 +206,7 @@ public class GlobalContext {
         Parent.initialize();
         Lib.initialize();
         Re.initialize();
-        Cwd.initialize();
+        // Cwd.initialize();  // Use Perl Cwd.pm instead (has pure Perl fallbacks)
         FileSpec.initialize();
         UnicodeNormalize.initialize();
         UnicodeUCD.initialize();

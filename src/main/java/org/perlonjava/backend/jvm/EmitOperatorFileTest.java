@@ -76,8 +76,8 @@ public class EmitOperatorFileTest {
             }
         } else {
             // Original single operator logic remains unchanged
-            emitterVisitor.ctx.mv.visitLdcInsn(node.operator);
             if (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_")) {
+                emitterVisitor.ctx.mv.visitLdcInsn(node.operator);
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/operators/FileTestOperator",
@@ -85,7 +85,13 @@ public class EmitOperatorFileTest {
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             } else {
+                // Visit the operand first, then push the operator string
+                // This avoids stack inconsistency when operand has control flow (e.g., function calls)
                 node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                int operandSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, operandSlot);
+                emitterVisitor.ctx.mv.visitLdcInsn(node.operator);
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, operandSlot);
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/operators/FileTestOperator",
