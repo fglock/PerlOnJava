@@ -463,6 +463,11 @@ imports:
   - source: perl5/cpan/CPAN/lib/CPAN.pm
     target: src/main/perl/lib/CPAN.pm
 
+  # CPAN/Distribution.pm - protected because we added fork fallback for PerlOnJava
+  - source: perl5/cpan/CPAN/lib/CPAN/Distribution.pm
+    target: src/main/perl/lib/CPAN/Distribution.pm
+    protected: true
+
   - source: perl5/cpan/CPAN/lib/CPAN
     target: src/main/perl/lib/CPAN
     type: directory
