@@ -113,6 +113,10 @@ $os_name =~ s/\s+/_/g;
     dlsrc => 'classloader',
     so => 'jar',
 
+    # File locking (supported via Java's FileLock API)
+    d_flock => 'define',
+    d_fcntl_can_lock => 'define',
+
     ## # Threading
     ## useithreads => 'define',
     ## usethreads => 'define',
