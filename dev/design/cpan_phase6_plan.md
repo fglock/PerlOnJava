@@ -326,6 +326,100 @@ sub search_module {
 
 ---
 
+## Phase 6e: Try::Tiny Compatibility Shim
+
+Create a `Try::Tiny` replacement that uses the built-in `try` feature:
+
+```perl
+package Try::Tiny;
+use strict;
+use warnings;
+use feature 'try';
+no warnings 'experimental::try';
+
+our $VERSION = '0.31_perlonjava';
+
+use Exporter 'import';
+our @EXPORT = qw(try catch finally);
+our @EXPORT_OK = @EXPORT;
+
+# try BLOCK catch BLOCK
+# try BLOCK catch BLOCK finally BLOCK
+# try BLOCK finally BLOCK
+
+sub try (&;@) {
+    my ($try, @handlers) = @_;
+    
+    my ($catch, $finally);
+    for my $h (@handlers) {
+        if (ref $h eq 'Try::Tiny::Catch') {
+            $catch = $$h;
+        }
+        elsif (ref $h eq 'Try::Tiny::Finally') {
+            $finally = $$h;
+        }
+    }
+    
+    my ($ok, $error, @result);
+    {
+        local $@;
+        $ok = eval {
+            @result = $try->();
+            1;
+        };
+        $error = $@;
+    }
+    
+    if (!$ok && $catch) {
+        local $_ = $error;
+        @result = $catch->($error);
+    }
+    
+    if ($finally) {
+        $finally->();
+    }
+    
+    return wantarray ? @result : $result[0];
+}
+
+sub catch (&;@) {
+    my ($block, @rest) = @_;
+    return (bless(\$block, 'Try::Tiny::Catch'), @rest);
+}
+
+sub finally (&;@) {
+    my ($block, @rest) = @_;
+    return (bless(\$block, 'Try::Tiny::Finally'), @rest);
+}
+
+1;
+```
+
+**Usage** (identical to original Try::Tiny):
+```perl
+use Try::Tiny;
+
+try {
+    die "oops";
+}
+catch {
+    warn "caught: $_";
+}
+finally {
+    print "cleanup\n";
+};
+```
+
+**Files to create:**
+- `src/main/perl/lib/Try/Tiny.pm`
+
+**Benefits:**
+- Drop-in replacement for existing code using Try::Tiny
+- No DESTROY needed - uses eval-based approach
+- Supports try/catch/finally syntax
+
+---
+
 ## Open Questions
 
 1. Should jcpan auto-install dependencies recursively?
