@@ -734,7 +734,7 @@ public class Operator {
 
             // Check if source file exists
             if (!Files.exists(oldPath)) {
-                getGlobalVariable("main::!").set("No such file or directory");
+                getGlobalVariable("main::!").set(2); // ENOENT
                 return scalarFalse;
             }
 
@@ -745,32 +745,35 @@ public class Operator {
             return scalarTrue;
 
         } catch (AccessDeniedException e) {
-            getGlobalVariable("main::!").set("Permission denied");
+            getGlobalVariable("main::!").set(13); // EACCES
             return scalarFalse;
         } catch (FileAlreadyExistsException e) {
-            getGlobalVariable("main::!").set("File exists");
+            getGlobalVariable("main::!").set(17); // EEXIST
             return scalarFalse;
         } catch (NoSuchFileException e) {
-            getGlobalVariable("main::!").set("No such file or directory");
+            getGlobalVariable("main::!").set(2); // ENOENT
+            return scalarFalse;
+        } catch (DirectoryNotEmptyException e) {
+            getGlobalVariable("main::!").set(39); // ENOTEMPTY
             return scalarFalse;
         } catch (IOException e) {
             // Handle other IO errors
             String errorMessage = e.getMessage();
             if (errorMessage != null) {
                 if (errorMessage.contains("cross-device link")) {
-                    getGlobalVariable("main::!").set("Invalid cross-device link");
+                    getGlobalVariable("main::!").set(18); // EXDEV
                 } else if (errorMessage.contains("directory not empty")) {
-                    getGlobalVariable("main::!").set("Directory not empty");
+                    getGlobalVariable("main::!").set(39); // ENOTEMPTY
                 } else {
-                    getGlobalVariable("main::!").set(errorMessage);
+                    getGlobalVariable("main::!").set(5); // EIO
                 }
             } else {
-                getGlobalVariable("main::!").set("I/O error");
+                getGlobalVariable("main::!").set(5); // EIO
             }
             return scalarFalse;
         } catch (Exception e) {
             // Generic error
-            getGlobalVariable("main::!").set(e.getMessage() != null ? e.getMessage() : "Unknown error");
+            getGlobalVariable("main::!").set(5); // EIO
             return scalarFalse;
         }
     }
