@@ -317,14 +317,18 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 - `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` - Added ~/.perlonjava/lib to @INC
 
 ### Next Steps
-1. Consider a minimal CPAN download helper (pure Perl, no build step)
-2. Expand user documentation with more examples
-3. Add more commonly-needed pure Perl modules
-4. Test with real CPAN modules (pure Perl ones)
+
+**See [Phase 6 Plan](cpan_phase6_plan.md)** for full CPAN.pm and Module::Build support:
+
+1. **Phase 6a**: Safe.pm stub (enables CPAN.pm)
+2. **Phase 6b**: jcpan minimal download tool
+3. **Phase 6c**: Module::Build stub
+4. **Phase 6d**: Import and test CPAN.pm
+5. **Phase 6e**: Try::Tiny compatibility shim
 
 ### Open Questions
-- Should we create a PerlOnJava-specific minimal CPAN download tool?
-- How important is Safe compartmentalization for users?
+- ~~Should we create a PerlOnJava-specific minimal CPAN download tool?~~ → Yes, see Phase 6b
+- How important is Safe compartmentalization for users? → Not needed, stub is sufficient
 
 ### Resolved Questions
 - ✅ fork() alternative: IPC::Open2/Open3 now use Java ProcessBuilder
