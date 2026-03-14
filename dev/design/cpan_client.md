@@ -369,8 +369,25 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
    - Increased YAML::PP code point limit to 50MB
 4. **parse_version warnings**: "Error while parsing version" appears but doesn't affect functionality
    - May be related to alarm/eval interaction in CPAN::Module
+5. ~~**File::Copy::move fails on reinstall**~~ **FIXED in Phase 7**
+   - `$!` now supports dualvar (numeric errno + string message)
 
-### Next Steps (Phase 6 Remaining)
+- [x] **Phase 7: Errno Dualvar Support** (2024-03-14)
+  - **ErrnoVariable class**: Implements dualvar behavior for `$!`
+    - Numeric context returns errno number (e.g., 39 for ENOTEMPTY)
+    - String context returns error message (e.g., "Directory not empty")
+  - **Operator.rename()**: Now uses errno numbers (ENOENT=2, EACCES=13, ENOTEMPTY=39, etc.)
+  - **RuntimeIO.handleIOException()**: Detects exception types and sets appropriate errno
+    - Added `handleIOException(e, msg, defaultErrno)` overload
+  - Fixes "Couldn't move" error when CPAN.pm reinstalls modules
+
+### Files Changed (Phase 7)
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoVariable.java` - New dualvar class for `$!`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` - Use ErrnoVariable for `$!`
+- `src/main/java/org/perlonjava/runtime/operators/Operator.java` - Use errno numbers in rename()
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeIO.java` - Enhanced handleIOException()
+
+### Next Steps (Phase 7 Remaining)
 1. **Core module detection** (Medium priority)
    - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
    - Need to either provide version stubs or configure CPAN.pm to skip core modules
