@@ -372,7 +372,7 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
 5. ~~**File::Copy::move fails on reinstall**~~ **FIXED in Phase 7**
    - `$!` now supports dualvar (numeric errno + string message)
 
-- [x] **Phase 7: Errno Dualvar Support** (2024-03-14)
+- [x] **Phase 7: Errno Dualvar Support & Regex Fixes** (2024-03-14)
   - **ErrnoVariable class**: Implements dualvar behavior for `$!`
     - Numeric context returns errno number (e.g., 39 for ENOTEMPTY)
     - String context returns error message (e.g., "Directory not empty")
@@ -380,12 +380,22 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
   - **RuntimeIO.handleIOException()**: Detects exception types and sets appropriate errno
     - Added `handleIOException(e, msg, defaultErrno)` overload
   - Fixes "Couldn't move" error when CPAN.pm reinstalls modules
+  - **'our' variable redeclared warning**: Now only warns when redeclared in same package
+    - Fixed to match Perl behavior (different packages don't trigger warning)
+  - **Regex literal `{}` braces fix**: Perl treats `{}`, `{,}` as literal braces, not quantifiers
+    - Pattern `/^{}(?:\s+\#.*)?\z/` from CPAN::Meta::YAML now works
+    - Invalid quantifiers escaped as `\{\}` for Java regex compatibility
+    - `isValidQuantifierAt()` helper prevents false "nested quantifier" errors for patterns like `a{3}{x}`
 
 ### Files Changed (Phase 7)
 - `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoVariable.java` - New dualvar class for `$!`
 - `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` - Use ErrnoVariable for `$!`
 - `src/main/java/org/perlonjava/runtime/operators/Operator.java` - Use errno numbers in rename()
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeIO.java` - Enhanced handleIOException()
+- `src/main/java/org/perlonjava/frontend/parser/OperatorParser.java` - Fix 'our' redeclaration warning
+- `src/main/java/org/perlonjava/frontend/symbol/ScopedSymbolTable.java` - Add isOurVariableRedeclaredInSamePackage()
+- `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` - Use same-package check for warning
+- `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java` - Literal `{}` braces support
 
 ### Next Steps (Phase 7 Remaining)
 1. **Core module detection** (Medium priority)
@@ -402,9 +412,9 @@ This is already working for many modules (Pod::*, Test::*, Getopt::Long, etc.)
    - Warning: "YAML version '0.01' is too low"
    - Current stub is minimal; better YAML parsing would help with META.yml
 
-4. **CPAN::Meta::Requirements warnings** (Low priority)
-   - `"our" variable @ISA redeclared` warnings
-   - Cosmetic issue in imported CPAN module
+4. ~~**CPAN::Meta::Requirements warnings** (Low priority)~~
+   - ~~`"our" variable @ISA redeclared` warnings~~ **FIXED in Phase 7**
+   - Warning now only appears when redeclaring in same package
 
 5. **Module::Build support** (Phase 6b)
    - Some CPAN modules use Module::Build instead of MakeMaker
