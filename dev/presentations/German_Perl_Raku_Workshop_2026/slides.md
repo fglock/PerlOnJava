@@ -225,11 +225,10 @@ say @data;                      # Runtime — must see "a b c"
 
 **Solution:** Temporary package globals as a bridge:
 
-1. Parser **snapshots** all visible lexicals
-2. Each `my` variable gets a temporary global
-3. BEGIN body compiled with aliases to these globals
-4. BEGIN **executes immediately** — sets the values
-5. At runtime, `my @data` **retrieves** the value and cleans up
+1. Parser **snapshots** visible lexicals → temporary globals
+2. BEGIN body compiled with aliases to these globals
+3. BEGIN **executes immediately** — sets the values
+4. At runtime, `my @data` **retrieves** the value and cleans up
 
 Note:
 Implemented in SpecialBlockParser (capture + alias) and PersistentVariable (retrieve + cleanup). eval STRING uses ThreadLocal storage for BEGIN access to caller lexicals. use Module is sugar for BEGIN { require Module; Module->import() }.
@@ -275,8 +274,6 @@ INVOKESTATIC IOOperator.say(RuntimeList;RuntimeScalar)
   17: SAY r7, fh=r5
   24: RETURN r8
 ```
-
-Same Perl source, two backends, identical behavior.
 
 Note:
 JVM bytecode: standard instructions, optimized by HotSpot JIT at runtime. Internal VM: register-based, ~300 opcodes, much more compact. Both share 100% of the runtime.
@@ -364,21 +361,9 @@ This pattern is used throughout: getDouble(), toString(), getBoolean(). Keep the
 - **No method size limits**, lower startup overhead
 - Good fit for `eval`-heavy scripts
 
-**Why register-based?**
+**Why register-based, not stack-based?**
 
-```perl
-eval {
-    for my $i (1..10) {
-        goto LABEL if $i > 5;
-    }
-};
-LABEL: print "Jumped out!\n";
-```
-
-- **Stack-based:** Stack state corrupts on non-local jumps
-- **Register-based:** Explicit operands (`rd = rs1 op rs2`) — always correct
-
-Perl's control flow — labeled loops, `goto`, `eval` — requires register architecture.
+Perl's non-local jumps (`goto`, `last LABEL`, `eval`) corrupt stack state. Register operands (`rd = rs1 op rs2`) stay correct regardless of control flow.
 
 Note:
 Peak throughput lower than JVM backend, but startup faster and no size constraints. Switch-based dispatch loop.
@@ -416,13 +401,7 @@ Transition to the hard implementation problems. Perl's dynamic nature fights JVM
 
 **Five core classes — shared by both backends:**
 
-| Class | Purpose |
-|---|---|
-| **RuntimeScalar** | Dynamically typed value |
-| **RuntimeArray** | Dynamic list with autovivification |
-| **RuntimeHash** | Associative array |
-| **RuntimeCode** | Compiled sub (`MethodHandle` or `InterpretedCode`) |
-| **RuntimeGlob** | Typeglob with slot delegation |
+**RuntimeScalar** · **RuntimeArray** · **RuntimeHash** · **RuntimeCode** · **RuntimeGlob**
 
 **RuntimeScalar — three fields:**
 - **`blessId`** — `0` unblessed, `> 0` blessed, `< 0` has overloads
@@ -442,19 +421,10 @@ my $y = $x + 5;        # String → number: 15
 my $z = $x . " cats";  # Same $x, string context: "10 cats"
 ```
 
-**Context-driven coercion** — the same variable is both string and number.
-
-```perl
-sub flexible {
-    return wantarray ? (1, 2, 3) : 42;
-}
-my @arr = flexible();   # List context  → (1, 2, 3)
-my $n   = flexible();   # Scalar context → 42
-```
-
-Compiler threads context (void/scalar/list) via **EmitterContext** at each call site. `wantarray` reads the flag at runtime. Works identically in both backends.
-
-**Overload optimization:** Negative `blessId` → has overloads → check. Positive → skip. ~10–20ns saved per operation.
+- **Context-driven coercion** — same variable is both string and number
+- Compiler threads context (void/scalar/list) via **EmitterContext** at each call site
+- `wantarray` reads the flag at runtime — works in both backends
+- **Overload optimization:** negative `blessId` → check; positive → skip (~10–20ns saved)
 
 Note:
 Detection happens once at bless time. Critical because overload checks happen on nearly every operation on blessed references.
@@ -503,21 +473,14 @@ Closure capture is determined at compile time by analyzing which lexicals are re
 ## Control Flow: Non-Local Jumps
 
 ```perl
-sub skip { last SKIP }    # Jumps out of caller's block!
-
-SKIP: {
-    skip() unless $have_feature;
-    ok(1, "feature works");
-}
+sub skip { last SKIP }       # Jumps out of caller's block!
+SKIP: { skip() unless $ok }  # SKIP is in the caller's scope
 ```
 
-`skip()` executes `last SKIP` — but `SKIP` is in the **caller's** scope.
-
 **Implementation:** Tagged return values (`RuntimeControlFlowList`):
-- Return carries a **control-flow tag** (`last`/`next`/`redo`/`goto`) + target label
-- Caller checks tag and dispatches — unwinding across subroutine boundaries
-
-Register architecture essential — stack state would corrupt on non-local jumps.
+- Return carries a **control-flow tag** + target label
+- Tags: `last`, `next`, `redo`, `goto`
+- Caller checks tag and unwinds across subroutine boundaries
 
 Note:
 Registers maintain state explicitly. Label → bytecode offset mapping with shared handlers for multiple exits. die → Java exceptions; eval → try-catch. This is also how goto &sub (tail calls) works.
@@ -560,8 +523,7 @@ say "Caught: $@" if $@;
 
 1. `alarm()` schedules a timer on a **daemon thread**
 2. Timer **enqueues** signal + handler (`ConcurrentLinkedQueue`)
-3. Compiler inserts `checkPendingSignals()` at every **loop entry**
-4. Check is a volatile boolean read — **~2 CPU cycles**, zero cost when idle
+3. Compiler inserts `checkPendingSignals()` at every loop entry — volatile read, **~2 cycles**
 
 Note:
 kill() reuses this mechanism. Unix signals via jnr-posix; Windows via GenerateConsoleCtrlEvent. Handlers always execute in the original thread context.
@@ -632,15 +594,13 @@ Debugger uses Internal VM (forced with -d). DEBUG opcodes inserted at each state
 
 **JVM-incompatible:**
 - `fork` — not available on JVM
-- `DESTROY` — JVM uses non-deterministic GC
+- `DESTROY` — non-deterministic GC
 - Threading — not yet implemented
 
-**In progress:** Internal VM optimization, `eval STRING` performance
-
 **Next:**
+- Internal VM optimization, `eval STRING` performance
 - More compatible regex engine
-- GraalVM — native executables, instant startup
-- Android DEX — Perl on mobile devices
+- GraalVM native images · Android DEX
 
 Note:
 Workarounds: jnr-posix for native access, Java threading APIs. The Internal VM is key to multi-platform — custom bytecode is portable to any JVM derivative.
