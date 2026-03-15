@@ -25,6 +25,8 @@ public class ScalarUtil extends PerlModuleBase {
     public static void initialize() {
         ScalarUtil scalarUtil = new ScalarUtil();
         scalarUtil.initializeExporter(); // Use the base class method to initialize the exporter
+        // Set $VERSION so CPAN.pm can detect our bundled version
+        GlobalVariable.getGlobalVariable("Scalar::Util::VERSION").set(new RuntimeScalar("1.63"));
         scalarUtil.defineExport("EXPORT_OK", "blessed", "refaddr", "reftype", "weaken", "unweaken", "isweak",
                 "dualvar", "isdual", "isvstring", "looks_like_number", "openhandle", "readonly",
                 "set_prototype", "tainted");

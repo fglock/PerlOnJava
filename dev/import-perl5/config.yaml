@@ -391,6 +391,15 @@ imports:
     target: src/main/perl/lib
     type: directory
 
+  # Test::Harness - Test harness for running tests (needed by CPAN make test)
+  - source: perl5/cpan/Test-Harness/lib/Test/Harness.pm
+    target: src/main/perl/lib/Test/Harness.pm
+
+  # TAP - Test Anything Protocol modules (required by Test::Harness)
+  - source: perl5/cpan/Test-Harness/lib/TAP
+    target: src/main/perl/lib/TAP
+    type: directory
+
   # Tests for distribution
   - source: perl5/cpan/Test-Simple/t
     target: perl5_t/Test-Simple
