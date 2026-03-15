@@ -500,31 +500,40 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - This matches Perl's behavior where: `my $orig = \&foo; sub foo {"new"}; $orig->()` returns "old"
   - Moo tests improved from 20/71 to 16/71 failing test programs
 
+- [x] Phase 19: Fix glob assignment to properly alias arrays and hashes (2026-03-15)
+  - Root cause: `*INFO = \%Role::Tiny::INFO` was copying hash contents instead of aliasing
+  - Moo::Role uses `*INFO = \%Role::Tiny::INFO` to share the same %INFO hash
+  - But when Moo::Role later did `our %INFO`, PerlOnJava created a new hash instead of
+    using the aliased one
+  - **RuntimeGlob.java fixes**:
+    - For ARRAYREFERENCE type: `GlobalVariable.globalArrays.put(globName, arr)` (was setFromList)
+    - For HASHREFERENCE type: `GlobalVariable.globalHashes.put(globName, hash)` (was setFromList)
+  - This creates true aliases where both names refer to the same container
+  - compose-roles.t: 4 failing tests → all 25 passing
+  - Overall: 15 failing test programs → 12 failing test programs
+
 ### Current Status
 
-**Test Results (after Phase 18):**
-- 55/71 test programs passing (77%)
-- 738/813 subtests passing (91%)
-- No StackOverflowError in around/before/after modifiers
+**Test Results (after Phase 19):**
+- 58/71 test programs passing (82%)
+- ~770/816 subtests passing (94%)
+- compose-roles.t fully passing (25/25)
 
 **Remaining Failures (categorized):**
 1. **DEMOLISH tests** (6 failures) - Expected failures (DESTROY not supported)
 2. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
 3. **croak-locations tests** (29 failures) - Carp reports `(eval N)` instead of actual filename
-4. **compose-roles.t** (4 failures) - ISA ordering issues
-5. **no-moo.t** (5 failures) - Cleanup of extends/has not working
-6. **method-generate-accessor.t** (8 failures) - Various edge cases
-7. **Other minor issues** - isa-interfere.t, load_module_role_tiny.t, etc.
+4. **no-moo.t** (5 failures) - Cleanup of extends/has not working
+5. **method-generate-accessor.t** (8 failures) - Various edge cases
+6. **Other minor issues** - load_module_role_tiny.t, coerce-1.t, etc.
 
 ### Next Steps
 
-1. **Fix compose-roles.t ISA ordering** - Role composition puts BaseClass first instead of roles
+1. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace
 
-2. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace
+2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
 
-3. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
-
-4. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
