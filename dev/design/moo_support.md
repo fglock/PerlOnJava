@@ -315,7 +315,7 @@ All tests meet or exceed the baseline (20260312T075000):
 ## Success Criteria
 
 1. `jcpan -t Moo` runs Moo tests ✓ (tests now run with Test::Harness)
-2. **All Moo tests pass** ❌ (687/~800 passing, see Known Issues below)
+2. **All Moo tests pass** ❌ (685/774 passing = 88%, see Known Issues below)
 3. `jperl -e 'use Moo; print "OK\n"'` works ✓
 4. `has x => (is => "ro")` syntax parses correctly ✓
 5. Moo class with attributes works ✓
@@ -337,11 +337,11 @@ All tests meet or exceed the baseline (20260312T075000):
 **Root cause**: SUPER:: resolution issue when extending non-Moo classes
 **Status**: Needs investigation
 
-### Issue: Regex Escaping in Error Messages
-**Tests affected**: t/accessor-coerce.t (1 failure)
-**Symptom**: `plus\_three` vs `plus_three` - underscores being escaped
-**Root cause**: quotemeta or error message formatting escaping `_` incorrectly
-**Status**: Minor - cosmetic issue in error messages
+### Issue: Regex Escaping in Error Messages (quotemeta)
+**Tests affected**: t/accessor-coerce.t, t/accessor-isa.t (many failures)
+**Symptom**: `plus\_three` vs `plus_three`, `less\_than\_three` vs `less_than_three`
+**Root cause**: quotemeta is escaping `_` (underscore) which Perl doesn't escape
+**Status**: Needs fix - quotemeta should not escape underscores
 
 ### Issue: Role Application Error Messages
 **Tests affected**: t/compose-roles.t (4 failures)  
@@ -366,10 +366,10 @@ All tests meet or exceed the baseline (20260312T075000):
 
 ## Progress Tracking
 
-### Current Status: 🟢 WORKING - Tests running, ~85% passing
+### Current Status: 🟢 WORKING - Tests running, ~88% passing
 
-Moo tests now run via `jcpan -t Moo`. Approximately 687 of ~800 tests pass.
-Main blockers: DEMOLISH (destructors), SUPER::new resolution, error message escaping.
+Moo tests now run via `jcpan -t Moo`. **685/774 subtests passed** (89 failed), **40/71 test programs passed**.
+Main blockers: DEMOLISH (destructors), SUPER::new resolution, quotemeta escaping `_` in error messages.
 
 ### Completed Phases
 - [x] Phase 1: Replace Carp.java with Carp.pm (2024-03-14)
@@ -407,6 +407,12 @@ Main blockers: DEMOLISH (destructors), SUPER::new resolution, error message esca
   - Added Sub::Util Java implementation (set_subname)
   - Added Scalar/List::Util $VERSION for CPAN detection
   - XSLoader stubs for .pm file version detection
+
+- [x] Phase 11: Fix return @array in scalar context (2024-03-15)
+  - `return @array` now returns count in scalar context (was returning last element)
+  - Fixed TAP::Harness panic: "planned test count did not equal sum of passed and failed"
+  - JVM backend: emitRuntimeContextConversion() in EmitVariable.java
+  - Interpreter: SCALAR_IF_WANTARRAY opcode (388)
 
 ### Next Steps
 
