@@ -473,6 +473,16 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - **CompileAssignment.java**: Updated 1 occurrence
   - This fixes Sub::Quote generated code that uses `local @_`
 
+- [x] Phase 17: Extend print { hash } detection for string keys and whitespace (2026-03-15)
+  - Root cause: `print { "a", 2 }` was incorrectly parsed as filehandle block
+  - The parser wasn't skipping WHITESPACE tokens when scanning ahead after `{`
+  - **FileHandle.java fixes**:
+    - Added whitespace skipping when looking for hash patterns
+    - Added detection for string literal keys (`"..."` or `'...'`) followed by `,` or `=>`
+    - Added detection for numeric keys followed by `,`
+  - Now correctly recognizes `{ "key", value }`, `{ "key" => value }`, `{ 123, value }`
+  - Test: `print { "a", 2 }` now prints `HASH(0x...)` as expected
+
 ### Current Status
 
 **Test Results (after Phase 16):**
@@ -522,12 +532,13 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
    **Possible workaround**: Patch Moo to call CMM directly instead of through _install_modifier,
    or rewrite `or do {}` as explicit `if (!$hit) {...}` in CMM
 
-2. **Fix `print { a => 2 }` case** - Pre-existing limitation. When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
-   ```perl
-   print { a => 2 }         # Perl: prints HASH(0x...) - PerlOnJava: syntax error
-   print { a => 2 } "text"  # Perl: syntax error (correct)
-   ```
-   The parser needs to detect hash-like content and NOT treat it as a filehandle.
+2. **`print { a => 2 }` case** - Mostly fixed. The parser now detects hash patterns:
+   - `{ ident => ... }` - fat comma after identifier
+   - `{ ident , ... }` - comma after identifier  
+   - `{ "string" , ... }` or `{ "string" => ... }` - string keys
+   - `{ 123 , ... }` - numeric keys
+   
+   Fixed in Phase 17. Whitespace between tokens is now properly skipped.
 
 3. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
 
