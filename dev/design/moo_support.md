@@ -454,13 +454,20 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 
 ### Next Steps
 
-1. **Investigate remaining "Odd number of elements" warnings** - Some warnings may still appear. If they do, add stack trace debugging to identify the source pattern.
+1. **Fix `print { a => 2 }` case** - When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
+   ```perl
+   print { a => 2 }         # Perl: prints HASH(0x...) - PerlOnJava: syntax error
+   print { a => 2 } "text"  # Perl: syntax error (correct)
+   ```
+   The parser needs to detect hash-like content and NOT treat it as a filehandle.
 
-2. **Run full Moo test suite** - Re-run `jcpan -t Moo` to measure improvement after Phase 14 fixes.
+2. **Investigate remaining "Odd number of elements" warnings** - Some warnings may still appear. If they do, add stack trace debugging to identify the source pattern.
 
-3. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+3. **Run full Moo test suite** - Re-run `jcpan -t Moo` to measure improvement after Phase 14 fixes.
 
-4. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+4. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+
+5. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
