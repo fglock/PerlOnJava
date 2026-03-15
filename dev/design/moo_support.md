@@ -419,6 +419,7 @@ Main blockers: DEMOLISH (destructors), SUPER::new resolution, quotemeta escaping
 1. **Fix SUPER::new resolution** - Extending non-Moo classes fails
 2. **Fix regex escaping** - `\_` vs `_` in error messages
 3. **Prototype checking** - `$$` prototype should accept `@array` argument
+4. **Investigate "Odd number of elements in anonymous hash" warnings** - These appear when running tests via TAP::Harness but not when running tests directly. **Standard Perl does NOT emit these warnings**, so this is a PerlOnJava bug. Likely cause: TAP:: modules construct hashes in a way that triggers spurious warnings in PerlOnJava.
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
