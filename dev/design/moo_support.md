@@ -325,9 +325,9 @@ All tests meet or exceed the baseline (20260312T075000):
 
 ## Progress Tracking
 
-### Current Status: 🟡 TESTING - Verify Moo extends works
+### Current Status: 🟢 WORKING - Moo::Role exports fixed, tests running
 
-Parser fixes complete. Need to verify Moo's `extends` keyword now works.
+Moo::Role now correctly exports `has`, `with`, `requires`. Test pass rate improved from 591 to 687 tests.
 
 ### Completed Phases
 - [x] Phase 1: Replace Carp.java with Carp.pm (2024-03-14)
@@ -354,25 +354,27 @@ Parser fixes complete. Need to verify Moo's `extends` keyword now works.
 - [x] Phase 8: Implement Internals::stack_refcounted (2024-03-15)
   - Returns 1 for RC stack behavior
   - Fixed op/array.t: 116 → 175 passing tests
+- [x] Phase 9: Fix goto &sub in use/import (2024-03-15)
+  - Added TAILCALL trampoline in StatementParser.parseUseDeclaration()
+  - Moo::Role now correctly exports has, with, requires
+  - Moo test pass rate: 591 → 687 tests (+96)
+  - Improved jcpan MakeMaker:
+    - Cross-platform test running with Test::Harness
+    - MYMETA.yml generation for CPAN.pm dependency resolution
+    - Added MM_PerlOnJava.pm stub for future MakeMaker integration
 
 ### Next Steps
 
-1. **Test Moo extends** - Verify `extends 'Parent'` now works
-2. **Run Moo test suite** - `jcpan -t Moo` to check test pass rate
-3. **Fix remaining failures** - Debug any remaining test failures
+1. **Fix version parsing error** - CPAN.pm fails parsing "undef" versions
+2. **Investigate remaining test failures** - SUPER::new, DEMOLISH, etc.
+3. **Consider full MakeMaker integration** - Use original with MM_PerlOnJava
 
 ### PR Information
-- **Branch**: `feature/moo-support`
-- **PR**: https://github.com/fglock/PerlOnJava/pull/319
-- **Commits**:
-  - `66bfe37a6` - Initial Moo support (Carp.pm, @; fix)
-  - `150bc23e8` - Fix x => autoquoting and goto &$coderef
-  - `9188c3d76` - Fix jcpan Unix wrapper
-  - `f4bc5594e` - Fix Storable YAML codePointLimit
-  - `42903b3cb` - Fix parser for @{*{expr}} glob dereference
-  - `75700c220` - Fix regressions in parser and string interpolation
-  - `2762e6d68` - Implement Internals::stack_refcounted
-  - `00c256b75` - Add detailed comments explaining fixes
+- **Branch**: `feature/moo-support` (PR #319 - merged)
+- **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
+- **Key commits**:
+  - `7a76739b8` - Fix goto &sub in use/import TAILCALL handling
+  - `ceb105a56` - Cross-platform jcpan, MYMETA.yml, MM_PerlOnJava
 
 ## Related Documents
 
