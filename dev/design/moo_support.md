@@ -483,62 +483,44 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - Now correctly recognizes `{ "key", value }`, `{ "key" => value }`, `{ 123, value }`
   - Test: `print { "a", 2 }` now prints `HASH(0x...)` as expected
 
+- [x] Phase 18: Fix subroutine redefinition to preserve old code references (2026-03-15)
+  - Root cause: When a subroutine is redefined via eval, saved code references (from `\&sub`
+    or `can()`) were being affected because the same RuntimeCode object was modified in place
+  - The `around` modifier in Class::Method::Modifiers calls `$into->can($name)` to get
+    the original method, then redefines it with a wrapper. The wrapper calls `$orig->(@_)`
+    expecting the original, but was getting the new wrapper (infinite recursion)
+  - **SubroutineParser.java fixes**:
+    - When redefining a sub that already has code (subroutine, methodHandle, codeObject,
+      or compilerSupplier set), create a NEW RuntimeCode instead of reusing the existing one
+    - Old references continue pointing to the old RuntimeCode
+  - **RuntimeCode.java fixes**:
+    - `createCodeReference()` now returns a snapshot RuntimeScalar (new RuntimeScalar with
+      same type/value) instead of the global entry directly
+    - This ensures `\&foo` captures the current RuntimeCode, not a mutable reference
+  - This matches Perl's behavior where: `my $orig = \&foo; sub foo {"new"}; $orig->()` returns "old"
+  - Moo tests improved from 20/71 to 16/71 failing test programs
+
 ### Current Status
 
-**Test Results (after Phase 16):**
-- 51/71 test programs passing (72%)
-- 730/808 subtests passing (90%)
-- No "Odd number of elements" warnings
+**Test Results (after Phase 18):**
+- 55/71 test programs passing (77%)
+- 738/813 subtests passing (91%)
+- No StackOverflowError in around/before/after modifiers
 
 **Remaining Failures (categorized):**
-1. **DEMOLISH tests** - Expected failures (DESTROY not supported)
-2. **accessor-weaken tests** - Weak references not supported in Java GC
-3. **croak-locations tests** - Carp reports `(eval N)` instead of actual filename
-4. **Around missing method** - StackOverflowError instead of error message
-5. **Role composition** - ISA ordering issues
+1. **DEMOLISH tests** (6 failures) - Expected failures (DESTROY not supported)
+2. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
+3. **croak-locations tests** (29 failures) - Carp reports `(eval N)` instead of actual filename
+4. **compose-roles.t** (4 failures) - ISA ordering issues
+5. **no-moo.t** (5 failures) - Cleanup of extends/has not working
+6. **method-generate-accessor.t** (8 failures) - Various edge cases
+7. **Other minor issues** - isa-interfere.t, load_module_role_tiny.t, etc.
 
 ### Next Steps
 
-1. **Fix `around` missing method detection** - Runtime bug in `or do {}` construct:
-   ```perl
-   # In Class::Method::Modifiers::install_modifier:
-   my $hit = $into->can($name) or do {
-       die "Method not found";  # This block doesn't execute when it should
-   };
-   ```
-   **Detailed Analysis (2026-03-15):**
-   - Bug only appears when calling CMM through `Moo::_Utils::_install_modifier` after
-     `Moo->import()` has been run (i.e., after `use Moo;`)
-   - Direct calls to CMM::install_modifier always work correctly
-   - The bug is triggered specifically by `_install_tracked` being called during Moo's import
-   - `_install_tracked` calls `weaken` on `%EXPORTS` and `_install_coderef`
-   - Manually replicating these operations doesn't trigger the bug
-   - The bug appears to be in how PerlOnJava's JVM bytecode handles compiled modules
-   
-   **Reproduction steps:**
-   ```perl
-   package MyClass;
-   use Moo;  # This enables the bug
-   
-   # This should die but doesn't:
-   Moo::_Utils::_install_modifier("MyClass", "around", "missing", sub {});
-   
-   # But this works correctly:
-   Class::Method::Modifiers::install_modifier("MyClass", "around", "missing", sub {});
-   ```
-   
-   **Impact**: Test t/moo.t test 6 fails with StackOverflowError
-   
-   **Possible workaround**: Patch Moo to call CMM directly instead of through _install_modifier,
-   or rewrite `or do {}` as explicit `if (!$hit) {...}` in CMM
+1. **Fix compose-roles.t ISA ordering** - Role composition puts BaseClass first instead of roles
 
-2. **`print { a => 2 }` case** - Mostly fixed. The parser now detects hash patterns:
-   - `{ ident => ... }` - fat comma after identifier
-   - `{ ident , ... }` - comma after identifier  
-   - `{ "string" , ... }` or `{ "string" => ... }` - string keys
-   - `{ 123 , ... }` - numeric keys
-   
-   Fixed in Phase 17. Whitespace between tokens is now properly skipped.
+2. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace
 
 3. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
 
