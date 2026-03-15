@@ -7,6 +7,14 @@ triggers:
   - model
 ---
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 # Interpreter/JVM Backend Parity Debugging
 
 You are fixing cases where PerlOnJava's bytecode interpreter produces different results than the JVM compiler backend. The interpreter should be a drop-in replacement — same parsing, same runtime APIs, different execution engine.
@@ -15,7 +23,7 @@ You are fixing cases where PerlOnJava's bytecode interpreter produces different 
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
-**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+**IMPORTANT: Always commit changes BEFORE switching branches.** Use `git diff > backup.patch` to save uncommitted work, or commit to a WIP branch. Never use `git stash` — changes can be silently lost.
 
 ```bash
 git checkout -b fix/interpreter-issue-name
@@ -180,8 +188,12 @@ All paths relative to `src/main/java/org/perlonjava/`.
 
 **Save master baseline to files FIRST** (do this once per debugging session):
 ```bash
+# Save your current work first (NEVER use git stash!)
+git diff > /tmp/my-changes.patch  # Save uncommitted changes
+git add -A && git commit -m "WIP: save work before baseline check"  # Or commit to WIP
+
 # Switch to master and build
-git stash && git checkout master
+git checkout master
 make dev
 
 # Save master test output for JVM backend
@@ -192,7 +204,9 @@ grep "^not ok" /tmp/master_subst.log > /tmp/master_subst_fails.txt
 cd perl5_t/t && ../../jperl --interpreter re/subst.t 2>&1 > /tmp/master_subst_interp.log
 
 # Switch back to feature branch
-git checkout feature-branch && git stash pop
+git checkout feature-branch
+# Restore uncommitted changes if you used patch:
+# git apply /tmp/my-changes.patch
 ```
 
 **After making changes**, compare against saved baselines:

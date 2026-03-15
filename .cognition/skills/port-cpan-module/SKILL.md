@@ -1,5 +1,13 @@
 # Port CPAN Module to PerlOnJava
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
 ## When to Use This Skill

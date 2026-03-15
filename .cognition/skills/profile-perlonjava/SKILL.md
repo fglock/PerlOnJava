@@ -1,5 +1,13 @@
 # Profile PerlOnJava
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 Profile and optimize PerlOnJava runtime performance using Java Flight Recorder.
 
 ## Git Workflow

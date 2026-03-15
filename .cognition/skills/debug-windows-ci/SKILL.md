@@ -1,5 +1,13 @@
 # Debug PerlOnJava Windows CI Failures
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 ## Overview
 
 This skill helps debug test failures that occur specifically in the Windows CI/CD environment but pass locally on macOS/Linux.

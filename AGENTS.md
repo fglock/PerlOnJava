@@ -1,5 +1,25 @@
 # PerlOnJava Agent Guidelines
 
+## ⚠️⚠️⚠️ CRITICAL WARNING: NEVER USE `git stash` ⚠️⚠️⚠️
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   DANGER: DO NOT USE `git stash` DURING ACTIVE WORK!                        ║
+║                                                                              ║
+║   Changes can be SILENTLY LOST when using git stash/stash pop.              ║
+║   This has caused loss of completed work during debugging sessions.         ║
+║                                                                              ║
+║   INSTEAD:                                                                   ║
+║   - Commit your changes to a WIP branch before testing alternatives         ║
+║   - Use `git diff > backup.patch` to save uncommitted changes               ║
+║   - Never stash to "temporarily" revert - you WILL lose work                ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Project Rules
 
 ### Progress Tracking for Multi-Phase Work

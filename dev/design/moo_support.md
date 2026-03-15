@@ -452,22 +452,29 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - This fixed the majority of "Odd number of elements in anonymous hash" warnings
   - Test: `print { get_fh() } "text\n"` now works correctly
 
+- [x] Phase 15: Fix print { $var->method } filehandle blocks (2026-03-15)
+  - Root cause: `print { $self->stdout }` and `print { shift->stdout }` were being miscompiled
+  - The `{ ... }` was treated as anonymous hash instead of filehandle block
+  - **FileHandle.java fixes**:
+    - When `hasBracket` is true and token is `$`, parse as full expression (not just primary)
+    - This captures method chains like `$self->stdout`
+    - When identifier is followed by `->`, parse as expression (for `shift->stdout`)
+    - Added early detection of hash patterns: `{ identifier => }` or `{ identifier , }` returns null immediately
+  - **Result**: All "Odd number of elements in anonymous hash" warnings eliminated from Moo tests
+  - Test: `print { $self->stdout } @_` now works correctly
+
 ### Next Steps
 
-1. **Fix `print { a => 2 }` case** - When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
+1. **Fix `print { a => 2 }` case** - Pre-existing limitation. When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
    ```perl
    print { a => 2 }         # Perl: prints HASH(0x...) - PerlOnJava: syntax error
    print { a => 2 } "text"  # Perl: syntax error (correct)
    ```
    The parser needs to detect hash-like content and NOT treat it as a filehandle.
 
-2. **Investigate remaining "Odd number of elements" warnings** - Some warnings may still appear. If they do, add stack trace debugging to identify the source pattern.
+2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
 
-3. **Run full Moo test suite** - Re-run `jcpan -t Moo` to measure improvement after Phase 14 fixes.
-
-4. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
-
-5. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)

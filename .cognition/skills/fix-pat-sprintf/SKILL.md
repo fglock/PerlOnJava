@@ -7,6 +7,14 @@ triggers:
   - model
 ---
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 # Fix pat.t and sprintf2.t Regressions
 
 You are fixing test regressions in `re/pat.t` (-17 tests) and `op/sprintf2.t` (-3 tests) on the `fix-exiftool-cli` branch of PerlOnJava.
