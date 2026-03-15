@@ -133,7 +133,10 @@ public class Universal extends PerlModuleBase {
         String normalizedName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedName);
-            return codeRef.getList();
+            // Only return the code ref if it's actually defined (has a real subroutine)
+            if (codeRef.getDefinedBoolean()) {
+                return codeRef.getList();
+            }
         }
 
         // Fallback: if either the class name or method name was stored as UTF-8 octets
