@@ -186,11 +186,30 @@ public class EmitOperator {
     // Handles the 'say' operator for outputting data.
     static void handleSayOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
         // Emit the argument list in LIST context.
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+        // Spill the argument list to a local variable to avoid ASM frame issues
+        // when the filehandle is a complex expression (e.g., function call)
+        int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArg = argSlot >= 0;
+        if (!pooledArg) {
+            argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
         // Emit the File Handle
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
+
+        // Reload the argument list and swap to get correct order for IOOperator.print
+        mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+        mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledArg) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         // Call the operator, return Scalar
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/IOOperator", operator, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);

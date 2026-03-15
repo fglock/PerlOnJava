@@ -97,14 +97,22 @@ public class FileHandle {
         // Handle bareword file handles (most common case)
         // Examples: STDOUT, STDERR, STDIN, or user-defined handles like LOG, FILE, etc.
         else if (token.type == LexerTokenType.IDENTIFIER) {
-            // Try to parse as a bareword identifier
-            // parseSubroutineIdentifier handles qualified names like Some::Package::HANDLE
-            String name = IdentifierParser.parseSubroutineIdentifier(parser);
-            if (name != null) {
-                fileHandle = parseBarewordHandle(parser, name);
-                if (fileHandle == null && name.matches("^[A-Z_][A-Z0-9_]*$")) {
-                    GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
+            // Check if this is a function call: identifier followed by (
+            // In that case, we need to parse it as an expression, not a bareword
+            LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+            if (hasBracket && nextToken.text.equals("(")) {
+                // This is a function call like { get_fh() } - parse as expression
+                fileHandle = parser.parseExpression(0);
+            } else {
+                // Try to parse as a bareword identifier
+                // parseSubroutineIdentifier handles qualified names like Some::Package::HANDLE
+                String name = IdentifierParser.parseSubroutineIdentifier(parser);
+                if (name != null) {
                     fileHandle = parseBarewordHandle(parser, name);
+                    if (fileHandle == null && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                        GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
+                        fileHandle = parseBarewordHandle(parser, name);
+                    }
                 }
             }
         }
@@ -142,6 +150,11 @@ public class FileHandle {
                     fileHandle = null;
                 }
             }
+        }
+        // Handle expression in brackets (for any other case like method calls)
+        else if (hasBracket) {
+            // Parse as a general expression: { $obj->method } etc.
+            fileHandle = parser.parseExpression(0);
         }
 
         // If we had an opening bracket, consume the closing bracket
