@@ -3068,6 +3068,33 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
+                    // For reserved variables like @_, use register-based localization
+                    // because register 1 holds @_ which is different from @main::_
+                    if (isReservedVariable(varName)) {
+                        int regIdx = getVariableRegister(varName);
+
+                        // Emit PUSH_LOCAL_VARIABLE to save register state
+                        emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        emitReg(regIdx);
+
+                        // The result is the register itself (for assignment)
+                        if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                            int refReg1 = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg1);
+                            emitReg(regIdx);
+
+                            int refReg2 = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg2);
+                            emitReg(refReg1);
+                            lastResultReg = refReg2;
+                        } else {
+                            lastResultReg = regIdx;
+                        }
+                        return;
+                    }
+
                     String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
                     int nameIdx = addToStringPool(globalVarName);
 

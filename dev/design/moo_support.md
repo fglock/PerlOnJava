@@ -572,28 +572,51 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
       - Also added check for unblessed REFERENCE types to throw same error
     - Fixes t/method-generate-accessor.t (41/49 → 46/49), t/coerce-1.t (0/2 → 2/2)
 
+- [x] Phase 23: Fix `local @_` in string eval (2026-03-15)
+  - Root cause: `local @_ = (...)` in string eval was localizing `@main::_` (global) instead of
+    register 1 which holds the actual `@_` for the subroutine
+  - In PerlOnJava, `@_` in a subroutine (register 1) and `@main::_` are different arrays
+  - When compiling `local @_ = (...)`, the compiler was emitting:
+    - `LOAD_GLOBAL_ARRAY @main::_` followed by `PUSH_LOCAL_VARIABLE` and assignment
+  - For reserved variables like `@_`, we need to use register-based localization:
+    - `PUSH_LOCAL_VARIABLE r1` to save register 1's state
+    - `ARRAY_SET_FROM_LIST r1` to assign new values
+  - **CompileAssignment.java fix**:
+    - In `handleLocalAssignment`, check `bc.isReservedVariable(varName)` for `@` case
+    - If reserved, use `PUSH_LOCAL_VARIABLE` on the register directly instead of loading global
+  - **BytecodeCompiler.java fix**:
+    - Similar fix for standalone `local @_` without assignment
+  - This fixes Sub::Quote's `local @_ = ($value)` inlinification pattern
+  - Fixes t/method-generate-accessor.t (46/49 → 49/49)
+
 ### Current Status
 
-**Test Results (after Phase 22):**
-- 61/71 test programs passing (86%)
-- ~765/829 subtests passing (92%)
+**Test Results (after Phase 23):**
+- 62/71 test programs passing (87%)
+- ~768/829 subtests passing (93%)
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
 2. **croak-locations.t** (29 failures) - Carp reports `(eval N)` instead of actual filename
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
-4. **method-generate-accessor.t** (3 failures) - quote_sub inlinification issues
-5. **moo-utils-_subname-Sub-Name.t** (1 failure) - Expected, we have Sub::Util (no fallback to Sub::Name)
-6. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
-7. **overloaded-coderefs.t** - Expected, B::Deparse not available
+4. **moo-utils-_subname-Sub-Name.t** (1 failure) - Expected, we have Sub::Util (no fallback to Sub::Name)
+5. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+6. **overloaded-coderefs.t** - Expected, B::Deparse not available
+
+**Expected failures** (not fixable without fundamental changes):
+- Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
+- DESTROY/GC: demolish tests (6)
+- Missing B::Deparse: overloaded-coderefs.t
+- Sub::Name fallback: moo-utils-_subname-Sub-Name.t (1)
+
+**Potentially fixable**:
+- croak-locations.t (29) - Carp filename in string eval
 
 ### Next Steps
 
 1. **Investigate croak-locations.t** - Carp reports `(eval N)` instead of actual filename
 
-2. **Investigate quote_sub issues** - Sub::Quote inlinification not working correctly for coerce/trigger/isa
-
-3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+2. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
