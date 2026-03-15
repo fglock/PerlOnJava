@@ -440,15 +440,25 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - Extracts package name and method, resolves from that package's parent
   - Fixes t/extends-non-moo.t (10/10 tests now pass)
 
+- [x] Phase 14: Fix print { func() } filehandle block parsing (2024-03-15)
+  - Root cause: `print { get_fh() } "text"` was parsed as anonymous hash, not block
+  - The `{...}` was being miscompiled as `CREATE_HASH` instead of evaluating the expression
+  - **Parser fix (FileHandle.java)**:
+    - When identifier is followed by `(`, parse as function call expression
+    - Added fallback to parse any bracketed expression as filehandle block
+  - **JVM codegen fix (EmitOperator.java)**:
+    - handleSayOperator now uses register spilling for arguments
+    - Fixes ASM frame compute crash when filehandle is complex expression
+  - This fixed the majority of "Odd number of elements in anonymous hash" warnings
+  - Test: `print { get_fh() } "text\n"` now works correctly
+
 ### Next Steps
 
-1. **Investigate "Odd number of elements in anonymous hash" warnings** - These appear when running tests via TAP::Harness but not when running tests directly. **Standard Perl does NOT emit these warnings**, so this is a PerlOnJava bug. Likely cause: TAP:: modules construct hashes in a way that triggers spurious warnings in PerlOnJava.
-   - Debug approach: Add stack trace to warning emission in RuntimeHash.java
-   - Identify which TAP module triggers it and what hash construction pattern causes it
+1. **Investigate remaining "Odd number of elements" warnings** - Some warnings may still appear. If they do, add stack trace debugging to identify the source pattern.
 
-2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+2. **Run full Moo test suite** - Re-run `jcpan -t Moo` to measure improvement after Phase 14 fixes.
 
-3. **Run full Moo test suite** - After fixes, re-run `jcpan -t Moo` to measure improvement
+3. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
 
 4. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
@@ -456,6 +466,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 - **Branch**: `feature/moo-support` (PR #319 - merged)
 - **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
 - **Key commits**:
+  - `00c124167` - Fix print { func() } filehandle block parsing and JVM codegen
   - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution
   - `7a76739b8` - Fix goto &sub in use/import TAILCALL handling
   - `053d91a95` - Add Sub::Util, fix Scalar/List::Util VERSION, add Test::Harness
