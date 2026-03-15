@@ -331,23 +331,29 @@ All tests meet or exceed the baseline (20260312T075000):
 **Root cause**: DESTROY/fork/threads are not supported in PerlOnJava (they compile but throw at runtime)
 **Status**: Expected failure - these features are out of scope for PerlOnJava
 
-### Issue: SUPER::new Not Working in Extended Classes
+### Issue: SUPER::new Not Working in Extended Classes - FIXED (Phase 13)
 **Tests affected**: t/extends-non-moo.t
 **Symptom**: `Undefined subroutine &Package::SUPER::new called`
-**Root cause**: SUPER:: resolution issue when extending non-Moo classes
-**Status**: Needs investigation
+**Root cause**: Only `SUPER::method` was supported, not `Package::SUPER::method`
+**Status**: ✅ FIXED - RuntimeCode.java now handles `::SUPER::` pattern
 
-### Issue: Regex Escaping in Error Messages (quotemeta)
+### Issue: Regex Escaping in Error Messages (quotemeta) - FIXED (Phase 12)
 **Tests affected**: t/accessor-coerce.t, t/accessor-isa.t (many failures)
 **Symptom**: `plus\_three` vs `plus_three`, `less\_than\_three` vs `less_than_three`
-**Root cause**: quotemeta is escaping `_` (underscore) which Perl doesn't escape
-**Status**: Needs fix - quotemeta should not escape underscores
+**Root cause**: quotemeta was escaping `_` (underscore) which Perl doesn't escape
+**Status**: ✅ FIXED - StringOperators.java now treats `_` as alphanumeric
 
 ### Issue: Role Application Error Messages
 **Tests affected**: t/compose-roles.t (4 failures)  
 **Symptom**: Missing error messages when required attributes are not provided
 **Root cause**: Error throwing in role composition may not propagate correctly
 **Status**: Needs investigation
+
+### Issue: Spurious "Odd number of elements in anonymous hash" Warnings
+**Tests affected**: Various tests when run via TAP::Harness
+**Symptom**: Warnings appear in TAP::Harness but not when running tests directly
+**Root cause**: Unknown - standard Perl does NOT emit these warnings
+**Status**: Needs investigation - add stack trace to RuntimeHash.java to identify source
 
 ## Remaining jcpan Improvements
 
@@ -366,10 +372,18 @@ All tests meet or exceed the baseline (20260312T075000):
 
 ## Progress Tracking
 
-### Current Status: 🟢 WORKING - Tests running, ~88% passing
+### Current Status: 🟢 WORKING - Tests running, improvements in progress
 
-Moo tests now run via `jcpan -t Moo`. **685/774 subtests passed** (89 failed), **40/71 test programs passed**.
-Main blockers: DEMOLISH (destructors), SUPER::new resolution, quotemeta escaping `_` in error messages.
+Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pass rate.
+**Previous baseline**: 685/774 subtests passed (89 failed), 40/71 test programs passed.
+
+**Fixed in this session**:
+- t/extends-non-moo.t: 0/10 → 10/10 (Package::SUPER::method fix)
+- t/accessor-coerce.t, t/accessor-isa.t: error message matching (quotemeta fix)
+
+**Remaining blockers**: 
+- DEMOLISH (destructors - not supported, expected)
+- Spurious anonymous hash warnings in TAP::Harness
 
 ### Completed Phases
 - [x] Phase 1: Replace Carp.java with Carp.pm (2024-03-14)
@@ -414,17 +428,35 @@ Main blockers: DEMOLISH (destructors), SUPER::new resolution, quotemeta escaping
   - JVM backend: emitRuntimeContextConversion() in EmitVariable.java
   - Interpreter: SCALAR_IF_WANTARRAY opcode (388)
 
+- [x] Phase 12: Fix quotemeta underscore escaping (2024-03-15)
+  - Perl's `quotemeta` does NOT escape underscore (`_`) - it's part of `\w`
+  - Fixed StringOperators.java to treat `_` like alphanumeric characters
+  - Fixes Moo tests t/accessor-coerce.t, t/accessor-isa.t error message matching
+
+- [x] Phase 13: Fix Package::SUPER::method resolution (2024-03-15)
+  - Moo uses `$class->Package::SUPER::new(@_)` to explicitly specify parent
+  - Previously only `SUPER::method` (no package prefix) was supported
+  - Added handling in RuntimeCode.java to detect `::SUPER::` pattern
+  - Extracts package name and method, resolves from that package's parent
+  - Fixes t/extends-non-moo.t (10/10 tests now pass)
+
 ### Next Steps
 
-1. **Fix SUPER::new resolution** - Extending non-Moo classes fails
-2. **Fix regex escaping** - `\_` vs `_` in error messages
-3. **Prototype checking** - `$$` prototype should accept `@array` argument
-4. **Investigate "Odd number of elements in anonymous hash" warnings** - These appear when running tests via TAP::Harness but not when running tests directly. **Standard Perl does NOT emit these warnings**, so this is a PerlOnJava bug. Likely cause: TAP:: modules construct hashes in a way that triggers spurious warnings in PerlOnJava.
+1. **Investigate "Odd number of elements in anonymous hash" warnings** - These appear when running tests via TAP::Harness but not when running tests directly. **Standard Perl does NOT emit these warnings**, so this is a PerlOnJava bug. Likely cause: TAP:: modules construct hashes in a way that triggers spurious warnings in PerlOnJava.
+   - Debug approach: Add stack trace to warning emission in RuntimeHash.java
+   - Identify which TAP module triggers it and what hash construction pattern causes it
+
+2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+
+3. **Run full Moo test suite** - After fixes, re-run `jcpan -t Moo` to measure improvement
+
+4. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
 - **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
 - **Key commits**:
+  - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution
   - `7a76739b8` - Fix goto &sub in use/import TAILCALL handling
   - `053d91a95` - Add Sub::Util, fix Scalar/List::Util VERSION, add Test::Harness
   - `7993ef74d` - Fix version parsing and MM->parse_version for CPAN.pm
