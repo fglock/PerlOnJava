@@ -954,8 +954,38 @@ public abstract class StringSegmentParser {
             return false;
         }
 
+        // For @ sigil, only allow specific characters that can start array variable names
+        // Valid: identifiers, digits, _, {, $, +, -
+        // Invalid: ;, /, !, etc. (these are only valid after $ sigil)
+        if ("@".equals(sigil)) {
+            return isValidArrayVariableStart(nextToken);
+        }
+
         // Don't interpolate if followed by certain characters
         return !isNonInterpolatingCharacter(nextToken.text);
+    }
+
+    /**
+     * Checks if a token can start a valid array variable name.
+     * <p>
+     * Array variables can be: @foo, @123, @_, @{expr}, @$ref, @+, @-
+     * But NOT: @;, @/, @!, etc. (these are only valid for scalar $)
+     *
+     * @param token the token following the @ sigil
+     * @return true if this can start a valid array variable
+     */
+    private boolean isValidArrayVariableStart(LexerToken token) {
+        if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
+            return true;
+        }
+        if (token.type == LexerTokenType.OPERATOR) {
+            // Only specific operators can follow @ for valid array variables
+            return switch (token.text) {
+                case "{", "$", "+", "-", "_", "^" -> true;
+                default -> false;
+            };
+        }
+        return false;
     }
 
     /**
@@ -971,9 +1001,7 @@ public abstract class StringSegmentParser {
     private boolean isNonInterpolatingCharacter(String text) {
         return switch (text) {
             case ")", "%", "|", "#", "\"", "\\",
-                 "?", "(", ";", ".", ",", ":",
-                 "+", "*", "!", "~", "<", ">",
-                 "=", "/" -> true;
+                 "?", "(" -> true;
             default -> false;
         };
     }

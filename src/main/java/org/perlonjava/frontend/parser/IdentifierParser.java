@@ -199,9 +199,10 @@ public class IdentifierParser {
         // Special case for special variables like `$|`, `$'`, etc.
         char firstChar = token.text.charAt(0);
         if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?".indexOf(firstChar) >= 0) {
-            // Special case: * followed by { is glob dereference, not special variable $*
+            // Special case: * followed by { is glob dereference when inside braces
             // @{*{expr}} should be parsed as @{ *{expr} }, not @*{expr}
-            if (firstChar == '*' && nextToken.text.equals("{")) {
+            // But @*{key} outside braces is hash slice on @*, so only apply when insideBraces
+            if (insideBraces && firstChar == '*' && nextToken.text.equals("{")) {
                 return null; // Force fallback to expression parsing
             }
             // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
