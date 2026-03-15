@@ -6,6 +6,8 @@ Profile and optimize PerlOnJava runtime performance using Java Flight Recorder.
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
+**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+
 ```bash
 git checkout -b perf/optimization-name
 # ... make changes ...
@@ -115,10 +117,10 @@ done
 
 ```bash
 # Rebuild after changes
-mvn package -q -DskipTests
+make dev
 
 # Run tests to verify correctness
-mvn test -q
+make -q
 ```
 
 ## Example Session

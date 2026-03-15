@@ -182,7 +182,7 @@ as Perl itself.
 
 3. **Build and verify:**
    ```bash
-   ./gradlew build -x test
+   make dev
    ./jperl -e 'use Module::Name; ...'
    ```
 
@@ -341,7 +341,7 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Register all methods in `initialize()`
 
 ### Testing
-- [ ] Build compiles without errors: `./gradlew build -x test`
+- [ ] Build compiles without errors: `make dev`
 - [ ] Basic functionality works: `./jperl -e 'use Module::Name; ...'`
 - [ ] Compare output with system Perl
 - [ ] Test edge cases identified in XS code

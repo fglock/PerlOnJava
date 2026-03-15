@@ -15,6 +15,8 @@ You are fixing cases where PerlOnJava's bytecode interpreter produces different 
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
+**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+
 ```bash
 git checkout -b fix/interpreter-issue-name
 # ... make changes ...
@@ -25,15 +27,15 @@ gh pr create --title "Fix interpreter: description" --body "Details"
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
-- **Unit tests**: `src/test/resources/unit/*.t` (155 tests, run via `mvn test`)
+- **Unit tests**: `src/test/resources/unit/*.t` (155 tests, run via `make`)
 - **Fat JAR**: `target/perlonjava-3.0.0.jar`
 - **Launcher script**: `./jperl`
 
 ## Building
 
 ```bash
-mvn package -q -DskipTests    # Build JAR (after any Java change)
-mvn test                       # Run unit tests (JVM backend, must all pass)
+make dev    # Build JAR (after any Java change)
+make                       # Run unit tests (JVM backend, must all pass)
 make test-interpreter          # Run unit tests with interpreter backend
 ```
 
@@ -172,7 +174,7 @@ All paths relative to `src/main/java/org/perlonjava/`.
 ```bash
 # Switch to master and build
 git stash && git checkout master
-mvn package -q -DskipTests
+make dev
 
 # Save master test output for JVM backend
 cd perl5_t/t && ../../jperl re/subst.t 2>&1 > /tmp/master_subst.log
@@ -187,7 +189,7 @@ git checkout feature-branch && git stash pop
 
 **After making changes**, compare against saved baselines:
 ```bash
-mvn package -q -DskipTests
+make dev
 
 # Test JVM backend
 cd perl5_t/t && ../../jperl re/subst.t 2>&1 > /tmp/feature_subst.log
@@ -224,13 +226,13 @@ JPERL_INTERPRETER=1 ./jperl -e 'failing code'
 **CRITICAL: Save baselines to files!** When comparing test suites across branches:
 ```bash
 # On master - save results so you don't have to rebuild later
-git checkout master && mvn package -q -DskipTests
+git checkout master && make dev
 cd perl5_t/t && JPERL_INTERPRETER=1 ../../jperl test.t 2>&1 | tee /tmp/test_master.log
 JPERL_INTERPRETER=1 ../../jperl test.t 2>&1 | grep "^ok\|^not ok" > /tmp/test_master_results.txt
 grep "^ok" /tmp/test_master_results.txt | wc -l  # Save this number!
 
 # Return to feature branch - now you can compare without rebuilding master
-git checkout feature-branch && mvn package -q -DskipTests
+git checkout feature-branch && make dev
 ```
 
 ### 2. Use --disassemble to see interpreter bytecode

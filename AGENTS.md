@@ -42,7 +42,7 @@ Example format at the end of a design doc:
 
 ### Testing
 
-- Run `./gradlew test` before committing
+- Run `make` before committing
 - For interpreter changes, test with both backends:
   ```bash
   java -jar target/perlonjava.jar -e 'code'           # JVM backend

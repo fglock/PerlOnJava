@@ -8,6 +8,8 @@ Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
+**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+
 ```bash
 git checkout -b feature/debugger-improvement
 # ... make changes ...
@@ -131,7 +133,7 @@ Tested side-by-side with `perl -d`:
 ### Testing the debugger
 ```bash
 # Build after changes
-mvn package -q -DskipTests
+make dev
 
 # Test basic stepping
 echo 'n
