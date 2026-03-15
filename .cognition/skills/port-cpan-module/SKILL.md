@@ -165,6 +165,13 @@ as Perl itself.
 
 ### Phase 4: Testing
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during development) |
+
 1. **Create test file:** `src/test/resources/module_name.t`
 
 2. **Compare with system Perl:**
@@ -182,8 +189,9 @@ as Perl itself.
 
 3. **Build and verify:**
    ```bash
-   make dev
+   make dev   # Quick build (no tests)
    ./jperl -e 'use Module::Name; ...'
+   make       # Full build with tests before committing
    ```
 
 ## Common Patterns
@@ -341,7 +349,7 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Register all methods in `initialize()`
 
 ### Testing
-- [ ] Build compiles without errors: `make dev`
+- [ ] Build compiles without errors: `make dev` (NEVER use raw mvn/gradlew)
 - [ ] Basic functionality works: `./jperl -e 'use Module::Name; ...'`
 - [ ] Compare output with system Perl
 - [ ] Test edge cases identified in XS code

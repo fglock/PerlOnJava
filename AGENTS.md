@@ -42,11 +42,17 @@ Example format at the end of a design doc:
 
 ### Testing
 
-- Run `make` before committing
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 - For interpreter changes, test with both backends:
   ```bash
-  java -jar target/perlonjava.jar -e 'code'           # JVM backend
-  java -jar target/perlonjava.jar --int -e 'code'     # Interpreter
+  ./jperl -e 'code'           # JVM backend
+  ./jperl --int -e 'code'     # Interpreter
   ```
 
 ### Git Workflow

@@ -130,10 +130,16 @@ Tested side-by-side with `perl -d`:
 
 ## Tips for Development
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 ### Testing the debugger
 ```bash
-# Build after changes
-make dev
+make dev   # Quick build after changes (no tests)
 
 # Test basic stepping
 echo 'n

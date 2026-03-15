@@ -81,10 +81,18 @@ Migrate in this order (least to most complex):
 
 ## Testing
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration) |
+| `make test-all` | Run extended test suite |
+
 After each file migration:
 ```bash
-make                    # Must pass
-make test-all           # Check for regressions
+make          # Build + unit tests (must pass)
+make test-all # Check for regressions in extended tests
 ```
 
 Key tests that exercise native operations:

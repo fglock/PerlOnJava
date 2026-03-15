@@ -36,9 +36,16 @@ gh pr create --title "Fix: description" --body "Details"
 
 ## Building
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 ```bash
-make                           # Build JAR + run unit tests (must all pass)
-make dev                       # Build only (no tests, for quick iteration)
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
 ```
 
 ## Running Tests

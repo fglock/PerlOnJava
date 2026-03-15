@@ -39,17 +39,16 @@ gh pr create --title "Fix: description" --body "Details"
 
 ## Building PerlOnJava
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 ```bash
-# Build JAR (required after any Java source change)
-make dev
-
-# Run PerlOnJava's own unit test suite (154 tests, must all pass)
-make
-
-# Run Perl5 core compatibility tests (perl5_t/t/*.t)
-make test-gradle
-# Or manually:
-perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json perl5_t/t
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
 ```
 
 ## Running ExifTool Tests

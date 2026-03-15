@@ -115,12 +115,16 @@ done
 
 ### 7. Build and Test
 
-```bash
-# Rebuild after changes
-make dev
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
-# Run tests to verify correctness
-make -q
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during profiling) |
+
+```bash
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
 ```
 
 ## Example Session

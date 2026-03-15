@@ -33,10 +33,18 @@ gh pr create --title "Fix interpreter: description" --body "Details"
 
 ## Building
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+| `make test-interpreter` | Run unit tests with interpreter backend |
+
 ```bash
-make dev    # Build JAR (after any Java change)
-make                       # Run unit tests (JVM backend, must all pass)
-make test-interpreter          # Run unit tests with interpreter backend
+make                  # Standard build - compiles and runs tests
+make dev              # Quick build - compiles only, NO tests
+make test-interpreter # Test interpreter backend specifically
 ```
 
 ## Running in Interpreter Mode

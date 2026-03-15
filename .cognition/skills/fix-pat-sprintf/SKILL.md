@@ -50,11 +50,20 @@ For each failing test:
 
 ## Running the Tests
 
-```bash
-# Build
-make build
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
-# Run individual tests via test runner (sets correct ENV vars)
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
+```bash
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
+```
+
+Run individual tests via test runner (sets correct ENV vars):
+```bash
 perl dev/tools/perl_test_runner.pl perl5_t/t/re/pat.t
 perl dev/tools/perl_test_runner.pl perl5_t/t/op/sprintf2.t
 
