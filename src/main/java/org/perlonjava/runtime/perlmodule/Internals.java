@@ -36,10 +36,10 @@ public class Internals extends PerlModuleBase {
     }
 
     public static RuntimeList stack_refcounted(RuntimeArray args, int ctx) {
-
-        // XXX TODO placeholder
-
-        return new RuntimeList();
+        // Return 1 to indicate reference-counted stack behavior
+        // This is appropriate for PerlOnJava since Java's GC keeps objects alive
+        // as long as they're referenced, similar to Perl's RC stack builds
+        return new RuntimeScalar(1).getList();
     }
 
     /**
