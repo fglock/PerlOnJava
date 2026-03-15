@@ -15,6 +15,10 @@ use File::Spec;
 use File::Basename;
 use Cwd qw(getcwd abs_path);
 
+# Load ExtUtils::MM to set up the MM package with parse_version, etc.
+# CPAN.pm and other tools expect MM->parse_version() to work after loading MakeMaker
+require ExtUtils::MM;
+
 # Installation directory (configurable via environment)
 our $INSTALL_BASE = $ENV{PERLONJAVA_LIB};
 

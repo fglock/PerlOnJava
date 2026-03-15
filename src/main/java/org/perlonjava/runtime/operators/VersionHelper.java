@@ -205,6 +205,12 @@ public class VersionHelper {
 
     public static String normalizeVersion(RuntimeScalar wantVersion) {
         String normalizedVersion = wantVersion.toString();
+        
+        // Handle special case: "undef" is returned by MM_Unix.parse_version when no version found
+        if (normalizedVersion.equals("undef") || normalizedVersion.isEmpty()) {
+            return "0.0.0";
+        }
+        
         if (normalizedVersion.startsWith("v")) {
             normalizedVersion = normalizedVersion.substring(1);
         }
@@ -223,9 +229,18 @@ public class VersionHelper {
                 if (patch.length() > 3) {
                     patch = patch.substring(0, 3);
                 }
-                int majorNumber = Integer.parseInt(major);
-                int minorNumber = Integer.parseInt(minor);
-                int patchNumber = Integer.parseInt(patch);
+                // Handle non-numeric version parts gracefully
+                int majorNumber;
+                int minorNumber;
+                int patchNumber;
+                try {
+                    majorNumber = Integer.parseInt(major);
+                    minorNumber = Integer.parseInt(minor);
+                    patchNumber = Integer.parseInt(patch);
+                } catch (NumberFormatException e) {
+                    // If version parts aren't numeric, return 0.0.0
+                    return "0.0.0";
+                }
                 normalizedVersion = String.format("%d.%d.%d", majorNumber, minorNumber, patchNumber);
             }
         }
