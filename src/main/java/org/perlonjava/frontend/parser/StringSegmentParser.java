@@ -957,6 +957,9 @@ public abstract class StringSegmentParser {
         // For @ sigil, only allow specific characters that can start array variable names
         // Valid: identifiers, digits, _, {, $, +, -
         // Invalid: ;, /, !, etc. (these are only valid after $ sigil)
+        // This is critical to prevent incorrect interpolation of @; in strings like "@;\n"
+        // Without this fix, "@;" would be incorrectly treated as an array variable
+        // This also ensures $/ still interpolates correctly (scalar special var)
         if ("@".equals(sigil)) {
             return isValidArrayVariableStart(nextToken);
         }
@@ -970,6 +973,13 @@ public abstract class StringSegmentParser {
      * <p>
      * Array variables can be: @foo, @123, @_, @{expr}, @$ref, @+, @-
      * But NOT: @;, @/, @!, etc. (these are only valid for scalar $)
+     * <p>
+     * This method prevents incorrect string interpolation. For example:
+     * - "@;\n" should NOT interpolate @; (not a valid array)
+     * - "$/" SHOULD interpolate $/ (valid scalar special var)
+     * <p>
+     * Without this distinction, tests like op/chop.t, op/concat2.t, and
+     * op/magic.t would fail due to incorrect string interpolation.
      *
      * @param token the token following the @ sigil
      * @return true if this can start a valid array variable

@@ -873,12 +873,17 @@ public class Variable {
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             if (block.elements.size() == 1 && block.elements.getFirst() instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
-                // ${*F} is a fancy way to say $Package::F
-                // But ${*{expr}} or @{*{expr}} should remain as glob dereference
+                // ${*F} is a fancy way to say $Package::F (glob dereference of bareword)
+                // But ${*{expr}} or @{*{expr}} should remain as glob dereference of expression
+                // This distinction is critical for Moo's extends which uses:
+                //   @{*{_getglob("${target}::ISA")}} = @_
+                // Without this check, *{expr} would be incorrectly unwrapped like *F
                 if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                     identifierNode.name = NameNormalizer.normalizeVariableName(identifierNode.name, parser.ctx.symbolTable.getCurrentPackage());
                     return new OperatorNode(sigil, operatorNode.operand, parser.tokenIndex);
                 }
+                // When operand is NOT an IdentifierNode (e.g., it's a block like {expr}),
+                // fall through to return the full block as the dereference target
             }
             return new OperatorNode(sigil, block, parser.tokenIndex);
         } catch (Exception e) {

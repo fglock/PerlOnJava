@@ -354,6 +354,9 @@ public class ListParser {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
             } else if (token.text.equals("x") && nextToken.text.equals("=>")) {
                 // Special case: `x =>` is autoquoted as bareword, not the repetition operator
+                // This is critical for Moo which uses hash keys like: x => 1
+                // Without this, the parser would try to parse 'x' as repetition operator
+                // Combined with the fix in Parser.java, this ensures 'x =>' works correctly
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like autoquoted x");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`

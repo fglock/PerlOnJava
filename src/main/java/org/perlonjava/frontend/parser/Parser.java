@@ -181,6 +181,8 @@ public class Parser {
             if (token.text.equals("x") && tokens.get(tokenIndex + 1).text.equals("=")) {
                 // Check if this is actually 'x =>' (fat comma autoquoting)
                 // In that case, 'x' should be treated as a bareword, not as the repetition operator
+                // This is critical for Moo which uses hash keys like: x => 1
+                // Without this fix, 'x =>' would be parsed as repetition operator 'x=' followed by '>'
                 if (tokens.get(tokenIndex + 2).text.equals(">")) {
                     break; // Stop parsing infix, let 'x' be parsed as a bareword argument
                 }
