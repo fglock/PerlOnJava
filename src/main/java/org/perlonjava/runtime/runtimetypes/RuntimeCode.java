@@ -1939,7 +1939,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        return codeRef;
+        // Return a snapshot of the current code reference, not the global entry itself.
+        // This ensures that saved code references (\&sub) point to the current RuntimeCode
+        // and won't be affected if the subroutine is later redefined.
+        // This matches Perl's behavior where $orig = \&foo; sub foo {...} leaves $orig
+        // pointing to the old version.
+        RuntimeScalar snapshot = new RuntimeScalar();
+        snapshot.type = codeRef.type;
+        snapshot.value = codeRef.value;
+        return snapshot;
     }
 
     public static RuntimeScalar prototype(RuntimeScalar runtimeScalar, String packageName) {

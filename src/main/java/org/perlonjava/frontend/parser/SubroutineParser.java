@@ -662,7 +662,23 @@ public class SubroutineParser {
         String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
         InheritanceResolver.invalidateCache();
-        if (codeRef.value == null) {
+        
+        // Check if we're redefining an existing subroutine that already has code.
+        // In that case, create a NEW RuntimeCode so that saved code references
+        // (from \&sub or can()) continue pointing to the old implementation.
+        // This matches Perl's behavior where:
+        //   my $orig = \&foo; sub foo { "new" }; $orig->() returns "old"
+        boolean isRedefinition = false;
+        if (codeRef.value instanceof RuntimeCode existingCode) {
+            // Check if the existing code has actual implementation OR pending compilation
+            // compilerSupplier != null means there's a lazy definition waiting to be compiled
+            isRedefinition = existingCode.subroutine != null 
+                    || existingCode.methodHandle != null
+                    || existingCode.codeObject != null
+                    || existingCode.compilerSupplier != null;
+        }
+        
+        if (codeRef.value == null || isRedefinition) {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
         }
