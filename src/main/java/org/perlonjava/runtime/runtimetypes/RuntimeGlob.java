@@ -105,13 +105,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
             case ARRAYREFERENCE:
                 // Handle the case where a typeglob is assigned a reference to an array
-                if (value.value instanceof RuntimeArray) {
-                    GlobalVariable.getGlobalArray(this.globName).setFromList(((RuntimeArray) value.value).getList());
+                // `*foo = \@bar` creates an alias - both names refer to the same array
+                if (value.value instanceof RuntimeArray arr) {
+                    GlobalVariable.globalArrays.put(this.globName, arr);
                 }
                 return value;
             case HASHREFERENCE:
-                if (value.value instanceof RuntimeHash) {
-                    GlobalVariable.getGlobalHash(this.globName).setFromList(((RuntimeHash) value.value).getList());
+                // `*foo = \%bar` creates an alias - both names refer to the same hash
+                if (value.value instanceof RuntimeHash hash) {
+                    GlobalVariable.globalHashes.put(this.globName, hash);
                 }
                 return value;
             case REFERENCE:

@@ -167,6 +167,17 @@ public class GlobalVariable {
     }
 
     /**
+     * Checks if a global variable exists AND has a defined value, without auto-creating.
+     *
+     * @param key The key of the global variable.
+     * @return True if the variable exists and is defined, false otherwise.
+     */
+    public static boolean isGlobalVariableDefined(String key) {
+        RuntimeScalar var = globalVariables.get(key);
+        return var != null && var.getDefinedBoolean();
+    }
+
+    /**
      * Removes a global variable by its key.
      *
      * @param key The key of the global variable.
@@ -292,6 +303,21 @@ public class GlobalVariable {
      */
     public static boolean existsGlobalCodeRef(String key) {
         return globalCodeRefs.containsKey(key);
+    }
+
+    /**
+     * Checks if a global code reference exists AND is defined (has a real subroutine),
+     * without auto-creating an entry.
+     *
+     * @param key The key of the global code reference.
+     * @return True if the code reference exists and is defined, false otherwise.
+     */
+    public static boolean isGlobalCodeRefDefined(String key) {
+        RuntimeScalar var = globalCodeRefs.get(key);
+        if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
+            return runtimeCode.defined();
+        }
+        return false;
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(String key) {
@@ -436,6 +462,21 @@ public class GlobalVariable {
     }
 
     /**
+     * Checks if a global IO reference exists AND has an actual IO handle (not just an empty glob),
+     * without auto-creating an entry.
+     *
+     * @param key The key of the global IO reference.
+     * @return True if the IO reference exists and has a real IO handle, false otherwise.
+     */
+    public static boolean isGlobalIODefined(String key) {
+        RuntimeGlob glob = globalIORefs.get(key);
+        if (glob != null && glob.type == RuntimeScalarType.GLOB) {
+            return glob.value instanceof RuntimeIO;
+        }
+        return false;
+    }
+
+    /**
      * Checks if a glob is defined (has any slot initialized).
      * Used for `defined *$var` which should not throw strict refs and not auto-vivify.
      *
@@ -542,6 +583,17 @@ public class GlobalVariable {
 
     public static RuntimeScalar existsGlobalFormatAsScalar(RuntimeScalar key) {
         return existsGlobalFormatAsScalar(key.toString());
+    }
+
+    /**
+     * Checks if a global format reference exists AND is defined, without auto-creating an entry.
+     *
+     * @param key The key of the global format reference.
+     * @return True if the format reference exists and is defined, false otherwise.
+     */
+    public static boolean isGlobalFormatDefined(String key) {
+        RuntimeFormat format = globalFormatRefs.get(key);
+        return format != null && format.isFormatDefined();
     }
 
     public static RuntimeScalar definedGlobalFormatAsScalar(String key) {

@@ -1,5 +1,13 @@
 # Perl Debugger Implementation Skill
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 ## Overview
 
 Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger uses DEBUG opcodes injected at statement boundaries in the bytecode interpreter.
@@ -7,6 +15,8 @@ Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger
 ## Git Workflow
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
 
 ```bash
 git checkout -b feature/debugger-improvement
@@ -128,10 +138,16 @@ Tested side-by-side with `perl -d`:
 
 ## Tips for Development
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 ### Testing the debugger
 ```bash
-# Build after changes
-mvn package -q -DskipTests
+make dev   # Quick build after changes (no tests)
 
 # Test basic stepping
 echo 'n

@@ -7,6 +7,14 @@ triggers:
   - model
 ---
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 # Interpreter/JVM Backend Parity Debugging
 
 You are fixing cases where PerlOnJava's bytecode interpreter produces different results than the JVM compiler backend. The interpreter should be a drop-in replacement — same parsing, same runtime APIs, different execution engine.
@@ -14,6 +22,8 @@ You are fixing cases where PerlOnJava's bytecode interpreter produces different 
 ## Git Workflow
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+**IMPORTANT: Always commit changes BEFORE switching branches.** Use `git diff > backup.patch` to save uncommitted work, or commit to a WIP branch. Never use `git stash` — changes can be silently lost.
 
 ```bash
 git checkout -b fix/interpreter-issue-name
@@ -25,16 +35,24 @@ gh pr create --title "Fix interpreter: description" --body "Details"
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
-- **Unit tests**: `src/test/resources/unit/*.t` (155 tests, run via `mvn test`)
+- **Unit tests**: `src/test/resources/unit/*.t` (155 tests, run via `make`)
 - **Fat JAR**: `target/perlonjava-3.0.0.jar`
 - **Launcher script**: `./jperl`
 
 ## Building
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+| `make test-interpreter` | Run unit tests with interpreter backend |
+
 ```bash
-mvn package -q -DskipTests    # Build JAR (after any Java change)
-mvn test                       # Run unit tests (JVM backend, must all pass)
-make test-interpreter          # Run unit tests with interpreter backend
+make                  # Standard build - compiles and runs tests
+make dev              # Quick build - compiles only, NO tests
+make test-interpreter # Test interpreter backend specifically
 ```
 
 ## Running in Interpreter Mode
@@ -170,9 +188,13 @@ All paths relative to `src/main/java/org/perlonjava/`.
 
 **Save master baseline to files FIRST** (do this once per debugging session):
 ```bash
+# Save your current work first (NEVER use git stash!)
+git diff > /tmp/my-changes.patch  # Save uncommitted changes
+git add -A && git commit -m "WIP: save work before baseline check"  # Or commit to WIP
+
 # Switch to master and build
-git stash && git checkout master
-mvn package -q -DskipTests
+git checkout master
+make dev
 
 # Save master test output for JVM backend
 cd perl5_t/t && ../../jperl re/subst.t 2>&1 > /tmp/master_subst.log
@@ -182,12 +204,14 @@ grep "^not ok" /tmp/master_subst.log > /tmp/master_subst_fails.txt
 cd perl5_t/t && ../../jperl --interpreter re/subst.t 2>&1 > /tmp/master_subst_interp.log
 
 # Switch back to feature branch
-git checkout feature-branch && git stash pop
+git checkout feature-branch
+# Restore uncommitted changes if you used patch:
+# git apply /tmp/my-changes.patch
 ```
 
 **After making changes**, compare against saved baselines:
 ```bash
-mvn package -q -DskipTests
+make dev
 
 # Test JVM backend
 cd perl5_t/t && ../../jperl re/subst.t 2>&1 > /tmp/feature_subst.log
@@ -224,13 +248,13 @@ JPERL_INTERPRETER=1 ./jperl -e 'failing code'
 **CRITICAL: Save baselines to files!** When comparing test suites across branches:
 ```bash
 # On master - save results so you don't have to rebuild later
-git checkout master && mvn package -q -DskipTests
+git checkout master && make dev
 cd perl5_t/t && JPERL_INTERPRETER=1 ../../jperl test.t 2>&1 | tee /tmp/test_master.log
 JPERL_INTERPRETER=1 ../../jperl test.t 2>&1 | grep "^ok\|^not ok" > /tmp/test_master_results.txt
 grep "^ok" /tmp/test_master_results.txt | wc -l  # Save this number!
 
 # Return to feature branch - now you can compare without rebuilding master
-git checkout feature-branch && mvn package -q -DskipTests
+git checkout feature-branch && make dev
 ```
 
 ### 2. Use --disassemble to see interpreter bytecode

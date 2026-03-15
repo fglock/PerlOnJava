@@ -736,6 +736,29 @@ public class InlineOpcodeHandler {
     }
 
     /**
+     * Convert array/hash to scalar if wantarray indicates scalar context.
+     * Format: SCALAR_IF_WANTARRAY rd rs wantarray_reg
+     * This mirrors the JVM backend's emitRuntimeContextConversion() exactly.
+     */
+    public static int executeScalarIfWantarray(int[] bytecode, int pc, RuntimeBase[] registers, int callContext) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        // wantarray_reg is not used - we use callContext directly (same as JVM's ILOAD 2)
+        pc++; // Skip wantarray_reg operand
+
+        RuntimeBase val = registers[rs];
+
+        // If scalar context and value is array or hash, call .scalar()
+        if (callContext == RuntimeContextType.SCALAR &&
+                (val instanceof RuntimeArray || val instanceof RuntimeHash)) {
+            registers[rd] = val.scalar();
+        } else {
+            registers[rd] = val;
+        }
+        return pc;
+    }
+
+    /**
      * String join: rd = join(separator, list)
      * Format: JOIN rd separatorReg listReg
      */

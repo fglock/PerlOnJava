@@ -11,6 +11,14 @@ triggers:
 
 You are debugging failures in PerlOnJava, a Perl-to-JVM compiler with a bytecode interpreter fallback. This skill covers debugging workflows for test failures, regressions, and parity issues between backends.
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 ## Git Workflow
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
@@ -25,16 +33,23 @@ gh pr create --title "Fix: description" --body "Details"
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
-- **Unit tests**: `src/test/resources/unit/*.t` (156 tests, run via `mvn test`)
+- **Unit tests**: `src/test/resources/unit/*.t` (run via `make`)
 - **Perl5 core tests**: `perl5_t/t/` (Perl 5 compatibility suite)
 - **Fat JAR**: `target/perlonjava-3.0.0.jar`
 - **Launcher script**: `./jperl`
 
 ## Building
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 ```bash
-mvn package -q -DskipTests    # Build JAR (required after any Java change)
-mvn test                       # Run unit tests (156 tests, must all pass)
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
 ```
 
 ## Running Tests
@@ -142,10 +157,10 @@ JPERL_INTERPRETER=1 ./jperl -e 'code'  # Interpreter backend
 ### 1. Identify the regression
 ```bash
 # Compare branch vs master
-git checkout master && mvn package -q -DskipTests
+git checkout master && make dev
 ./jperl -e 'failing code'
 
-git checkout branch && mvn package -q -DskipTests
+git checkout branch && make dev
 ./jperl -e 'failing code'
 ```
 
@@ -190,14 +205,14 @@ In Java source, add:
 ```java
 System.err.println("DEBUG: var=" + var);
 ```
-Then rebuild with `mvn package -q -DskipTests`.
+Then rebuild with `make dev`.
 
 ### 8. Fix and verify
 ```bash
 # After fixing
-mvn package -q -DskipTests
+make dev
 ./jperl -e 'test code'        # Verify fix
-mvn test                       # No regressions in unit tests
+make                           # Build + run unit tests (no regressions)
 ```
 
 ## Git Workflow
@@ -380,11 +395,13 @@ The JVM's `setFromList()` → `addToArray()` chain already handles `PerlRange` c
 ## Quick Reference Commands
 
 ```bash
-# Build
-mvn package -q -DskipTests
+# Build + test
+make
 
-# Test
-mvn test
+# Build only (no tests)
+make dev
+
+# Run specific Perl5 test
 perl dev/tools/perl_test_runner.pl perl5_t/t/op/bop.t
 
 # Debug parsing

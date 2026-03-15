@@ -80,6 +80,88 @@ public class FileHandle {
         // Check if the file handle is enclosed in curly braces
         // Perl allows {FILEHANDLE} syntax for disambiguation
         if (peek(parser).text.equals("{")) {
+            // Before consuming {, check if this looks like an anonymous hash
+            // Hash patterns include:
+            // { identifier => ... } or { identifier , ... }
+            // { "string" , ... } or { "string" => ... }
+            // { 'string' , ... } or { 'string' => ... }
+            // { number , ... }
+            int idx = parser.tokenIndex + 1;
+            
+            // Skip whitespace tokens
+            while (idx < parser.tokens.size() && 
+                   parser.tokens.get(idx).type == LexerTokenType.WHITESPACE) {
+                idx++;
+            }
+            
+            if (idx < parser.tokens.size()) {
+                LexerToken afterBrace = parser.tokens.get(idx);
+                
+                // Check for identifier followed by => or ,
+                if (afterBrace.type == LexerTokenType.IDENTIFIER) {
+                    int nextIdx = idx + 1;
+                    // Skip whitespace
+                    while (nextIdx < parser.tokens.size() && 
+                           parser.tokens.get(nextIdx).type == LexerTokenType.WHITESPACE) {
+                        nextIdx++;
+                    }
+                    if (nextIdx < parser.tokens.size()) {
+                        LexerToken afterIdent = parser.tokens.get(nextIdx);
+                        if (afterIdent.text.equals("=>") || afterIdent.text.equals(",")) {
+                            // This is { a => ... } or { a, ... } - it's a hash, not filehandle
+                            return null;
+                        }
+                    }
+                }
+                
+                // Check for string literal followed by => or ,
+                // Strings are lexed with the opening quote as OPERATOR
+                if (afterBrace.type == LexerTokenType.OPERATOR && 
+                    (afterBrace.text.equals("\"") || afterBrace.text.equals("'"))) {
+                    // Scan forward to find the closing quote, then check for , or =>
+                    // For simplicity, look for the pattern: quote ... quote (comma or =>)
+                    String quoteChar = afterBrace.text;
+                    int scanIdx = idx + 1;
+                    int depth = 1;
+                    while (scanIdx < parser.tokens.size() && depth > 0) {
+                        LexerToken scanToken = parser.tokens.get(scanIdx);
+                        if (scanToken.type == LexerTokenType.OPERATOR && scanToken.text.equals(quoteChar)) {
+                            depth--;
+                        }
+                        scanIdx++;
+                    }
+                    // Skip whitespace after the closing quote
+                    while (scanIdx < parser.tokens.size() && 
+                           parser.tokens.get(scanIdx).type == LexerTokenType.WHITESPACE) {
+                        scanIdx++;
+                    }
+                    // Check for , or =>
+                    if (scanIdx < parser.tokens.size()) {
+                        LexerToken afterString = parser.tokens.get(scanIdx);
+                        if (afterString.text.equals(",") || afterString.text.equals("=>")) {
+                            // This is { "a", ... } or { "a" => ... } - it's a hash
+                            return null;
+                        }
+                    }
+                }
+                
+                // Check for number followed by ,
+                if (afterBrace.type == LexerTokenType.NUMBER) {
+                    int nextIdx = idx + 1;
+                    // Skip whitespace
+                    while (nextIdx < parser.tokens.size() && 
+                           parser.tokens.get(nextIdx).type == LexerTokenType.WHITESPACE) {
+                        nextIdx++;
+                    }
+                    if (nextIdx < parser.tokens.size()) {
+                        LexerToken afterNum = parser.tokens.get(nextIdx);
+                        if (afterNum.text.equals(",")) {
+                            // This is { 1, ... } - it's a hash
+                            return null;
+                        }
+                    }
+                }
+            }
             TokenUtils.consume(parser);
             hasBracket = true;
         }
@@ -97,28 +179,42 @@ public class FileHandle {
         // Handle bareword file handles (most common case)
         // Examples: STDOUT, STDERR, STDIN, or user-defined handles like LOG, FILE, etc.
         else if (token.type == LexerTokenType.IDENTIFIER) {
-            // Try to parse as a bareword identifier
-            // parseSubroutineIdentifier handles qualified names like Some::Package::HANDLE
-            String name = IdentifierParser.parseSubroutineIdentifier(parser);
-            if (name != null) {
-                fileHandle = parseBarewordHandle(parser, name);
-                if (fileHandle == null && name.matches("^[A-Z_][A-Z0-9_]*$")) {
-                    GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
+            // Check if this is a function call or method chain
+            // In that case, we need to parse it as an expression, not a bareword
+            LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+            if (hasBracket && (nextToken.text.equals("(") || nextToken.text.equals("->"))) {
+                // This is a function call like { get_fh() } or method chain like { shift->stdout }
+                // Parse as expression to capture the full call/chain
+                fileHandle = parser.parseExpression(0);
+            } else {
+                // Try to parse as a bareword identifier
+                // parseSubroutineIdentifier handles qualified names like Some::Package::HANDLE
+                String name = IdentifierParser.parseSubroutineIdentifier(parser);
+                if (name != null) {
                     fileHandle = parseBarewordHandle(parser, name);
+                    if (fileHandle == null && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                        GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
+                        fileHandle = parseBarewordHandle(parser, name);
+                    }
                 }
             }
         }
         // Handle scalar variable file handles
         // Modern Perl idiom: open my $fh, '<', 'filename'; print $fh "text";
         else if (token.text.equals("$")) {
-            // Parse the scalar variable
-            fileHandle = ParsePrimary.parsePrimary(parser);
+            if (hasBracket) {
+                // When bracketed, parse as a full expression to capture method chains
+                // Example: print { $self->stdout } "text"
+                // This ensures $self->stdout is parsed as a complete expression
+                fileHandle = parser.parseExpression(0);
+            } else {
+                // Parse the scalar variable
+                fileHandle = ParsePrimary.parsePrimary(parser);
 
-            // When not bracketed, we need to disambiguate between:
-            // - print $fh "text";  # $fh is a file handle
-            // - print $fh + 2;     # $fh is part of an expression
-            // - print $fh;         # ambiguous case
-            if (!hasBracket) {
+                // When not bracketed, we need to disambiguate between:
+                // - print $fh "text";  # $fh is a file handle
+                // - print $fh + 2;     # $fh is part of an expression
+                // - print $fh;         # ambiguous case
                 // Check if the next token is an infix operator
                 // If so, this is likely an expression, not a file handle
                 String nextText = peek(parser).text;
@@ -142,6 +238,11 @@ public class FileHandle {
                     fileHandle = null;
                 }
             }
+        }
+        // Handle expression in brackets (for any other case like method calls)
+        else if (hasBracket) {
+            // Parse as a general expression: { $obj->method } etc.
+            fileHandle = parser.parseExpression(0);
         }
 
         // If we had an opening bracket, consume the closing bracket

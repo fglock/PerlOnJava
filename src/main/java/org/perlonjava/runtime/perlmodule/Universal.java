@@ -133,7 +133,10 @@ public class Universal extends PerlModuleBase {
         String normalizedName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedName);
-            return codeRef.getList();
+            // Only return the code ref if it's actually defined (has a real subroutine)
+            if (codeRef.getDefinedBoolean()) {
+                return codeRef.getList();
+            }
         }
 
         // Fallback: if either the class name or method name was stored as UTF-8 octets
@@ -229,7 +232,16 @@ public class Universal extends PerlModuleBase {
         // Get the linearized inheritance hierarchy using C3
         List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
 
-        return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
+        // Normalize the argument: main::Foo -> Foo, ::Foo -> Foo
+        // This is needed because isa("main::Foo") should match a class blessed as "Foo"
+        String normalizedArg = argString;
+        if (normalizedArg.startsWith("main::")) {
+            normalizedArg = normalizedArg.substring(6);
+        } else if (normalizedArg.startsWith("::")) {
+            normalizedArg = normalizedArg.substring(2);
+        }
+
+        return new RuntimeScalar(linearizedClasses.contains(normalizedArg)).getList();
     }
 
     /**

@@ -7,6 +7,14 @@ triggers:
   - model
 ---
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 # Fix pat.t and sprintf2.t Regressions
 
 You are fixing test regressions in `re/pat.t` (-17 tests) and `op/sprintf2.t` (-3 tests) on the `fix-exiftool-cli` branch of PerlOnJava.
@@ -50,11 +58,20 @@ For each failing test:
 
 ## Running the Tests
 
-```bash
-# Build
-make build
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
-# Run individual tests via test runner (sets correct ENV vars)
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
+```bash
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
+```
+
+Run individual tests via test runner (sets correct ENV vars):
+```bash
 perl dev/tools/perl_test_runner.pl perl5_t/t/re/pat.t
 perl dev/tools/perl_test_runner.pl perl5_t/t/op/sprintf2.t
 

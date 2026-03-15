@@ -65,8 +65,9 @@ public class StringOperators {
         StringBuilder quoted = new StringBuilder();
         // Iterate over each character in the string
         for (char c : runtimeScalar.toString().toCharArray()) {
-            // If the character is alphanumeric, append it as is
-            if (Character.isLetterOrDigit(c)) {
+            // If the character is alphanumeric or underscore, append it as is
+            // Perl's quotemeta does NOT escape underscore (it's part of \w)
+            if (Character.isLetterOrDigit(c) || c == '_') {
                 quoted.append(c);
             } else {
                 // Otherwise, escape it with a backslash

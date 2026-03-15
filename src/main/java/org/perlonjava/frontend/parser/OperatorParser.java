@@ -819,7 +819,11 @@ public class OperatorParser {
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
             var op = separator;
-            if (op instanceof OperatorNode operatorNode && operatorNode.operator.equals("my")) {
+            // Unwrap my/our/local declarations to get to the underlying array
+            if (op instanceof OperatorNode operatorNode && 
+                    (operatorNode.operator.equals("my") || 
+                     operatorNode.operator.equals("our") || 
+                     operatorNode.operator.equals("local"))) {
                 op = operatorNode.operand;
             }
             if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {

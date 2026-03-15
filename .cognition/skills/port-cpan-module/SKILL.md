@@ -1,5 +1,13 @@
 # Port CPAN Module to PerlOnJava
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
 ## When to Use This Skill
@@ -165,6 +173,13 @@ as Perl itself.
 
 ### Phase 4: Testing
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during development) |
+
 1. **Create test file:** `src/test/resources/module_name.t`
 
 2. **Compare with system Perl:**
@@ -182,8 +197,9 @@ as Perl itself.
 
 3. **Build and verify:**
    ```bash
-   ./gradlew build -x test
+   make dev   # Quick build (no tests)
    ./jperl -e 'use Module::Name; ...'
+   make       # Full build with tests before committing
    ```
 
 ## Common Patterns
@@ -341,7 +357,7 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Register all methods in `initialize()`
 
 ### Testing
-- [ ] Build compiles without errors: `./gradlew build -x test`
+- [ ] Build compiles without errors: `make dev` (NEVER use raw mvn/gradlew)
 - [ ] Basic functionality works: `./jperl -e 'use Module::Name; ...'`
 - [ ] Compare output with system Perl
 - [ ] Test edge cases identified in XS code

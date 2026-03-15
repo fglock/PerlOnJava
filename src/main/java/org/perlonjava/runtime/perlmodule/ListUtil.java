@@ -31,6 +31,8 @@ public class ListUtil extends PerlModuleBase {
      */
     public static void initialize() {
         ListUtil listUtil = new ListUtil();
+        // Set $VERSION so CPAN.pm can detect our bundled version
+        GlobalVariable.getGlobalVariable("List::Util::VERSION").set(new RuntimeScalar("1.63"));
         try {
             // List reduction functions
             listUtil.registerMethod("reduce", "reduce", "&@");

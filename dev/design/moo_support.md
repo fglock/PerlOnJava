@@ -314,20 +314,76 @@ All tests meet or exceed the baseline (20260312T075000):
 
 ## Success Criteria
 
-1. `jcpan -t Moo` runs Moo tests ❌ (tests skipped)
-2. **All Moo tests pass** ❌ (needs verification with extends fix)
+1. `jcpan -t Moo` runs Moo tests ✓ (tests now run with Test::Harness)
+2. **All Moo tests pass** ❌ (685/774 passing = 88%, see Known Issues below)
 3. `jperl -e 'use Moo; print "OK\n"'` works ✓
 4. `has x => (is => "ro")` syntax parses correctly ✓
 5. Moo class with attributes works ✓
 6. `croak` and `carp` work with proper stack traces ✓
-7. `extends 'Parent'` inheritance works ✓ (NEW - fixed in Phase 7)
+7. `extends 'Parent'` inheritance works ✓ (fixed in Phase 7)
 8. No regressions in baseline tests ✓
+
+## Known Issues (Remaining Moo Test Failures)
+
+### Issue: DEMOLISH Not Being Called (Expected - Not Supported)
+**Tests affected**: t/demolish-basics.t (3 failures)
+**Symptom**: Object destructors (DEMOLISH methods) are not called when objects go out of scope
+**Root cause**: DESTROY/fork/threads are not supported in PerlOnJava (they compile but throw at runtime)
+**Status**: Expected failure - these features are out of scope for PerlOnJava
+
+### Issue: SUPER::new Not Working in Extended Classes - FIXED (Phase 13)
+**Tests affected**: t/extends-non-moo.t
+**Symptom**: `Undefined subroutine &Package::SUPER::new called`
+**Root cause**: Only `SUPER::method` was supported, not `Package::SUPER::method`
+**Status**: ✅ FIXED - RuntimeCode.java now handles `::SUPER::` pattern
+
+### Issue: Regex Escaping in Error Messages (quotemeta) - FIXED (Phase 12)
+**Tests affected**: t/accessor-coerce.t, t/accessor-isa.t (many failures)
+**Symptom**: `plus\_three` vs `plus_three`, `less\_than\_three` vs `less_than_three`
+**Root cause**: quotemeta was escaping `_` (underscore) which Perl doesn't escape
+**Status**: ✅ FIXED - StringOperators.java now treats `_` as alphanumeric
+
+### Issue: Role Application Error Messages
+**Tests affected**: t/compose-roles.t (4 failures)  
+**Symptom**: Missing error messages when required attributes are not provided
+**Root cause**: Error throwing in role composition may not propagate correctly
+**Status**: Needs investigation
+
+### Issue: Spurious "Odd number of elements in anonymous hash" Warnings
+**Tests affected**: Various tests when run via TAP::Harness
+**Symptom**: Warnings appear in TAP::Harness but not when running tests directly
+**Root cause**: Unknown - standard Perl does NOT emit these warnings
+**Status**: Needs investigation - add stack trace to RuntimeHash.java to identify source
+
+## Remaining jcpan Improvements
+
+### Completed in This Session
+- [x] **Version parsing**: Handle "undef" version strings gracefully
+- [x] **MM->parse_version**: ExtUtils::MakeMaker now loads ExtUtils::MM
+- [x] **Sub::Util**: Java implementation with set_subname (required by Moo)
+- [x] **Scalar/List::Util VERSION**: Added $VERSION for CPAN detection
+- [x] **Test::Harness**: Added for `make test` support
+
+### Still Needed
+- [ ] **Prototype checking**: `$$` prototype with `@array` argument should work (workaround: removed prototype)
+- [ ] **CPAN.pm metadata caching**: Reduce repeated dependency checks
+- [ ] **Better XS module detection**: Skip XS modules earlier in the process
+- [ ] **CPAN::DistnameInfo**: Install to avoid "allow_installing_outdated_dists" warnings
 
 ## Progress Tracking
 
-### Current Status: 🟡 TESTING - Verify Moo extends works
+### Current Status: 🟢 WORKING - Tests running, improvements in progress
 
-Parser fixes complete. Need to verify Moo's `extends` keyword now works.
+Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pass rate.
+**Previous baseline**: 685/774 subtests passed (89 failed), 40/71 test programs passed.
+
+**Fixed in this session**:
+- t/extends-non-moo.t: 0/10 → 10/10 (Package::SUPER::method fix)
+- t/accessor-coerce.t, t/accessor-isa.t: error message matching (quotemeta fix)
+
+**Remaining blockers**: 
+- DEMOLISH (destructors - not supported, expected)
+- Spurious anonymous hash warnings in TAP::Harness
 
 ### Completed Phases
 - [x] Phase 1: Replace Carp.java with Carp.pm (2024-03-14)
@@ -354,25 +410,160 @@ Parser fixes complete. Need to verify Moo's `extends` keyword now works.
 - [x] Phase 8: Implement Internals::stack_refcounted (2024-03-15)
   - Returns 1 for RC stack behavior
   - Fixed op/array.t: 116 → 175 passing tests
+- [x] Phase 9: Fix goto &sub in use/import (2024-03-15)
+  - Added TAILCALL trampoline in StatementParser.parseUseDeclaration()
+  - Moo::Role now correctly exports has, with, requires
+  - Moo test pass rate: 591 → 687 tests (+96)
+- [x] Phase 10: jcpan Test::Harness integration (2024-03-15)
+  - Added Test::Harness and TAP:: modules
+  - Fixed version parsing for "undef" strings
+  - Fixed MM->parse_version() via ExtUtils::MM loading
+  - Added Sub::Util Java implementation (set_subname)
+  - Added Scalar/List::Util $VERSION for CPAN detection
+  - XSLoader stubs for .pm file version detection
+
+- [x] Phase 11: Fix return @array in scalar context (2024-03-15)
+  - `return @array` now returns count in scalar context (was returning last element)
+  - Fixed TAP::Harness panic: "planned test count did not equal sum of passed and failed"
+  - JVM backend: emitRuntimeContextConversion() in EmitVariable.java
+  - Interpreter: SCALAR_IF_WANTARRAY opcode (388)
+
+- [x] Phase 12: Fix quotemeta underscore escaping (2024-03-15)
+  - Perl's `quotemeta` does NOT escape underscore (`_`) - it's part of `\w`
+  - Fixed StringOperators.java to treat `_` like alphanumeric characters
+  - Fixes Moo tests t/accessor-coerce.t, t/accessor-isa.t error message matching
+
+- [x] Phase 13: Fix Package::SUPER::method resolution (2024-03-15)
+  - Moo uses `$class->Package::SUPER::new(@_)` to explicitly specify parent
+  - Previously only `SUPER::method` (no package prefix) was supported
+  - Added handling in RuntimeCode.java to detect `::SUPER::` pattern
+  - Extracts package name and method, resolves from that package's parent
+  - Fixes t/extends-non-moo.t (10/10 tests now pass)
+
+- [x] Phase 14: Fix print { func() } filehandle block parsing (2024-03-15)
+  - Root cause: `print { get_fh() } "text"` was parsed as anonymous hash, not block
+  - The `{...}` was being miscompiled as `CREATE_HASH` instead of evaluating the expression
+  - **Parser fix (FileHandle.java)**:
+    - When identifier is followed by `(`, parse as function call expression
+    - Added fallback to parse any bracketed expression as filehandle block
+  - **JVM codegen fix (EmitOperator.java)**:
+    - handleSayOperator now uses register spilling for arguments
+    - Fixes ASM frame compute crash when filehandle is complex expression
+  - This fixed the majority of "Odd number of elements in anonymous hash" warnings
+  - Test: `print { get_fh() } "text\n"` now works correctly
+
+- [x] Phase 15: Fix print { $var->method } filehandle blocks (2026-03-15)
+  - Root cause: `print { $self->stdout }` and `print { shift->stdout }` were being miscompiled
+  - The `{ ... }` was treated as anonymous hash instead of filehandle block
+  - **FileHandle.java fixes**:
+    - When `hasBracket` is true and token is `$`, parse as full expression (not just primary)
+    - This captures method chains like `$self->stdout`
+    - When identifier is followed by `->`, parse as expression (for `shift->stdout`)
+    - Added early detection of hash patterns: `{ identifier => }` or `{ identifier , }` returns null immediately
+  - **Result**: All "Odd number of elements in anonymous hash" warnings eliminated from Moo tests
+  - Test: `print { $self->stdout } @_` now works correctly
+
+- [x] Phase 16: Fix local @_ in string eval context (2026-03-15)
+  - Root cause: `local @_` inside string eval was throwing "Can't localize lexical variable @_"
+  - The issue: @_ is registered as "reserved" in the symbol table (register 1), but the 
+    localization check only excluded "our" variables
+  - **BytecodeCompiler.java fixes**:
+    - Added `isReservedVariable()` method to check for "reserved" declaration type
+    - Updated 7 occurrences of the localization check to also exclude reserved variables
+  - **CompileAssignment.java**: Updated 1 occurrence
+  - This fixes Sub::Quote generated code that uses `local @_`
+
+- [x] Phase 17: Extend print { hash } detection for string keys and whitespace (2026-03-15)
+  - Root cause: `print { "a", 2 }` was incorrectly parsed as filehandle block
+  - The parser wasn't skipping WHITESPACE tokens when scanning ahead after `{`
+  - **FileHandle.java fixes**:
+    - Added whitespace skipping when looking for hash patterns
+    - Added detection for string literal keys (`"..."` or `'...'`) followed by `,` or `=>`
+    - Added detection for numeric keys followed by `,`
+  - Now correctly recognizes `{ "key", value }`, `{ "key" => value }`, `{ 123, value }`
+  - Test: `print { "a", 2 }` now prints `HASH(0x...)` as expected
+
+- [x] Phase 18: Fix subroutine redefinition to preserve old code references (2026-03-15)
+  - Root cause: When a subroutine is redefined via eval, saved code references (from `\&sub`
+    or `can()`) were being affected because the same RuntimeCode object was modified in place
+  - The `around` modifier in Class::Method::Modifiers calls `$into->can($name)` to get
+    the original method, then redefines it with a wrapper. The wrapper calls `$orig->(@_)`
+    expecting the original, but was getting the new wrapper (infinite recursion)
+  - **SubroutineParser.java fixes**:
+    - When redefining a sub that already has code (subroutine, methodHandle, codeObject,
+      or compilerSupplier set), create a NEW RuntimeCode instead of reusing the existing one
+    - Old references continue pointing to the old RuntimeCode
+  - **RuntimeCode.java fixes**:
+    - `createCodeReference()` now returns a snapshot RuntimeScalar (new RuntimeScalar with
+      same type/value) instead of the global entry directly
+    - This ensures `\&foo` captures the current RuntimeCode, not a mutable reference
+  - This matches Perl's behavior where: `my $orig = \&foo; sub foo {"new"}; $orig->()` returns "old"
+  - Moo tests improved from 20/71 to 16/71 failing test programs
+
+- [x] Phase 19: Fix glob assignment to properly alias arrays and hashes (2026-03-15)
+  - Root cause: `*INFO = \%Role::Tiny::INFO` was copying hash contents instead of aliasing
+  - Moo::Role uses `*INFO = \%Role::Tiny::INFO` to share the same %INFO hash
+  - But when Moo::Role later did `our %INFO`, PerlOnJava created a new hash instead of
+    using the aliased one
+  - **RuntimeGlob.java fixes**:
+    - For ARRAYREFERENCE type: `GlobalVariable.globalArrays.put(globName, arr)` (was setFromList)
+    - For HASHREFERENCE type: `GlobalVariable.globalHashes.put(globName, hash)` (was setFromList)
+  - This creates true aliases where both names refer to the same container
+  - compose-roles.t: 4 failing tests → all 25 passing
+  - Overall: 15 failing test programs → 12 failing test programs
+
+### Current Status
+
+**Test Results (after Phase 19):**
+- 58/71 test programs passing (82%)
+- ~770/816 subtests passing (94%)
+- compose-roles.t fully passing (25/25)
+
+**Remaining Failures (categorized):**
+1. **DEMOLISH tests** (6 failures) - Expected failures (DESTROY not supported)
+2. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
+3. **croak-locations tests** (29 failures) - Carp reports `(eval N)` instead of actual filename
+4. **no-moo.t** (5 failures) - Cleanup of extends/has not working
+5. **method-generate-accessor.t** (8 failures) - Various edge cases
+6. **Other minor issues** - load_module_role_tiny.t, coerce-1.t, etc.
+
+- [x] Phase 20: Fix isa("main::ClassName") not matching class blessed as "ClassName" (2026-03-15)
+  - Root cause: `isa("main::Foo")` was comparing literally against linearized class list containing `"Foo"`
+  - In Perl, `main::Foo` and `Foo` are equivalent class names for the main package
+  - **Universal.java fixes**:
+    - Normalize the `argString` before comparing: strip `main::` or `::` prefix
+    - This allows `$obj->isa("main::Foo")` to match when blessed as `"Foo"`
+  - Fixes uni/universal.t tests 3 and 6 (and similar tests)
+  - Test: `bless({}, "Foo")->isa("main::Foo")` now returns true
+
+- [x] Phase 21: Fix `undef %hash` not clearing hashes in scalar context (2026-03-15)
+  - Root cause: Phase 11's `emitRuntimeContextConversion()` was being applied to `undef %hash`
+  - The `handleUndefOperator` used `RuntimeContextType.RUNTIME` to visit the operand
+  - When the containing subroutine was called in scalar context (e.g., `my $r = func()`),
+    the hash was converted to a scalar (key count) before `undefine()` was called
+  - This caused `undef %fetched` in ExifTool's PDF.pm to silently do nothing
+  - **EmitOperator.java fix**:
+    - Changed `handleUndefOperator` to use `RuntimeContextType.LIST` instead of `RUNTIME`
+    - This ensures the actual hash/array container is passed to `undefine()`, not a scalar
+  - ExifTool PDF.t now passes all 26 tests (was 7/26)
 
 ### Next Steps
 
-1. **Test Moo extends** - Verify `extends 'Parent'` now works
-2. **Run Moo test suite** - `jcpan -t Moo` to check test pass rate
-3. **Fix remaining failures** - Debug any remaining test failures
+1. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace
+
+2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+
+3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
-- **Branch**: `feature/moo-support`
-- **PR**: https://github.com/fglock/PerlOnJava/pull/319
-- **Commits**:
-  - `66bfe37a6` - Initial Moo support (Carp.pm, @; fix)
-  - `150bc23e8` - Fix x => autoquoting and goto &$coderef
-  - `9188c3d76` - Fix jcpan Unix wrapper
-  - `f4bc5594e` - Fix Storable YAML codePointLimit
-  - `42903b3cb` - Fix parser for @{*{expr}} glob dereference
-  - `75700c220` - Fix regressions in parser and string interpolation
-  - `2762e6d68` - Implement Internals::stack_refcounted
-  - `00c256b75` - Add detailed comments explaining fixes
+- **Branch**: `feature/moo-support` (PR #319 - merged)
+- **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
+- **Key commits**:
+  - `00c124167` - Fix print { func() } filehandle block parsing and JVM codegen
+  - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution
+  - `7a76739b8` - Fix goto &sub in use/import TAILCALL handling
+  - `053d91a95` - Add Sub::Util, fix Scalar/List::Util VERSION, add Test::Harness
+  - `7993ef74d` - Fix version parsing and MM->parse_version for CPAN.pm
 
 ## Related Documents
 

@@ -1940,6 +1940,18 @@ public class Opcodes {
      */
     public static final short DEFINED_GLOB = 386;
 
+    /**
+     * Convert array/hash to scalar if wantarray indicates scalar context.
+     * Format: SCALAR_IF_WANTARRAY rd rs wantarray_reg
+     * Effect:
+     *   - If wantarray_reg == SCALAR (1): rd = rs.scalar()
+     *   - Otherwise: rd = rs (unchanged)
+     * 
+     * This mirrors the JVM backend's emitRuntimeContextConversion() exactly.
+     * Used for `return @array` to ensure arrays return count in scalar context.
+     */
+    public static final short SCALAR_IF_WANTARRAY = 388;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

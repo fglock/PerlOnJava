@@ -114,6 +114,72 @@ public class EmitVariable {
     }
 
     /**
+     * Emits bytecode to handle RUNTIME context conversion for arrays and hashes.
+     *
+     * <p>When an array or hash is used in RUNTIME context (e.g., {@code return @a}),
+     * we need to check wantarray at runtime:
+     * <ul>
+     *   <li>If scalar context (wantarray == 1), return the count (array.scalar())</li>
+     *   <li>Otherwise, return the array/hash as-is for list context</li>
+     * </ul>
+     *
+     * <p>This is needed because in Perl:
+     * <ul>
+     *   <li>{@code return @a} in scalar context returns the count of elements</li>
+     *   <li>{@code return @a} in list context returns the elements</li>
+     *   <li>{@code return (1,2,3)} in scalar context returns the last element (3)</li>
+     * </ul>
+     *
+     * @param emitterVisitor The visitor handling the bytecode emission
+     * @param sigil          The variable sigil (@ or %)
+     */
+    private static void emitRuntimeContextConversion(EmitterVisitor emitterVisitor, String sigil) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Stack has the array/hash. We need to check wantarray (slot 2) and decide:
+        // - If wantarray == SCALAR (1), call .scalar() and return the count
+        // - Otherwise, leave the array/hash as-is
+        //
+        // IMPORTANT: We must store the result to a register and reload it so that
+        // both branches converge with the same type on the stack (RuntimeBase).
+        // Direct stack manipulation causes VerifyError because the branches have
+        // different types (RuntimeScalar vs RuntimeArray/Hash).
+
+        Label notScalarContext = new Label();
+        Label done = new Label();
+
+        // Store the array/hash temporarily
+        int inputSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, inputSlot);
+
+        // Allocate result slot - will hold RuntimeBase (common supertype)
+        int resultSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+
+        // Load wantarray (slot 2 = callContext parameter)
+        mv.visitVarInsn(Opcodes.ILOAD, 2);
+
+        // Check if wantarray == RuntimeContextType.SCALAR (1)
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitJumpInsn(Opcodes.IF_ICMPNE, notScalarContext);
+
+        // Scalar context: load array/hash and call .scalar(), store to result
+        mv.visitVarInsn(Opcodes.ALOAD, inputSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar",
+                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+        mv.visitJumpInsn(Opcodes.GOTO, done);
+
+        // List/void context: store input as-is to result
+        mv.visitLabel(notScalarContext);
+        mv.visitVarInsn(Opcodes.ALOAD, inputSlot);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+
+        // Both branches converge here - load result from register
+        mv.visitLabel(done);
+        mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
+    }
+
+    /**
      * Emits bytecode to fetch a global (package) variable.
      *
      * <p>This method generates JVM bytecode to access global variables stored in the
@@ -388,6 +454,10 @@ public class EmitVariable {
             // In scalar context, convert array/hash to scalar (e.g., array length, hash key count)
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME && !sigil.equals("$")) {
+                // In RUNTIME context (e.g., return @a), check wantarray at runtime
+                // If scalar context, return the count; otherwise return the array/hash as-is
+                emitRuntimeContextConversion(emitterVisitor, sigil);
             }
 
             if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR end " + symbolEntry);
@@ -408,6 +478,8 @@ public class EmitVariable {
                 }
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                    emitRuntimeContextConversion(emitterVisitor, sigil);
                 }
                 return;
             case "%":
@@ -424,6 +496,8 @@ public class EmitVariable {
                 }
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                    emitRuntimeContextConversion(emitterVisitor, sigil);
                 }
                 return;
             case "$":

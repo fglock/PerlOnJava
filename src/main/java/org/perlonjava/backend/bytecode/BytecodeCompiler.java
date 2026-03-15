@@ -250,6 +250,11 @@ public class BytecodeCompiler implements Visitor {
         return entry != null && "our".equals(entry.decl());
     }
 
+    boolean isReservedVariable(String name) {
+        SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(name);
+        return entry != null && "reserved".equals(entry.decl());
+    }
+
     int getVariableRegister(String name) {
         return symbolTable.getVariableIndex(name);
     }
@@ -3022,7 +3027,7 @@ public class BytecodeCompiler implements Visitor {
                 if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                    if (hasVariable(varName) && !isOurVariable(varName)) {
+                    if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                         throwCompilerException("Can't localize lexical variable " + varName);
                         return;
                     }
@@ -3055,7 +3060,7 @@ public class BytecodeCompiler implements Visitor {
                 if ((sigil.equals("@") || sigil.equals("%")) && sigilOp.operand instanceof IdentifierNode idNode) {
                     String varName = sigil + idNode.name;
 
-                    if (hasVariable(varName) && !isOurVariable(varName)) {
+                    if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                         throwCompilerException("Can't localize lexical variable " + varName);
                         return;
                     }
@@ -3106,7 +3111,7 @@ public class BytecodeCompiler implements Visitor {
                             String originalSigil = innerOp.operator;
                             String varName = originalSigil + idNode.name;
 
-                            if (hasVariable(varName) && !isOurVariable(varName)) {
+                            if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                                 throwCompilerException("Can't localize lexical variable " + varName);
                                 return;
                             }
@@ -3225,7 +3230,7 @@ public class BytecodeCompiler implements Visitor {
 
                                     String varName = varNode.operator + idNode.name;
 
-                                    if (hasVariable(varName) && !isOurVariable(varName)) {
+                                    if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                                         throwCompilerException("Can't localize lexical variable " + varName);
                                     }
 
@@ -3275,7 +3280,7 @@ public class BytecodeCompiler implements Visitor {
                                             nestedVarNode.operand instanceof IdentifierNode idNode) {
                                         String varName = nestedVarNode.operator + idNode.name;
 
-                                        if (hasVariable(varName) && !isOurVariable(varName)) {
+                                        if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                                             throwCompilerException("Can't localize lexical variable " + varName);
                                         }
 
@@ -3307,7 +3312,7 @@ public class BytecodeCompiler implements Visitor {
                                 String originalSigil = varNode.operator;
                                 String varName = originalSigil + idNode.name;
 
-                                if (hasVariable(varName) && !isOurVariable(varName)) {
+                                if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                                     throwCompilerException("Can't localize lexical variable " + varName);
                                 }
 
@@ -3345,7 +3350,7 @@ public class BytecodeCompiler implements Visitor {
                                 varRegs.add(rd);
                             } else {
                                 String varName = sigil + idNode.name;
-                                if (hasVariable(varName) && !isOurVariable(varName)) {
+                                if (hasVariable(varName) && !isOurVariable(varName) && !isReservedVariable(varName)) {
                                     throwCompilerException("Can't localize lexical variable " + varName);
                                 }
                                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
@@ -3592,6 +3597,15 @@ public class BytecodeCompiler implements Visitor {
                     emit(Opcodes.ARRAY_SIZE);
                     emitReg(rd);
                     emitReg(arrayReg);
+                    lastResultReg = rd;
+                } else if (currentCallContext == RuntimeContextType.RUNTIME) {
+                    // In RUNTIME context (e.g., return @a), check wantarray at runtime
+                    // and convert to scalar (count) if scalar context
+                    int rd = allocateOutputRegister();
+                    emit(Opcodes.SCALAR_IF_WANTARRAY);
+                    emitReg(rd);
+                    emitReg(arrayReg);
+                    emitReg(2); // wantarray is in register 2
                     lastResultReg = rd;
                 } else {
                     lastResultReg = arrayReg;

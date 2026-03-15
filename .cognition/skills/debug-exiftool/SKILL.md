@@ -7,6 +7,14 @@ triggers:
   - model
 ---
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 # Debugging Image::ExifTool Tests in PerlOnJava
 
 You are debugging failures in the Image::ExifTool test suite running under PerlOnJava (a Perl-to-JVM compiler/interpreter). Failures typically stem from missing Perl features or subtle behavior differences in PerlOnJava, not bugs in ExifTool itself.
@@ -14,6 +22,8 @@ You are debugging failures in the Image::ExifTool test suite running under PerlO
 ## Git Workflow
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
 
 ```bash
 git checkout -b fix/exiftool-issue-name
@@ -30,24 +40,23 @@ gh pr create --title "Fix: description" --body "Details"
 - **ExifTool test lib**: `Image-ExifTool-13.44/t/TestLib.pm` (exports `check`, `writeCheck`, `writeInfo`, `testCompare`, `binaryCompare`, `testVerbose`, `notOK`, `done`)
 - **ExifTool test data**: `Image-ExifTool-13.44/t/images/` (reference images)
 - **ExifTool reference output**: `Image-ExifTool-13.44/t/<TestName>_N.out` (expected tag output per sub-test)
-- **PerlOnJava unit tests**: `src/test/resources/unit/*.t` (mvn test suite, 154 tests)
+- **PerlOnJava unit tests**: `src/test/resources/unit/*.t` (make suite, 154 tests)
 - **Perl5 core tests**: `perl5_t/t/` (Perl 5 compatibility suite, run via `make test-gradle`)
 - **Fat JAR**: `target/perlonjava-3.0.0.jar`
 - **Launcher script**: `./jperl` (resolves JAR path, sets `$^X`)
 
 ## Building PerlOnJava
 
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 ```bash
-# Build JAR (required after any Java source change)
-mvn package -q -DskipTests
-
-# Run PerlOnJava's own unit test suite (154 tests, must all pass)
-mvn test
-
-# Run Perl5 core compatibility tests (perl5_t/t/*.t)
-make test-gradle
-# Or manually:
-perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json perl5_t/t
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
 ```
 
 ## Running ExifTool Tests
@@ -232,9 +241,9 @@ The `check()` function compares extracted tags against reference files `t/<TestN
 
 6. **Trace into PerlOnJava source** to find the bug. Use `JPERL_SHOW_FALLBACK=1` to check if large subs are hitting the interpreter path.
 
-7. **Fix in PerlOnJava**, rebuild (`mvn package -q -DskipTests`), re-run the ExifTool test.
+7. **Fix in PerlOnJava**, rebuild (`make dev`), re-run the ExifTool test.
 
-8. **Verify no regressions**: Run `mvn test` (154 unit tests) and check `perl5_t/t/op/lexsub.t` (sensitive to block/sub emission changes).
+8. **Verify no regressions**: Run `make` (154 unit tests) and check `perl5_t/t/op/lexsub.t` (sensitive to block/sub emission changes).
 
 ## Interpreter Fallback Architecture
 

@@ -1,10 +1,20 @@
 # Profile PerlOnJava
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+
+**DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
+
+- NEVER use `git stash` to temporarily revert changes
+- INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
+- This warning exists because completed work was lost during debugging
+
 Profile and optimize PerlOnJava runtime performance using Java Flight Recorder.
 
 ## Git Workflow
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
+
+**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
 
 ```bash
 git checkout -b perf/optimization-name
@@ -113,12 +123,16 @@ done
 
 ### 7. Build and Test
 
-```bash
-# Rebuild after changes
-mvn package -q -DskipTests
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
-# Run tests to verify correctness
-mvn test -q
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during profiling) |
+
+```bash
+make       # Standard build - compiles and runs tests
+make dev   # Quick build - compiles only, NO tests
 ```
 
 ## Example Session

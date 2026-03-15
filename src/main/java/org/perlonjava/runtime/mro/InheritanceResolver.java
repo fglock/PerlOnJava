@@ -12,7 +12,7 @@ import java.util.*;
 public class InheritanceResolver {
     // Cache for linearized class hierarchies
     static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
-    private static final boolean TRACE_METHOD_RESOLUTION = false;
+    private static final boolean TRACE_METHOD_RESOLUTION = false;  // Set to true for debugging
     // Per-package MRO settings
     private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
     // Method resolution cache

@@ -90,24 +90,23 @@ public class RuntimeStash extends RuntimeHash {
      */
     public RuntimeScalar get(String key) {
         if (!elements.containsKey(key)) {
-            // Check if any slots exist for this glob name
+            // Check if any slots exist for this glob name, without auto-creating entries
             String fullKey = namespace + key;
 
-            // Check if the variable exists by trying to get it and checking if it's defined
-            RuntimeScalar var = GlobalVariable.getGlobalVariable(fullKey);
-            boolean hasScalarSlot = var.getDefinedBoolean();
+            // Check if the scalar slot exists AND is defined (don't auto-create)
+            boolean hasScalarSlot = GlobalVariable.isGlobalVariableDefined(fullKey);
 
             boolean hasArraySlot = GlobalVariable.existsGlobalArray(fullKey);
             boolean hasHashSlot = GlobalVariable.existsGlobalHash(fullKey);
 
-            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullKey);
-            boolean hasCodeSlot = codeRef.type == RuntimeScalarType.CODE && codeRef.getDefinedBoolean();
+            // Check if the code slot exists AND is defined (don't auto-create)
+            boolean hasCodeSlot = GlobalVariable.isGlobalCodeRefDefined(fullKey);
 
-            RuntimeScalar ioRef = GlobalVariable.getGlobalIO(fullKey);
-            boolean hasIOSlot = ioRef.type == RuntimeScalarType.GLOB && ioRef.value instanceof RuntimeIO;
+            // Check if the IO slot exists AND has a real handle (don't auto-create)
+            boolean hasIOSlot = GlobalVariable.isGlobalIODefined(fullKey);
 
-            RuntimeScalar formatRef = GlobalVariable.getGlobalFormatRef(fullKey);
-            boolean hasFormatSlot = formatRef.type == RuntimeScalarType.FORMAT && formatRef.getDefinedBoolean();
+            // Check if the format slot exists AND is defined (don't auto-create)
+            boolean hasFormatSlot = GlobalVariable.isGlobalFormatDefined(fullKey);
 
             boolean hasSlots = hasScalarSlot || hasArraySlot || hasHashSlot || hasCodeSlot || hasIOSlot || hasFormatSlot;
 

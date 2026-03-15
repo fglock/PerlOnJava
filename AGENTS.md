@@ -1,5 +1,25 @@
 # PerlOnJava Agent Guidelines
 
+## ⚠️⚠️⚠️ CRITICAL WARNING: NEVER USE `git stash` ⚠️⚠️⚠️
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   DANGER: DO NOT USE `git stash` DURING ACTIVE WORK!                        ║
+║                                                                              ║
+║   Changes can be SILENTLY LOST when using git stash/stash pop.              ║
+║   This has caused loss of completed work during debugging sessions.         ║
+║                                                                              ║
+║   INSTEAD:                                                                   ║
+║   - Commit your changes to a WIP branch before testing alternatives         ║
+║   - Use `git diff > backup.patch` to save uncommitted changes               ║
+║   - Never stash to "temporarily" revert - you WILL lose work                ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Project Rules
 
 ### Progress Tracking for Multi-Phase Work
@@ -42,11 +62,17 @@ Example format at the end of a design doc:
 
 ### Testing
 
-- Run `./gradlew test` before committing
+**ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
+
+| Command | What it does |
+|---------|--------------|
+| `make` | Build + run all unit tests (use before committing) |
+| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+
 - For interpreter changes, test with both backends:
   ```bash
-  java -jar target/perlonjava.jar -e 'code'           # JVM backend
-  java -jar target/perlonjava.jar --int -e 'code'     # Interpreter
+  ./jperl -e 'code'           # JVM backend
+  ./jperl --int -e 'code'     # Interpreter
   ```
 
 ### Git Workflow

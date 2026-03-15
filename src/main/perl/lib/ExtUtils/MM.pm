@@ -7,12 +7,20 @@ our @ISA;
 
 # MM is a compatibility shim that some modules expect.
 # In traditional MakeMaker, MM is the platform-specific Makefile generator.
-# In PerlOnJava, we don't generate Makefiles, but we provide the methods
-# needed by CPAN.pm (parse_version, maybe_command).
+# In PerlOnJava, we use MM_PerlOnJava which handles the JVM-specific details.
 
 # Load platform-specific module and set up inheritance
 BEGIN {
-    if ($^O eq 'MSWin32') {
+    # Detect PerlOnJava environment - works on both Unix and Windows
+    # Check for PERLONJAVA_JAR env var or jperl in the interpreter path
+    my $Is_PerlOnJava = exists $ENV{PERLONJAVA_JAR} 
+                     || $^X =~ /jperl(?:\.bat|\.cmd)?$/i
+                     || exists $ENV{PERLONJAVA_LIB};
+    
+    if ($Is_PerlOnJava) {
+        require ExtUtils::MM_PerlOnJava;
+        push @ISA, 'ExtUtils::MM_PerlOnJava';
+    } elsif ($^O eq 'MSWin32') {
         require ExtUtils::MM_Win32;
         push @ISA, 'ExtUtils::MM_Win32';
     } else {
