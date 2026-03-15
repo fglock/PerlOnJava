@@ -489,16 +489,31 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 
 ### Next Steps
 
-1. **Fix `print { a => 2 }` case** - Pre-existing limitation. When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
+1. **Fix `around` missing method detection** - Runtime bug in `or do {}` construct:
+   ```perl
+   # In Class::Method::Modifiers::install_modifier:
+   my $hit = $into->can($name) or do {
+       die "Method not found";  # This block doesn't execute when it should
+   };
+   ```
+   - When `around missing_method => sub {...}` is called via Moo's closure chain
+   - The `or do {}` block doesn't execute even when `can` returns undef
+   - `$hit` incorrectly gets assigned a code reference
+   - **Root cause**: Something in the call context (after `_check_tracked` call) 
+     affects how the `or do {}` expression is evaluated
+   - **Workaround**: Direct calls to CMM::install_modifier work correctly
+   - **Impact**: Test t/moo.t test 6 fails with StackOverflowError
+
+2. **Fix `print { a => 2 }` case** - Pre-existing limitation. When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
    ```perl
    print { a => 2 }         # Perl: prints HASH(0x...) - PerlOnJava: syntax error
    print { a => 2 } "text"  # Perl: syntax error (correct)
    ```
    The parser needs to detect hash-like content and NOT treat it as a filehandle.
 
-2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+3. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
 
-3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+4. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
