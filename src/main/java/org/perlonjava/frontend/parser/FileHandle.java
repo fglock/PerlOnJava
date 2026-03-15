@@ -81,17 +81,82 @@ public class FileHandle {
         // Perl allows {FILEHANDLE} syntax for disambiguation
         if (peek(parser).text.equals("{")) {
             // Before consuming {, check if this looks like an anonymous hash
-            // { identifier => ... } or { identifier , ... } is a hash, not a filehandle block
+            // Hash patterns include:
+            // { identifier => ... } or { identifier , ... }
+            // { "string" , ... } or { "string" => ... }
+            // { 'string' , ... } or { 'string' => ... }
+            // { number , ... }
             int idx = parser.tokenIndex + 1;
+            
+            // Skip whitespace tokens
+            while (idx < parser.tokens.size() && 
+                   parser.tokens.get(idx).type == LexerTokenType.WHITESPACE) {
+                idx++;
+            }
+            
             if (idx < parser.tokens.size()) {
                 LexerToken afterBrace = parser.tokens.get(idx);
+                
+                // Check for identifier followed by => or ,
                 if (afterBrace.type == LexerTokenType.IDENTIFIER) {
-                    // Check what follows the identifier
                     int nextIdx = idx + 1;
+                    // Skip whitespace
+                    while (nextIdx < parser.tokens.size() && 
+                           parser.tokens.get(nextIdx).type == LexerTokenType.WHITESPACE) {
+                        nextIdx++;
+                    }
                     if (nextIdx < parser.tokens.size()) {
                         LexerToken afterIdent = parser.tokens.get(nextIdx);
                         if (afterIdent.text.equals("=>") || afterIdent.text.equals(",")) {
                             // This is { a => ... } or { a, ... } - it's a hash, not filehandle
+                            return null;
+                        }
+                    }
+                }
+                
+                // Check for string literal followed by => or ,
+                // Strings are lexed with the opening quote as OPERATOR
+                if (afterBrace.type == LexerTokenType.OPERATOR && 
+                    (afterBrace.text.equals("\"") || afterBrace.text.equals("'"))) {
+                    // Scan forward to find the closing quote, then check for , or =>
+                    // For simplicity, look for the pattern: quote ... quote (comma or =>)
+                    String quoteChar = afterBrace.text;
+                    int scanIdx = idx + 1;
+                    int depth = 1;
+                    while (scanIdx < parser.tokens.size() && depth > 0) {
+                        LexerToken scanToken = parser.tokens.get(scanIdx);
+                        if (scanToken.type == LexerTokenType.OPERATOR && scanToken.text.equals(quoteChar)) {
+                            depth--;
+                        }
+                        scanIdx++;
+                    }
+                    // Skip whitespace after the closing quote
+                    while (scanIdx < parser.tokens.size() && 
+                           parser.tokens.get(scanIdx).type == LexerTokenType.WHITESPACE) {
+                        scanIdx++;
+                    }
+                    // Check for , or =>
+                    if (scanIdx < parser.tokens.size()) {
+                        LexerToken afterString = parser.tokens.get(scanIdx);
+                        if (afterString.text.equals(",") || afterString.text.equals("=>")) {
+                            // This is { "a", ... } or { "a" => ... } - it's a hash
+                            return null;
+                        }
+                    }
+                }
+                
+                // Check for number followed by ,
+                if (afterBrace.type == LexerTokenType.NUMBER) {
+                    int nextIdx = idx + 1;
+                    // Skip whitespace
+                    while (nextIdx < parser.tokens.size() && 
+                           parser.tokens.get(nextIdx).type == LexerTokenType.WHITESPACE) {
+                        nextIdx++;
+                    }
+                    if (nextIdx < parser.tokens.size()) {
+                        LexerToken afterNum = parser.tokens.get(nextIdx);
+                        if (afterNum.text.equals(",")) {
+                            // This is { 1, ... } - it's a hash
                             return null;
                         }
                     }
