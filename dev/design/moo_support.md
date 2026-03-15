@@ -496,13 +496,31 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
        die "Method not found";  # This block doesn't execute when it should
    };
    ```
-   - When `around missing_method => sub {...}` is called via Moo's closure chain
-   - The `or do {}` block doesn't execute even when `can` returns undef
-   - `$hit` incorrectly gets assigned a code reference
-   - **Root cause**: Something in the call context (after `_check_tracked` call) 
-     affects how the `or do {}` expression is evaluated
-   - **Workaround**: Direct calls to CMM::install_modifier work correctly
-   - **Impact**: Test t/moo.t test 6 fails with StackOverflowError
+   **Detailed Analysis (2026-03-15):**
+   - Bug only appears when calling CMM through `Moo::_Utils::_install_modifier` after
+     `Moo->import()` has been run (i.e., after `use Moo;`)
+   - Direct calls to CMM::install_modifier always work correctly
+   - The bug is triggered specifically by `_install_tracked` being called during Moo's import
+   - `_install_tracked` calls `weaken` on `%EXPORTS` and `_install_coderef`
+   - Manually replicating these operations doesn't trigger the bug
+   - The bug appears to be in how PerlOnJava's JVM bytecode handles compiled modules
+   
+   **Reproduction steps:**
+   ```perl
+   package MyClass;
+   use Moo;  # This enables the bug
+   
+   # This should die but doesn't:
+   Moo::_Utils::_install_modifier("MyClass", "around", "missing", sub {});
+   
+   # But this works correctly:
+   Class::Method::Modifiers::install_modifier("MyClass", "around", "missing", sub {});
+   ```
+   
+   **Impact**: Test t/moo.t test 6 fails with StackOverflowError
+   
+   **Possible workaround**: Patch Moo to call CMM directly instead of through _install_modifier,
+   or rewrite `or do {}` as explicit `if (!$hit) {...}` in CMM
 
 2. **Fix `print { a => 2 }` case** - Pre-existing limitation. When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
    ```perl
