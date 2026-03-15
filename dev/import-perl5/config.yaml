@@ -524,6 +524,28 @@ imports:
     target: src/main/perl/lib/CPAN/Meta/Requirements
     type: directory
 
+  # ExtUtils::MakeMaker - PerlOnJava custom implementations
+  # These are protected because they have PerlOnJava-specific logic
+  
+  # MakeMaker.pm - Custom implementation that directly installs pure-Perl modules
+  # and generates MYMETA.yml for CPAN.pm dependency resolution
+  - source: perl5/cpan/ExtUtils-MakeMaker/lib/ExtUtils/MakeMaker.pm
+    target: src/main/perl/lib/ExtUtils/MakeMaker.pm
+    protected: true
+
+  # MM.pm - Modified to detect PerlOnJava and load MM_PerlOnJava
+  - source: perl5/cpan/ExtUtils-MakeMaker/lib/ExtUtils/MM.pm
+    target: src/main/perl/lib/ExtUtils/MM.pm
+    protected: true
+
+  # MM_Unix.pm - Minimal stub with parse_version for CPAN.pm
+  - source: perl5/cpan/ExtUtils-MakeMaker/lib/ExtUtils/MM_Unix.pm
+    target: src/main/perl/lib/ExtUtils/MM_Unix.pm
+    protected: true
+
+  # MM_PerlOnJava.pm - PerlOnJava-specific MakeMaker subclass (no upstream source)
+  # This file is created by PerlOnJava, not imported from perl5
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
