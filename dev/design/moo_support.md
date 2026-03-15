@@ -527,6 +527,26 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 5. **method-generate-accessor.t** (8 failures) - Various edge cases
 6. **Other minor issues** - load_module_role_tiny.t, coerce-1.t, etc.
 
+- [x] Phase 20: Fix isa("main::ClassName") not matching class blessed as "ClassName" (2026-03-15)
+  - Root cause: `isa("main::Foo")` was comparing literally against linearized class list containing `"Foo"`
+  - In Perl, `main::Foo` and `Foo` are equivalent class names for the main package
+  - **Universal.java fixes**:
+    - Normalize the `argString` before comparing: strip `main::` or `::` prefix
+    - This allows `$obj->isa("main::Foo")` to match when blessed as `"Foo"`
+  - Fixes uni/universal.t tests 3 and 6 (and similar tests)
+  - Test: `bless({}, "Foo")->isa("main::Foo")` now returns true
+
+- [x] Phase 21: Fix `undef %hash` not clearing hashes in scalar context (2026-03-15)
+  - Root cause: Phase 11's `emitRuntimeContextConversion()` was being applied to `undef %hash`
+  - The `handleUndefOperator` used `RuntimeContextType.RUNTIME` to visit the operand
+  - When the containing subroutine was called in scalar context (e.g., `my $r = func()`),
+    the hash was converted to a scalar (key count) before `undefine()` was called
+  - This caused `undef %fetched` in ExifTool's PDF.pm to silently do nothing
+  - **EmitOperator.java fix**:
+    - Changed `handleUndefOperator` to use `RuntimeContextType.LIST` instead of `RUNTIME`
+    - This ensures the actual hash/array container is passed to `undefine()`, not a scalar
+  - ExifTool PDF.t now passes all 26 tests (was 7/26)
+
 ### Next Steps
 
 1. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace

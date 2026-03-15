@@ -871,7 +871,10 @@ public class EmitOperator {
             }
             return;
         }
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+        // Use LIST context to avoid runtime context conversion that would convert
+        // hashes/arrays to scalars when the containing subroutine is called in scalar context.
+        // The undef operator needs the actual container to call undefine() on it.
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeList",
                 "undefine",
