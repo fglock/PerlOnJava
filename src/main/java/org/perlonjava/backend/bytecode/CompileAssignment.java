@@ -34,7 +34,7 @@ public class CompileAssignment {
             if ((sigil.equals("$") || sigil.equals("@") || sigil.equals("%") || sigil.equals("*"))
                     && sigilOp.operand instanceof IdentifierNode idNode) {
                 String varName = sigil + idNode.name;
-                if (bc.hasVariable(varName) && !bc.isOurVariable(varName)) {
+                if (bc.hasVariable(varName) && !bc.isOurVariable(varName) && !bc.isReservedVariable(varName)) {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
