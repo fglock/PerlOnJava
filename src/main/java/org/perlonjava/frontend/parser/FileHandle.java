@@ -80,6 +80,23 @@ public class FileHandle {
         // Check if the file handle is enclosed in curly braces
         // Perl allows {FILEHANDLE} syntax for disambiguation
         if (peek(parser).text.equals("{")) {
+            // Before consuming {, check if this looks like an anonymous hash
+            // { identifier => ... } or { identifier , ... } is a hash, not a filehandle block
+            int idx = parser.tokenIndex + 1;
+            if (idx < parser.tokens.size()) {
+                LexerToken afterBrace = parser.tokens.get(idx);
+                if (afterBrace.type == LexerTokenType.IDENTIFIER) {
+                    // Check what follows the identifier
+                    int nextIdx = idx + 1;
+                    if (nextIdx < parser.tokens.size()) {
+                        LexerToken afterIdent = parser.tokens.get(nextIdx);
+                        if (afterIdent.text.equals("=>") || afterIdent.text.equals(",")) {
+                            // This is { a => ... } or { a, ... } - it's a hash, not filehandle
+                            return null;
+                        }
+                    }
+                }
+            }
             TokenUtils.consume(parser);
             hasBracket = true;
         }
@@ -97,11 +114,12 @@ public class FileHandle {
         // Handle bareword file handles (most common case)
         // Examples: STDOUT, STDERR, STDIN, or user-defined handles like LOG, FILE, etc.
         else if (token.type == LexerTokenType.IDENTIFIER) {
-            // Check if this is a function call: identifier followed by (
+            // Check if this is a function call or method chain
             // In that case, we need to parse it as an expression, not a bareword
             LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
-            if (hasBracket && nextToken.text.equals("(")) {
-                // This is a function call like { get_fh() } - parse as expression
+            if (hasBracket && (nextToken.text.equals("(") || nextToken.text.equals("->"))) {
+                // This is a function call like { get_fh() } or method chain like { shift->stdout }
+                // Parse as expression to capture the full call/chain
                 fileHandle = parser.parseExpression(0);
             } else {
                 // Try to parse as a bareword identifier
@@ -119,14 +137,19 @@ public class FileHandle {
         // Handle scalar variable file handles
         // Modern Perl idiom: open my $fh, '<', 'filename'; print $fh "text";
         else if (token.text.equals("$")) {
-            // Parse the scalar variable
-            fileHandle = ParsePrimary.parsePrimary(parser);
+            if (hasBracket) {
+                // When bracketed, parse as a full expression to capture method chains
+                // Example: print { $self->stdout } "text"
+                // This ensures $self->stdout is parsed as a complete expression
+                fileHandle = parser.parseExpression(0);
+            } else {
+                // Parse the scalar variable
+                fileHandle = ParsePrimary.parsePrimary(parser);
 
-            // When not bracketed, we need to disambiguate between:
-            // - print $fh "text";  # $fh is a file handle
-            // - print $fh + 2;     # $fh is part of an expression
-            // - print $fh;         # ambiguous case
-            if (!hasBracket) {
+                // When not bracketed, we need to disambiguate between:
+                // - print $fh "text";  # $fh is a file handle
+                // - print $fh + 2;     # $fh is part of an expression
+                // - print $fh;         # ambiguous case
                 // Check if the next token is an infix operator
                 // If so, this is likely an expression, not a file handle
                 String nextText = peek(parser).text;
