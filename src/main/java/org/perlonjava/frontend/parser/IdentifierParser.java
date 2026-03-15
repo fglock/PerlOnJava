@@ -199,6 +199,14 @@ public class IdentifierParser {
         // Special case for special variables like `$|`, `$'`, etc.
         char firstChar = token.text.charAt(0);
         if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?".indexOf(firstChar) >= 0) {
+            // Special case: * followed by { is glob dereference when inside braces
+            // @{*{expr}} should be parsed as @{ *{expr} }, not @*{expr} (hash slice on @*)
+            // But @*{key} outside braces IS a hash slice on @*, so only apply when insideBraces
+            // This is critical for Moo's extends: @{*{_getglob("${target}::ISA")}} = @_
+            // Without this fix, *{expr} is incorrectly parsed as special variable $* followed by {expr}
+            if (insideBraces && firstChar == '*' && nextToken.text.equals("{")) {
+                return null; // Force fallback to expression parsing for glob dereference
+            }
             // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
             if (firstChar == '\'' && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
                 // This is $'foo which means $main::foo

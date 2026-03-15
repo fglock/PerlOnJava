@@ -737,7 +737,7 @@ public class EmitSubroutine {
      * @param blockDispatcher The label for this block dispatcher
      * @param baseSpills      Array of spill references that need to be cleaned up
      */
-    private static void emitBlockDispatcher(MethodVisitor mv, EmitterVisitor emitterVisitor,
+    static void emitBlockDispatcher(MethodVisitor mv, EmitterVisitor emitterVisitor,
                                             Label blockDispatcher, JavaClassInfo.SpillRef[] baseSpills) {
         Label propagateToCaller = new Label();
         Label checkLoopLabels = new Label();

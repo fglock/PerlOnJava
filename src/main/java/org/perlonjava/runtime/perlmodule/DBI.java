@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.sql.*;
@@ -83,10 +84,10 @@ public class DBI extends PerlModuleBase {
         }
         RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + "() failed: " + getGlobalVariable("DBI::errstr"));
         if (handle.get("RaiseError").getBoolean()) {
-            Carp.croak(new RuntimeArray(msg), RuntimeContextType.VOID);
+            throw new PerlCompilerException(msg.toString());
         }
         if (handle.get("PrintError").getBoolean()) {
-            Carp.carp(new RuntimeArray(msg), RuntimeContextType.VOID);
+            WarnDie.warn(msg, RuntimeScalarCache.scalarEmptyString);
         }
         return new RuntimeList();
     }

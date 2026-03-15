@@ -190,6 +190,7 @@ public class Storable extends PerlModuleBase {
     private static RuntimeScalar deserializeFromYAML(String yaml) {
         LoadSettings settings = LoadSettings.builder()
                 .setSchema(new CoreSchema())
+                .setCodePointLimit(50 * 1024 * 1024)  // 50MB limit for large CPAN metadata files
                 .build();
 
         Load load = new Load(settings);

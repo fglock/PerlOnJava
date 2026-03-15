@@ -18,6 +18,15 @@
 
 imports:
   # Perl modules imported to src/main/perl/lib/
+
+  # Carp - Error reporting module (replacing minimal Java implementation)
+  # Required by many CPAN modules including Moo
+  - source: perl5/dist/Carp/lib/Carp.pm
+    target: src/main/perl/lib/Carp.pm
+
+  - source: perl5/dist/Carp/lib/Carp/Heavy.pm
+    target: src/main/perl/lib/Carp/Heavy.pm
+
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 
