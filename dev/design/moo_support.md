@@ -547,11 +547,51 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
     - This ensures the actual hash/array container is passed to `undefine()`, not a scalar
   - ExifTool PDF.t now passes all 26 tests (was 7/26)
 
+- [x] Phase 22: Fix stash keys for nested packages and overload &{} handling (2026-03-15)
+  - **Two fixes in this phase**:
+  
+  - **Fix 1: Stash keys for nested packages must include trailing `::`**
+    - Root cause: `keys %Foo::Bar::` was returning `Baz` instead of `Baz::` for nested packages
+    - This broke `Role::Tiny::_load_module` which uses `grep !/::\z/, keys %{_getstash($module)}`
+      to detect if a module's stash has actual symbols vs just sub-package markers
+    - **HashSpecialVariable.java fix**:
+      - Changed `entryKey = remainingKey.substring(0, nextSeparatorIndex)` 
+        to `entryKey = remainingKey.substring(0, nextSeparatorIndex + 2)`
+      - Now stash keys correctly include `::` suffix for sub-packages
+    - Fixes t/load_module_role_tiny.t (0/2 → 2/2)
+
+  - **Fix 2: \&{$blessed_obj} must throw "Not a subroutine reference" for objects without &{} overload**
+    - Root cause: `\&{$obj}` on a blessed object without `&{}` overload was creating a symbolic
+      reference instead of throwing an error
+    - In Perl: `\&{bless({}, "Foo")}` throws "Not a subroutine reference"
+    - In PerlOnJava: was creating CODE ref pointing to non-existent `&Foo=HASH(...)` sub
+    - **RuntimeCode.java fix (createCodeReference)**:
+      - Check `blessedId()`: negative = blessed with overload, positive = blessed without, 0 = not blessed
+      - For `blessId != 0` (blessed), try `&{}` overload if available
+      - If no `&{}` overload exists, throw "Not a subroutine reference"
+      - Also added check for unblessed REFERENCE types to throw same error
+    - Fixes t/method-generate-accessor.t (41/49 → 46/49), t/coerce-1.t (0/2 → 2/2)
+
+### Current Status
+
+**Test Results (after Phase 22):**
+- 61/71 test programs passing (86%)
+- ~765/829 subtests passing (92%)
+
+**Remaining Failures (categorized):**
+1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
+2. **croak-locations.t** (29 failures) - Carp reports `(eval N)` instead of actual filename
+3. **demolish tests** (6 failures) - Expected, DESTROY not supported
+4. **method-generate-accessor.t** (3 failures) - quote_sub inlinification issues
+5. **moo-utils-_subname-Sub-Name.t** (1 failure) - Expected, we have Sub::Util (no fallback to Sub::Name)
+6. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+7. **overloaded-coderefs.t** - Expected, B::Deparse not available
+
 ### Next Steps
 
-1. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace
+1. **Investigate croak-locations.t** - Carp reports `(eval N)` instead of actual filename
 
-2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
+2. **Investigate quote_sub issues** - Sub::Quote inlinification not working correctly for coerce/trigger/isa
 
 3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 

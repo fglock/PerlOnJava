@@ -104,9 +104,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     if (nextSeparatorIndex == -1) {
                         entryKey = remainingKey;
                     } else {
-                        // Stash keys for nested packages are reported without the trailing "::"
-                        // (e.g. "Foo" instead of "Foo::")
-                        entryKey = remainingKey.substring(0, nextSeparatorIndex);
+                        // Stash keys for nested packages include the trailing "::"
+                        // (e.g. "Foo::" not "Foo") - this is how Perl indicates sub-packages
+                        entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
                     }
 
                     // Special sort variables should not show up in stash enumeration
@@ -118,9 +118,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                         continue;
                     }
 
-                    String globName = (nextSeparatorIndex == -1)
-                            ? (namespace + entryKey)
-                            : (namespace + entryKey + "::");
+                    // entryKey already includes "::" for nested packages
+                    String globName = namespace + entryKey;
 
                     // Add the entry only if it's not already in the set of unique keys
                     if (uniqueKeys.add(entryKey)) {
