@@ -1367,6 +1367,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeCreateList(bytecode, pc, registers);
                             }
 
+                            case Opcodes.SCALAR_IF_WANTARRAY -> {
+                                pc = InlineOpcodeHandler.executeScalarIfWantarray(bytecode, pc, registers, callContext);
+                            }
+
                             // =================================================================
                             // STRING OPERATIONS
                             // =================================================================

@@ -3593,6 +3593,15 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(rd);
                     emitReg(arrayReg);
                     lastResultReg = rd;
+                } else if (currentCallContext == RuntimeContextType.RUNTIME) {
+                    // In RUNTIME context (e.g., return @a), check wantarray at runtime
+                    // and convert to scalar (count) if scalar context
+                    int rd = allocateOutputRegister();
+                    emit(Opcodes.SCALAR_IF_WANTARRAY);
+                    emitReg(rd);
+                    emitReg(arrayReg);
+                    emitReg(2); // wantarray is in register 2
+                    lastResultReg = rd;
                 } else {
                     lastResultReg = arrayReg;
                 }
