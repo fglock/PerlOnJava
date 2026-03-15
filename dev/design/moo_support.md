@@ -463,6 +463,30 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - **Result**: All "Odd number of elements in anonymous hash" warnings eliminated from Moo tests
   - Test: `print { $self->stdout } @_` now works correctly
 
+- [x] Phase 16: Fix local @_ in string eval context (2026-03-15)
+  - Root cause: `local @_` inside string eval was throwing "Can't localize lexical variable @_"
+  - The issue: @_ is registered as "reserved" in the symbol table (register 1), but the 
+    localization check only excluded "our" variables
+  - **BytecodeCompiler.java fixes**:
+    - Added `isReservedVariable()` method to check for "reserved" declaration type
+    - Updated 7 occurrences of the localization check to also exclude reserved variables
+  - **CompileAssignment.java**: Updated 1 occurrence
+  - This fixes Sub::Quote generated code that uses `local @_`
+
+### Current Status
+
+**Test Results (after Phase 16):**
+- 51/71 test programs passing (72%)
+- 730/808 subtests passing (90%)
+- No "Odd number of elements" warnings
+
+**Remaining Failures (categorized):**
+1. **DEMOLISH tests** - Expected failures (DESTROY not supported)
+2. **accessor-weaken tests** - Weak references not supported in Java GC
+3. **croak-locations tests** - Carp reports `(eval N)` instead of actual filename
+4. **Around missing method** - StackOverflowError instead of error message
+5. **Role composition** - ISA ordering issues
+
 ### Next Steps
 
 1. **Fix `print { a => 2 }` case** - Pre-existing limitation. When `{...}` contains `=>`, it's an anonymous hash being printed, not a filehandle block:
