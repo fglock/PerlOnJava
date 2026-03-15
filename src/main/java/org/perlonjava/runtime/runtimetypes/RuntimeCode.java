@@ -1426,6 +1426,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Handle SUPER::method calls
             if (methodName.startsWith("SUPER::")) {
                 method = NextMethod.superMethod(currentSub, methodName);
+            } else if (methodName.contains("::SUPER::")) {
+                // Handle Package::SUPER::method syntax
+                // This is used by Moo to explicitly specify which package's parent to use
+                // Example: $class->GrandChild::SUPER::new(@_)
+                int superIdx = methodName.indexOf("::SUPER::");
+                String packageName = methodName.substring(0, superIdx);
+                String actualMethod = methodName.substring(superIdx + 9); // skip "::SUPER::"
+                method = InheritanceResolver.findMethodInHierarchy(
+                        actualMethod,
+                        packageName,
+                        methodName,  // cache key includes the full qualified name
+                        1   // start looking in the parent package
+                );
             } else {
                 // Fully qualified method name - call the exact subroutine
                 method = GlobalVariable.getGlobalCodeRef(methodName);
