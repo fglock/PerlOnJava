@@ -271,6 +271,25 @@ sub _create_stub_makefile {
         return;
     };
     
+    # Get the Perl interpreter path
+    my $perl = $^X;
+    
+    # Build test command - run all t/*.t files
+    my $test_cmd;
+    if (-d 't') {
+        # Use prove-like test running
+        $test_cmd = qq{\@echo "Running tests..."; \\
+\tfor t in t/*.t; do \\
+\t\tif [ -f "\$\$t" ]; then \\
+\t\t\techo "# \$\$t"; \\
+\t\t\t$perl "\$\$t" || exit 1; \\
+\t\tfi; \\
+\tdone; \\
+\techo "All tests passed."};
+    } else {
+        $test_cmd = q{\@echo "PerlOnJava: No tests found (no t/ directory)"};
+    }
+    
     # Minimal Makefile that works with CPAN.pm
     print $fh <<"MAKEFILE";
 # Stub Makefile for PerlOnJava
@@ -278,7 +297,7 @@ sub _create_stub_makefile {
 
 NAME = $name
 VERSION = $version
-PERL = $^X
+PERL = $perl
 INSTALLDIRS = site
 
 # PerlOnJava installs modules directly - these are no-ops
@@ -286,7 +305,7 @@ all:
 \t\@echo "PerlOnJava: Module already installed"
 
 test:
-\t\@echo "PerlOnJava: Tests skipped (module already installed)"
+\t$test_cmd
 
 install:
 \t\@echo "PerlOnJava: Module already installed to $INSTALL_BASE"
