@@ -236,6 +236,9 @@ sub _install_pure_perl {
     # Create a stub Makefile to satisfy CPAN.pm's check
     _create_stub_makefile($name, $version, $args);
     
+    # Create MYMETA.yml for CPAN.pm dependency resolution
+    _create_mymeta($name, $version, $args);
+    
     return PerlOnJava::MM::Installed->new($args);
 }
 
@@ -274,20 +277,13 @@ sub _create_stub_makefile {
     # Get the Perl interpreter path
     my $perl = $^X;
     
-    # Build test command - run all t/*.t files
+    # Build test command - run all t/*.t files using Perl for cross-platform compatibility
     my $test_cmd;
     if (-d 't') {
-        # Use prove-like test running
-        $test_cmd = qq{\@echo "Running tests..."; \\
-\tfor t in t/*.t; do \\
-\t\tif [ -f "\$\$t" ]; then \\
-\t\t\techo "# \$\$t"; \\
-\t\t\t$perl "\$\$t" || exit 1; \\
-\t\tfi; \\
-\tdone; \\
-\techo "All tests passed."};
+        # Use Perl one-liner with Test::Harness for cross-platform test running
+        $test_cmd = qq{$perl -MTest::Harness -e "runtests(glob(q{t/*.t}))"};
     } else {
-        $test_cmd = q{\@echo "PerlOnJava: No tests found (no t/ directory)"};
+        $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
     
     # Minimal Makefile that works with CPAN.pm
@@ -319,6 +315,80 @@ distclean: clean
 
 .PHONY: all test install clean realclean distclean
 MAKEFILE
+
+    close $fh;
+}
+
+sub _create_mymeta {
+    my ($name, $version, $args) = @_;
+    
+    # Create MYMETA.yml for CPAN.pm dependency resolution
+    # This allows CPAN.pm to detect and install prerequisites
+    
+    my $mymeta = 'MYMETA.yml';
+    
+    open my $fh, '>', $mymeta or do {
+        warn "Note: Could not create MYMETA.yml: $!\n";
+        return;
+    };
+    
+    # Build prerequisites section
+    my $prereqs = '';
+    if ($args->{PREREQ_PM} && %{$args->{PREREQ_PM}}) {
+        $prereqs .= "requires:\n";
+        for my $mod (sort keys %{$args->{PREREQ_PM}}) {
+            my $ver = $args->{PREREQ_PM}{$mod} || 0;
+            $prereqs .= "  $mod: '$ver'\n";
+        }
+    }
+    
+    if ($args->{BUILD_REQUIRES} && %{$args->{BUILD_REQUIRES}}) {
+        $prereqs .= "build_requires:\n";
+        for my $mod (sort keys %{$args->{BUILD_REQUIRES}}) {
+            my $ver = $args->{BUILD_REQUIRES}{$mod} || 0;
+            $prereqs .= "  $mod: '$ver'\n";
+        }
+    }
+    
+    if ($args->{TEST_REQUIRES} && %{$args->{TEST_REQUIRES}}) {
+        $prereqs .= "test_requires:\n";
+        for my $mod (sort keys %{$args->{TEST_REQUIRES}}) {
+            my $ver = $args->{TEST_REQUIRES}{$mod} || 0;
+            $prereqs .= "  $mod: '$ver'\n";
+        }
+    }
+    
+    if ($args->{CONFIGURE_REQUIRES} && %{$args->{CONFIGURE_REQUIRES}}) {
+        $prereqs .= "configure_requires:\n";
+        for my $mod (sort keys %{$args->{CONFIGURE_REQUIRES}}) {
+            my $ver = $args->{CONFIGURE_REQUIRES}{$mod} || 0;
+            $prereqs .= "  $mod: '$ver'\n";
+        }
+    }
+    
+    # Convert NAME to abstract (guess from module name)
+    my $abstract = $args->{ABSTRACT} || "$name module";
+    
+    print $fh <<"MYMETA";
+---
+abstract: '$abstract'
+author:
+  - 'Unknown'
+build_requires: {}
+dynamic_config: 0
+generated_by: 'ExtUtils::MakeMaker (PerlOnJava)'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: $name
+no_index:
+  directory:
+    - t
+    - inc
+$prereqs
+version: '$version'
+MYMETA
 
     close $fh;
 }
