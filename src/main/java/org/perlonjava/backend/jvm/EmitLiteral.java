@@ -521,6 +521,10 @@ public class EmitLiteral {
         if (contextType == RuntimeContextType.SCALAR) {
             // In scalar context, all elements are treated as scalars
             returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
+        } else if (contextType == RuntimeContextType.RUNTIME) {
+            // In RUNTIME context, array/hash elements may have been converted to RuntimeBase
+            // via emitRuntimeContextConversion(), so we must use the generic add(RuntimeBase)
+            returnType = RuntimeDescriptorConstants.BASE_TYPE;
         } else {
             // Use static analysis to determine the element's return type
             returnType = ReturnTypeVisitor.getReturnType(element);

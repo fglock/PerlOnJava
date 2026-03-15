@@ -139,13 +139,21 @@ public class EmitVariable {
         // Stack has the array/hash. We need to check wantarray (slot 2) and decide:
         // - If wantarray == SCALAR (1), call .scalar() and return the count
         // - Otherwise, leave the array/hash as-is
+        //
+        // IMPORTANT: We must store the result to a register and reload it so that
+        // both branches converge with the same type on the stack (RuntimeBase).
+        // Direct stack manipulation causes VerifyError because the branches have
+        // different types (RuntimeScalar vs RuntimeArray/Hash).
 
         Label notScalarContext = new Label();
         Label done = new Label();
 
         // Store the array/hash temporarily
-        int tempSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, tempSlot);
+        int inputSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, inputSlot);
+
+        // Allocate result slot - will hold RuntimeBase (common supertype)
+        int resultSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
 
         // Load wantarray (slot 2 = callContext parameter)
         mv.visitVarInsn(Opcodes.ILOAD, 2);
@@ -154,17 +162,21 @@ public class EmitVariable {
         mv.visitInsn(Opcodes.ICONST_1);
         mv.visitJumpInsn(Opcodes.IF_ICMPNE, notScalarContext);
 
-        // Scalar context: load array/hash and call .scalar()
-        mv.visitVarInsn(Opcodes.ALOAD, tempSlot);
+        // Scalar context: load array/hash and call .scalar(), store to result
+        mv.visitVarInsn(Opcodes.ALOAD, inputSlot);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar",
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
         mv.visitJumpInsn(Opcodes.GOTO, done);
 
-        // List/void context: load array/hash as-is
+        // List/void context: store input as-is to result
         mv.visitLabel(notScalarContext);
-        mv.visitVarInsn(Opcodes.ALOAD, tempSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, inputSlot);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
 
+        // Both branches converge here - load result from register
         mv.visitLabel(done);
+        mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
     }
 
     /**
