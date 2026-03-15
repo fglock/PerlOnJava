@@ -655,7 +655,20 @@ public class StatementParser {
                             RuntimeArray importArgs = args.getArrayOfAlias();
                             RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
                             setCurrentScope(parser.ctx.symbolTable);
-                            RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
+                            RuntimeList res = RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
+
+                            // Handle TAILCALL with trampoline loop (for goto &sub in import methods)
+                            // This is needed for Moo::Role which does: goto &Role::Tiny::import
+                            while (res.isNonLocalGoto()) {
+                                RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
+                                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                                    RuntimeArray callArgs = flow.getTailCallArgs();
+                                    res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
+                                } else {
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
