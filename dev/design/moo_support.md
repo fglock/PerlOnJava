@@ -314,20 +314,62 @@ All tests meet or exceed the baseline (20260312T075000):
 
 ## Success Criteria
 
-1. `jcpan -t Moo` runs Moo tests ❌ (tests skipped)
-2. **All Moo tests pass** ❌ (needs verification with extends fix)
+1. `jcpan -t Moo` runs Moo tests ✓ (tests now run with Test::Harness)
+2. **All Moo tests pass** ❌ (687/~800 passing, see Known Issues below)
 3. `jperl -e 'use Moo; print "OK\n"'` works ✓
 4. `has x => (is => "ro")` syntax parses correctly ✓
 5. Moo class with attributes works ✓
 6. `croak` and `carp` work with proper stack traces ✓
-7. `extends 'Parent'` inheritance works ✓ (NEW - fixed in Phase 7)
+7. `extends 'Parent'` inheritance works ✓ (fixed in Phase 7)
 8. No regressions in baseline tests ✓
+
+## Known Issues (Remaining Moo Test Failures)
+
+### Issue: DEMOLISH Not Being Called (Expected - Not Supported)
+**Tests affected**: t/demolish-basics.t (3 failures)
+**Symptom**: Object destructors (DEMOLISH methods) are not called when objects go out of scope
+**Root cause**: DESTROY/fork/threads are not supported in PerlOnJava (they compile but throw at runtime)
+**Status**: Expected failure - these features are out of scope for PerlOnJava
+
+### Issue: SUPER::new Not Working in Extended Classes
+**Tests affected**: t/extends-non-moo.t
+**Symptom**: `Undefined subroutine &Package::SUPER::new called`
+**Root cause**: SUPER:: resolution issue when extending non-Moo classes
+**Status**: Needs investigation
+
+### Issue: Regex Escaping in Error Messages
+**Tests affected**: t/accessor-coerce.t (1 failure)
+**Symptom**: `plus\_three` vs `plus_three` - underscores being escaped
+**Root cause**: quotemeta or error message formatting escaping `_` incorrectly
+**Status**: Minor - cosmetic issue in error messages
+
+### Issue: Role Application Error Messages
+**Tests affected**: t/compose-roles.t (4 failures)  
+**Symptom**: Missing error messages when required attributes are not provided
+**Root cause**: Error throwing in role composition may not propagate correctly
+**Status**: Needs investigation
+
+## Remaining jcpan Improvements
+
+### Completed in This Session
+- [x] **Version parsing**: Handle "undef" version strings gracefully
+- [x] **MM->parse_version**: ExtUtils::MakeMaker now loads ExtUtils::MM
+- [x] **Sub::Util**: Java implementation with set_subname (required by Moo)
+- [x] **Scalar/List::Util VERSION**: Added $VERSION for CPAN detection
+- [x] **Test::Harness**: Added for `make test` support
+
+### Still Needed
+- [ ] **Prototype checking**: `$$` prototype with `@array` argument should work (workaround: removed prototype)
+- [ ] **CPAN.pm metadata caching**: Reduce repeated dependency checks
+- [ ] **Better XS module detection**: Skip XS modules earlier in the process
+- [ ] **CPAN::DistnameInfo**: Install to avoid "allow_installing_outdated_dists" warnings
 
 ## Progress Tracking
 
-### Current Status: 🟢 WORKING - Moo::Role exports fixed, tests running
+### Current Status: 🟢 WORKING - Tests running, ~85% passing
 
-Moo::Role now correctly exports `has`, `with`, `requires`. Test pass rate improved from 591 to 687 tests.
+Moo tests now run via `jcpan -t Moo`. Approximately 687 of ~800 tests pass.
+Main blockers: DEMOLISH (destructors), SUPER::new resolution, error message escaping.
 
 ### Completed Phases
 - [x] Phase 1: Replace Carp.java with Carp.pm (2024-03-14)
@@ -358,23 +400,27 @@ Moo::Role now correctly exports `has`, `with`, `requires`. Test pass rate improv
   - Added TAILCALL trampoline in StatementParser.parseUseDeclaration()
   - Moo::Role now correctly exports has, with, requires
   - Moo test pass rate: 591 → 687 tests (+96)
-  - Improved jcpan MakeMaker:
-    - Cross-platform test running with Test::Harness
-    - MYMETA.yml generation for CPAN.pm dependency resolution
-    - Added MM_PerlOnJava.pm stub for future MakeMaker integration
+- [x] Phase 10: jcpan Test::Harness integration (2024-03-15)
+  - Added Test::Harness and TAP:: modules
+  - Fixed version parsing for "undef" strings
+  - Fixed MM->parse_version() via ExtUtils::MM loading
+  - Added Sub::Util Java implementation (set_subname)
+  - Added Scalar/List::Util $VERSION for CPAN detection
+  - XSLoader stubs for .pm file version detection
 
 ### Next Steps
 
-1. **Fix version parsing error** - CPAN.pm fails parsing "undef" versions
-2. **Investigate remaining test failures** - SUPER::new, DEMOLISH, etc.
-3. **Consider full MakeMaker integration** - Use original with MM_PerlOnJava
+1. **Fix SUPER::new resolution** - Extending non-Moo classes fails
+2. **Fix regex escaping** - `\_` vs `_` in error messages
+3. **Prototype checking** - `$$` prototype should accept `@array` argument
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
 - **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
 - **Key commits**:
   - `7a76739b8` - Fix goto &sub in use/import TAILCALL handling
-  - `ceb105a56` - Cross-platform jcpan, MYMETA.yml, MM_PerlOnJava
+  - `053d91a95` - Add Sub::Util, fix Scalar/List::Util VERSION, add Test::Harness
+  - `7993ef74d` - Fix version parsing and MM->parse_version for CPAN.pm
 
 ## Related Documents
 
