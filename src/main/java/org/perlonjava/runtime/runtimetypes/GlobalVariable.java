@@ -40,6 +40,11 @@ public class GlobalVariable {
     // to Dst:: symbols can still point to their original objects.
     static final Map<String, String> stashAliases = new HashMap<>();
 
+    // Glob aliasing: `*a = *b` makes a and b share the same glob.
+    // Maps glob names to their canonical (target) name.
+    // When looking up or assigning to glob slots, we resolve through this map.
+    static final Map<String, String> globAliases = new HashMap<>();
+
     // Flags used by operator override
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
     // Used to detect when built-in operators have been globally overridden
@@ -66,6 +71,7 @@ public class GlobalVariable {
         globalGlobs.clear();
         isSubs.clear();
         stashAliases.clear();
+        globAliases.clear();
         clearPackageCache();
 
         RuntimeCode.clearCaches();
@@ -103,6 +109,49 @@ public class GlobalVariable {
             return aliased.substring(0, aliased.length() - 2);
         }
         return aliased;
+    }
+
+    /**
+     * Sets a glob alias. After `*a = *b`, calling setGlobAlias("a", "b") makes
+     * all slot assignments to "a" also affect "b" and vice versa.
+     */
+    public static void setGlobAlias(String fromGlob, String toGlob) {
+        // Find the canonical name for toGlob (in case it's already an alias)
+        String canonical = resolveGlobAlias(toGlob);
+        globAliases.put(fromGlob, canonical);
+        // Also ensure toGlob points to the canonical name
+        if (!toGlob.equals(canonical)) {
+            globAliases.put(toGlob, canonical);
+        }
+    }
+
+    /**
+     * Resolves a glob name to its canonical name.
+     * If the glob is aliased, returns the target name; otherwise returns the input.
+     */
+    public static String resolveGlobAlias(String globName) {
+        String aliased = globAliases.get(globName);
+        if (aliased != null) {
+            // Follow the chain in case of multiple aliases
+            return resolveGlobAlias(aliased);
+        }
+        return globName;
+    }
+
+    /**
+     * Gets all glob names that are aliased to the same canonical name.
+     * This is used when assigning to a glob slot - we need to update all aliases.
+     */
+    public static java.util.List<String> getGlobAliasGroup(String globName) {
+        String canonical = resolveGlobAlias(globName);
+        java.util.List<String> group = new java.util.ArrayList<>();
+        group.add(canonical);
+        for (Map.Entry<String, String> entry : globAliases.entrySet()) {
+            if (resolveGlobAlias(entry.getKey()).equals(canonical) && !group.contains(entry.getKey())) {
+                group.add(entry.getKey());
+            }
+        }
+        return group;
     }
 
     /**

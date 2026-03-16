@@ -106,14 +106,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case ARRAYREFERENCE:
                 // Handle the case where a typeglob is assigned a reference to an array
                 // `*foo = \@bar` creates an alias - both names refer to the same array
+                // Also update all glob aliases
                 if (value.value instanceof RuntimeArray arr) {
-                    GlobalVariable.globalArrays.put(this.globName, arr);
+                    for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                        GlobalVariable.globalArrays.put(aliasedName, arr);
+                    }
                 }
                 return value;
             case HASHREFERENCE:
                 // `*foo = \%bar` creates an alias - both names refer to the same hash
+                // Also update all glob aliases
                 if (value.value instanceof RuntimeHash hash) {
-                    GlobalVariable.globalHashes.put(this.globName, hash);
+                    for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                        GlobalVariable.globalHashes.put(aliasedName, hash);
+                    }
                 }
                 return value;
             case REFERENCE:
@@ -127,10 +133,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         InheritanceResolver.invalidateCache();
                     } else if (deref.type == RuntimeScalarType.ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
                         // `*foo = \@bar` assigns to the ARRAY slot.
-                        GlobalVariable.globalArrays.put(this.globName, arr);
+                        // Also update all glob aliases
+                        for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                            GlobalVariable.globalArrays.put(aliasedName, arr);
+                        }
                     } else if (deref.type == RuntimeScalarType.HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
                         // `*foo = \%bar` assigns to the HASH slot.
-                        GlobalVariable.globalHashes.put(this.globName, hash);
+                        // Also update all glob aliases
+                        for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                            GlobalVariable.globalHashes.put(aliasedName, hash);
+                        }
                     } else if (value.type == RuntimeScalarType.REFERENCE && deref.type == RuntimeScalarType.ARRAYREFERENCE) {
                         // `*foo = \$array_ref` creates a constant subroutine returning the array reference
                         RuntimeCode constSub = new RuntimeCode("", null);
@@ -204,6 +216,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             GlobalVariable.clearPackageCache();
             return value.scalar();
         }
+
+        // Register glob alias so future slot assignments affect both globs
+        GlobalVariable.setGlobAlias(this.globName, value.globName);
 
         // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
         RuntimeScalar result = value.scalar();
