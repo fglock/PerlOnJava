@@ -862,18 +862,15 @@ public class ModuleOperators {
         args.push(selfArg);
         args.push(new RuntimeScalar(fileName));
 
-        try {
-            RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
+        // Call the hook - if it throws an exception, propagate it
+        // This matches Perl's behavior where die() in an @INC hook stops require
+        RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
 
-            // If result is undef, return null to continue to next @INC entry
-            if (result == null || !result.scalar().defined().getBoolean()) {
-                return null;
-            }
-
-            return result;
-        } catch (Exception e) {
-            // If hook throws an exception, continue to next @INC entry
+        // If result is undef, return null to continue to next @INC entry
+        if (result == null || !result.scalar().defined().getBoolean()) {
             return null;
         }
+
+        return result;
     }
 }

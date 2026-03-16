@@ -612,26 +612,36 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - This fixed Mo's BUILD feature which depends on the %e merge pattern
   - Mo tests: 6/28 failing → 1/28 failing (143/144 subtests pass)
 
+- [x] Phase 26: Add Sub::Name module and fix @INC hook exception handling (2026-03-16)
+  - Root cause: moo-utils-_subname-Sub-Name.t was failing because:
+    1. Sub::Name module was not available
+    2. @INC hooks that threw exceptions were silently ignored
+  - **SubName.java**: Java implementation of Sub::Name::subname(NAME, CODEREF)
+  - **Sub/Name.pm**: Perl wrapper using XSLoader
+  - **ModuleOperators.java fix**:
+    - Previously: catch (Exception e) { return null; } - ignored hook errors
+    - Now: Let exceptions propagate to match Perl's behavior
+  - This allows InlineModule to "hide" modules by having hooks throw die()
+  - moo-utils-_subname-Sub-Name.t: 0/2 → 2/2 passing
+
 ### Current Status
 
-**Test Results (after Phase 25):**
-- **Moo**: 62/71 test programs passing (87%), 768/829 subtests passing (93%)
+**Test Results (after Phase 26):**
+- **Moo**: 63/71 test programs passing (89%), 770/829 subtests passing (93%)
 - **Mo**: 27/28 test programs passing (99.3%), 143/144 subtests passing
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
 2. **croak-locations.t** (29 failures) - Carp reports `(eval N)` instead of actual filename
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
-4. **moo-utils-_subname-Sub-Name.t** (1 failure) - Expected, we have Sub::Util (no fallback to Sub::Name)
-5. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
-6. **overloaded-coderefs.t** - Expected, B::Deparse not available
-7. **Mo t/strict.t** (1 failure) - Error message format differs from Perl
+4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+5. **overloaded-coderefs.t** - Expected, B::Deparse not available
+6. **Mo t/strict.t** (1 failure) - Error message format differs from Perl
 
 **Expected failures** (not fixable without fundamental changes):
 - Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
 - DESTROY/GC: demolish tests (6)
 - Missing B::Deparse: overloaded-coderefs.t
-- Sub::Name fallback: moo-utils-_subname-Sub-Name.t (1)
 
 **Potentially fixable**:
 - croak-locations.t (29) - Carp filename in string eval
@@ -646,6 +656,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 - **Branch**: `feature/moo-support` (PR #319 - merged)
 - **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
 - **Branch**: `fix/mo-bareword-parsing` (PR #322 - open)
+- **Branch**: `feature/sub-name` (PR #324 - open)
 - **Key commits**:
   - `00c124167` - Fix print { func() } filehandle block parsing and JVM codegen
   - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution
@@ -655,6 +666,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - `db434f8d3` - Fix ::identifier bareword parsing and add cpan to sync
   - `ff31163f9` - Fix self-referential hash assignment %h = (stuff, %h)
   - `a3233cd55` - Improve ::identifier to check sub existence at compile time
+  - `86591c703` - Add Sub::Name module and fix @INC hook exception handling
 
 ## Related Documents
 
