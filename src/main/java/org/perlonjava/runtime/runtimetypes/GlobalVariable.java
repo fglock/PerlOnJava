@@ -118,9 +118,12 @@ public class GlobalVariable {
     public static void setGlobAlias(String fromGlob, String toGlob) {
         // Find the canonical name for toGlob (in case it's already an alias)
         String canonical = resolveGlobAlias(toGlob);
-        globAliases.put(fromGlob, canonical);
-        // Also ensure toGlob points to the canonical name
-        if (!toGlob.equals(canonical)) {
+        // Don't create self-loops
+        if (!fromGlob.equals(canonical)) {
+            globAliases.put(fromGlob, canonical);
+        }
+        // Also ensure toGlob points to the canonical name (unless it would create a self-loop)
+        if (!toGlob.equals(canonical) && !toGlob.equals(fromGlob)) {
             globAliases.put(toGlob, canonical);
         }
     }
@@ -131,7 +134,7 @@ public class GlobalVariable {
      */
     public static String resolveGlobAlias(String globName) {
         String aliased = globAliases.get(globName);
-        if (aliased != null) {
+        if (aliased != null && !aliased.equals(globName)) {
             // Follow the chain in case of multiple aliases
             return resolveGlobAlias(aliased);
         }
