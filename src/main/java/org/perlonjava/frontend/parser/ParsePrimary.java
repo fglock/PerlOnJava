@@ -269,15 +269,40 @@ public class ParsePrimary {
                 return StringParser.parseRawString(parser, token.text);
 
             case "::":
-                // Leading :: means main:: (e.g., ::foo is main::foo)
-                // This allows accessing global variables even when a lexical exists
+                // Leading :: can mean either:
+                // 1. Function call: ::foo() -> main::foo()
+                // 2. Bareword string: $x . ::foo -> $x . '::foo'
+                //
+                // In Perl, ::foo without parens is a bareword that gets stringified to '::foo'
+                // unless a main::foo subroutine exists at compile time (which would be called).
+                // Since PerlOnJava doesn't have compile-time sub resolution, we use a heuristic:
+                // - If followed by ( -> function call (main::identifier)
+                // - Otherwise -> bareword string ('::identifier')
                 LexerToken nextToken2 = peek(parser);
                 if (nextToken2.type == LexerTokenType.IDENTIFIER) {
-                    // Insert "main" before the :: to create main::identifier
-                    parser.tokens.add(parser.tokenIndex - 1, new LexerToken(LexerTokenType.IDENTIFIER, "main"));
-                    parser.tokenIndex--; // Go back to process "main"
-                    return parseIdentifier(parser, parser.tokenIndex,
-                            new LexerToken(LexerTokenType.IDENTIFIER, "main"), "main");
+                    String identifierName = nextToken2.text;
+                    // Look ahead to see if this is a function call
+                    int lookAhead = parser.tokenIndex + 1;
+                    // Skip whitespace
+                    while (lookAhead < parser.tokens.size() && 
+                           parser.tokens.get(lookAhead).type == LexerTokenType.WHITESPACE) {
+                        lookAhead++;
+                    }
+                    String afterIdentifier = lookAhead < parser.tokens.size() ? 
+                                            parser.tokens.get(lookAhead).text : "";
+                    
+                    if (afterIdentifier.equals("(")) {
+                        // Function call: ::foo() -> main::foo()
+                        // Insert "main" before the :: to create main::identifier
+                        parser.tokens.add(parser.tokenIndex - 1, new LexerToken(LexerTokenType.IDENTIFIER, "main"));
+                        parser.tokenIndex--; // Go back to process "main"
+                        return parseIdentifier(parser, parser.tokenIndex,
+                                new LexerToken(LexerTokenType.IDENTIFIER, "main"), "main");
+                    } else {
+                        // Bareword: ::foo -> '::foo'
+                        parser.tokenIndex++; // Consume the identifier
+                        return new StringNode("::" + identifierName, parser.tokenIndex);
+                    }
                 }
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
 
