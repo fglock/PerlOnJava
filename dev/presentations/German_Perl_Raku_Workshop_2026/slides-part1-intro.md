@@ -43,10 +43,10 @@ PerlOnJava generates real JVM bytecode — the same kind of instructions that ja
 
 ## Why the JVM?
 
-- **30 years of optimization** — JIT compilation turns hot code into native machine code
-- **500K+ libraries** on Maven Central — accessible without C bindings
-- **Container-aware** — built-in cgroup support for Docker/Kubernetes
-- Perl joins Java, Kotlin, Scala, Clojure, JRuby on the platform
+- **30 years of optimization** — JIT turns hot code into native machine code
+- **500K+ libraries** on Maven Central — no C bindings needed
+- **Container-aware** — cgroup support for Docker/Kubernetes
+- Joins Java, Kotlin, Scala, Clojure, JRuby on the platform
 
 Note:
 The JVM runs on 3+ billion devices. Built-in tooling (JFR flight recorder, JMX monitoring, VisualVM) works automatically on PerlOnJava code. Multiple GC strategies available (ZGC, G1, Shenandoah).
@@ -59,7 +59,7 @@ The JVM runs on 3+ billion devices. Built-in tooling (JFR flight recorder, JMX m
 - Access any **JDBC database** — no C drivers needed
 - Embed Perl in Java apps via **JSR-223** scripting API
 - Deploy to Docker, Kubernetes — **anywhere Java runs**
-- **Interactive debugger** with step, breakpoints, and stack traces (`-d`)
+- **Interactive debugger** — step, breakpoints, stack traces (`-d`)
 
 Note:
 JSR-223 is the standard Java scripting API, available since Java 6. It allows bidirectional Java ↔ Perl communication.
@@ -80,7 +80,7 @@ perlonjava.jar
 
 `java -jar perlonjava.jar script.pl` — that's it.
 
-Or use `./jperl script.pl` — a wrapper that also supports `$CLASSPATH` for JDBC drivers.
+Or use `./jperl script.pl` — a wrapper that supports `$CLASSPATH`.
 
 Note:
 Built with Gradle Shadow plugin (fat JAR). Perl modules live in src/main/perl/lib and are packaged as resources inside the JAR. The require mechanism reads them directly from the JAR via classloader. No installation, no CPAN, no paths to configure. The jperl wrapper uses -cp instead of -jar so users can add extra JARs to CLASSPATH.
@@ -184,14 +184,15 @@ Supports PostgreSQL, MySQL, Oracle, SQLite, H2 — any JDBC driver.
 
 ## Live Demo: Image::ExifTool
 
-The most widely-used Perl photo metadata library — running on PerlOnJava **unmodified**.
+The most widely-used Perl photo metadata library
+— running on PerlOnJava **unmodified**.
 
-- <span class="metric">239 Perl source files</span> · <span class="metric">296,000 lines of code</span>
-- Largest modules exceed **10,000 lines** (Nikon.pm, Sony.pm, Canon.pm)
-- Subroutines over **1,000 lines** (SetNewValue, WriteInfo, ExtractInfo)
-- <span class="metric">600 tests</span> in 113 files — **all pass**
+- <span class="metric">239 source files</span> · <span class="metric">296K lines</span> · <span class="metric">600 tests — all pass</span>
+- Largest modules exceed **10,000 lines**
+- Subroutines over **1,000 lines**
 
-**Why this matters:** Large methods exceed the JVM's 64KB bytecode limit — the compiler automatically falls back to the Internal VM.
+Large methods exceed the JVM's 64KB bytecode limit
+— the compiler falls back to the Internal VM automatically.
 
 Note:
 Image::ExifTool 13.44 by Phil Harvey. Modules like TagLookup.pm (13,840 LOC), Nikon.pm (12,843 LOC), and Writer.pl (5,849 LOC) stress-test every part of the compilation pipeline. The automatic dual-backend fallback is transparent — ExifTool doesn't know which backend runs each method.
@@ -219,7 +220,8 @@ Low-level instructions for the Java Virtual Machine
 - Same format as Java, Kotlin, Scala
 - The JVM's **JIT compiler** turns hot bytecode into native machine code
 
-PerlOnJava emits bytecode directly via the **ASM library** — no Java source intermediate step.
+PerlOnJava emits bytecode directly via the **ASM library**
+— no Java source intermediate step.
 
 ---
 
@@ -255,15 +257,9 @@ The dual backend is a common VM design pattern. HotSpot, V8, SpiderMonkey, and C
 LDC 10
 INVOKESTATIC RuntimeScalarCache.getScalarInt(I)
 ASTORE 7
-NEW RuntimeScalar
-DUP
-INVOKESPECIAL RuntimeScalar.<init>()
-ASTORE 25
-ALOAD 25
-ALOAD 7
-SWAP
-INVOKEVIRTUAL RuntimeBase.addToScalar(RuntimeScalar)
 ...
+ALOAD 7
+INVOKEVIRTUAL RuntimeBase.addToScalar(RuntimeScalar)
 INVOKESTATIC IOOperator.say(RuntimeList;RuntimeScalar)
 ```
 
@@ -276,31 +272,26 @@ Standard JVM bytecode — optimized by the JVM's JIT compiler at runtime.
 
 **Same Perl:** `my $x = 10; say $x`
 
-**Generated Internal VM bytecode** (`./jperl --interpreter --disassemble`):
+**Internal VM bytecode** (`./jperl --interpreter --disassemble`):
 ```text
-Registers: 9
-Bytecode length: 26 shorts
-
    0: LOAD_INT r4 = 10
    4: MOVE r3 = r4
    7: CREATE_LIST r6 = []
-  10: SELECT r5 = select(r6)
   13: CREATE_LIST r7 = [r3]
   17: SAY r7, fh=r5
-  20: LOAD_INT r8 = 1
   24: RETURN r8
 ```
 
-Register-based, ~300 opcodes — much more compact.
+Register-based, ~300 opcodes — more compact.
 
 ---
 
 ## Key Takeaways
 
 - **One JAR, zero dependencies** — drop-in Perl runtime for the JVM
-- **Run existing Perl unchanged** — 200,000+ tests, ExifTool passes unmodified
-- **Full JVM integration** — JDBC, JSR-223, Docker/Kubernetes ready
-- **Two backends, one runtime** — performance where it matters, flexibility where it's needed
+- **Run existing Perl unchanged** — 200K+ tests pass
+- **Full JVM integration** — JDBC, JSR-223, Kubernetes
+- **Two backends, one runtime** — performance + flexibility
 
 ---
 

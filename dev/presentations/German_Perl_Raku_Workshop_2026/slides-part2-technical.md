@@ -23,8 +23,9 @@ Perl Source → Lexer → Parser → OP Tree → Optimizer → Execution
 
 **PerlOnJava (dual backend):**
 ```text
-Perl Source → Lexer → Parser → Syntax Tree → JVM Bytecode → JVM Execution
-                                             ↘ Custom Bytecode → Internal VM
+Perl Source → Lexer → Parser → Syntax Tree
+  → JVM Bytecode → JVM Execution
+  ↘ Custom Bytecode → Internal VM
 ```
 
 Shared frontend + shared runtime, two execution paths.
@@ -65,7 +66,8 @@ Perl limits identifiers to 251 code points; ICU4J handles code points rather tha
 3. **Operator-specific parsers** (20+ specialized)
    - `StringParser`, `PackParser`, `SignatureParser`
 
-Modular AST: `BlockNode`, `BinaryOperatorNode`, `ListNode` — easy to extend.
+Modular AST: `BlockNode`, `BinaryOperatorNode`, `ListNode`
+— easy to extend.
 
 ---
 
@@ -80,9 +82,11 @@ BEGIN {
 say @data;  # Uses data set by BEGIN
 ```
 
-Parser encounters `BEGIN` → wraps as anonymous sub → **executes immediately** → captures lexical variables.
+Parser encounters `BEGIN` → wraps as anonymous sub
+→ **executes immediately** → captures lexical variables.
 
-`use Module` is sugar for `BEGIN { require Module; Module->import() }`
+`use Module` is sugar for
+`BEGIN { require Module; Module->import() }`
 
 Note:
 END runs at exit, INIT after compilation, CHECK in reverse order, UNITCHECK per compilation unit. Behavior follows the Perl test suite.
@@ -97,15 +101,16 @@ BEGIN { @data = qw(a b c) }  # Compile time
 say @data;                    # Runtime — must see "a b c"
 ```
 
-`@data` is a **lexical** — but BEGIN runs at compile time, before runtime lexicals exist.
+`@data` is a **lexical** — but BEGIN runs at compile time,
+before runtime lexicals exist.
 
 **Solution:** Temporary package globals as a bridge:
 
 1. Parser **snapshots** all visible lexicals
-2. Each `my` variable gets a temporary global: `PerlOnJava::_BEGIN_42::data`
-3. BEGIN body is compiled with `our` aliases to these globals
+2. Each `my` variable gets a temporary global
+3. BEGIN body compiled with `our` aliases
 4. BEGIN **executes immediately** — sets the global
-5. At runtime, `my @data` **retrieves** the value from the global and removes it
+5. At runtime, `my @data` **retrieves** + removes it
 
 Note:
 Implemented in SpecialBlockParser (capture + alias) and PersistentVariable (retrieve + cleanup). eval STRING uses ThreadLocal storage for BEGIN access to caller lexicals. Temporary globals cleaned up after retrieval.
@@ -149,15 +154,11 @@ my $msg = "Hello $name!\n";
 **Generated AST** (from `./jperl --parse`):
 ```text
 BinaryOperatorNode: =
-  OperatorNode: my
-    OperatorNode: $
-      IdentifierNode: 'msg'
+  OperatorNode: my $msg
   BinaryOperatorNode: join
-    StringNode: empty
     ListNode:
       StringNode: 'Hello '
-      OperatorNode: $
-        IdentifierNode: 'name'
+      OperatorNode: $name
       StringNode: '!\x0A'
 ```
 
@@ -176,7 +177,7 @@ Compile-time validation catches errors early.
 JVM bytecode is the primary path — but three problems need a second backend:
 
 1. **64KB method size limit** — large Perl subs exceed it
-2. **CPU cache pressure** — sparse JVM bytecode overflows instruction caches
+2. **CPU cache pressure** — JVM bytecode overflows icache
 3. **ClassLoader overhead** — `eval STRING` pays per-class cost
 
 The Internal VM solves all three.
@@ -273,9 +274,11 @@ LABEL: print "Jumped out!\n";
 ```
 
 - **Stack-based:** Stack state becomes inconsistent on non-local jumps
-- **Register-based:** Explicit operands (`rd = rs1 op rs2`) — correct regardless of control flow
+- **Register-based:** Explicit operands (`rd = rs1 op rs2`)
+  — correct regardless of control flow
 
-Perl's complex control flow — labeled loops, `goto`, `eval` — requires register architecture.
+Perl's complex control flow — labeled loops, `goto`, `eval`
+— requires register architecture.
 
 ---
 
@@ -288,7 +291,8 @@ Perl's complex control flow — labeled loops, `goto`, `eval` — requires regis
 | Perl 5 | 1.29s |
 | PerlOnJava (Internal VM) | 2.78s |
 
-Internal VM skips ClassLoader — compiles directly to register bytecode, no JVM class generated.
+Internal VM skips ClassLoader — compiles directly
+to register bytecode, no JVM class generated.
 
 Note:
 Set JPERL_EVAL_USE_INTERPRETER=1. Each iteration evals a unique string, so compilation dominates. Repeated patterns perform much closer.
@@ -308,7 +312,7 @@ Set JPERL_EVAL_USE_INTERPRETER=1. Each iteration evals a unique string, so compi
 1. **RuntimeScalar** — dynamically typed value
 2. **RuntimeArray** — dynamic list with autovivification
 3. **RuntimeHash** — associative array
-4. **RuntimeCode** — compiled sub (`MethodHandle` or `InterpretedCode`)
+4. **RuntimeCode** — compiled sub (`MethodHandle`/`InterpretedCode`)
 5. **RuntimeGlob** — typeglob with slot delegation
 
 Note:
@@ -318,7 +322,7 @@ RuntimeScalar types: integer, double, string, reference, undef, regex, glob, tie
 
 ## RuntimeScalar: Three Fields
 
-1. **`int blessId`** — `0` unblessed, `> 0` blessed, `< 0` has overloads
+1. **`int blessId`** — `0` unblessed, `>0` blessed, `<0` overloads
 2. **`int type`** — `INTEGER`, `DOUBLE`, `STRING`, `UNDEF`, references…
 3. **`Object value`** — the actual data
 
@@ -374,7 +378,8 @@ say ord($emoji);     # Must return 128077
 
 Java uses 2 UTF-16 code units for emoji; Perl counts code points.
 
-**Solution:** `Character.toCodePoint()`, `codePointCount()`, and dual representation in pack/unpack.
+**Solution:** `Character.toCodePoint()`, `codePointCount()`,
+and dual representation in pack/unpack.
 
 ---
 
@@ -393,8 +398,8 @@ SKIP: {
 
 **Implementation:** Tagged return values (`RuntimeControlFlowList`).
 
-- Return carries a control-flow tag (`last`/`next`/`redo`/`goto`) + target label
-- Caller checks tag and dispatches — unwinding across subroutine boundaries
+- Return carries a control-flow tag + target label
+- Caller checks tag and dispatches — unwinding across boundaries
 
 ---
 
@@ -404,7 +409,8 @@ SKIP: {
 2. `die` → Java exceptions; `eval` → try-catch
 3. **Tagged return values** for cross-boundary jumps
 
-Register architecture is essential — stack state would corrupt on non-local jumps.
+Register architecture is essential
+— stack state would corrupt on non-local jumps.
 
 Note:
 Registers maintain state explicitly. Label → bytecode offset mapping with shared handlers for multiple exits.
@@ -417,13 +423,15 @@ Registers maintain state explicitly. Label → bytecode offset mapping with shar
 sub foo { print "Called from: ", (caller)[1], " line ", (caller)[2], "\n" }
 ```
 
-**Key trick:** `caller()` captures the **native JVM stack** via `new Throwable()` — zero cost when unused.
+`caller()` captures the **native JVM stack** via `new Throwable()`
+— zero cost when unused.
 
-**JVM backend:** Each sub → JVM class. `ByteCodeSourceMapper` maps tokens to file/line/package.
+- **JVM backend:** Each sub → JVM class.
+  `ByteCodeSourceMapper` maps tokens to file/line/package.
+- **Internal VM:** `InterpreterState` frame stack (ThreadLocal).
+  `ExceptionFormatter` maps JVM → Perl-level info.
 
-**Internal VM:** `InterpreterState` keeps a frame stack (ThreadLocal). `ExceptionFormatter` maps JVM frames to Perl-level info.
-
-No shadow stack needed — the JVM does the bookkeeping for us.
+No shadow stack — the JVM does the bookkeeping.
 
 Note:
 ExceptionFormatter handles three frame types: JVM-compiled subs (anon*), Internal VM frames, and compile-time frames (CallerStack). Same mechanism powers warn/die messages.
@@ -442,9 +450,10 @@ say $c->();  # 1
 say $c->();  # 2
 ```
 
-**JVM backend:** Each anon sub → new JVM class. Visible lexicals passed as constructor args. Shared by reference — mutations visible to both scopes.
-
-**Internal VM:** Dedicated opcode for closure variable allocation, same runtime objects.
+- **JVM backend:** Each anon sub → new JVM class.
+  Lexicals passed as constructor args, shared by reference.
+- **Internal VM:** Dedicated opcode for closure variable allocation,
+  same runtime objects.
 
 ---
 
@@ -458,7 +467,9 @@ my @arr = flexible();   # list context → (1, 2, 3)
 my $n   = flexible();   # scalar context → 42
 ```
 
-Compiler threads context via `EmitterContext`, emitting the right flag at each call site. `wantarray` reads it at runtime. Works in both backends.
+Compiler threads context via `EmitterContext`,
+emitting the right flag at each call site.
+`wantarray` reads it at runtime. Works in both backends.
 
 ---
 
@@ -471,7 +482,8 @@ Compiler threads context via `EmitterContext`, emitting the right flag at each c
 | `state $x` | Persistent via `StateVariable` registry, keyed by `__SUB__` |
 | `local $x` | **Save stack** — snapshot + restore on scope exit |
 
-All four use JVM local variable slots for fast access. The difference is *lifetime* and *initialization*.
+All four use JVM local variable slots for fast access.
+The difference is *lifetime* and *initialization*.
 
 Note:
 `my` creates fresh RuntimeScalar per call. `our` aliases a global into a local slot — same object, mutations visible globally. `state` persists via registry keyed by sub ref + name, unique per closure clone. `local` uses DynamicVariableManager push/pop with getLocalLevel()/popToLocalLevel() in a finally block.
@@ -493,7 +505,8 @@ outer();  # "dynamic"
 inner();  # "global" again
 ```
 
-Compiler wraps scope with `getLocalLevel()` / `popToLocalLevel()` — restores even through `die`/`eval`. Supports all variable types.
+Compiler wraps scope with `getLocalLevel()` / `popToLocalLevel()`
+— restores even through `die`/`eval`.
 
 Note:
 DynamicVariableManager uses a Stack of saved states. pushLocalVariable() snapshots {type, value, blessId} and resets to undef. popToLocalLevel() restores each variable. Compiler detects `local` at compile time and only emits save/restore for blocks that need it.
@@ -514,7 +527,8 @@ $x = 10;   # prints "writing!"
 say $x;    # prints "reading!" then 10
 ```
 
-`TIED_SCALAR` type dispatches `FETCH`/`STORE` transparently. Works for scalars, arrays, hashes, and filehandles.
+`TIED_SCALAR` type dispatches `FETCH`/`STORE` transparently.
+Works for scalars, arrays, hashes, and filehandles.
 
 ---
 
@@ -528,14 +542,14 @@ alarm(0);
 say "Caught: $@" if $@;
 ```
 
-**Challenge:** JVM has no POSIX signals. Timer threads can't safely run Perl handlers.
+**Challenge:** JVM has no POSIX signals.
 
-**Solution:** A signal queue with safe-point checking:
+**Solution:** Signal queue with safe-point checking:
 
 1. `alarm()` schedules a timer on a daemon thread
-2. Timer **enqueues** signal + handler (thread-safe `ConcurrentLinkedQueue`)
-3. Compiler inserts `checkPendingSignals()` at every **loop entry**
-4. Check is a volatile boolean read (~2 CPU cycles) — zero cost when idle
+2. Timer **enqueues** signal + handler (thread-safe queue)
+3. Compiler inserts `checkPendingSignals()` at loop entry
+4. Volatile boolean read (~2 cycles) — zero cost when idle
 
 Note:
 kill() reuses this mechanism. Unix signals via jnr-posix; Windows via GenerateConsoleCtrlEvent/TerminateProcess. Handlers always execute in the original thread context.
@@ -582,9 +596,11 @@ Also: globalIORefs → IO, globalFormatRefs → FORMAT. Slot access: *foo{CODE} 
 - **Dual backend** — JVM for performance, Internal VM for flexibility
 - **Shared runtime** — both backends use the same data structures
 - **JVM-friendly design** — fast/slow path splits enable JIT inlining
-- **Perl's complexity mapped to JVM** — closures, dynamic scoping, non-local jumps, `eval`
+- **Perl's complexity mapped to JVM** — closures, scoping,
+  non-local jumps, `eval`
 
-Perl was never designed for the JVM — but careful engineering makes it work.
+Perl was never designed for the JVM
+— but careful engineering makes it work.
 
 ---
 

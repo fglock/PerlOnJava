@@ -39,7 +39,8 @@ jperl Makefile.PL   # installs to ~/.perlonjava/lib/
 
 ## Module Loading
 
-`require` converts `Module::Name` → `Module/Name.pm`, searches `@INC`, caches in `%INC`.
+`require` converts `Module::Name` → `Module/Name.pm`,
+searches `@INC`, caches in `%INC`.
 
 **300+ modules bundled inside the JAR:**
 ```text
@@ -63,7 +64,8 @@ Object result = perl.eval("process_data($data)");
 
 **Bidirectional:** Java ↔ Perl seamlessly.
 
-**Use case:** Embed legacy Perl scripts in a modern Java application without rewriting them.
+**Use case:** Embed legacy Perl scripts in a Java application
+without rewriting them.
 
 ---
 
