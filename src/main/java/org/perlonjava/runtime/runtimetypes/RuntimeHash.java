@@ -189,22 +189,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeArray setFromList(RuntimeList value) {
         return switch (type) {
             case PLAIN_HASH -> {
-                // Store the original list size for scalar context
-                int originalSize = 0;
-                for (RuntimeBase elem : value.elements) {
-                    if (elem instanceof RuntimeArray) {
-                        originalSize += ((RuntimeArray) elem).elements.size();
-                    } else if (elem instanceof RuntimeScalar) {
-                        originalSize++;
-                    } else {
-                        // Count elements by iterating
-                        Iterator<RuntimeScalar> it = elem.iterator();
-                        while (it.hasNext()) {
-                            it.next();
-                            originalSize++;
-                        }
-                    }
+                // First, fully materialize the right-hand side list BEFORE clearing
+                // This is critical for self-referential assignments like: %h = (new_stuff, %h)
+                // We must capture the current hash contents before clearing.
+                RuntimeArray materializedList = new RuntimeArray();
+                Iterator<RuntimeScalar> iterator = value.iterator();
+                while (iterator.hasNext()) {
+                    materializedList.push(new RuntimeScalar(iterator.next()));
                 }
+
+                // Store the original list size for scalar context
+                int originalSize = materializedList.elements.size();
 
                 // Warn about odd elements (Perl does not warn about references in hash assignment)
                 if (originalSize % 2 != 0) {
@@ -216,13 +211,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // Clear existing elements but keep the same Map instance to preserve capacity
                 this.elements.clear();
 
-                // Populate the hash from the provided list
-                // This reuses the existing StableHashMap and its capacity
-                Iterator<RuntimeScalar> iter = value.iterator();
-                while (iter.hasNext()) {
-                    String key = iter.next().toString();
+                // Populate the hash from the materialized list
+                iterator = materializedList.iterator();
+                while (iterator.hasNext()) {
+                    String key = iterator.next().toString();
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
-                    RuntimeScalar val = iter.hasNext() ? new RuntimeScalar(iter.next()) : new RuntimeScalar();
+                    RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
                     this.elements.put(key, val);
                 }
 
