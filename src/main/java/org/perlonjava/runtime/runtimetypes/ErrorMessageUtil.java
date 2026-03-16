@@ -340,6 +340,7 @@ public class ErrorMessageUtil {
                             j++;
                         }
                         if (j < tokens.size() && tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\"")) {
+                            // Quoted filename: #line N "filename"
                             j++;
                             StringBuilder filenameBuilder = new StringBuilder();
                             while (j < tokens.size() && !(tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\""))) {
@@ -352,6 +353,10 @@ public class ErrorMessageUtil {
                                     currentFileName = directiveFile;
                                 }
                             }
+                        } else if (j < tokens.size() && tokens.get(j).type == LexerTokenType.IDENTIFIER) {
+                            // Unquoted filename: #line N filename
+                            // Perl allows unquoted bareword filenames in #line directives
+                            currentFileName = tokens.get(j).text;
                         }
 
                         if (directiveLine >= 1) {

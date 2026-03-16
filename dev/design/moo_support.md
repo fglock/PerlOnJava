@@ -624,15 +624,24 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - This allows InlineModule to "hide" modules by having hooks throw die()
   - moo-utils-_subname-Sub-Name.t: 0/2 → 2/2 passing
 
+- [x] Phase 27: Fix #line directive with unquoted filenames (2026-03-16)
+  - Root cause: `#line N filename` without quotes around filename wasn't being parsed
+  - Perl allows both `#line N "filename"` and `#line N filename` (unquoted bareword)
+  - **ErrorMessageUtil.java fix**:
+    - `getSourceLocationAccurate()` only parsed quoted filenames
+    - Added else clause to also handle IDENTIFIER tokens as unquoted filenames
+  - croak-locations.t: 29 failures → 3 failures (26 tests fixed)
+  - Remaining 3 failures are complex nested eval cases related to Carp stack walking
+
 ### Current Status
 
-**Test Results (after Phase 26):**
-- **Moo**: 63/71 test programs passing (89%), 770/829 subtests passing (93%)
+**Test Results (after Phase 27):**
+- **Moo**: 64/71 test programs passing (90%), 795/829 subtests passing (96%)
 - **Mo**: 27/28 test programs passing (99.3%), 143/144 subtests passing
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
-2. **croak-locations.t** (29 failures) - Carp reports `(eval N)` instead of actual filename
+2. **croak-locations.t** (3 failures) - Complex nested eval cases, Carp stack walking edge cases
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
 4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
 5. **overloaded-coderefs.t** - Expected, B::Deparse not available
@@ -643,14 +652,9 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 - DESTROY/GC: demolish tests (6)
 - Missing B::Deparse: overloaded-coderefs.t
 
-**Potentially fixable**:
-- croak-locations.t (29) - Carp filename in string eval
-
 ### Next Steps
 
-1. **Investigate croak-locations.t** - Carp reports `(eval N)` instead of actual filename
-
-2. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+1. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
