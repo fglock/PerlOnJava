@@ -1922,6 +1922,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return runtimeScalar;
         }
 
+        // Check if object is eligible for &{} overloading (e.g., blessed object with &{} operator)
+        // This handles cases like \&{$constraint_obj} where $constraint_obj overloads &{}
+        // blessId: negative = blessed with overload, positive = blessed without overload, 0 = not blessed
+        int blessId = blessedId(runtimeScalar);
+        // System.err.println("DEBUG createCodeReference: type=" + runtimeScalar.type + " blessId=" + blessId + " value=" + runtimeScalar.value);
+        if (blessId != 0) {
+            // Object is blessed
+            if (blessId < 0) {
+                // Has overloading - try to get &{} overload
+                OverloadContext ctx = OverloadContext.prepare(blessId);
+                if (ctx != null) {
+                    RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(runtimeScalar));
+                    if (result != null && result.value.hashCode() != runtimeScalar.value.hashCode()) {
+                        // Successfully got a CODE reference via overload, return it
+                        if (result.type == RuntimeScalarType.CODE) {
+                            return result;
+                        }
+                        // Recursively handle if not CODE yet
+                        return createCodeReference(result, packageName);
+                    }
+                }
+            }
+            // Blessed reference without &{} overload - this is an error in Perl
+            // "Not a subroutine reference"
+            throw new PerlCompilerException("Not a subroutine reference");
+        }
+
+        // Check if this is a reference type that isn't CODE - error "Not a subroutine reference"
+        // This catches cases like \&{$hashref} where $hashref is an unblessed reference
+        if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
+            RuntimeScalar deref = (RuntimeScalar) runtimeScalar.value;
+            if (deref.type != RuntimeScalarType.CODE) {
+                throw new PerlCompilerException("Not a subroutine reference");
+            }
+        }
+
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);

@@ -53,6 +53,17 @@ public class CompileAssignment {
                         bc.emitReg(valueReg);
                     }
                     case "@" -> {
+                        // For reserved variables like @_, use register-based localization
+                        if (bc.isReservedVariable(varName)) {
+                            int regIdx = bc.getVariableRegister(varName);
+                            bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                            bc.emitReg(regIdx);
+                            bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            bc.emitReg(regIdx);
+                            bc.emitReg(valueReg);
+                            bc.lastResultReg = regIdx;
+                            return true;
+                        }
                         bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
                         bc.emitReg(localReg);
                         bc.emit(nameIdx);

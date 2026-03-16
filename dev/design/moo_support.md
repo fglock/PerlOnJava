@@ -547,13 +547,76 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
     - This ensures the actual hash/array container is passed to `undefine()`, not a scalar
   - ExifTool PDF.t now passes all 26 tests (was 7/26)
 
+- [x] Phase 22: Fix stash keys for nested packages and overload &{} handling (2026-03-15)
+  - **Two fixes in this phase**:
+  
+  - **Fix 1: Stash keys for nested packages must include trailing `::`**
+    - Root cause: `keys %Foo::Bar::` was returning `Baz` instead of `Baz::` for nested packages
+    - This broke `Role::Tiny::_load_module` which uses `grep !/::\z/, keys %{_getstash($module)}`
+      to detect if a module's stash has actual symbols vs just sub-package markers
+    - **HashSpecialVariable.java fix**:
+      - Changed `entryKey = remainingKey.substring(0, nextSeparatorIndex)` 
+        to `entryKey = remainingKey.substring(0, nextSeparatorIndex + 2)`
+      - Now stash keys correctly include `::` suffix for sub-packages
+    - Fixes t/load_module_role_tiny.t (0/2 → 2/2)
+
+  - **Fix 2: \&{$blessed_obj} must throw "Not a subroutine reference" for objects without &{} overload**
+    - Root cause: `\&{$obj}` on a blessed object without `&{}` overload was creating a symbolic
+      reference instead of throwing an error
+    - In Perl: `\&{bless({}, "Foo")}` throws "Not a subroutine reference"
+    - In PerlOnJava: was creating CODE ref pointing to non-existent `&Foo=HASH(...)` sub
+    - **RuntimeCode.java fix (createCodeReference)**:
+      - Check `blessedId()`: negative = blessed with overload, positive = blessed without, 0 = not blessed
+      - For `blessId != 0` (blessed), try `&{}` overload if available
+      - If no `&{}` overload exists, throw "Not a subroutine reference"
+      - Also added check for unblessed REFERENCE types to throw same error
+    - Fixes t/method-generate-accessor.t (41/49 → 46/49), t/coerce-1.t (0/2 → 2/2)
+
+- [x] Phase 23: Fix `local @_` in string eval (2026-03-15)
+  - Root cause: `local @_ = (...)` in string eval was localizing `@main::_` (global) instead of
+    register 1 which holds the actual `@_` for the subroutine
+  - In PerlOnJava, `@_` in a subroutine (register 1) and `@main::_` are different arrays
+  - When compiling `local @_ = (...)`, the compiler was emitting:
+    - `LOAD_GLOBAL_ARRAY @main::_` followed by `PUSH_LOCAL_VARIABLE` and assignment
+  - For reserved variables like `@_`, we need to use register-based localization:
+    - `PUSH_LOCAL_VARIABLE r1` to save register 1's state
+    - `ARRAY_SET_FROM_LIST r1` to assign new values
+  - **CompileAssignment.java fix**:
+    - In `handleLocalAssignment`, check `bc.isReservedVariable(varName)` for `@` case
+    - If reserved, use `PUSH_LOCAL_VARIABLE` on the register directly instead of loading global
+  - **BytecodeCompiler.java fix**:
+    - Similar fix for standalone `local @_` without assignment
+  - This fixes Sub::Quote's `local @_ = ($value)` inlinification pattern
+  - Fixes t/method-generate-accessor.t (46/49 → 49/49)
+
+### Current Status
+
+**Test Results (after Phase 23):**
+- 62/71 test programs passing (87%)
+- ~768/829 subtests passing (93%)
+
+**Remaining Failures (categorized):**
+1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
+2. **croak-locations.t** (29 failures) - Carp reports `(eval N)` instead of actual filename
+3. **demolish tests** (6 failures) - Expected, DESTROY not supported
+4. **moo-utils-_subname-Sub-Name.t** (1 failure) - Expected, we have Sub::Util (no fallback to Sub::Name)
+5. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+6. **overloaded-coderefs.t** - Expected, B::Deparse not available
+
+**Expected failures** (not fixable without fundamental changes):
+- Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
+- DESTROY/GC: demolish tests (6)
+- Missing B::Deparse: overloaded-coderefs.t
+- Sub::Name fallback: moo-utils-_subname-Sub-Name.t (1)
+
+**Potentially fixable**:
+- croak-locations.t (29) - Carp filename in string eval
+
 ### Next Steps
 
-1. **Fix no-moo.t cleanup** - `no Moo` should remove `extends`, `has`, etc. from namespace
+1. **Investigate croak-locations.t** - Carp reports `(eval N)` instead of actual filename
 
-2. **Prototype checking** - `$$` prototype should accept `@array` argument (workaround: removed prototype)
-
-3. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
+2. **DEMOLISH support** - Expected to remain unsupported (requires DESTROY/GC hooks)
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
