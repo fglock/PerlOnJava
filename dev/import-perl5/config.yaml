@@ -27,6 +27,10 @@ imports:
   - source: perl5/dist/Carp/lib/Carp/Heavy.pm
     target: src/main/perl/lib/Carp/Heavy.pm
 
+  # CPAN client script - required by jcpan wrapper
+  - source: perl5/cpan/CPAN/scripts/cpan
+    target: src/main/perl/bin/cpan
+
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 

@@ -589,11 +589,34 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - This fixes Sub::Quote's `local @_ = ($value)` inlinification pattern
   - Fixes t/method-generate-accessor.t (46/49 → 49/49)
 
+- [x] Phase 24: Fix ::identifier bareword parsing (2026-03-16)
+  - Root cause: `::foo` without parens was always treated as `main::foo` identifier
+  - In Perl: `::foo` calls main::foo only if sub exists at compile time, else bareword string
+  - Mo uses `$M.$_.::e` to build package names - `::e` should be bareword string
+  - But tests use `::is ::exception { }` where `is` and `exception` are imported subs
+  - **ParsePrimary.java fix**:
+    - Check `GlobalVariable.getGlobalCodeRef(fullSubName).getDefinedBoolean()`
+    - If sub exists OR followed by `(`: function call (main::identifier)
+    - If sub doesn't exist AND no parens: bareword string ('::identifier')
+  - **config.yaml fix**: Added cpan script to sync config for jcpan wrapper
+  - **.gitignore fix**: Allow src/main/perl/bin/ directory in git
+  - Mo tests: 27/28 passing (99.3%)
+
+- [x] Phase 25: Fix self-referential hash assignment (2026-03-16)
+  - Root cause: `%h = (new_stuff, %h)` was clearing hash before evaluating `%h`
+  - Mo uses: `%e = (extends => sub{...}, has => sub{...}, %e)` to merge exports
+  - The hash was cleared before iterating over the RHS list containing `%h`
+  - **RuntimeHash.java fix**:
+    - Materialize entire RHS list into temporary array BEFORE clearing hash
+    - Similar to how tied hashes are already handled
+  - This fixed Mo's BUILD feature which depends on the %e merge pattern
+  - Mo tests: 6/28 failing → 1/28 failing (143/144 subtests pass)
+
 ### Current Status
 
-**Test Results (after Phase 23):**
-- 62/71 test programs passing (87%)
-- ~768/829 subtests passing (93%)
+**Test Results (after Phase 25):**
+- **Moo**: 62/71 test programs passing (87%), 768/829 subtests passing (93%)
+- **Mo**: 27/28 test programs passing (99.3%), 143/144 subtests passing
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
@@ -602,6 +625,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 4. **moo-utils-_subname-Sub-Name.t** (1 failure) - Expected, we have Sub::Util (no fallback to Sub::Name)
 5. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
 6. **overloaded-coderefs.t** - Expected, B::Deparse not available
+7. **Mo t/strict.t** (1 failure) - Error message format differs from Perl
 
 **Expected failures** (not fixable without fundamental changes):
 - Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
@@ -621,12 +645,16 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
 - **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
+- **Branch**: `fix/mo-bareword-parsing` (PR #322 - open)
 - **Key commits**:
   - `00c124167` - Fix print { func() } filehandle block parsing and JVM codegen
   - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution
   - `7a76739b8` - Fix goto &sub in use/import TAILCALL handling
   - `053d91a95` - Add Sub::Util, fix Scalar/List::Util VERSION, add Test::Harness
   - `7993ef74d` - Fix version parsing and MM->parse_version for CPAN.pm
+  - `db434f8d3` - Fix ::identifier bareword parsing and add cpan to sync
+  - `ff31163f9` - Fix self-referential hash assignment %h = (stuff, %h)
+  - `a3233cd55` - Improve ::identifier to check sub existence at compile time
 
 ## Related Documents
 

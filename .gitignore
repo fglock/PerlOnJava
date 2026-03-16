@@ -13,6 +13,8 @@ target/
 .java-version
 build/
 bin/
+# But allow Perl bin scripts
+!src/main/perl/bin/
 gradle/*
 !gradle/libs.versions.toml
 gradlew
