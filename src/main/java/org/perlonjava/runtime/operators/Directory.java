@@ -252,7 +252,10 @@ public class Directory {
 
         try {
             Path path = RuntimeIO.resolvePath(fileName);
-            Files.createDirectories(path);
+            // Use createDirectory (not createDirectories) so it throws FileAlreadyExistsException
+            // when the directory exists. This matches Perl's behavior where mkdir() fails
+            // with EEXIST if the directory already exists.
+            Files.createDirectory(path);
 
             // Set permissions only if the file system supports POSIX permissions
             if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
@@ -263,9 +266,9 @@ public class Directory {
 
             return scalarTrue;
         } catch (IOException e) {
-            // Set $! (errno) in case of failure
-            getGlobalVariable("main::!").set(e.getMessage());
-            return scalarFalse;
+            // Set $! (errno) properly using handleIOException which maps
+            // FileAlreadyExistsException to EEXIST (17), etc.
+            return handleIOException(e, fileName, 0);
         }
     }
 }
