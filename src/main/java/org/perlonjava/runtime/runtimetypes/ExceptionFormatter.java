@@ -93,12 +93,31 @@ public class ExceptionFormatter {
                 if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
-                        // For the innermost frame (index 0), use the runtime current package
-                        // tracked by SET_PACKAGE/PUSH_PACKAGE opcodes, which reflects runtime
-                        // "package Foo;" declarations.  Outer frames still use compile-time names.
-                        String pkg = (interpreterFrameIndex == 0)
-                                ? InterpreterState.currentPackage.get().toString()
-                                : frame.packageName();
+                        // First, get tokenIndex from PC mapping (needed for both package and line lookup)
+                        Integer tokenIndex = null;
+                        if (interpreterFrameIndex < interpreterPcs.size()) {
+                            int pc = interpreterPcs.get(interpreterFrameIndex);
+                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
+                                if (entryPc != null) {
+                                    tokenIndex = entryPc.getValue();
+                                }
+                            }
+                        }
+
+                        // Look up package from ByteCodeSourceMapper using tokenIndex
+                        // This unifies package tracking with the JVM bytecode path
+                        String pkg = null;
+                        if (tokenIndex != null && frame.code().errorUtil != null) {
+                            String fileName = frame.code().errorUtil.getFileName();
+                            pkg = ByteCodeSourceMapper.getPackageAtLocation(fileName, tokenIndex);
+                        }
+                        if (pkg == null) {
+                            // Fallback: runtime package for innermost frame, compile-time for others
+                            pkg = (interpreterFrameIndex == 0)
+                                    ? InterpreterState.currentPackage.get().toString()
+                                    : frame.packageName();
+                        }
 
                         String subName = frame.subroutineName();
                         if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
@@ -109,20 +128,11 @@ public class ExceptionFormatter {
                         entry.add(pkg);
                         String filename = frame.code().sourceName;
                         String line = String.valueOf(frame.code().sourceLine);
-                        if (interpreterFrameIndex < interpreterPcs.size()) {
-                            Integer tokenIndex = null;
-                            int pc = interpreterPcs.get(interpreterFrameIndex);
-                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
-                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
-                                if (entryPc != null) {
-                                    tokenIndex = entryPc.getValue();
-                                }
-                            }
-                            if (tokenIndex != null && frame.code().errorUtil != null) {
-                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
-                                filename = loc.fileName();
-                                line = String.valueOf(loc.lineNumber());
-                            }
+                        // Use tokenIndex for line lookup (same logic as before, just uses pre-computed tokenIndex)
+                        if (tokenIndex != null && frame.code().errorUtil != null) {
+                            ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                            filename = loc.fileName();
+                            line = String.valueOf(loc.lineNumber());
                         }
                         entry.add(filename);
                         entry.add(line);

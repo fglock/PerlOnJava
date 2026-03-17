@@ -189,20 +189,34 @@ public class ByteCodeSourceMapper {
     public static String getPackageAtLocation(String fileName, int tokenIndex) {
         int fileId = fileNameToId.getOrDefault(fileName, -1);
         if (fileId == -1) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG getPackageAtLocation: NO FILE ID for fileName=" + fileName);
+            }
             return null;
         }
 
         SourceFileInfo info = sourceFiles.get(fileId);
         if (info == null) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG getPackageAtLocation: NO SOURCE INFO for fileName=" + fileName + " fileId=" + fileId);
+            }
             return null;
         }
 
         Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
         if (entry == null) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG getPackageAtLocation: NO ENTRY for fileName=" + fileName + " tokenIndex=" + tokenIndex);
+            }
             return null;
         }
 
-        return packageNamePool.get(entry.getValue().packageNameId());
+        String pkg = packageNamePool.get(entry.getValue().packageNameId());
+        if (System.getenv("DEBUG_CALLER") != null) {
+            System.err.println("DEBUG getPackageAtLocation: fileName=" + fileName + " tokenIndex=" + tokenIndex 
+                + " foundTokenIndex=" + entry.getKey() + " pkg=" + pkg);
+        }
+        return pkg;
     }
 
     /**
