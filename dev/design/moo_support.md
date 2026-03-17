@@ -662,9 +662,9 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 
 ### Current Status
 
-**Test Results (after Phase 29):**
+**Test Results (after Phase 34):**
 - **Moo**: 63/71 test programs passing (89%), 796/829 subtests passing (96%)
-- **Mo**: 27/28 test programs passing (99.3%), 143/144 subtests passing
+- **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
@@ -672,7 +672,6 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
 4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
 5. **overloaded-coderefs.t** - Expected, B::Deparse not available
-6. **Mo t/strict.t** (1 failure) - Error message format differs from Perl
 
 **Expected failures** (not fixable without fundamental changes):
 - Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
@@ -759,10 +758,21 @@ The interpreter path uses different frame handling for `caller()`. Need to ensur
 
 See `dev/design/caller_package_context.md` Issue 2 for details.
 
-#### Phase 34: Mo strict.t Error Message (Low Impact)
-**Enables**: Mo t/strict.t (1 failure)
+#### Phase 34: Mo strict.t - Make $^H Magical (Completed)
+**Enables**: Mo t/strict.t (1 failure) → **FIXED**  
+**Status**: Completed 2026-03-17
 
-Minor formatting difference in error messages. Low priority cosmetic fix.
+Mo uses `$^H |= 1538` in its import to enable strict, but `$^H` was a regular variable
+that didn't communicate with the compiler's strict checking.
+
+**Fix**: Made `$^H` a `ScalarSpecialVariable` that syncs with `strictOptionsStack`:
+- On write: Updates symbol table's strict options
+- On read: Returns current strict options from symbol table
+
+**Future consideration**: Refactor to use `$^H` as single source of truth, eliminating
+`strictOptionsStack`. See `dev/design/strict_hints_refactor.md` for analysis.
+
+**Result**: Mo tests now 28/28 passing (was 27/28).
 
 #### Phase 35: croak-locations.t Test 28 (Low Impact)
 **Enables**: 1 additional subtest
@@ -776,7 +786,7 @@ Complex nested eval context where Carp reports wrong caller. Edge case in stack 
 | Priority | Phase | Impact | Status | Effort |
 |----------|-------|--------|--------|--------|
 | 1 | **B::Deparse** (32) | 1 test | Ready | Medium |
-| 2 | **Mo strict.t** (34) | 1 test | Ready | Low |
+| 2 | ~~Mo strict.t (34)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
 | 3 | **croak-locations.t** (35) | 1 test | Ready | Low |
 | 4 | **Interpreter caller()** (33) | Parity | Ready | Medium |
 | 5 | DESTROY (30) | 6 tests | **Deferred** | High |
@@ -784,9 +794,8 @@ Complex nested eval context where Carp reports wrong caller. Edge case in stack 
 
 **Actionable items** (can be implemented now):
 1. **Phase 32 (B::Deparse)**: Store token range in RuntimeCode, reconstruct source
-2. **Phase 34 (Mo strict.t)**: Minor error message formatting fix
-3. **Phase 35 (croak-locations.t)**: Edge case in Carp stack walking
-4. **Phase 33 (Interpreter caller())**: Backend parity for caller()
+2. **Phase 35 (croak-locations.t)**: Edge case in Carp stack walking
+3. **Phase 33 (Interpreter caller())**: Backend parity for caller()
 
 **Deferred** (need design maturation):
 - Phase 30 (DESTROY): Requires scope-based tracking, complex GC interaction
