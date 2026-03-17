@@ -96,31 +96,64 @@ public class ExceptionFormatter {
                 if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
-                        // First, get tokenIndex from PC mapping (needed for both package and line lookup)
-                        Integer tokenIndex = null;
-                        if (interpreterFrameIndex < interpreterPcs.size()) {
-                            int pc = interpreterPcs.get(interpreterFrameIndex);
-                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
-                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
-                                if (entryPc != null) {
-                                    tokenIndex = entryPc.getValue();
+                        // First check CallerStack for accurate call site info.
+                        // CallerStack entries are pushed by CALL_SUB/CALL_METHOD with the exact
+                        // call site location, which is more accurate than the current PC.
+                        var callerInfo = CallerStack.peek(interpreterFrameIndex);
+                        
+                        String pkg = null;
+                        String filename = frame.code().sourceName;
+                        String line = String.valueOf(frame.code().sourceLine);
+                        
+                        if (callerInfo != null && callerInfo.filename() != null) {
+                            // Use CallerStack info for call site location
+                            pkg = callerInfo.packageName();
+                            filename = callerInfo.filename();
+                            line = String.valueOf(callerInfo.line());
+                            if (System.getenv("DEBUG_CALLER") != null) {
+                                System.err.println("DEBUG ExceptionFormatter: using CallerStack[" + interpreterFrameIndex + 
+                                    "] pkg=" + pkg + " file=" + filename + " line=" + line);
+                            }
+                        } else {
+                            // Fallback: get tokenIndex from PC mapping
+                            Integer tokenIndex = null;
+                            int pc = -1;
+                            if (interpreterFrameIndex < interpreterPcs.size()) {
+                                pc = interpreterPcs.get(interpreterFrameIndex);
+                                if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                    var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
+                                    if (entryPc != null) {
+                                        tokenIndex = entryPc.getValue();
+                                    }
                                 }
                             }
-                        }
+                            if (System.getenv("DEBUG_CALLER") != null) {
+                                System.err.println("DEBUG ExceptionFormatter: fallback interpreter frame " + interpreterFrameIndex + 
+                                    " pc=" + pc + " tokenIndex=" + tokenIndex + 
+                                    " sourceName=" + frame.code().sourceName);
+                            }
 
-                        // Look up package from ByteCodeSourceMapper using tokenIndex
-                        // This unifies package tracking with the JVM bytecode path
-                        // Use sourceName (original compile-time filename) for lookup, not
-                        // the #line-adjusted filename from errorUtil.getFileName()
-                        String pkg = null;
-                        if (tokenIndex != null && frame.code().sourceName != null) {
-                            pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
-                        }
-                        if (pkg == null) {
-                            // Fallback: runtime package for innermost frame, compile-time for others
-                            pkg = (interpreterFrameIndex == 0)
-                                    ? InterpreterState.currentPackage.get().toString()
-                                    : frame.packageName();
+                            // Look up package from ByteCodeSourceMapper using tokenIndex
+                            if (tokenIndex != null && frame.code().sourceName != null) {
+                                pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
+                            }
+                            if (pkg == null) {
+                                // Fallback: runtime package for innermost frame, compile-time for others
+                                pkg = (interpreterFrameIndex == 0)
+                                        ? InterpreterState.currentPackage.get().toString()
+                                        : frame.packageName();
+                            }
+
+                            // Use tokenIndex for line lookup
+                            if (tokenIndex != null && frame.code().errorUtil != null) {
+                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                                filename = loc.fileName();
+                                line = String.valueOf(loc.lineNumber());
+                                if (System.getenv("DEBUG_CALLER") != null) {
+                                    System.err.println("DEBUG ExceptionFormatter: tokenIndex " + tokenIndex + 
+                                        " -> file=" + filename + " line=" + line);
+                                }
+                            }
                         }
 
                         String subName = frame.subroutineName();
@@ -130,14 +163,6 @@ public class ExceptionFormatter {
 
                         var entry = new ArrayList<String>();
                         entry.add(pkg);
-                        String filename = frame.code().sourceName;
-                        String line = String.valueOf(frame.code().sourceLine);
-                        // Use tokenIndex for line lookup (same logic as before, just uses pre-computed tokenIndex)
-                        if (tokenIndex != null && frame.code().errorUtil != null) {
-                            ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
-                            filename = loc.fileName();
-                            line = String.valueOf(loc.lineNumber());
-                        }
                         entry.add(filename);
                         entry.add(line);
                         entry.add(subName);

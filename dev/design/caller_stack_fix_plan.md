@@ -263,38 +263,43 @@ SourceLocation loc = ByteCodeSourceMapper.parseStackTraceElement(synthetic, loca
 - [x] Tests 1-27, 29 passing
 - [x] Phase 1: Investigate CallerStack for interpreter
 - [x] Phase 2: Track call sites in interpreter (implemented CallerStack push/pop)
+- [x] Phase 3: Modify ExceptionFormatter to use CallerStack for interpreter call-site tracking
+- [x] All 29 croak-locations.t tests passing
 
-### Current Status (2026-03-17)
+### Current Status (2026-03-17) - COMPLETE
 
-**Implementation completed:**
-1. Added `getCallSiteInfo()` helper method to `BytecodeInterpreter.java`
-2. Modified `CALL_SUB` handler to push/pop CallerStack around calls
-3. Modified `CALL_METHOD` handler to push/pop CallerStack around calls
-4. Added debug output to `CallerStack.push()` for tracing
+**Final fix:** Modified `ExceptionFormatter` to use `CallerStack` for interpreter frame line/file tracking.
+
+**Key change in ExceptionFormatter.java (lines 99-117):**
+```java
+// First check CallerStack for accurate call site info.
+// CallerStack entries are pushed by CALL_SUB/CALL_METHOD with the exact
+// call site location, which is more accurate than the current PC.
+var callerInfo = CallerStack.peek(interpreterFrameIndex);
+
+if (callerInfo != null && callerInfo.filename() != null) {
+    // Use CallerStack info for call site location
+    pkg = callerInfo.packageName();
+    filename = callerInfo.filename();
+    line = String.valueOf(callerInfo.line());
+} else {
+    // Fallback: use PC-based lookup (original behavior)
+    ...
+}
+```
+
+**The fix works because:**
+1. CallerStack entries are pushed at the CALL_SUB/CALL_METHOD opcodes with the correct call site location
+2. CallerStack index 0 = most recent call (innermost frame), index 1 = previous call, etc.
+3. Interpreter frame indices align with CallerStack indices (both count from innermost)
+4. For test 28: CallerStack[1] contains `pkg=Elsewhere file=LocationTestFile line=21`
 
 **Results:**
-- Unit tests: ALL PASSING (no regressions)
-- Simple caller() tests: WORKING CORRECTLY
-- Moo croak-locations.t test 28: STILL FAILING (line 18 instead of line 21)
+- Unit tests: ALL PASSING
+- Moo croak-locations.t: ALL 29 TESTS PASSING (including test 28)
+- Error message now correctly shows: `isa check for "attr" failed: must be true at LocationTestFile line 21.`
 
-**Root cause of remaining issue:**
-The CallerStack push/pop is happening correctly at call time, but `ExceptionFormatter` doesn't use CallerStack for interpreter frame tracking. Instead, it uses `InterpreterState.getPcStack()` which returns the current PC, not the call-site PC.
-
-When a very simple isa sub (single croak statement) is called:
-- CallerStack.push correctly records line 21 (apply_roles_to_object call site)
-- But ExceptionFormatter gets line info from InterpreterState, which reflects the last instruction executed in the parent frame
-- For some reason, with simple subs the line mapping returns line 18 instead of line 21
-
-**Interesting observation:**
-- Adding ANY code to the isa sub (even `my $x = 1;`) changes the line number reported
-- With 2+ extra statements, the correct line (21) is reported
-- This suggests the issue is in how simple single-statement subs affect PC-to-line mapping
-
-### Remaining Work
-- [ ] Phase 3: Modify ExceptionFormatter to use CallerStack for interpreter call-site tracking
-- [ ] Phase 4: Investigate why simple subs have incorrect line mapping
-
-### Not Started
+### Not Started (Low Priority)
 - [ ] Thread-safety analysis (CallerStack uses static ArrayList, not ThreadLocal)
 
 ## Appendix: Test 28 Code Structure
