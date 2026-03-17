@@ -208,13 +208,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield scalarUndef;
                 }
                 case HINTS -> {
-                    // $^H - Return current strict options from symbol table
+                    // $^H - Return stored lvalue first (preserves custom hint bits like 0x04000000)
+                    // Only fall back to symbol table strict options if no lvalue stored
+                    if (lvalue != null) {
+                        yield lvalue;
+                    }
                     ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
                     if (symbolTable != null) {
                         yield getScalarInt(symbolTable.getStrictOptions());
                     }
-                    // Fallback to stored lvalue if no symbol table available
-                    yield lvalue != null ? lvalue : getScalarInt(0);
+                    yield getScalarInt(0);
                 }
             };
             return result;
