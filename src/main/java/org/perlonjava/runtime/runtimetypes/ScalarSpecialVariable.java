@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.frontend.parser.SpecialBlockParser;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.Stack;
@@ -57,7 +59,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        if (variableId == Id.INPUT_LINE_NUMBER) {
+        if (variableId == Id.INPUT_LINE_NUMBER || variableId == Id.HINTS) {
             if (lvalue == null) {
                 lvalue = new RuntimeScalar(0);
             }
@@ -76,6 +78,22 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             } else {
                 lvalue.set(value);
             }
+            this.type = lvalue.type;
+            this.value = lvalue.value;
+            return lvalue;
+        }
+        if (variableId == Id.HINTS) {
+            int hints = value.getInt();
+            // Update the symbol table's strict options
+            ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+            if (symbolTable != null) {
+                // Clear all strict options and set the new ones
+                // The hints value contains the strict flags directly
+                symbolTable.setStrictOptions(hints);
+            }
+            // Also store in lvalue for reading back
+            vivify();
+            lvalue.set(hints);
             this.type = lvalue.type;
             this.value = lvalue.value;
             return lvalue;
@@ -188,6 +206,15 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         yield codeBlockResult != null ? codeBlockResult : scalarUndef;
                     }
                     yield scalarUndef;
+                }
+                case HINTS -> {
+                    // $^H - Return current strict options from symbol table
+                    ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+                    if (symbolTable != null) {
+                        yield getScalarInt(symbolTable.getStrictOptions());
+                    }
+                    // Fallback to stored lvalue if no symbol table available
+                    yield lvalue != null ? lvalue : getScalarInt(0);
                 }
             };
             return result;
@@ -349,6 +376,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
         LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
+        HINTS, // $^H - Compile-time hints (strict, etc.)
     }
 
     private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {
