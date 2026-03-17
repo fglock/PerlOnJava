@@ -376,6 +376,183 @@ filteredSnapshot.setCurrentPackage(parser.ctx.symbolTable.getCurrentPackage(), .
 
 This captures the package at **parse time**, not runtime. For lazily-compiled subs, this may be wrong.
 
+---
+
+## Issue 5: croak-locations.t Tests 28-29 (Investigation 2026-03-17)
+
+### Problem Summary
+
+Two tests in Moo's `croak-locations.t` fail with incorrect caller information:
+
+| Test | Description | Expected | Got |
+|------|-------------|----------|-----|
+| 28 | Moo::Role::create_class_with_roles - default fails isa | LocationTestFile line 21 | LocationTestFile line 18 |
+| 29 | Method::Generate::DemolishAll - user croak | LocationTestFile line 9 | (eval N) line 36 |
+
+### Test 28 Deep Dive
+
+**Test code structure:**
+```perl
+1:  BEGIN {
+2:    eval qq{
+3:      package ${PACKAGE}::Role;
+4:      use Moo::Role;
+...
+14:   } or die $@;
+15: }
+16: 
+17: use Moo;
+18: my $o = $PACKAGE->new;        # ← PerlOnJava reports this line
+19: package Elsewhere;
+20: use Moo::Role ();
+21: Moo::Role->apply_roles_to_object($o, "${PACKAGE}::Role");  # ← Should report this line
+```
+
+**Comparing stack traces (caller frames at croak time):**
+
+| Frame | Perl | PerlOnJava |
+|-------|------|------------|
+| 5 | pkg=Elsewhere file=LocationTestFile **line=21** | pkg=main file=LocationTestFile **line=18** |
+
+**Key observations:**
+1. PerlOnJava reports line 18 (`$PACKAGE->new`) instead of line 21 (`apply_roles_to_object`)
+2. PerlOnJava reports package `main` instead of `Elsewhere`
+3. The offset is exactly 3 lines (18 vs 21)
+4. In a SECOND stack dump during error handling, PerlOnJava correctly shows line 21
+
+### Investigation Results
+
+**Basic caller() works correctly:**
+```perl
+package Before;
+main::test();  # caller correctly reports "Before"
+
+package After;
+main::test();  # caller correctly reports "After"
+```
+
+**Eval with package changes works correctly:**
+```perl
+eval q{
+  package ChangedPkg;
+  main::test();  # caller correctly reports "ChangedPkg"
+};
+```
+
+**Issue is specific to Sub::Quote generated code:**
+When Sub::Quote generates code at runtime (used by Moo for constructors/accessors), the caller frame information appears stale.
+
+### Hypotheses
+
+**Hypothesis A: Stale tokenIndex in Generated Code**
+
+When Sub::Quote compiles code at runtime via `eval`, the tokenIndex stored in bytecode LineNumberTable may reference the wrong position. The generated code's LineNumberTable entries may be inheriting stale context from the compilation environment.
+
+**Hypothesis B: Package Not Updated for Runtime-Generated Frames**
+
+The `package Elsewhere;` statement at line 19 changes the package at compile time, but when Sub::Quote generates code, it may be capturing the package context from before this change.
+
+**Hypothesis C: Deferred Compilation Timing**
+
+Sub::Quote uses Sub::Defer to lazily compile subs. When the sub is finally compiled (at first call), it may capture the wrong source location context.
+
+### Test Script for Reproduction
+
+```bash
+cat > /tmp/test_croak_moo.pl << 'EOF'
+use strict;
+use warnings;
+use Carp qw(croak);
+
+my $PACKAGE = "LocationTest";
+my $code = <<'END_CODE';
+BEGIN {
+  eval qq{
+    package ${PACKAGE}::Role;
+    use Moo::Role;
+    use Carp qw(croak);
+    has attr => (
+      is => 'ro',
+      default => sub { 0 },
+      isa => sub {
+        croak "must be true" unless \$_[0];
+      },
+    );
+    1;
+  } or die $@;
+}
+
+use Moo;
+my $o = $PACKAGE->new;
+package Elsewhere;
+use Moo::Role ();
+Moo::Role->apply_roles_to_object($o, "${PACKAGE}::Role");
+END_CODE
+
+my $sub = eval qq{ sub {
+package $PACKAGE;
+#line 1 LocationTestFile
+$code
+  } };
+die "Compile error: $@" if $@;
+
+local $SIG{__DIE__} = sub {
+    my $i = 0;
+    print STDERR "=== CALLER FRAMES ===\n";
+    while (my ($pkg, $file, $line, $sub) = caller($i++)) {
+        print STDERR "  Frame $i: pkg=$pkg file=$file line=$line sub=", ($sub // "<none>"), "\n";
+    }
+};
+
+eval { $sub->(); 1 };
+print "Error: $@";
+EOF
+
+# Compare:
+echo "=== Perl ===" && perl /tmp/test_croak_moo.pl 2>&1
+echo "=== PerlOnJava ===" && ./jperl /tmp/test_croak_moo.pl 2>&1
+```
+
+### Next Steps
+
+1. **Trace Sub::Quote compilation**: Add debug output to see what tokenIndex/package is captured when quote_sub compiles code
+
+2. **Check ByteCodeSourceMapper entries**: When the generated code runs, what entries exist in `sourceFiles` and what does `floorEntry` return?
+
+3. **Compare interpreter vs JVM paths**: Test with `JPERL_EVAL_NO_INTERPRETER=1` to see if the issue is in interpreter frame handling
+
+4. **Investigate "eager" caller capture**: As suggested, consider capturing caller info (filename, line, package) at CALL TIME rather than looking it up lazily from bytecode metadata
+
+5. **Check Sub::Defer's undefer_sub**: The first call to a deferred sub triggers compilation. This may be affecting what source location gets stored.
+
+### Potential Fix Approaches
+
+**Approach A: Eager Caller Info Capture**
+
+Instead of storing tokenIndex in bytecode and looking up at caller() time, capture the actual (file, line, package) tuple when each call is made:
+
+```java
+// Pseudo-code for method call emission
+mv.visitLdcInsn(currentFileName);
+mv.visitLdcInsn(currentLineNumber);
+mv.visitLdcInsn(currentPackage);
+mv.visitMethodInsn(INVOKESTATIC, "CallerContext", "push", ...);
+// ... actual method call ...
+mv.visitMethodInsn(INVOKESTATIC, "CallerContext", "pop", ...);
+```
+
+**Approach B: Fix Sub::Quote Source Location**
+
+Ensure Sub::Quote's generated eval code stores correct source location in its bytecode. May need to pass `#line` directives into the generated code.
+
+**Approach C: Use Runtime Package Tracking**
+
+For the package mismatch, ensure the runtime package (tracked by SET_PACKAGE opcode) is used instead of compile-time package for caller() lookups in generated code.
+
+### Test 29 Notes
+
+Test 29 (`Method::Generate::DemolishAll - user croak`) has a different issue - the error message contains `(eval N) line 36` instead of the actual source file. This is likely related to how DEMOLISH is called from generated destructor code. Since DESTROY is not fully supported in PerlOnJava, this test may be expected to fail.
+
 ## Related Documents
 
 - `dev/design/moo_support.md` - Moo integration progress
