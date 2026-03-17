@@ -660,15 +660,28 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - After fix: `caller(0)` returns correct line numbers matching Perl exactly
   - Carp stack traces now show correct "called at line N" information
 
+- [x] Phase 30: Unified caller() package tracking for interpreter path (2026-03-17)
+  - Root cause: Interpreter path in ExceptionFormatter used different package sources for inner vs outer frames
+  - Frame 0 (innermost): Used `InterpreterState.currentPackage` (correct runtime package)
+  - Frame > 0 (outer): Used `frame.packageName()` (wrong - compile-time package from sub definition)
+  - **ByteCodeSourceMapper.java fix**:
+    - Added `getPackageAtLocation(String fileName, int tokenIndex)` to look up package from source map
+    - This makes interpreter path use same source of truth as JVM path
+  - **ExceptionFormatter.java fix**:
+    - Interpreter path now calls `ByteCodeSourceMapper.getPackageAtLocation()` for all frames
+    - Ensures consistent package reporting regardless of stack depth
+  - See `dev/design/unified_caller_stack.md` for full analysis
+  - Result: Interpreter and JVM backends now report same package for same source location
+
 ### Current Status
 
-**Test Results (after Phase 35):**
-- **Moo**: 64/71 test programs passing (90%), 806/839 subtests passing (96%)
+**Test Results (after Phase 30):**
+- **Moo**: 64/71 test programs passing (90%), 795/828 subtests passing (96%)
 - **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
-2. **croak-locations.t** (2 failures) - Tests 28-29: complex eval/DEMOLISH cases
+2. **croak-locations.t** (2 failures) - Tests 15, 18: complex eval/BUILDARGS stack walking
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
 4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
 
@@ -680,7 +693,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 
 The remaining test failures require implementing core Perl features that are currently missing or incomplete in PerlOnJava.
 
-#### Phase 30: DESTROY/Destructor Support (High Impact)
+#### Phase 31: DESTROY/Destructor Support (High Impact)
 **Enables**: demolish tests (6 failures), proper object cleanup  
 **Status**: Analysis complete, implementation deferred  
 **Design doc**: `dev/design/destroy_support.md`
@@ -691,7 +704,7 @@ when an object becomes unreachable while we can still access it to call DESTROY.
 Proposed approach: Scope-based DESTROY with GC fallback. See dedicated design doc for
 detailed analysis of implementation strategies, challenges, and test cases.
 
-#### Phase 31: Weak Reference Emulation (High Impact)  
+#### Phase 32: Weak Reference Emulation (High Impact)  
 **Enables**: accessor-weaken tests (20 failures), no-moo.t (5 failures)  
 **Status**: Analysis complete, implementation deferred  
 **Design doc**: `dev/design/weak_references.md`
@@ -706,7 +719,7 @@ impact - RuntimeScalar is instantiated millions of times. Need to explore altern
 
 See dedicated design doc for full analysis and alternative approaches.
 
-#### Phase 32: B::Deparse Stub Implementation (Completed)
+#### Phase 33: B::Deparse Stub Implementation (Completed)
 **Enables**: overloaded-coderefs.t (10 tests) → **FIXED**  
 **Status**: Completed 2026-03-17
 
@@ -730,17 +743,17 @@ This stub only works for Sub::Quote-generated code where source is stored.
 
 **Result**: overloaded-coderefs.t now 10/10 passing (was 9/10).
 
-#### Phase 33: Interpreter caller() Parity (Medium Impact)
-**Enables**: consistent behavior between JVM and interpreter backends
+#### Phase 34: Interpreter caller() Parity (Completed)
+**Enables**: consistent behavior between JVM and interpreter backends  
+**Status**: Completed 2026-03-17 (merged into Completed Phase 30 above)
 
-The interpreter path uses different frame handling for `caller()`. Need to ensure:
-- Package context is correct
-- Line numbers match
-- Subroutine names are accurate
+The interpreter path was using different package sources for inner vs outer frames.
+Fixed by adding `getPackageAtLocation()` to ByteCodeSourceMapper and using it in
+ExceptionFormatter for all frames.
 
-See `dev/design/caller_package_context.md` Issue 2 for details.
+See `dev/design/unified_caller_stack.md` for detailed analysis.
 
-#### Phase 34: Mo strict.t - Make $^H Magical (Completed)
+#### Phase 35: Mo strict.t - Make $^H Magical (Completed)
 **Enables**: Mo t/strict.t (1 failure) → **FIXED**  
 **Status**: Completed 2026-03-17
 
@@ -756,10 +769,14 @@ that didn't communicate with the compiler's strict checking.
 
 **Result**: Mo tests now 28/28 passing (was 27/28).
 
-#### Phase 35: croak-locations.t Test 28 (Low Impact)
-**Enables**: 1 additional subtest
+#### Phase 36: croak-locations.t Tests 15, 18 (Low Impact)
+**Enables**: 2 additional subtests
 
-Complex nested eval context where Carp reports wrong caller. Edge case in stack walking.
+Complex eval/BUILDARGS stack walking cases where Carp reports wrong caller:
+- Test 15: Wrapped inlined BUILDARGS shows `(eval N)` instead of `LocationTestFile`
+- Test 18: Moo::Object new args shows internal file instead of caller location
+
+These are edge cases in how Carp walks the stack to find the "blame" location.
 
 ---
 
@@ -767,24 +784,23 @@ Complex nested eval context where Carp reports wrong caller. Edge case in stack 
 
 | Priority | Phase | Impact | Status | Effort |
 |----------|-------|--------|--------|--------|
-| 1 | ~~B::Deparse (32)~~ | ~~1 test~~ | **Completed** | ~~Medium~~ |
-| 2 | ~~Mo strict.t (34)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
-| 3 | **croak-locations.t** (35) | 1 test | Ready | Low |
-| 4 | **Interpreter caller()** (33) | Parity | Ready | Medium |
-| 5 | DESTROY (30) | 6 tests | **Deferred** | High |
-| 6 | Weak References (31) | 25 tests | **Deferred** | High |
+| 1 | ~~B::Deparse (33)~~ | ~~1 test~~ | **Completed** | ~~Medium~~ |
+| 2 | ~~Mo strict.t (35)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
+| 3 | ~~Interpreter caller() (34)~~ | ~~Parity~~ | **Completed** | ~~Medium~~ |
+| 4 | **croak-locations.t** (36) | 2 tests | Ready | Medium |
+| 5 | DESTROY (31) | 6 tests | **Deferred** | High |
+| 6 | Weak References (32) | 25 tests | **Deferred** | High |
 
 **Actionable items** (can be implemented now):
-1. **Phase 35 (croak-locations.t)**: Edge case in Carp stack walking
-2. **Phase 33 (Interpreter caller())**: Backend parity for caller()
+1. **Phase 36 (croak-locations.t)**: Edge cases in Carp stack walking (tests 15, 18)
 
 **Deferred** (need design maturation):
-- Phase 30 (DESTROY): Requires scope-based tracking, complex GC interaction
-- Phase 31 (Weak refs): Memory impact concern, need alternative to adding field
+- Phase 31 (DESTROY): Requires scope-based tracking, complex GC interaction
+- Phase 32 (Weak refs): Memory impact concern, need alternative to adding field
 
 **Achievable test improvement without deferred features**:
 - Current: 64/71 Moo tests (90%), 28/28 Mo tests (100%)
-- Potential: +1 (croak-locations) = minor improvement
+- Potential: +2 (croak-locations) = minor improvement
 - The bulk of remaining failures (31 tests) require DESTROY or weak refs
 
 ### PR Information
@@ -804,9 +820,11 @@ Complex nested eval context where Carp reports wrong caller. Edge case in stack 
   - `ff31163f9` - Fix self-referential hash assignment %h = (stuff, %h)
   - `a3233cd55` - Improve ::identifier to check sub existence at compile time
   - `86591c703` - Add Sub::Name module and fix @INC hook exception handling
+  - `c35faad00` - Fix interpreter path to use unified package tracking
 
 ## Related Documents
 
 - `dev/design/cpan_client.md` - jcpan implementation
+- `dev/design/unified_caller_stack.md` - caller() package tracking analysis
 - `dev/import-perl5/README.md` - Module sync process
 - `dev/import-perl5/config.yaml` - Module import configuration
