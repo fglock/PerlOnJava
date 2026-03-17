@@ -644,15 +644,31 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - See `dev/design/caller_package_context.md` for detailed analysis
   - No data structure changes, minimal 6-line fix
 
+- [x] Phase 29: Fix caller() returning wrong line numbers (2026-03-17)
+  - Root cause: Phase 28's emit-time `saveSourceLocation()` call was overwriting correct
+    line numbers with wrong values. The issue was that `ErrorMessageUtil.getLineNumber()` 
+    uses a forward-only cache - it only counts forward from the last processed token.
+  - During parsing, tokens are processed in order (1, 2, 3, ..., 500), so line numbers are correct
+  - During emit, subroutine tokens are processed out of order (105, 132, ...) but the cache
+    has already advanced past them, so all lookups return the last cached line number
+  - **ByteCodeSourceMapper.java fix**:
+    - In `saveSourceLocation()`, check if an entry already exists for the tokenIndex
+    - If it exists, PRESERVE the existing line number (from parse time) but UPDATE 
+      the package and subroutine info (from emit time)
+    - This combines: correct LINE from parse-time + correct PACKAGE from emit-time
+  - Before fix: `caller(0)` returned line 25 for all frames (wrong)
+  - After fix: `caller(0)` returns correct line numbers matching Perl exactly
+  - Carp stack traces now show correct "called at line N" information
+
 ### Current Status
 
-**Test Results (after Phase 28):**
-- **Moo**: 64/71 test programs passing (90%), 795/829 subtests passing (96%)
+**Test Results (after Phase 29):**
+- **Moo**: 63/71 test programs passing (89%), 796/829 subtests passing (96%)
 - **Mo**: 27/28 test programs passing (99.3%), 143/144 subtests passing
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
-2. **croak-locations.t** (3 failures) - Complex nested eval cases, Carp stack walking edge cases
+2. **croak-locations.t** (2 failures) - Tests 28-29: complex eval/DEMOLISH cases
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
 4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
 5. **overloaded-coderefs.t** - Expected, B::Deparse not available
@@ -663,17 +679,131 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 - DESTROY/GC: demolish tests (6)
 - Missing B::Deparse: overloaded-coderefs.t
 
-### Next Steps
+### Next Steps - Missing Features Roadmap
 
-1. **Investigate croak-locations.t remaining 3 failures** - Related to Carp stack walking in nested eval contexts
-2. **Interpreter path frame handling** - `caller()` in interpreter mode uses different code path (see caller_package_context.md Issue 2)
-3. **Mo strict.t error message** - Minor formatting difference
+The remaining test failures require implementing core Perl features that are currently missing or incomplete in PerlOnJava.
+
+#### Phase 30: DESTROY/Destructor Support (High Impact)
+**Enables**: demolish tests (6 failures), proper object cleanup  
+**Status**: Analysis complete, implementation deferred  
+**Design doc**: `dev/design/destroy_support.md`
+
+Perl's DESTROY relies on reference counting; Java uses GC. The challenge is detecting
+when an object becomes unreachable while we can still access it to call DESTROY.
+
+Proposed approach: Scope-based DESTROY with GC fallback. See dedicated design doc for
+detailed analysis of implementation strategies, challenges, and test cases.
+
+#### Phase 31: Weak Reference Emulation (High Impact)  
+**Enables**: accessor-weaken tests (20 failures), no-moo.t (5 failures)  
+**Status**: Analysis complete, implementation deferred  
+**Design doc**: `dev/design/weak_references.md`
+
+Perl's weak references are tied to reference counting, which Java doesn't have.
+
+**Key concern**: Adding `isWeak` field to RuntimeScalar would have significant memory
+impact - RuntimeScalar is instantiated millions of times. Need to explore alternatives:
+- External registry (IdentityHashMap) for weak ref tracking
+- Sentinel wrapper type in value field
+- Bit-packing in type field
+
+See dedicated design doc for full analysis and alternative approaches.
+
+#### Phase 32: B::Deparse Using Source Token Reconstruction (Medium Impact)
+**Enables**: overloaded-coderefs.t
+
+B::Deparse in Perl introspects the internal optree to decompile code back to source.
+While we can't truly decompile JVM bytecode, we CAN reconstruct source from tokens.
+
+**Key insight**: We already have the infrastructure!
+- `SubroutineNode` stores `tokenIndex` (start position)
+- Tokens store their original `text` in `LexerToken.text`
+- `ErrorMessageUtil` uses tokens for "near" error messages
+- We just need to capture the END token index and store it
+
+**Implementation approach**:
+1. Modify `SubroutineNode` to store `endTokenIndex` (captured after `}` is consumed)
+2. Store token range in `RuntimeCode` (startToken, endToken, tokens list reference)
+3. Create `B/Deparse.pm`:
+   ```perl
+   package B::Deparse;
+   sub new { bless {}, shift }
+   sub coderef2text {
+       my ($self, $coderef) = @_;
+       # Call Java method to reconstruct source from tokens
+       return _deparse_coderef($coderef);
+   }
+   ```
+4. Add `RuntimeCode.deparseSource()` Java method that:
+   - Gets startToken and endToken indices
+   - Iterates tokens[start..end] and concatenates `.text`
+   - Returns reconstructed source string
+
+**Advantages**:
+- Reuses existing token storage (no new data structures)
+- Gives EXACT original source (not reconstructed from AST)
+- Works for all subroutines, not just simple ones
+- Handles comments, formatting, heredocs correctly
+
+**Limitation**: Only works for subs defined in parsed source, not for:
+- XS/Java builtins
+- Dynamically generated code (unless we store eval strings)
+
+#### Phase 33: Interpreter caller() Parity (Medium Impact)
+**Enables**: consistent behavior between JVM and interpreter backends
+
+The interpreter path uses different frame handling for `caller()`. Need to ensure:
+- Package context is correct
+- Line numbers match
+- Subroutine names are accurate
+
+See `dev/design/caller_package_context.md` Issue 2 for details.
+
+#### Phase 34: Mo strict.t Error Message (Low Impact)
+**Enables**: Mo t/strict.t (1 failure)
+
+Minor formatting difference in error messages. Low priority cosmetic fix.
+
+#### Phase 35: croak-locations.t Test 28 (Low Impact)
+**Enables**: 1 additional subtest
+
+Complex nested eval context where Carp reports wrong caller. Edge case in stack walking.
+
+---
+
+**Revised Priority Order** (considering deferred implementations):
+
+| Priority | Phase | Impact | Status | Effort |
+|----------|-------|--------|--------|--------|
+| 1 | **B::Deparse** (32) | 1 test | Ready | Medium |
+| 2 | **Mo strict.t** (34) | 1 test | Ready | Low |
+| 3 | **croak-locations.t** (35) | 1 test | Ready | Low |
+| 4 | **Interpreter caller()** (33) | Parity | Ready | Medium |
+| 5 | DESTROY (30) | 6 tests | **Deferred** | High |
+| 6 | Weak References (31) | 25 tests | **Deferred** | High |
+
+**Actionable items** (can be implemented now):
+1. **Phase 32 (B::Deparse)**: Store token range in RuntimeCode, reconstruct source
+2. **Phase 34 (Mo strict.t)**: Minor error message formatting fix
+3. **Phase 35 (croak-locations.t)**: Edge case in Carp stack walking
+4. **Phase 33 (Interpreter caller())**: Backend parity for caller()
+
+**Deferred** (need design maturation):
+- Phase 30 (DESTROY): Requires scope-based tracking, complex GC interaction
+- Phase 31 (Weak refs): Memory impact concern, need alternative to adding field
+
+**Achievable test improvement without deferred features**:
+- Current: 63/71 Moo tests (89%), 27/28 Mo tests (96%)
+- Potential: +1 (B::Deparse) +1 (Mo strict.t) = minor improvement
+- The bulk of remaining failures (31 tests) require DESTROY or weak refs
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
-- **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
-- **Branch**: `fix/mo-bareword-parsing` (PR #322 - open)
-- **Branch**: `feature/sub-name` (PR #324 - open)
+- **Branch**: `fix/goto-tailcall-import` (PR #320 - merged)
+- **Branch**: `fix/mo-bareword-parsing` (PR #322 - merged)
+- **Branch**: `feature/sub-name` (PR #324 - merged)
+- **Branch**: `fix/line-directive-unquoted` (PR #325 - merged)
+- **Branch**: `fix/caller-line-numbers` (PR #326 - open)
 - **Key commits**:
   - `00c124167` - Fix print { func() } filehandle block parsing and JVM codegen
   - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution

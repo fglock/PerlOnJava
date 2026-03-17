@@ -114,6 +114,13 @@ public class ByteCodeSourceMapper {
      * This method maps a token index to its corresponding line number
      * and package context in the source file, storing this information
      * in the source file's debug metadata.
+     * 
+     * IMPORTANT: If an entry already exists for this tokenIndex, we preserve the
+     * existing LINE NUMBER but update the package and subroutine info. This is
+     * because:
+     * - Parse-time calls have CORRECT line numbers (getLineNumber works in order)
+     * - Emit-time calls have CORRECT package context (subroutine scope is established)
+     * - getLineNumber() uses a forward-only cache that fails for out-of-order access
      *
      * @param ctx        The current emitter context containing compilation details
      * @param tokenIndex The index of the token in the source code
@@ -131,11 +138,23 @@ public class ByteCodeSourceMapper {
             subroutineName = "";  // Use empty string for main code
         }
 
+        // Check if entry already exists - if so, preserve the line number
+        // but update package and subroutine (emit-time has correct context)
+        LineInfo existingEntry = info.tokenToLineInfo.get(tokenIndex);
+        int lineNumber;
+        if (existingEntry != null) {
+            // Preserve the existing line number from parse time
+            lineNumber = existingEntry.lineNumber();
+        } else {
+            // First time seeing this tokenIndex - compute line number
+            lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
+        }
+
         // Map the token index to a LineInfo object containing the line number, package ID, and subroutine ID
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
-                ctx.errorUtil.getLineNumber(tokenIndex), // Get the line number for the token
-                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()), // Get or create the package ID
-                getOrCreateSubroutineId(subroutineName) // Get or create the subroutine ID
+                lineNumber,
+                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()),
+                getOrCreateSubroutineId(subroutineName)
         ));
     }
 
