@@ -1,6 +1,9 @@
 # Unified Caller Stack Implementation
 
-## Status: Implementation Phase
+> **Note:** This document has been consolidated into `dev/design/caller_stack_fix_plan.md`.
+> See that document for the current plan and status.
+
+## Status: Merged into caller_stack_fix_plan.md
 
 ## Branch: `fix/caller-line-numbers`
 

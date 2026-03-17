@@ -65,6 +65,9 @@ public class ExceptionFormatter {
         boolean addedFrameForCurrentLevel = false;
 
         for (var element : t.getStackTrace()) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG ExceptionFormatter: element class=" + element.getClassName() + " method=" + element.getMethodName() + " file=" + element.getFileName() + " line=" + element.getLineNumber());
+            }
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
                 // Artificial caller stack entry created at `use` statement
@@ -107,10 +110,11 @@ public class ExceptionFormatter {
 
                         // Look up package from ByteCodeSourceMapper using tokenIndex
                         // This unifies package tracking with the JVM bytecode path
+                        // Use sourceName (original compile-time filename) for lookup, not
+                        // the #line-adjusted filename from errorUtil.getFileName()
                         String pkg = null;
-                        if (tokenIndex != null && frame.code().errorUtil != null) {
-                            String fileName = frame.code().errorUtil.getFileName();
-                            pkg = ByteCodeSourceMapper.getPackageAtLocation(fileName, tokenIndex);
+                        if (tokenIndex != null && frame.code().sourceName != null) {
+                            pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
                         }
                         if (pkg == null) {
                             // Fallback: runtime package for innermost frame, compile-time for others
@@ -160,6 +164,9 @@ public class ExceptionFormatter {
                     entry.add(loc.sourceFileName());
                     entry.add(String.valueOf(loc.lineNumber()));
                     entry.add(subName);  // Add subroutine name
+                    if (System.getenv("DEBUG_CALLER") != null) {
+                        System.err.println("DEBUG ExceptionFormatter: adding frame pkg=" + loc.packageName() + " file=" + loc.sourceFileName() + " line=" + loc.lineNumber());
+                    }
                     stackTrace.add(entry);
                     lastFileName = loc.sourceFileName() != null ? loc.sourceFileName() : "";
                 }
@@ -168,6 +175,10 @@ public class ExceptionFormatter {
 
         // Add the outermost artificial stack entry if different from last file
         var callerInfo = CallerStack.peek(callerStackIndex);
+        if (System.getenv("DEBUG_CALLER") != null) {
+            System.err.println("DEBUG ExceptionFormatter: CallerStack at index " + callerStackIndex + " = " + 
+                (callerInfo != null ? "pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line() : "null"));
+        }
         if (callerInfo != null && callerInfo.filename() != null && !lastFileName.equals(callerInfo.filename())) {
             var entry = new ArrayList<String>();
             entry.add(callerInfo.packageName());

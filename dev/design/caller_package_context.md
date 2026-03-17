@@ -1,5 +1,8 @@
 # Fix caller() Package Context for Inlined Code
 
+> **Note:** This document has been consolidated into `dev/design/caller_stack_fix_plan.md`.
+> See that document for the current plan and status. This document is kept for historical reference.
+
 ## TL;DR (2026-03-17)
 
 **Problem**: `caller()` returns empty or wrong package for many stack frames.
