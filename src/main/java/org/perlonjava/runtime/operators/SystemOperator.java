@@ -59,16 +59,18 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar system(RuntimeList args, boolean hasHandle, int ctx) {
-        List<RuntimeBase> elements = args.elements;
-        if (elements.isEmpty()) {
+        // Flatten the arguments - arrays and lists should be expanded to individual elements
+        List<String> flattenedArgs = flattenToStringList(args.elements);
+        
+        if (flattenedArgs.isEmpty()) {
             throw new PerlCompilerException("system: no command specified");
         }
 
         CommandResult result;
 
-        if (!hasHandle && elements.size() == 1) {
+        if (!hasHandle && flattenedArgs.size() == 1) {
             // Single argument - check for shell metacharacters
-            String command = elements.getFirst().toString();
+            String command = flattenedArgs.getFirst();
             if (SHELL_METACHARACTERS.matcher(command).find()) {
                 // Has shell metacharacters, use shell
                 result = executeCommand(command, false);
@@ -79,11 +81,7 @@ public class SystemOperator {
             }
         } else {
             // Multiple arguments - execute directly without shell
-            List<String> commandArgs = new ArrayList<>();
-            for (RuntimeBase element : elements) {
-                commandArgs.add(element.toString());
-            }
-            result = executeCommandDirect(commandArgs);
+            result = executeCommandDirect(flattenedArgs);
         }
 
         // Set $? to the exit status
@@ -96,6 +94,32 @@ public class SystemOperator {
         }
 
         return new RuntimeScalar(result.exitCode);
+    }
+    
+    /**
+     * Flattens a list of RuntimeBase elements into a list of strings.
+     * Arrays and lists are expanded to their individual elements.
+     * This is needed for system() and exec() to properly handle @array arguments.
+     *
+     * @param elements The list of RuntimeBase elements to flatten
+     * @return A list of strings representing individual command arguments
+     */
+    private static List<String> flattenToStringList(List<RuntimeBase> elements) {
+        List<String> result = new ArrayList<>();
+        for (RuntimeBase element : elements) {
+            if (element instanceof RuntimeArray arr) {
+                // Flatten array elements
+                for (RuntimeBase arrElement : arr.elements) {
+                    result.add(arrElement.toString());
+                }
+            } else if (element instanceof RuntimeList list) {
+                // Recursively flatten list elements
+                result.addAll(flattenToStringList(list.elements));
+            } else {
+                result.add(element.toString());
+            }
+        }
+        return result;
     }
 
     /**
@@ -317,8 +341,10 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar exec(RuntimeList args, boolean hasHandle, int ctx) {
-        List<RuntimeBase> elements = args.elements;
-        if (elements.isEmpty()) {
+        // Flatten the arguments - arrays and lists should be expanded to individual elements
+        List<String> flattenedArgs = flattenToStringList(args.elements);
+        
+        if (flattenedArgs.isEmpty()) {
             throw new PerlCompilerException("exec: no command specified");
         }
 
@@ -327,9 +353,9 @@ public class SystemOperator {
 
             int exitCode;
 
-            if (!hasHandle && elements.size() == 1) {
+            if (!hasHandle && flattenedArgs.size() == 1) {
                 // Single argument - check for shell metacharacters
-                String command = elements.getFirst().toString();
+                String command = flattenedArgs.getFirst();
                 if (SHELL_METACHARACTERS.matcher(command).find()) {
                     // Has shell metacharacters, use shell
                     exitCode = execCommand(command);
@@ -340,11 +366,7 @@ public class SystemOperator {
                 }
             } else {
                 // Multiple arguments - execute directly without shell
-                List<String> commandArgs = new ArrayList<>();
-                for (RuntimeBase element : elements) {
-                    commandArgs.add(element.toString());
-                }
-                exitCode = execCommandDirect(commandArgs);
+                exitCode = execCommandDirect(flattenedArgs);
             }
 
             // exec() should never return in Perl, so we terminate the JVM
