@@ -29,5 +29,11 @@ fi
 #     (file operations, process management). Can be removed if JNR-POSIX is replaced.
 #   --sun-misc-unsafe-memory-access=allow: Suppresses deprecation warnings from JFFI library
 #     (used by JNR). Can be removed when JFFI updates to use MemorySegment API (Java 22+).
-java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow ${JPERL_OPTS} -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.app.cli.Main "$@"
+# Note: Only include CLASSPATH if set, to avoid empty prefix that would add current dir to path
+if [ -n "$CLASSPATH" ]; then
+    CP="$CLASSPATH:$JAR_PATH"
+else
+    CP="$JAR_PATH"
+fi
+java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow ${JPERL_OPTS} -cp "$CP" org.perlonjava.app.cli.Main "$@"
 

@@ -224,6 +224,25 @@ $os_name =~ s/\s+/_/g;
 sub non_bincompat_options() {}
 sub bincompat_options() {}
 
+# Return a string describing the perl configuration (like perl -V)
+sub myconfig {
+    my $config = "Summary of my perl5 (revision 5 version 42 subversion 0) configuration:\n";
+    $config .= "   \n";  # Blank line with leading spaces (matches Perl format)
+    $config .= "  Platform:\n";
+    $config .= "    osname=$Config{osname}\n";
+    $config .= "    osvers=$Config{osvers}\n";
+    $config .= "    archname=$Config{archname}\n";
+    $config .= "  Compiler:\n";
+    $config .= "    cc=$Config{cc}\n";
+    $config .= "  Linker and Libraries:\n";
+    $config .= "    ld=$Config{ld}\n";
+    $config .= "    so=$Config{so}\n";
+    $config .= "  Dynamic Linking:\n";
+    $config .= "    dlext=$Config{dlext}\n";
+    $config .= "\n\n";  # Trailing newlines to match Perl format
+    return $config;
+}
+
 # Helper functions
 sub _determine_byteorder {
     my $test = pack("L", 0x12345678);
