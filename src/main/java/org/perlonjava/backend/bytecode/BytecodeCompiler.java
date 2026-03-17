@@ -1222,6 +1222,45 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Handle symbolic array element access: ${"name"}[index] or ${$ref}[index]
+     * In Perl, ${EXPR}[index] evaluates EXPR and uses it for array element access.
+     * This is different from ($scalarDeref)[index] - it allows symbolic references.
+     * Example: ${"test"}[0] accesses element 0 of @test when no strict refs
+     */
+    void handleSymbolicArrayElementAccess(BinaryOperatorNode node, BlockNode blockNode) {
+        // Compile the block expression to get the name/reference
+        // The block contains the expression that yields the array name or reference
+        if (blockNode.elements.isEmpty()) {
+            throwCompilerException("Empty block in symbolic array access");
+            return;
+        }
+
+        // Compile the block's content in scalar context
+        Node blockContent = blockNode.elements.get(blockNode.elements.size() - 1);
+        compileNode(blockContent, -1, RuntimeContextType.SCALAR);
+        int baseReg = lastResultReg;
+
+        // Compile the index expression
+        if (!(node.right instanceof ArrayLiteralNode indexNode)) {
+            throwCompilerException("Array subscript requires ArrayLiteralNode");
+            return;
+        }
+        if (indexNode.elements.isEmpty()) {
+            throwCompilerException("Array subscript requires at least one index");
+            return;
+        }
+
+        // Handle single element access
+        if (indexNode.elements.size() == 1) {
+            Node indexExpr = indexNode.elements.get(0);
+            // Use the arrayDerefGet helper which handles both strict and non-strict modes
+            lastResultReg = emitArrayDerefGet(baseReg, indexExpr, node.getIndex());
+        } else {
+            throwCompilerException("Multi-element symbolic array access not yet implemented");
+        }
+    }
+
+    /**
      * Handle hash slice operations: @hash{keys} or @$hashref{keys}
      * Must be called before automatic operand compilation to avoid compiling @ operator
      */

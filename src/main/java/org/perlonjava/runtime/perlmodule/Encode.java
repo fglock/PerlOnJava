@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -62,6 +63,8 @@ public class Encode extends PerlModuleBase {
 
     public static void initialize() {
         Encode encode = new Encode();
+        // Set $VERSION so CPAN.pm can detect our bundled version
+        GlobalVariable.getGlobalVariable("Encode::VERSION").set(new RuntimeScalar("3.21"));
         encode.initializeExporter();
         encode.defineExport("EXPORT", "encode", "decode", "encode_utf8", "decode_utf8",
                 "is_utf8", "find_encoding", "from_to");

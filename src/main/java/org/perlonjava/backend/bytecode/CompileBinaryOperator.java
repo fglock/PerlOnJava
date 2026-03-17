@@ -278,6 +278,15 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.handleArrayElementAccess(node, leftOp);
                     return;
                 }
+
+                // Handle symbolic array element access: ${"name"}[index] or ${$ref}[index]
+                // In Perl, ${EXPR}[index] does NOT call scalarDeref on EXPR.
+                // Instead, it evaluates EXPR and applies the subscript directly.
+                // This allows ${$aref}[0] to work even though ${$aref} alone would fail.
+                if (leftOp.operator.equals("$") && leftOp.operand instanceof BlockNode blockNode) {
+                    bytecodeCompiler.handleSymbolicArrayElementAccess(node, blockNode);
+                    return;
+                }
             }
 
             // Handle ListNode case: (expr)[index] like (caller)[0]

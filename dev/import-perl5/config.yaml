@@ -164,6 +164,10 @@ imports:
   - source: perl5/lib/File/Basename.t
     target: perl5_t/File/Basename.t
 
+  # File::Compare - file comparison functions (required by Module::Build)
+  - source: perl5/lib/File/Compare.pm
+    target: src/main/perl/lib/File/Compare.pm
+
   # From core library
   - source: perl5/lib/Tie/Array.pm
     target: src/main/perl/lib/Tie/Array.pm
