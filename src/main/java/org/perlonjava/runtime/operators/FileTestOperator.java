@@ -159,6 +159,11 @@ public class FileTestOperator {
             throw new PerlCompilerException("The stat preceding -l _ wasn't an lstat");
         }
 
+        // If lastBasicAttr is null (e.g., after testing a JAR path), fall back to re-testing
+        if (lastBasicAttr == null) {
+            return fileTest(operator, lastFileHandle);
+        }
+
         return switch (operator) {
             case "-e" -> scalarTrue;
             case "-f" -> getScalarBoolean(lastBasicAttr.isRegularFile());

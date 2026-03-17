@@ -50,10 +50,16 @@ sub _make_path_perl {
         # Simple mkdir -p implementation
         my @parts = split m{/}, $path;
         my $current = '';
+        my $is_absolute = ($path =~ m{^/});
 
         for my $part (@parts) {
             next unless length $part;
-            $current .= '/' . $part;
+            if ($current eq '' && !$is_absolute) {
+                # Relative path - start without leading /
+                $current = $part;
+            } else {
+                $current .= '/' . $part;
+            }
 
             next if -d $current;
 
