@@ -198,6 +198,25 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Sets the strict options directly (used by $^H assignment).
+     *
+     * @param options The new strict options bitmask.
+     */
+    public void setStrictOptions(int options) {
+        strictOptionsStack.pop();
+        strictOptionsStack.push(options);
+    }
+
+    /**
+     * Gets the current strict options bitmask.
+     *
+     * @return The current strict options.
+     */
+    public int getStrictOptions() {
+        return strictOptionsStack.peek();
+    }
+
+    /**
      * Checks if a strict option is enabled in the current scope.
      *
      * @param option The bitmask of the strict option to check.

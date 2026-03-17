@@ -65,6 +65,9 @@ public class ExceptionFormatter {
         boolean addedFrameForCurrentLevel = false;
 
         for (var element : t.getStackTrace()) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG ExceptionFormatter: element class=" + element.getClassName() + " method=" + element.getMethodName() + " file=" + element.getFileName() + " line=" + element.getLineNumber());
+            }
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
                 // Artificial caller stack entry created at `use` statement
@@ -93,12 +96,65 @@ public class ExceptionFormatter {
                 if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
-                        // For the innermost frame (index 0), use the runtime current package
-                        // tracked by SET_PACKAGE/PUSH_PACKAGE opcodes, which reflects runtime
-                        // "package Foo;" declarations.  Outer frames still use compile-time names.
-                        String pkg = (interpreterFrameIndex == 0)
-                                ? InterpreterState.currentPackage.get().toString()
-                                : frame.packageName();
+                        // First check CallerStack for accurate call site info.
+                        // CallerStack entries are pushed by CALL_SUB/CALL_METHOD with the exact
+                        // call site location, which is more accurate than the current PC.
+                        var callerInfo = CallerStack.peek(interpreterFrameIndex);
+                        
+                        String pkg = null;
+                        String filename = frame.code().sourceName;
+                        String line = String.valueOf(frame.code().sourceLine);
+                        
+                        if (callerInfo != null && callerInfo.filename() != null) {
+                            // Use CallerStack info for call site location
+                            pkg = callerInfo.packageName();
+                            filename = callerInfo.filename();
+                            line = String.valueOf(callerInfo.line());
+                            if (System.getenv("DEBUG_CALLER") != null) {
+                                System.err.println("DEBUG ExceptionFormatter: using CallerStack[" + interpreterFrameIndex + 
+                                    "] pkg=" + pkg + " file=" + filename + " line=" + line);
+                            }
+                        } else {
+                            // Fallback: get tokenIndex from PC mapping
+                            Integer tokenIndex = null;
+                            int pc = -1;
+                            if (interpreterFrameIndex < interpreterPcs.size()) {
+                                pc = interpreterPcs.get(interpreterFrameIndex);
+                                if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                    var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
+                                    if (entryPc != null) {
+                                        tokenIndex = entryPc.getValue();
+                                    }
+                                }
+                            }
+                            if (System.getenv("DEBUG_CALLER") != null) {
+                                System.err.println("DEBUG ExceptionFormatter: fallback interpreter frame " + interpreterFrameIndex + 
+                                    " pc=" + pc + " tokenIndex=" + tokenIndex + 
+                                    " sourceName=" + frame.code().sourceName);
+                            }
+
+                            // Look up package from ByteCodeSourceMapper using tokenIndex
+                            if (tokenIndex != null && frame.code().sourceName != null) {
+                                pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
+                            }
+                            if (pkg == null) {
+                                // Fallback: runtime package for innermost frame, compile-time for others
+                                pkg = (interpreterFrameIndex == 0)
+                                        ? InterpreterState.currentPackage.get().toString()
+                                        : frame.packageName();
+                            }
+
+                            // Use tokenIndex for line lookup
+                            if (tokenIndex != null && frame.code().errorUtil != null) {
+                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                                filename = loc.fileName();
+                                line = String.valueOf(loc.lineNumber());
+                                if (System.getenv("DEBUG_CALLER") != null) {
+                                    System.err.println("DEBUG ExceptionFormatter: tokenIndex " + tokenIndex + 
+                                        " -> file=" + filename + " line=" + line);
+                                }
+                            }
+                        }
 
                         String subName = frame.subroutineName();
                         if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
@@ -107,23 +163,6 @@ public class ExceptionFormatter {
 
                         var entry = new ArrayList<String>();
                         entry.add(pkg);
-                        String filename = frame.code().sourceName;
-                        String line = String.valueOf(frame.code().sourceLine);
-                        if (interpreterFrameIndex < interpreterPcs.size()) {
-                            Integer tokenIndex = null;
-                            int pc = interpreterPcs.get(interpreterFrameIndex);
-                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
-                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
-                                if (entryPc != null) {
-                                    tokenIndex = entryPc.getValue();
-                                }
-                            }
-                            if (tokenIndex != null && frame.code().errorUtil != null) {
-                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
-                                filename = loc.fileName();
-                                line = String.valueOf(loc.lineNumber());
-                            }
-                        }
                         entry.add(filename);
                         entry.add(line);
                         entry.add(subName);
@@ -150,6 +189,9 @@ public class ExceptionFormatter {
                     entry.add(loc.sourceFileName());
                     entry.add(String.valueOf(loc.lineNumber()));
                     entry.add(subName);  // Add subroutine name
+                    if (System.getenv("DEBUG_CALLER") != null) {
+                        System.err.println("DEBUG ExceptionFormatter: adding frame pkg=" + loc.packageName() + " file=" + loc.sourceFileName() + " line=" + loc.lineNumber());
+                    }
                     stackTrace.add(entry);
                     lastFileName = loc.sourceFileName() != null ? loc.sourceFileName() : "";
                 }
@@ -158,6 +200,10 @@ public class ExceptionFormatter {
 
         // Add the outermost artificial stack entry if different from last file
         var callerInfo = CallerStack.peek(callerStackIndex);
+        if (System.getenv("DEBUG_CALLER") != null) {
+            System.err.println("DEBUG ExceptionFormatter: CallerStack at index " + callerStackIndex + " = " + 
+                (callerInfo != null ? "pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line() : "null"));
+        }
         if (callerInfo != null && callerInfo.filename() != null && !lastFileName.equals(callerInfo.filename())) {
             var entry = new ArrayList<String>();
             entry.add(callerInfo.packageName());

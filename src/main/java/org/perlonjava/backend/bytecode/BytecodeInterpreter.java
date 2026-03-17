@@ -794,6 +794,8 @@ public class BytecodeInterpreter {
                             case Opcodes.CALL_SUB -> {
                                 // Call subroutine: rd = coderef->(args)
                                 // May return RuntimeControlFlowList!
+                                // pcHolder[0] contains the PC of this opcode (set before opcode read)
+                                int callSitePc = pcHolder[0];
                                 int rd = bytecode[pc++];
                                 int coderefReg = bytecode[pc++];
                                 int argsReg = bytecode[pc++];
@@ -809,8 +811,8 @@ public class BytecodeInterpreter {
                                 // This matches the JVM backend's call to codeDerefNonStrict()
                                 // Only call for STRING/BYTE_STRING types (symbolic references)
                                 // For CODE, REFERENCE, etc. let RuntimeCode.apply() handle errors
+                                String currentPkg = InterpreterState.currentPackage.get().toString();
                                 if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
-                                    String currentPkg = InterpreterState.currentPackage.get().toString();
                                     codeRef = codeRef.codeDerefNonStrict(currentPkg);
                                 }
 
@@ -826,21 +828,29 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                // Push call site info to CallerStack for caller() to see the correct location
+                                CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
+                                CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
+                                RuntimeList result;
+                                try {
+                                    result = RuntimeCode.apply(codeRef, "", callArgs, context);
 
-                                // Handle TAILCALL with trampoline loop (same as JVM backend)
-                                while (result.isNonLocalGoto()) {
-                                    RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-                                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                        // Extract codeRef and args, call target
-                                        codeRef = flow.getTailCallCodeRef();
-                                        callArgs = flow.getTailCallArgs();
-                                        result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                        // Loop to handle chained tail calls
-                                    } else {
-                                        // Not TAILCALL - check labeled blocks or propagate
-                                        break;
+                                    // Handle TAILCALL with trampoline loop (same as JVM backend)
+                                    while (result.isNonLocalGoto()) {
+                                        RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                                        if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                            // Extract codeRef and args, call target
+                                            codeRef = flow.getTailCallCodeRef();
+                                            callArgs = flow.getTailCallArgs();
+                                            result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            // Loop to handle chained tail calls
+                                        } else {
+                                            // Not TAILCALL - check labeled blocks or propagate
+                                            break;
+                                        }
                                     }
+                                } finally {
+                                    CallerStack.pop();
                                 }
 
                                 // Convert to scalar if called in scalar context
@@ -878,6 +888,8 @@ public class BytecodeInterpreter {
                             case Opcodes.CALL_METHOD -> {
                                 // Call method: rd = RuntimeCode.call(invocant, method, currentSub, args, context)
                                 // May return RuntimeControlFlowList!
+                                // pcHolder[0] contains the PC of this opcode (set before opcode read)
+                                int callSitePc = pcHolder[0];
                                 int rd = bytecode[pc++];
                                 int invocantReg = bytecode[pc++];
                                 int methodReg = bytecode[pc++];
@@ -900,21 +912,30 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                RuntimeList result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
+                                // Push call site info to CallerStack for caller() to see the correct location
+                                String currentPkg = InterpreterState.currentPackage.get().toString();
+                                CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
+                                CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
+                                RuntimeList result;
+                                try {
+                                    result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
 
-                                // Handle TAILCALL with trampoline loop (same as JVM backend)
-                                while (result.isNonLocalGoto()) {
-                                    RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-                                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                        // Extract codeRef and args, call target
-                                        RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                                        callArgs = flow.getTailCallArgs();
-                                        result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                        // Loop to handle chained tail calls
-                                    } else {
-                                        // Not TAILCALL - check labeled blocks or propagate
-                                        break;
+                                    // Handle TAILCALL with trampoline loop (same as JVM backend)
+                                    while (result.isNonLocalGoto()) {
+                                        RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                                        if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                                            // Extract codeRef and args, call target
+                                            RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                                            callArgs = flow.getTailCallArgs();
+                                            result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            // Loop to handle chained tail calls
+                                        } else {
+                                            // Not TAILCALL - check labeled blocks or propagate
+                                            break;
+                                        }
                                     }
+                                } finally {
+                                    CallerStack.pop();
                                 }
 
                                 // Convert to scalar if called in scalar context
@@ -2338,6 +2359,33 @@ public class BytecodeInterpreter {
      */
     private static int readInt(int[] bytecode, int pc) {
         return bytecode[pc];
+    }
+
+    /**
+     * Get call site information (package, filename, line) for the given bytecode PC.
+     * Used to push caller context before subroutine/method calls.
+     *
+     * @param code      The InterpretedCode containing the bytecode
+     * @param callPc    The PC of the call instruction (opcode position, before operands)
+     * @param currentPkg The current package name
+     * @return CallerStack.CallerInfo with package, filename, and line number
+     */
+    private static CallerStack.CallerInfo getCallSiteInfo(InterpretedCode code, int callPc, String currentPkg) {
+        String filename = code.sourceName;
+        int lineNumber = code.sourceLine;
+
+        // Try to get token index from pcToTokenIndex map
+        if (code.pcToTokenIndex != null && !code.pcToTokenIndex.isEmpty()) {
+            var entry = code.pcToTokenIndex.floorEntry(callPc);
+            if (entry != null && code.errorUtil != null) {
+                int tokenIndex = entry.getValue();
+                ErrorMessageUtil.SourceLocation loc = code.errorUtil.getSourceLocationAccurate(tokenIndex);
+                filename = loc.fileName();
+                lineNumber = loc.lineNumber();
+            }
+        }
+
+        return new CallerStack.CallerInfo(currentPkg, filename, lineNumber);
     }
 
     /**

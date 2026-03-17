@@ -644,36 +644,199 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - See `dev/design/caller_package_context.md` for detailed analysis
   - No data structure changes, minimal 6-line fix
 
+- [x] Phase 29: Fix caller() returning wrong line numbers (2026-03-17)
+  - Root cause: Phase 28's emit-time `saveSourceLocation()` call was overwriting correct
+    line numbers with wrong values. The issue was that `ErrorMessageUtil.getLineNumber()` 
+    uses a forward-only cache - it only counts forward from the last processed token.
+  - During parsing, tokens are processed in order (1, 2, 3, ..., 500), so line numbers are correct
+  - During emit, subroutine tokens are processed out of order (105, 132, ...) but the cache
+    has already advanced past them, so all lookups return the last cached line number
+  - **ByteCodeSourceMapper.java fix**:
+    - In `saveSourceLocation()`, check if an entry already exists for the tokenIndex
+    - If it exists, PRESERVE the existing line number (from parse time) but UPDATE 
+      the package and subroutine info (from emit time)
+    - This combines: correct LINE from parse-time + correct PACKAGE from emit-time
+  - Before fix: `caller(0)` returned line 25 for all frames (wrong)
+  - After fix: `caller(0)` returns correct line numbers matching Perl exactly
+  - Carp stack traces now show correct "called at line N" information
+
+- [x] Phase 30: Unified caller() package tracking for interpreter path (2026-03-17)
+  - Root cause: Interpreter path in ExceptionFormatter used different package sources for inner vs outer frames
+  - Frame 0 (innermost): Used `InterpreterState.currentPackage` (correct runtime package)
+  - Frame > 0 (outer): Used `frame.packageName()` (wrong - compile-time package from sub definition)
+  - **ByteCodeSourceMapper.java fix**:
+    - Added `getPackageAtLocation(String fileName, int tokenIndex)` to look up package from source map
+    - This makes interpreter path use same source of truth as JVM path
+  - **ExceptionFormatter.java fix**:
+    - Interpreter path now calls `ByteCodeSourceMapper.getPackageAtLocation()` for all frames
+    - Ensures consistent package reporting regardless of stack depth
+  - See `dev/design/unified_caller_stack.md` for full analysis
+  - Result: Interpreter and JVM backends now report same package for same source location
+
+- [x] Phase 37: Fix #line directive to update errorUtil.fileName during parsing (2026-03-17)
+  - Root cause: Unquoted filenames in `#line N filename` were only handled in `getSourceLocationAccurate()`
+    for error messages, not in `Whitespace.parseLineDirective()` during parsing
+  - This caused `caller()` and `__FILE__` to return `(eval N)` instead of the `#line`-adjusted filename
+  - **Whitespace.java fix**:
+    - Added handling for unquoted bareword filenames: `#line N filename`
+    - Now calls `errorUtil.setFileName(filename)` for both quoted and unquoted forms
+  - **ByteCodeSourceMapper.java fix**:
+    - Added `sourceFileNameId` field to `LineInfo` record
+    - `saveSourceLocation()` now uses original filename for key, stores adjusted filename in LineInfo
+    - `parseStackTraceElement()` returns the `#line`-adjusted filename for caller() reporting
+  - **Result**: Tests 15, 18 now PASS; tests 19-26 now run (were previously skipped due to parse errors)
+
 ### Current Status
 
-**Test Results (after Phase 28):**
-- **Moo**: 64/71 test programs passing (90%), 795/829 subtests passing (96%)
-- **Mo**: 27/28 test programs passing (99.3%), 143/144 subtests passing
+**Test Results (after Phase 37):**
+- **Moo**: 64/71 test programs passing (90%), 806/839 subtests passing (96%)
+- **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
-2. **croak-locations.t** (3 failures) - Complex nested eval cases, Carp stack walking edge cases
+2. **croak-locations.t** (2 failures) - Tests 27, 28: delegated method croak and role default isa
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
 4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
-5. **overloaded-coderefs.t** - Expected, B::Deparse not available
-6. **Mo t/strict.t** (1 failure) - Error message format differs from Perl
+
+**croak-locations.t test 27 analysis**:
+- Test: `Method::Generate::Accessor::_generate_delegation - user croak`
+- Expected: `LocationTestFile line 22` (where delegated method is called)
+- Got: `(eval N) line 50` (internal constructor code)
+- Issue: Carp is blaming the generated constructor instead of the user's call site
+- This is a deeper Carp stack-walking issue with Sub::Quote-generated code
+
+**croak-locations.t test 28 analysis**:
+- Test: `Moo::Role::create_class_with_roles - default fails isa`
+- Expected: `LocationTestFile line 21` (where `apply_roles_to_object` is called)
+- Got: `LocationTestFile line 18` (where the object was created)
+- Issue: Carp is blaming object creation instead of role application
+- Related to how default values and isa checks interact with stack walking
 
 **Expected failures** (not fixable without fundamental changes):
 - Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
 - DESTROY/GC: demolish tests (6)
-- Missing B::Deparse: overloaded-coderefs.t
 
-### Next Steps
+### Next Steps - Missing Features Roadmap
 
-1. **Investigate croak-locations.t remaining 3 failures** - Related to Carp stack walking in nested eval contexts
-2. **Interpreter path frame handling** - `caller()` in interpreter mode uses different code path (see caller_package_context.md Issue 2)
-3. **Mo strict.t error message** - Minor formatting difference
+The remaining test failures require implementing core Perl features that are currently missing or incomplete in PerlOnJava.
+
+#### Phase 31: DESTROY/Destructor Support (High Impact)
+**Enables**: demolish tests (6 failures), proper object cleanup  
+**Status**: Analysis complete, implementation deferred  
+**Design doc**: `dev/design/destroy_support.md`
+
+Perl's DESTROY relies on reference counting; Java uses GC. The challenge is detecting
+when an object becomes unreachable while we can still access it to call DESTROY.
+
+Proposed approach: Scope-based DESTROY with GC fallback. See dedicated design doc for
+detailed analysis of implementation strategies, challenges, and test cases.
+
+#### Phase 32: Weak Reference Emulation (High Impact)  
+**Enables**: accessor-weaken tests (20 failures), no-moo.t (5 failures)  
+**Status**: Analysis complete, implementation deferred  
+**Design doc**: `dev/design/weak_references.md`
+
+Perl's weak references are tied to reference counting, which Java doesn't have.
+
+**Key concern**: Adding `isWeak` field to RuntimeScalar would have significant memory
+impact - RuntimeScalar is instantiated millions of times. Need to explore alternatives:
+- External registry (IdentityHashMap) for weak ref tracking
+- Sentinel wrapper type in value field
+- Bit-packing in type field
+
+See dedicated design doc for full analysis and alternative approaches.
+
+#### Phase 33: B::Deparse Stub Implementation (Completed)
+**Enables**: overloaded-coderefs.t (10 tests) → **FIXED**  
+**Status**: Completed 2026-03-17
+
+Created a stub B::Deparse module that provides minimal functionality for Sub::Quote-generated subs.
+
+**Implementation**:
+- Created `src/main/perl/lib/B/Deparse.pm`
+- `new()` constructor
+- `coderef2text($coderef)` method that:
+  1. First undefers Sub::Defer deferred subs
+  2. Looks up source code from `Sub::Quote::quoted_from_sub()`
+  3. Strips only the first PRELUDE (non-greedy match) to preserve inlined subs
+  4. Returns reconstructed source wrapped in braces
+  5. Falls back to `{ "DUMMY" }` for non-Sub::Quote subs
+
+**Key insight**: Sub::Quote stores the source code of generated subs in `%Sub::Quote::QUOTED`.
+Moo uses Sub::Quote for constructors and accessors, so their source is retrievable.
+
+**Note**: True B::Deparse (decompiling JVM bytecode to Perl) is not feasible.
+This stub only works for Sub::Quote-generated code where source is stored.
+
+**Result**: overloaded-coderefs.t now 10/10 passing (was 9/10).
+
+#### Phase 34: Interpreter caller() Parity (Completed)
+**Enables**: consistent behavior between JVM and interpreter backends  
+**Status**: Completed 2026-03-17 (merged into Completed Phase 30 above)
+
+The interpreter path was using different package sources for inner vs outer frames.
+Fixed by adding `getPackageAtLocation()` to ByteCodeSourceMapper and using it in
+ExceptionFormatter for all frames.
+
+See `dev/design/unified_caller_stack.md` for detailed analysis.
+
+#### Phase 35: Mo strict.t - Make $^H Magical (Completed)
+**Enables**: Mo t/strict.t (1 failure) → **FIXED**  
+**Status**: Completed 2026-03-17
+
+Mo uses `$^H |= 1538` in its import to enable strict, but `$^H` was a regular variable
+that didn't communicate with the compiler's strict checking.
+
+**Fix**: Made `$^H` a `ScalarSpecialVariable` that syncs with `strictOptionsStack`:
+- On write: Updates symbol table's strict options
+- On read: Returns current strict options from symbol table
+
+**Future consideration**: Refactor to use `$^H` as single source of truth, eliminating
+`strictOptionsStack`. See `dev/design/strict_hints_refactor.md` for analysis.
+
+**Result**: Mo tests now 28/28 passing (was 27/28).
+
+#### Phase 36: croak-locations.t Tests 15, 18 (Completed)
+**Status**: Completed 2026-03-17 (merged into Phase 37 above)
+
+Tests 15 and 18 are now fixed. The remaining tests 27-28 involve:
+- Test 27: Delegated method croak - Carp blames generated code instead of call site
+- Test 28: Role default isa - Carp blames object creation instead of role application
+
+These require deeper investigation into how Carp walks the stack for Sub::Quote-generated code.
+
+---
+
+**Revised Priority Order** (considering deferred implementations):
+
+| Priority | Phase | Impact | Status | Effort |
+|----------|-------|--------|--------|--------|
+| 1 | ~~B::Deparse (33)~~ | ~~1 test~~ | **Completed** | ~~Medium~~ |
+| 2 | ~~Mo strict.t (35)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
+| 3 | ~~Interpreter caller() (34)~~ | ~~Parity~~ | **Completed** | ~~Medium~~ |
+| 4 | ~~croak-locations.t 15,18 (36/37)~~ | ~~2 tests~~ | **Completed** | ~~Medium~~ |
+| 5 | **croak-locations.t 27,28** | 2 tests | Complex | High |
+| 6 | DESTROY (31) | 6 tests | **Deferred** | High |
+| 7 | Weak References (32) | 25 tests | **Deferred** | High |
+
+**Actionable items** (can be investigated):
+1. **croak-locations.t 27-28**: Complex Carp stack walking for Sub::Quote-generated code
+
+**Deferred** (need design maturation):
+- Phase 31 (DESTROY): Requires scope-based tracking, complex GC interaction
+- Phase 32 (Weak refs): Memory impact concern, need alternative to adding field
+
+**Achievable test improvement without deferred features**:
+- Current: 64/71 Moo tests (90%), 806/839 subtests (96%), 28/28 Mo tests (100%)
+- The bulk of remaining failures (31 tests) require DESTROY or weak refs
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
-- **Branch**: `fix/goto-tailcall-import` (PR #320 - open)
-- **Branch**: `fix/mo-bareword-parsing` (PR #322 - open)
-- **Branch**: `feature/sub-name` (PR #324 - open)
+- **Branch**: `fix/goto-tailcall-import` (PR #320 - merged)
+- **Branch**: `fix/mo-bareword-parsing` (PR #322 - merged)
+- **Branch**: `feature/sub-name` (PR #324 - merged)
+- **Branch**: `fix/line-directive-unquoted` (PR #325 - merged)
+- **Branch**: `fix/caller-line-numbers` (PR #326 - open)
 - **Key commits**:
   - `00c124167` - Fix print { func() } filehandle block parsing and JVM codegen
   - `393bedf0f` - Fix quotemeta and Package::SUPER::method resolution
@@ -684,9 +847,12 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - `ff31163f9` - Fix self-referential hash assignment %h = (stuff, %h)
   - `a3233cd55` - Improve ::identifier to check sub existence at compile time
   - `86591c703` - Add Sub::Name module and fix @INC hook exception handling
+  - `c35faad00` - Fix interpreter path to use unified package tracking
+  - `01d5dc1dd` - Fix #line directive to update errorUtil.fileName during parsing
 
 ## Related Documents
 
 - `dev/design/cpan_client.md` - jcpan implementation
+- `dev/design/unified_caller_stack.md` - caller() package tracking analysis
 - `dev/import-perl5/README.md` - Module sync process
 - `dev/import-perl5/config.yaml` - Module import configuration

@@ -404,39 +404,41 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Clone compiler options and set isUnicodeSource if needed
             // This only affects string parsing, not symbol table or method resolution
-            CompilerOptions evalCompilerOptions = ctx.compilerOptions;
+            // Always clone to avoid modifying the original and to set a unique filename
+            CompilerOptions evalCompilerOptions = ctx.compilerOptions.clone();
             // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
             // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
             // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
             boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
-            if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
-                evalCompilerOptions = ctx.compilerOptions.clone();
-                if (hasUnicode) {
-                    evalCompilerOptions.isUnicodeSource = true;
-                }
-                if (ctx.isEvalbytes) {
-                    evalCompilerOptions.isEvalbytes = true;
-                }
-                if (isByteStringSource) {
-                    evalCompilerOptions.isByteStringSource = true;
-                }
+            if (hasUnicode) {
+                evalCompilerOptions.isUnicodeSource = true;
+            }
+            if (ctx.isEvalbytes) {
+                evalCompilerOptions.isEvalbytes = true;
+            }
+            if (isByteStringSource) {
+                evalCompilerOptions.isByteStringSource = true;
             }
 
             // Check $^P to determine if we should use caching
-            // When debugging is enabled, we want each eval to get a unique filename
+            // Give each eval a unique filename for correct source location tracking.
+            // Previously, all evals from the same source file shared the caller's filename,
+            // which caused source location info collisions when multiple evals had the same
+            // tokenIndex (since each eval's tokenization starts from 0).
+            // When debugging is enabled ($^P is set), we skip the cache entirely.
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
             boolean isDebugging = debugFlags != 0;
 
-            // Override the filename with a runtime-generated eval number when debugging
-            String actualFileName = evalCompilerOptions.fileName;
-            if (isDebugging) {
-                actualFileName = getNextEvalFilename();
-            }
+            // Always generate a unique filename for each eval to prevent source location collisions
+            String actualFileName = getNextEvalFilename();
+            evalCompilerOptions.fileName = actualFileName;
 
-            // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
+            // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, feature flags, and package in cache key)
             // Skip caching when $^P is set, so each eval gets a unique filename
+            // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
-            String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags;
+            String currentPackage = ctx.symbolTable.getCurrentPackage();
+            String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
                 synchronized (evalCache) {
@@ -863,21 +865,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            // Clone compiler options if needed
-            CompilerOptions evalCompilerOptions = ctx.compilerOptions;
+            // Clone compiler options and set isUnicodeSource if needed
+            // Always clone to avoid modifying the original and to set a unique filename
+            CompilerOptions evalCompilerOptions = ctx.compilerOptions.clone();
             boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
-            if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
-                evalCompilerOptions = ctx.compilerOptions.clone();
-                if (hasUnicode) {
-                    evalCompilerOptions.isUnicodeSource = true;
-                }
-                if (ctx.isEvalbytes) {
-                    evalCompilerOptions.isEvalbytes = true;
-                }
-                if (isByteStringSource) {
-                    evalCompilerOptions.isByteStringSource = true;
-                }
+            if (hasUnicode) {
+                evalCompilerOptions.isUnicodeSource = true;
             }
+            if (ctx.isEvalbytes) {
+                evalCompilerOptions.isEvalbytes = true;
+            }
+            if (isByteStringSource) {
+                evalCompilerOptions.isByteStringSource = true;
+            }
+            // Always generate a unique filename for each eval to prevent source location collisions
+            evalCompilerOptions.fileName = getNextEvalFilename();
 
             // Setup for BEGIN block support - create aliases for captured variables.
             // IMPORTANT: Do NOT mutate AST nodes (e.g. operatorAst.id) here.
