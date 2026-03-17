@@ -3,6 +3,8 @@ package Fcntl;
 use strict;
 use warnings;
 
+our $VERSION = '1.15';
+
 require Exporter;
 our @ISA = qw(Exporter);
 
