@@ -556,7 +556,154 @@ Test 29 (`Method::Generate::DemolishAll - user croak`) has a different issue - t
 ## Related Documents
 
 - `dev/design/moo_support.md` - Moo integration progress
+- `dev/design/unified_caller_stack.md` - Interpreter path fix
 - PR #325 - Current branch with #line directive fix
+- PR #326 - Fix interpreter path unified package tracking
+
+---
+
+## Issue 6: `#line` Directive Filename Not Used by caller() (2026-03-17)
+
+### Problem Statement
+
+When code uses `#line N "filename"` directives, `caller()` returns the **original eval filename** (e.g., `(eval 93)`) instead of the **`#line`-adjusted filename** (e.g., `LocationTestFile`).
+
+**Reproduction:**
+```perl
+eval q{
+#line 1 MyFile
+sub wrapper { 
+    inner();  # line 2
+}
+wrapper();    # line 4
+};
+```
+
+**Expected:** `caller(0)` returns `MyFile line 2`  
+**Actual:** `caller(0)` returns `(eval 93) line 2`
+
+### Root Cause
+
+The `#line` directive updates `errorUtil.setFileName("MyFile")` during parsing, but there's a mismatch in how ByteCodeSourceMapper stores vs retrieves entries:
+
+1. **During save (saveSourceLocation):**
+   ```java
+   int fileId = getOrCreateFileId(ctx.errorUtil.getFileName());  // "MyFile"
+   ```
+   Entries are stored under the `#line`-adjusted filename.
+
+2. **During lookup (parseStackTraceElement):**
+   ```java
+   int fileId = fileNameToId.getOrDefault(element.getFileName(), -1);  // "(eval N)"
+   ```
+   JVM stack traces report the ORIGINAL filename from `visitSource()`, not the `#line`-adjusted one.
+
+**Result:** Lookup uses `"(eval N)"` but entries are stored under `"MyFile"` → no match found!
+
+### Implemented Fix
+
+**Approach:** Store entries under the ORIGINAL filename (for key lookup), but also store the `#line`-adjusted filename in LineInfo (for caller() reporting).
+
+**Changes to ByteCodeSourceMapper.java:**
+
+1. **Extended LineInfo record:**
+   ```java
+   private record LineInfo(
+       int lineNumber, 
+       int packageNameId, 
+       int subroutineNameId, 
+       int sourceFileNameId  // NEW: #line-adjusted filename
+   ) {}
+   ```
+
+2. **Modified saveSourceLocation:**
+   ```java
+   public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
+       // Use ORIGINAL filename for key (matches JVM stack trace)
+       int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
+       
+       // Store #line-adjusted filename in LineInfo
+       int sourceFileNameId = getOrCreateFileId(ctx.errorUtil.getFileName());
+       
+       info.tokenToLineInfo.put(tokenIndex, new LineInfo(
+           lineNumber,
+           packageId,
+           getOrCreateSubroutineId(subroutineName),
+           sourceFileNameId  // Store adjusted filename
+       ));
+   }
+   ```
+
+3. **Modified parseStackTraceElement:**
+   ```java
+   LineInfo lineInfo = entry.getValue();
+   
+   // Use #line-adjusted filename for caller() reporting
+   String sourceFileName = fileNamePool.get(lineInfo.sourceFileNameId());
+   
+   return new SourceLocation(
+       sourceFileName,  // Returns "MyFile" instead of "(eval N)"
+       packageNamePool.get(lineInfo.packageNameId()),
+       lineInfo.lineNumber(),
+       subroutineName
+   );
+   ```
+
+### Current Status
+
+**Partial fix implemented:**
+- LineInfo extended with sourceFileNameId field
+- saveSourceLocation uses compilerOptions.fileName for key, stores errorUtil.getFileName() in LineInfo
+- parseStackTraceElement returns the #line-adjusted filename
+
+**Testing needed:**
+- Verify croak-locations.t test 15 (inlined BUILDARGS wrapped)
+- Verify croak-locations.t test 18 (Moo::Object new args)
+- Run full Moo test suite
+
+### Next Steps
+
+1. **Debug the current fix:** Run with `DEBUG_CALLER=1` to trace what's happening:
+   ```bash
+   DEBUG_CALLER=1 ./jperl -e '
+   eval q{
+   #line 1 MyFile
+   sub wrapper { print "caller: ", join(",", caller(0)), "\n"; }
+   wrapper();
+   };
+   '
+   ```
+
+2. **Check interpreter path:** The fix above is for JVM bytecode path. The interpreter path in ExceptionFormatter also needs to use the `#line`-adjusted filename.
+
+3. **Verify errorUtil.getFileName() returns correct value:** Ensure the `#line` directive processing in Whitespace.parseLineDirective() is actually calling `errorUtil.setFileName()`.
+
+4. **Test edge cases:**
+   - Multiple `#line` directives in same file
+   - `#line` inside subroutine definitions
+   - Nested evals with different `#line` values
+
+### Test Commands
+
+```bash
+# Basic #line directive test
+./jperl -e '
+use Carp qw(croak);
+sub inner { my @c = caller(0); print "caller(0): file=$c[1] line=$c[2]\n"; }
+eval q{
+#line 1 MyFile
+sub wrapper { inner(); }
+wrapper();
+};
+'
+# Expected: caller(0): file=MyFile line=2
+
+# Run Moo croak-locations test
+cd ~/.cpan/build/Moo-2.005005-6 && /path/to/jperl t/croak-locations.t
+
+# Full Moo test suite
+./jcpan -t Moo
+```
 
 ## Debug Environment Variables
 

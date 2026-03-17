@@ -126,8 +126,10 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source code
      */
     public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
-        // Retrieve or create a unique identifier for the source file
-        int fileId = getOrCreateFileId(ctx.errorUtil.getFileName());
+        // Use the ORIGINAL filename (compile-time) for the key, not the #line-adjusted one.
+        // This is because JVM stack traces report the original filename from visitSource().
+        // The #line-adjusted filename is stored separately in LineInfo for caller() reporting.
+        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
 
         // Get or create the SourceFileInfo object for the file
         SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
@@ -152,9 +154,10 @@ public class ByteCodeSourceMapper {
         if (existingEntry != null) {
             // Entry already exists from parse-time - preserve it entirely
             if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG saveSourceLocation: SKIP (exists) file=" + ctx.errorUtil.getFileName() 
+                System.err.println("DEBUG saveSourceLocation: SKIP (exists) file=" + ctx.compilerOptions.fileName 
                     + " tokenIndex=" + tokenIndex + " existingLine=" + existingEntry.lineNumber()
-                    + " existingPkg=" + packageNamePool.get(existingEntry.packageNameId()));
+                    + " existingPkg=" + packageNamePool.get(existingEntry.packageNameId())
+                    + " existingSourceFile=" + fileNamePool.get(existingEntry.sourceFileNameId()));
             }
             return;
         }
@@ -162,18 +165,24 @@ public class ByteCodeSourceMapper {
         // First time seeing this tokenIndex - compute and store
         int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
         int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
+        
+        // Store the #line-adjusted filename (may differ from ctx.compilerOptions.fileName)
+        // This is what caller() should report to match Perl's behavior
+        int sourceFileNameId = getOrCreateFileId(ctx.errorUtil.getFileName());
 
         if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG saveSourceLocation: STORE file=" + ctx.errorUtil.getFileName() 
+            System.err.println("DEBUG saveSourceLocation: STORE origFile=" + ctx.compilerOptions.fileName 
+                + " sourceFile=" + ctx.errorUtil.getFileName()
                 + " tokenIndex=" + tokenIndex + " line=" + lineNumber 
                 + " pkg=" + ctx.symbolTable.getCurrentPackage() + " sub=" + subroutineName);
         }
 
-        // Map the token index to a LineInfo object containing the line number, package ID, and subroutine ID
+        // Map the token index to a LineInfo object containing line, package, subroutine, and source file
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
                 lineNumber,
                 packageId,
-                getOrCreateSubroutineId(subroutineName)
+                getOrCreateSubroutineId(subroutineName),
+                sourceFileNameId
         ));
     }
 
@@ -248,8 +257,12 @@ public class ByteCodeSourceMapper {
 
         LineInfo lineInfo = entry.getValue();
         
+        // Get the #line directive-adjusted source filename for caller() reporting
+        String sourceFileName = fileNamePool.get(lineInfo.sourceFileNameId());
+        
         if (System.getenv("DEBUG_CALLER") != null) {
             System.err.println("DEBUG parseStackTraceElement: file=" + element.getFileName() 
+                + " sourceFile=" + sourceFileName
                 + " lookupTokenIndex=" + tokenIndex + " foundTokenIndex=" + entry.getKey()
                 + " line=" + lineInfo.lineNumber() + " pkg=" + packageNamePool.get(lineInfo.packageNameId()));
         }
@@ -263,8 +276,9 @@ public class ByteCodeSourceMapper {
 
         // Create a unique location key using tokenIndex instead of line number
         // This prevents false duplicates when multiple statements are on the same line
+        // Use the #line-adjusted filename for the key to properly dedupe by reported location
         var locationKey = new SourceLocation(
-                fileNamePool.get(fileId),
+                sourceFileName,
                 packageNamePool.get(lineInfo.packageNameId()),
                 entry.getKey(),  // Use the actual tokenIndex as the unique identifier
                 subroutineName
@@ -277,9 +291,9 @@ public class ByteCodeSourceMapper {
             return null;
         }
 
-        // Return the location with the actual line number for display
+        // Return the location with the #line-adjusted filename and actual line number for display
         return new SourceLocation(
-                fileNamePool.get(fileId),
+                sourceFileName,
                 packageNamePool.get(lineInfo.packageNameId()),
                 lineInfo.lineNumber(),
                 subroutineName
@@ -287,9 +301,11 @@ public class ByteCodeSourceMapper {
     }
 
     /**
-     * Associates a line number with its package context and subroutine name.
+     * Associates a line number with its package context, subroutine name, and source file.
+     * The sourceFileNameId stores the #line directive-adjusted filename for accurate
+     * caller() reporting, which may differ from the original compile-time filename.
      */
-    private record LineInfo(int lineNumber, int packageNameId, int subroutineNameId) {
+    private record LineInfo(int lineNumber, int packageNameId, int subroutineNameId, int sourceFileNameId) {
     }
 
     /**
