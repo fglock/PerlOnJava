@@ -138,24 +138,71 @@ public class ByteCodeSourceMapper {
             subroutineName = "";  // Use empty string for main code
         }
 
-        // Check if entry already exists - if so, preserve the line number
-        // but update package and subroutine (emit-time has correct context)
+        // Check if entry already exists - if so, preserve ALL parse-time data.
+        // 
+        // Why: Parse-time correctly tracks package changes (the parser executes
+        // `package Foo;` and updates the symbol table). Emit-time does NOT replay
+        // package changes - it just visits AST nodes. So parse-time has correct
+        // line numbers AND correct packages, while emit-time may have stale packages.
+        //
+        // The emit-time call to saveSourceLocation (from setDebugInfoLineNumber)
+        // exists to ensure entries are created for ALL bytecode locations. But if
+        // an entry already exists from parse-time, we should preserve it entirely.
         LineInfo existingEntry = info.tokenToLineInfo.get(tokenIndex);
-        int lineNumber;
         if (existingEntry != null) {
-            // Preserve the existing line number from parse time
-            lineNumber = existingEntry.lineNumber();
-        } else {
-            // First time seeing this tokenIndex - compute line number
-            lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
+            // Entry already exists from parse-time - preserve it entirely
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG saveSourceLocation: SKIP (exists) file=" + ctx.errorUtil.getFileName() 
+                    + " tokenIndex=" + tokenIndex + " existingLine=" + existingEntry.lineNumber()
+                    + " existingPkg=" + packageNamePool.get(existingEntry.packageNameId()));
+            }
+            return;
+        }
+        
+        // First time seeing this tokenIndex - compute and store
+        int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
+        int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
+
+        if (System.getenv("DEBUG_CALLER") != null) {
+            System.err.println("DEBUG saveSourceLocation: STORE file=" + ctx.errorUtil.getFileName() 
+                + " tokenIndex=" + tokenIndex + " line=" + lineNumber 
+                + " pkg=" + ctx.symbolTable.getCurrentPackage() + " sub=" + subroutineName);
         }
 
         // Map the token index to a LineInfo object containing the line number, package ID, and subroutine ID
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
                 lineNumber,
-                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()),
+                packageId,
                 getOrCreateSubroutineId(subroutineName)
         ));
+    }
+
+    /**
+     * Gets the package name at a specific source location.
+     * Used by the interpreter path to look up package from tokenIndex,
+     * providing unified package tracking with the JVM bytecode path.
+     *
+     * @param fileName   The source file name
+     * @param tokenIndex The token index to look up
+     * @return The package name at that location, or null if not found
+     */
+    public static String getPackageAtLocation(String fileName, int tokenIndex) {
+        int fileId = fileNameToId.getOrDefault(fileName, -1);
+        if (fileId == -1) {
+            return null;
+        }
+
+        SourceFileInfo info = sourceFiles.get(fileId);
+        if (info == null) {
+            return null;
+        }
+
+        Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
+        if (entry == null) {
+            return null;
+        }
+
+        return packageNamePool.get(entry.getValue().packageNameId());
     }
 
     /**
@@ -170,16 +217,28 @@ public class ByteCodeSourceMapper {
 
         SourceFileInfo info = sourceFiles.get(fileId);
         if (info == null) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG parseStackTraceElement: NO INFO for file=" + element.getFileName() + " fileId=" + fileId);
+            }
             return new SourceLocation(element.getFileName(), "", tokenIndex, null);
         }
 
         // Use TreeMap's floorEntry to find the nearest defined token index
         Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
         if (entry == null) {
+            if (System.getenv("DEBUG_CALLER") != null) {
+                System.err.println("DEBUG parseStackTraceElement: NO ENTRY for file=" + element.getFileName() + " tokenIndex=" + tokenIndex);
+            }
             return new SourceLocation(element.getFileName(), "", element.getLineNumber(), null);
         }
 
         LineInfo lineInfo = entry.getValue();
+        
+        if (System.getenv("DEBUG_CALLER") != null) {
+            System.err.println("DEBUG parseStackTraceElement: file=" + element.getFileName() 
+                + " lookupTokenIndex=" + tokenIndex + " foundTokenIndex=" + entry.getKey()
+                + " line=" + lineInfo.lineNumber() + " pkg=" + packageNamePool.get(lineInfo.packageNameId()));
+        }
 
         // Retrieve subroutine name
         String subroutineName = subroutineNamePool.get(lineInfo.subroutineNameId());
