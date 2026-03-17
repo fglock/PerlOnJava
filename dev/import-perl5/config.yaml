@@ -541,6 +541,10 @@ imports:
     target: src/main/perl/lib/CPAN/Meta/Requirements
     type: directory
 
+  # ExtUtils::Manifest - Check MANIFEST and build dist list (required by Module::Build)
+  - source: perl5/cpan/ExtUtils-Manifest/lib/ExtUtils/Manifest.pm
+    target: src/main/perl/lib/ExtUtils/Manifest.pm
+
   # ExtUtils::MakeMaker - PerlOnJava custom implementations
   # These are protected because they have PerlOnJava-specific logic
   
