@@ -174,7 +174,7 @@ public class ByteCodeSourceMapper {
         // check for a nearby parse-time entry that has a #line-adjusted filename.
         // This handles the case where parse-time captured the #line directive but
         // emit-time has a different tokenIndex and stale errorUtil without #line state.
-        if (sourceFileName.equals(ctx.compilerOptions.fileName)) {
+        if (sourceFileName != null && sourceFileName.equals(ctx.compilerOptions.fileName)) {
             // Look for nearby entry (within 50 tokens) that has #line-adjusted filename
             var nearbyEntry = info.tokenToLineInfo.floorEntry(tokenIndex);
             if (nearbyEntry != null && (tokenIndex - nearbyEntry.getKey()) < 50) {
@@ -287,7 +287,7 @@ public class ByteCodeSourceMapper {
         // FIX: If the found entry's sourceFile equals the original file (no #line applied),
         // check for nearby entries that have a #line-adjusted filename.
         // This handles entries stored before the #line directive was processed.
-        if (sourceFileName.equals(element.getFileName())) {
+        if (sourceFileName != null && sourceFileName.equals(element.getFileName())) {
             // First, check LOWER entries (in case #line was applied before this code)
             // Find the first entry with a #line-adjusted filename to calculate the offset
             var lowerEntry = info.tokenToLineInfo.lowerEntry(entry.getKey());
