@@ -436,7 +436,8 @@ public class RuntimeIO extends RuntimeScalar {
                         getGlobalVariable("main::!").set(2);  // ENOENT
                         return null;
                     }
-                    fh.ioHandle = new ProcessInputHandle(is);
+                    // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
+                    fh.ioHandle = new SeekableJarHandle(is);
                     addHandle(fh.ioHandle);
                     fh.binmode(ioLayers);
                     return fh;

@@ -242,6 +242,8 @@ L<File::Spec::VMS/file_name_is_absolute>).
 
 sub file_name_is_absolute {
     my ($self,$file) = @_;
+    # PerlOnJava: Also recognize jar: paths as absolute
+    return 1 if $file =~ /^jar:/;
     return scalar($file =~ m:^/:s);
 }
 

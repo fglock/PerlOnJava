@@ -254,6 +254,10 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for file_name_is_absolute() method");
         }
         String path = args.get(1).toString();
+        // PerlOnJava: Also recognize jar: paths as absolute
+        if (path.startsWith("jar:")) {
+            return new RuntimeScalar(true).getList();
+        }
         boolean isAbsolute = Paths.get(path).isAbsolute();
         return new RuntimeScalar(isAbsolute).getList();
     }
@@ -425,6 +429,11 @@ public class FileSpec extends PerlModuleBase {
         }
         String path = args.get(1).toString();
         String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
+
+        // PerlOnJava: jar: paths are already absolute, return as-is
+        if (path.startsWith("jar:")) {
+            return new RuntimeScalar(path).getList();
+        }
 
         // If the path is already absolute, return it as-is (normalized)
         if (Paths.get(path).isAbsolute()) {

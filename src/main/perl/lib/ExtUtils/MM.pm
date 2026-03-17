@@ -29,7 +29,8 @@ BEGIN {
     }
 }
 
-use ExtUtils::MakeMaker;
+# Note: Do NOT use ExtUtils::MakeMaker here - it would create a circular dependency
+# ExtUtils::MakeMaker already requires ExtUtils::MM
 
 # Convenient alias - allows MM->method() syntax
 {
