@@ -435,20 +435,24 @@ When a built-in function like `shift`, `pop`, `caller`, etc. is followed by `->`
    - Needs stub similar to ExtUtils::MakeMaker
    - Blocks: modules that only provide Build.PL
 
-2. **Core module detection** - Medium priority
-   - CPAN.pm doesn't recognize built-in modules (strict, warnings, Exporter, etc.)
-   - Option A: Add version stubs to built-in modules
-   - Option B: Configure CPAN.pm to skip core modules
-   - Option C: Add core module versions to a metadata file
+2. ~~**Core module detection**~~ - ✅ Resolved
+   - CPAN::DistnameInfo now installable via jcpan
+   - Warning about it no longer appears
 
 3. **Test running improvements** - Low priority
    - `make test` uses fork which isn't supported in PerlOnJava
    - Current workaround: `notest("install", "Module")`
    - Long-term: Consider IPC::Open3 for test harness
 
-4. **YAML.pm improvements** - Low priority
-   - Warning: "YAML version '0.01' is too low"
-   - Current stub is minimal; better YAML parsing would help with META.yml
+4. ~~**YAML.pm improvements**~~ - ✅ FIXED
+   - Updated YAML.pm version to 1.31 (matches CPAN version)
+   - "YAML version '0.01' is too low" warning no longer appears
+   - Our YAML.pm wraps YAML::PP which provides full functionality
+
+- [x] **Phase 9a: YAML version update** (2026-03-17)
+  - Updated YAML.pm $VERSION from 0.01 to 1.31
+  - Silences "YAML version too low" warning in CPAN.pm
+  - CPAN.pm requires >= 0.60; our YAML::PP-based implementation is fully capable
 
 ### Open Questions
 - How important is Safe compartmentalization for users?
