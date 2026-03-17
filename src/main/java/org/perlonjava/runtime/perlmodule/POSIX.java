@@ -37,6 +37,18 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_getegid", "getegid", null);
             module.registerMethod("_getcwd", "getcwd", null);
             module.registerMethod("_strerror", "strerror", null);
+            module.registerMethod("_access", "access", null);
+            
+            // Access constants
+            module.registerMethod("_const_F_OK", "const_F_OK", null);
+            module.registerMethod("_const_R_OK", "const_R_OK", null);
+            module.registerMethod("_const_W_OK", "const_W_OK", null);
+            module.registerMethod("_const_X_OK", "const_X_OK", null);
+            
+            // Seek constants
+            module.registerMethod("_const_SEEK_SET", "const_SEEK_SET", null);
+            module.registerMethod("_const_SEEK_CUR", "const_SEEK_CUR", null);
+            module.registerMethod("_const_SEEK_END", "const_SEEK_END", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing POSIX method: " + e.getMessage());
         }
@@ -305,5 +317,70 @@ public class POSIX extends PerlModuleBase {
             // Fall back to generic message
         }
         return new RuntimeScalar(msg).getList();
+    }
+
+    /**
+     * POSIX access() - check file accessibility.
+     * Arguments: path, mode
+     * mode is a bitmask: F_OK (0) = exists, R_OK (4) = readable, W_OK (2) = writable, X_OK (1) = executable
+     * Returns 0 on success, -1 on failure.
+     */
+    public static RuntimeList access(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            return new RuntimeScalar(-1).getList();
+        }
+        String path = args.get(0).toString();
+        int mode = args.get(1).getInt();
+        
+        java.io.File file = new java.io.File(path);
+        
+        // F_OK (0) - test for existence
+        if (!file.exists()) {
+            return new RuntimeScalar(-1).getList();
+        }
+        
+        // Check requested permissions
+        if ((mode & 4) != 0 && !file.canRead()) {
+            return new RuntimeScalar(-1).getList();
+        }
+        if ((mode & 2) != 0 && !file.canWrite()) {
+            return new RuntimeScalar(-1).getList();
+        }
+        if ((mode & 1) != 0 && !file.canExecute()) {
+            return new RuntimeScalar(-1).getList();
+        }
+        
+        // Return "0 but true" for success - this is 0 numerically but true in boolean context
+        return new RuntimeScalar("0 but true").getList();
+    }
+
+    // POSIX access() constants
+    public static RuntimeList const_F_OK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();  // F_OK = test for existence
+    }
+
+    public static RuntimeList const_R_OK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(4).getList();  // R_OK = test for read permission
+    }
+
+    public static RuntimeList const_W_OK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(2).getList();  // W_OK = test for write permission
+    }
+
+    public static RuntimeList const_X_OK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();  // X_OK = test for execute permission
+    }
+
+    // POSIX seek constants
+    public static RuntimeList const_SEEK_SET(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList const_SEEK_CUR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList const_SEEK_END(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(2).getList();
     }
 }

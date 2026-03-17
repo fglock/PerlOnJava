@@ -98,14 +98,21 @@ public class FileSpec extends PerlModuleBase {
         StringBuilder result = new StringBuilder();
         boolean isWindows = SystemUtils.osIsWindows();
         String separator = File.separator;
+        boolean isFirst = true;
 
         for (int i = 1; i < args.size(); i++) {
             String part = args.get(i).toString();
 
-            // Skip empty parts
+            // Empty first element represents root directory on Unix
             if (part.isEmpty()) {
+                if (isFirst && !isWindows) {
+                    // First empty element = absolute path (root)
+                    result.append(separator);
+                }
+                isFirst = false;
                 continue;
             }
+            isFirst = false;
 
             // For Windows, normalize slashes to the system separator
             if (isWindows) {
