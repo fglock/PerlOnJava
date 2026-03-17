@@ -93,6 +93,8 @@ public class ByteCodeSourceMapper {
 
     /**
      * Maps a token index to its source line number in the bytecode.
+     * Also saves the source location info with the correct class context.
+     * This is called during emit when we have the correct class name for subroutines.
      *
      * @param ctx        The current emitter context
      * @param tokenIndex The index of the token in the source
@@ -101,6 +103,10 @@ public class ByteCodeSourceMapper {
         Label thisLabel = new Label();
         ctx.mv.visitLabel(thisLabel);
         ctx.mv.visitLineNumber(tokenIndex, thisLabel);
+        
+        // Also save source location during emit - this ensures subroutine statements
+        // are saved with the correct package context from the emit-time symbol table
+        saveSourceLocation(ctx, tokenIndex);
     }
 
     /**
