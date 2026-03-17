@@ -673,17 +673,44 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - See `dev/design/unified_caller_stack.md` for full analysis
   - Result: Interpreter and JVM backends now report same package for same source location
 
+- [x] Phase 37: Fix #line directive to update errorUtil.fileName during parsing (2026-03-17)
+  - Root cause: Unquoted filenames in `#line N filename` were only handled in `getSourceLocationAccurate()`
+    for error messages, not in `Whitespace.parseLineDirective()` during parsing
+  - This caused `caller()` and `__FILE__` to return `(eval N)` instead of the `#line`-adjusted filename
+  - **Whitespace.java fix**:
+    - Added handling for unquoted bareword filenames: `#line N filename`
+    - Now calls `errorUtil.setFileName(filename)` for both quoted and unquoted forms
+  - **ByteCodeSourceMapper.java fix**:
+    - Added `sourceFileNameId` field to `LineInfo` record
+    - `saveSourceLocation()` now uses original filename for key, stores adjusted filename in LineInfo
+    - `parseStackTraceElement()` returns the `#line`-adjusted filename for caller() reporting
+  - **Result**: Tests 15, 18 now PASS; tests 19-26 now run (were previously skipped due to parse errors)
+
 ### Current Status
 
-**Test Results (after Phase 30):**
-- **Moo**: 64/71 test programs passing (90%), 795/828 subtests passing (96%)
+**Test Results (after Phase 37):**
+- **Moo**: 64/71 test programs passing (90%), 806/839 subtests passing (96%)
 - **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
 
 **Remaining Failures (categorized):**
 1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
-2. **croak-locations.t** (2 failures) - Tests 15, 18: complex eval/BUILDARGS stack walking
+2. **croak-locations.t** (2 failures) - Tests 27, 28: delegated method croak and role default isa
 3. **demolish tests** (6 failures) - Expected, DESTROY not supported
 4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+
+**croak-locations.t test 27 analysis**:
+- Test: `Method::Generate::Accessor::_generate_delegation - user croak`
+- Expected: `LocationTestFile line 22` (where delegated method is called)
+- Got: `(eval N) line 50` (internal constructor code)
+- Issue: Carp is blaming the generated constructor instead of the user's call site
+- This is a deeper Carp stack-walking issue with Sub::Quote-generated code
+
+**croak-locations.t test 28 analysis**:
+- Test: `Moo::Role::create_class_with_roles - default fails isa`
+- Expected: `LocationTestFile line 21` (where `apply_roles_to_object` is called)
+- Got: `LocationTestFile line 18` (where the object was created)
+- Issue: Carp is blaming object creation instead of role application
+- Related to how default values and isa checks interact with stack walking
 
 **Expected failures** (not fixable without fundamental changes):
 - Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
@@ -769,14 +796,14 @@ that didn't communicate with the compiler's strict checking.
 
 **Result**: Mo tests now 28/28 passing (was 27/28).
 
-#### Phase 36: croak-locations.t Tests 15, 18 (Low Impact)
-**Enables**: 2 additional subtests
+#### Phase 36: croak-locations.t Tests 15, 18 (Completed)
+**Status**: Completed 2026-03-17 (merged into Phase 37 above)
 
-Complex eval/BUILDARGS stack walking cases where Carp reports wrong caller:
-- Test 15: Wrapped inlined BUILDARGS shows `(eval N)` instead of `LocationTestFile`
-- Test 18: Moo::Object new args shows internal file instead of caller location
+Tests 15 and 18 are now fixed. The remaining tests 27-28 involve:
+- Test 27: Delegated method croak - Carp blames generated code instead of call site
+- Test 28: Role default isa - Carp blames object creation instead of role application
 
-These are edge cases in how Carp walks the stack to find the "blame" location.
+These require deeper investigation into how Carp walks the stack for Sub::Quote-generated code.
 
 ---
 
@@ -787,20 +814,20 @@ These are edge cases in how Carp walks the stack to find the "blame" location.
 | 1 | ~~B::Deparse (33)~~ | ~~1 test~~ | **Completed** | ~~Medium~~ |
 | 2 | ~~Mo strict.t (35)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
 | 3 | ~~Interpreter caller() (34)~~ | ~~Parity~~ | **Completed** | ~~Medium~~ |
-| 4 | **croak-locations.t** (36) | 2 tests | Ready | Medium |
-| 5 | DESTROY (31) | 6 tests | **Deferred** | High |
-| 6 | Weak References (32) | 25 tests | **Deferred** | High |
+| 4 | ~~croak-locations.t 15,18 (36/37)~~ | ~~2 tests~~ | **Completed** | ~~Medium~~ |
+| 5 | **croak-locations.t 27,28** | 2 tests | Complex | High |
+| 6 | DESTROY (31) | 6 tests | **Deferred** | High |
+| 7 | Weak References (32) | 25 tests | **Deferred** | High |
 
-**Actionable items** (can be implemented now):
-1. **Phase 36 (croak-locations.t)**: Edge cases in Carp stack walking (tests 15, 18)
+**Actionable items** (can be investigated):
+1. **croak-locations.t 27-28**: Complex Carp stack walking for Sub::Quote-generated code
 
 **Deferred** (need design maturation):
 - Phase 31 (DESTROY): Requires scope-based tracking, complex GC interaction
 - Phase 32 (Weak refs): Memory impact concern, need alternative to adding field
 
 **Achievable test improvement without deferred features**:
-- Current: 64/71 Moo tests (90%), 28/28 Mo tests (100%)
-- Potential: +2 (croak-locations) = minor improvement
+- Current: 64/71 Moo tests (90%), 806/839 subtests (96%), 28/28 Mo tests (100%)
 - The bulk of remaining failures (31 tests) require DESTROY or weak refs
 
 ### PR Information
@@ -821,6 +848,7 @@ These are edge cases in how Carp walks the stack to find the "blame" location.
   - `a3233cd55` - Improve ::identifier to check sub existence at compile time
   - `86591c703` - Add Sub::Name module and fix @INC hook exception handling
   - `c35faad00` - Fix interpreter path to use unified package tracking
+  - `01d5dc1dd` - Fix #line directive to update errorUtil.fileName during parsing
 
 ## Related Documents
 
