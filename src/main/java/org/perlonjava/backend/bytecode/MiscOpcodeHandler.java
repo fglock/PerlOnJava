@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.nativ.ExtendedNativeUtils;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -85,6 +86,7 @@ public class MiscOpcodeHandler {
             case Opcodes.READDIR ->
                     Directory.readdir(args.elements.isEmpty() ? null : (RuntimeScalar) args.elements.get(0), ctx);
             case Opcodes.SEEKDIR -> Directory.seekdir(args);
+            case Opcodes.GETHOSTBYNAME -> ExtendedNativeUtils.gethostbyname(ctx, argsArray);
             default -> throw new IllegalStateException("Unknown opcode in MiscOpcodeHandler: " + opcode);
         };
 

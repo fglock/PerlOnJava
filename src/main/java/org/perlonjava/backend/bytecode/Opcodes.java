@@ -1892,6 +1892,13 @@ public class Opcodes {
      */
     public static final short KILL = 380;
 
+    /**
+     * Get host information by name.
+     * Format: GETHOSTBYNAME rd args_reg ctx
+     * Effect: rd = ExtendedNativeUtils.gethostbyname(ctx, args...)
+     */
+    public static final short GETHOSTBYNAME = 389;
+
     // =================================================================
     // SUPEROPERATORS (381+) - Combined instruction sequences
     // =================================================================

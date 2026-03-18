@@ -174,11 +174,13 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         }
 
                         // Get the stash and access the glob
-                        RuntimeHash stash = HashSpecialVariable.getStash(packageName);
+                        // The stash key must end with "::" for package stashes
+                        RuntimeHash stash = HashSpecialVariable.getStash(packageName + "::");
                         RuntimeScalar glob = stash.get(name);
-                        if (glob.type == RuntimeScalarType.GLOB || glob.type == RuntimeScalarType.UNDEF) {
-                            // Return a reference to the glob
-                            yield glob.createReference();
+                        if (glob.type == RuntimeScalarType.GLOB) {
+                            // Return the glob itself (not a reference)
+                            // ${^LAST_FH} returns a GLOB, not a reference
+                            yield glob;
                         }
                     }
                     // Fallback to the RuntimeIO object if no glob name is available

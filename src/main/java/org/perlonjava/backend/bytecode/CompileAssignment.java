@@ -95,6 +95,36 @@ public class CompileAssignment {
                 bc.lastResultReg = localReg;
                 return true;
             }
+            // Handle dynamic glob names: local *$probe = sub { ... }
+            if (sigil.equals("*") && !(sigilOp.operand instanceof IdentifierNode)) {
+                // Compile the glob name expression (e.g., $probe)
+                bc.compileNode(sigilOp.operand, -1, RuntimeContextType.SCALAR);
+                int nameScalarReg = bc.lastResultReg;
+
+                // Load the glob using dynamic name
+                int globReg = bc.allocateRegister();
+                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                bc.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
+                bc.emitReg(globReg);
+                bc.emitReg(nameScalarReg);
+                bc.emit(pkgIdx);
+
+                // Push the glob onto the local stack
+                bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                bc.emitReg(globReg);
+
+                // Compile the RHS value
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+
+                // Store value to glob
+                bc.emit(Opcodes.STORE_GLOB);
+                bc.emitReg(globReg);
+                bc.emitReg(valueReg);
+
+                bc.lastResultReg = globReg;
+                return true;
+            }
             if (sigil.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
                     && innerSigilOp.operand instanceof IdentifierNode idNode) {
                 return handleLocalOurAssignment(bc, node, innerSigilOp, idNode, rhsContext);
