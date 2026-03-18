@@ -28,8 +28,15 @@ public class SymbolTable {
     public int addVariable(String name, String variableDeclType, String perlPackage, OperatorNode ast) {
         // Check if the variable is not already in the table
         // XXX TODO under 'no strict', we may need to allow variable redeclaration
-        if (!variableIndex.containsKey(name)) {
-            // Add the variable with a unique index
+        SymbolEntry existing = variableIndex.get(name);
+        if (existing == null) {
+            // Variable doesn't exist, add it
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+        } else if ("our".equals(variableDeclType) && existing.perlPackage != null 
+                   && !existing.perlPackage.equals(perlPackage)) {
+            // For 'our' declarations in a different package, create a new entry
+            // This handles the case where 'our $AUTOLOAD' is declared in multiple packages
+            // within the same lexical scope - each should refer to its own package's variable
             variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
         }
         // Return the index of the variable

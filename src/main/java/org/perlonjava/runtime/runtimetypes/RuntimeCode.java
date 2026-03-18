@@ -1263,6 +1263,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 for (RuntimeBase arg : args) {
                                     arg.setArrayOfAlias(a);
                                 }
+                                
+                                // If this is an AUTOLOAD, set $AUTOLOAD before calling
+                                String autoloadVariableName = cachedCode.autoloadVariableName;
+                                if (autoloadVariableName != null) {
+                                    String methodName = method.toString();
+                                    String className = autoloadVariableName.substring(0, autoloadVariableName.lastIndexOf("::"));
+                                    String fullMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+                                    getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                }
+                                
                                 // Prefer PerlSubroutine interface over MethodHandle
                                 if (cachedCode.subroutine != null) {
                                     return cachedCode.subroutine.apply(a, callContext);
