@@ -322,6 +322,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 String pkg = lastColonIndex >= 0 ? this.globName.substring(0, lastColonIndex) : "main";
                 yield new RuntimeScalar(NameNormalizer.getBlessStrForClassName(pkg));
             }
+            case "NAME" -> {
+                // Return the name of this glob (without the package prefix)
+                int lastColonIndex = this.globName.lastIndexOf("::");
+                String name = lastColonIndex >= 0 ? this.globName.substring(lastColonIndex + 2) : this.globName;
+                yield new RuntimeScalar(name);
+            }
             case "IO" -> {
                 // Accessing the IO slot yields a blessable reference-like value.
                 // We model this by returning a GLOBREFERENCE wrapper around the RuntimeIO.
