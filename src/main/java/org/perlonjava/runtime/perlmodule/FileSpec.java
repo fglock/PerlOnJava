@@ -312,7 +312,7 @@ public class FileSpec extends PerlModuleBase {
         String path = args.get(1).toString();
         boolean noFile = args.size() == 3 && args.get(2).getBoolean();
         String volume = "";
-        String directory = path;
+        String directory = "";
         String file = "";
 
         if (SystemUtils.osIsWindows()) {
@@ -323,11 +323,17 @@ public class FileSpec extends PerlModuleBase {
             }
         }
 
-        if (!noFile) {
+        if (noFile) {
+            // If noFile is true, entire path is directory
+            directory = path;
+        } else {
             int lastSeparator = path.lastIndexOf(File.separator);
             if (lastSeparator != -1) {
-                directory = path.substring(0, lastSeparator);
+                directory = path.substring(0, lastSeparator + 1);
                 file = path.substring(lastSeparator + 1);
+            } else {
+                // No separator - entire path is the filename
+                file = path;
             }
         }
 
