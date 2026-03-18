@@ -21,8 +21,8 @@ use Exporter 'import';
 
 our @EXPORT_OK = qw(usleep nanosleep ualarm gettimeofday tv_interval time sleep alarm);
 
-# require XSLoader;
-# XSLoader::load('Time::HiRes');
+require XSLoader;
+XSLoader::load('Time::HiRes');
 
 sub tv_interval {
     my ($start, $end) = @_;

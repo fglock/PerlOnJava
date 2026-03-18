@@ -211,14 +211,15 @@ public class GlobalContext {
         Re.initialize();
         // Cwd.initialize();  // Use Perl Cwd.pm instead (has pure Perl fallbacks)
         FileSpec.initialize();
-        UnicodeNormalize.initialize();
-        UnicodeUCD.initialize();
-        TimeHiRes.initialize();
-        TermReadLine.initialize();
-        TermReadKey.initialize();
-        FileTemp.initialize();
-        Encode.initialize();
-        JavaSystem.initialize();
+        // Deferred to XSLoader::load() for faster startup - only loaded when actually used:
+        // UnicodeNormalize.initialize();  // Has XSLoader in Perl file
+        // TimeHiRes.initialize();  // Has XSLoader in Perl file
+        UnicodeUCD.initialize();  // No XSLoader in Perl file - needed at startup
+        TermReadLine.initialize();  // No Perl file - needed at startup
+        TermReadKey.initialize();  // No Perl file - needed at startup
+        FileTemp.initialize();  // Perl uses eval require - keep for cleanup hooks
+        Encode.initialize();  // Common enough to keep
+        // JavaSystem.initialize();  // Only for java:: integration
         PerlIO.initialize();
         IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
         Version.initialize();   // Initialize version module for version objects
