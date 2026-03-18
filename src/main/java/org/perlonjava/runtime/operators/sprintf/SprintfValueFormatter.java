@@ -51,10 +51,21 @@ public class SprintfValueFormatter {
      */
     public String formatValue(RuntimeScalar value, String flags, int width,
                               int precision, char conversion) {
-        // Check for special floating-point values first
-        // BUT exclude %p - it should format the address even for Inf/NaN
+        // For non-numeric conversions (string, char, pointer), don't check for Inf/NaN
+        // because that would incorrectly convert strings like "INFO" to "Inf"
+        if (conversion == 's' || conversion == 'c' || conversion == 'p' || conversion == 'n') {
+            return switch (conversion) {
+                case 'c' -> formatCharacter(value, flags, width);
+                case 's' -> formatString(value.toString(), flags, width, precision);
+                case 'p' -> formatPointer(value, flags);
+                case 'n' -> throw new PerlCompilerException("%n specifier not supported");
+                default -> "";
+            };
+        }
+
+        // Check for special floating-point values for numeric conversions
         double doubleValue = value.getDouble();
-        if ((Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) && conversion != 'p') {
+        if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
             return numericFormatter.formatSpecialValue(doubleValue, flags, width, conversion);
         }
 
@@ -70,12 +81,6 @@ public class SprintfValueFormatter {
             case 'e', 'E', 'g', 'G', 'a', 'A' ->
                     numericFormatter.formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
             case 'f', 'F' -> numericFormatter.formatFloatingPoint(value.getDouble(), flags, width, precision, 'f');
-
-            // String and character conversions - handle directly
-            case 'c' -> formatCharacter(value, flags, width);
-            case 's' -> formatString(value.toString(), flags, width, precision);
-            case 'p' -> formatPointer(value, flags);  // This should already pass flags
-            case 'n' -> throw new PerlCompilerException("%n specifier not supported");
 
             // Uppercase variants (synonyms)
             case 'D' -> numericFormatter.formatInteger(value.getLong(), flags, width, precision, 10, false);
