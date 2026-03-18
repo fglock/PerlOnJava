@@ -16,6 +16,29 @@ local $Foo::X = 1;
 Foo::check();  # jperl: "X=0", Perl: "X=1"
 ```
 
+### Important Constraint: `our` Aliases Persist Across Package Changes
+
+The `our` declaration creates a **lexical** alias that must persist even when the package changes:
+
+```perl
+our $x = 10;        # Creates alias $x -> $main::x
+package ZZZ;
+print $x;           # Must still print 10 (referring to $main::x)
+```
+
+This already works in jperl. The fix must preserve this behavior - the `our` variable's **target package** is fixed at declaration time, not at access time.
+
+Combined test case (currently broken):
+```perl
+our $x = 10;
+sub check { print "x=$x\n"; }
+package ZZZ;
+{
+    local $main::x = 99;
+    main::check();  # jperl: "x=10", Perl: "x=99"
+}
+```
+
 ### Impact
 
 - Breaks `$Carp::CarpLevel` (affects error reporting in all modules using Carp)
@@ -136,9 +159,11 @@ Option A is recommended because:
 
 **File:** `src/main/java/org/perlonjava/frontend/semantic/ScopedSymbolTable.java`
 
+**Key Insight:** The global name must be captured at `our` declaration time, not at access time. This ensures that after `package ZZZ;`, the `$x` still refers to `$main::x` (the package where `our $x` was declared).
+
 1. Add new tracking for `our` declarations:
    ```java
-   // Map from short variable name to normalized global name
+   // Map from short variable name to normalized global name (captured at declaration time)
    private Map<String, String> ourVariableGlobalNames = new HashMap<>();
    
    public void addOurVariable(String varName, String globalName) {
