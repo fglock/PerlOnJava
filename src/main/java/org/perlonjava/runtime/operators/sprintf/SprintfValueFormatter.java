@@ -51,19 +51,23 @@ public class SprintfValueFormatter {
      */
     public String formatValue(RuntimeScalar value, String flags, int width,
                               int precision, char conversion) {
-        // For non-numeric conversions (string, char, pointer), don't check for Inf/NaN
+        // For string conversion (%s), don't call getDouble() to check for Inf/NaN
         // because that would incorrectly convert strings like "INFO" to "Inf"
-        if (conversion == 's' || conversion == 'c' || conversion == 'p' || conversion == 'n') {
-            return switch (conversion) {
-                case 'c' -> formatCharacter(value, flags, width);
-                case 's' -> formatString(value.toString(), flags, width, precision);
-                case 'p' -> formatPointer(value, flags);
-                case 'n' -> throw new PerlCompilerException("%n specifier not supported");
-                default -> "";
-            };
+        // (getDouble on "INFO" returns Infinity because it starts with "INF")
+        if (conversion == 's') {
+            return formatString(value.toString(), flags, width, precision);
+        }
+        
+        // For %p (pointer) and %n, also skip the Inf/NaN check
+        if (conversion == 'p') {
+            return formatPointer(value, flags);
+        }
+        if (conversion == 'n') {
+            throw new PerlCompilerException("%n specifier not supported");
         }
 
         // Check for special floating-point values for numeric conversions
+        // This includes %c - sprintf "%c", Inf should error in Perl
         double doubleValue = value.getDouble();
         if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
             return numericFormatter.formatSpecialValue(doubleValue, flags, width, conversion);
@@ -71,6 +75,9 @@ public class SprintfValueFormatter {
 
         // Dispatch to appropriate formatter based on conversion type
         return switch (conversion) {
+            // Character conversion
+            case 'c' -> formatCharacter(value, flags, width);
+            
             // Numeric conversions - delegate to numeric formatter
             case 'd', 'i' -> numericFormatter.formatInteger(value.getLong(), flags, width, precision, 10, false);
             case 'u' -> numericFormatter.formatUnsigned(value, flags, width, precision);
