@@ -178,9 +178,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         RuntimeHash stash = HashSpecialVariable.getStash(packageName + "::");
                         RuntimeScalar glob = stash.get(name);
                         if (glob.type == RuntimeScalarType.GLOB) {
-                            // Return the glob itself (not a reference)
-                            // ${^LAST_FH} returns a GLOB, not a reference
-                            yield glob;
+                            // ${^LAST_FH} returns a GLOB reference (like \*FH)
+                            // This allows *{${^LAST_FH}} to work under strict refs
+                            RuntimeGlob runtimeGlob = (RuntimeGlob) glob.value;
+                            yield runtimeGlob.createReference();
                         }
                     }
                     // Fallback to the RuntimeIO object if no glob name is available
@@ -300,6 +301,29 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     @Override
     public RuntimeIO getRuntimeIO() {
         return this.getValueAsScalar().getRuntimeIO();
+    }
+
+    /**
+     * Dereference as a glob (strict refs version).
+     * This delegates to the computed value's globDeref().
+     *
+     * @return The RuntimeGlob from the computed value.
+     */
+    @Override
+    public RuntimeGlob globDeref() {
+        return this.getValueAsScalar().globDeref();
+    }
+
+    /**
+     * Dereference as a glob (non-strict refs version).
+     * This delegates to the computed value's globDerefNonStrict().
+     *
+     * @param packageName The package name for symbolic reference resolution.
+     * @return The RuntimeGlob from the computed value.
+     */
+    @Override
+    public RuntimeGlob globDerefNonStrict(String packageName) {
+        return this.getValueAsScalar().globDerefNonStrict(packageName);
     }
 
     /**
