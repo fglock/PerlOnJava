@@ -380,12 +380,25 @@ public class EmitVariable {
 
             // A variable is lexical if it was declared with my/our/state
             // These are stored in JVM local variable slots, not in GlobalVariable registry
+            // IMPORTANT: 'our' variables must be treated specially - they need to fetch from
+            // global symbol table on every access to ensure 'local' modifications are visible.
+            // EXCEPTION: Closure-captured variables in BEGIN/END/etc blocks use 'our' syntax
+            // but are stored in special packages (PerlOnJava::_BEGIN_*) and should be treated
+            // as lexical since they're captured in the closure's local variable slots.
+            boolean isOurVariable = isDeclared && symbolEntry.decl().equals("our");
+            boolean isClosureCapturedOur = isOurVariable && 
+                    symbolEntry.perlPackage() != null && 
+                    symbolEntry.perlPackage().startsWith("PerlOnJava::_BEGIN_");
+            // Special case: @_ is declared as "our" but must be treated as lexical because
+            // it's in a local variable slot (index 1) and is dynamically bound per subroutine call
+            boolean isSpecialAtUnderscore = isDeclared && symbolEntry.name().equals("@_");
             boolean isLexical = isDeclared && (
                     symbolEntry.decl().equals("my")
                             || symbolEntry.decl().equals("state")
-                            || symbolEntry.decl().equals("our")
-                    // Note: @_ special handling is disabled as it breaks some tests
-                    // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
+                            || isSpecialAtUnderscore
+                            || isClosureCapturedOur  // Closure captures should use local slot
+                    // Note: True 'our' is NOT included here because we need to fetch from global
+                    // on every access to see 'local' modifications to the package variable.
             );
 
             if (!isLexical) {
@@ -440,7 +453,8 @@ public class EmitVariable {
                         || isNonAsciiLengthOneScalarAllowedUnderNoUtf8(emitterVisitor.ctx, sigil, name)
                         || allowIfAlreadyExists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
-                        || (isDeclared && isLexical);            // Lexically declared (my/our/state)
+                        || (isDeclared && isLexical)             // Lexically declared (my/state)
+                        || isOurVariable;                        // 'our' declarations (allowed but fetched from global)
 
                 // Fetch the global variable (may throw exception if strict and not allowed)
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());

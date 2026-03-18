@@ -118,8 +118,16 @@ public class EmitSubroutine {
         newSymbolTable.enterScope();
 
         // Add only the filtered visible variables (excluding 'our sub' entries)
+        // IMPORTANT: For 'our' variables, we must preserve the original perlPackage
+        // from when the variable was declared, not use the current package.
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
-            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+            if (entry.decl().equals("our")) {
+                // 'our' variables need their original perlPackage preserved
+                newSymbolTable.addVariableWithPackage(entry.name(), entry.decl(), entry.ast(), entry.perlPackage());
+            } else {
+                // 'my' and 'state' variables use current package
+                newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+            }
         }
 
         // Copy package, subroutine, and flags from the current context

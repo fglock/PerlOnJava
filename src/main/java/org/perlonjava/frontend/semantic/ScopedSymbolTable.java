@@ -242,6 +242,37 @@ public class ScopedSymbolTable {
         symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, getCurrentPackage());
     }
 
+    /**
+     * Adds a variable with a specific index and explicit package.
+     * Used when copying variables to a new symbol table (e.g., for subroutine compilation)
+     * where the original package must be preserved.
+     *
+     * @param name The name of the variable (with sigil).
+     * @param index The specific index to use.
+     * @param variableDeclType The declaration type (my, our, state).
+     * @param perlPackage The package where the variable was declared.
+     */
+    public void addVariableWithIndexAndPackage(String name, int index, String variableDeclType, String perlPackage) {
+        clearVisibleVariablesCache();
+        symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage);
+    }
+
+    /**
+     * Adds a variable with an explicit package but allocates a fresh index.
+     * Used when copying variables to a new symbol table where the original package
+     * must be preserved but indices should be reallocated contiguously.
+     *
+     * @param name The name of the variable (with sigil).
+     * @param variableDeclType The declaration type (my, our, state).
+     * @param ast The AST node for the declaration.
+     * @param perlPackage The package where the variable was declared.
+     * @return The index of the variable in the current scope.
+     */
+    public int addVariableWithPackage(String name, String variableDeclType, OperatorNode ast, String perlPackage) {
+        clearVisibleVariablesCache();
+        return symbolTableStack.peek().addVariableWithPackage(name, variableDeclType, perlPackage, ast);
+    }
+
     public Map<String, Integer> getVisibleVariableRegistry() {
         Map<String, Integer> registry = new HashMap<>();
         Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();
@@ -336,6 +367,26 @@ public class ScopedSymbolTable {
             return currentPackage.equals(entry.perlPackage());
         }
         return false;
+    }
+
+    /**
+     * Checks if a variable is declared with 'our' and returns the fully qualified global name.
+     * This is used to ensure that 'our' variables are fetched from the global symbol table
+     * on each access, so that 'local' modifications to the global are visible.
+     *
+     * @param name The short name of the variable (e.g., "$X")
+     * @return The fully qualified global name (e.g., "Foo::X") if the variable is 'our',
+     *         or null if the variable is not 'our' (i.e., 'my' or 'local').
+     */
+    public String getOurVariableGlobalName(String name) {
+        SymbolTable.SymbolEntry entry = getSymbolEntry(name);
+        if (entry != null && "our".equals(entry.decl())) {
+            // Construct fully qualified name from package and short name
+            // name includes sigil, so we need to extract just the identifier
+            String identifier = name.substring(1);  // Remove sigil ($, @, %)
+            return entry.perlPackage() + "::" + identifier;
+        }
+        return null;
     }
 
     /**
@@ -492,11 +543,11 @@ public class ScopedSymbolTable {
         ScopedSymbolTable st = new ScopedSymbolTable();
         st.enterScope();
 
-        // Clone visible variables
+        // Clone visible variables - IMPORTANT: preserve original perlPackage for 'our' variables
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
         for (Integer index : visibleVariables.keySet()) {
             SymbolTable.SymbolEntry entry = visibleVariables.get(index);
-            st.addVariable(entry.name(), entry.decl(), entry.ast());
+            st.addVariableWithPackage(entry.name(), entry.decl(), entry.ast(), entry.perlPackage());
         }
 
         // Clone the current package

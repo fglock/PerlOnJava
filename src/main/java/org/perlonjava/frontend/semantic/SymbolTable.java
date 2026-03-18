@@ -56,6 +56,26 @@ public class SymbolTable {
         }
     }
 
+    /**
+     * Adds a variable with an explicit package, allocating a fresh index.
+     *
+     * @param name The name of the variable to add.
+     * @param variableDeclType The declaration type.
+     * @param perlPackage The package where the variable was declared.
+     * @param ast The AST node.
+     * @return The index of the variable in the symbol table.
+     */
+    public int addVariableWithPackage(String name, String variableDeclType, String perlPackage, OperatorNode ast) {
+        SymbolEntry existing = variableIndex.get(name);
+        if (existing == null) {
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+        } else if ("our".equals(variableDeclType) && existing.perlPackage != null 
+                   && !existing.perlPackage.equals(perlPackage)) {
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+        }
+        return variableIndex.get(name).index;
+    }
+
     public int getVariableIndex(String name) {
         // Return the index of the variable, or -1 if not found
         return variableIndex.getOrDefault(name, new SymbolEntry(-1, null, null, null, null)).index;

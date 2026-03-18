@@ -782,7 +782,8 @@ public class SubroutineParser {
             if (sigil.equals("&")) {
                 continue;
             }
-            filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.ast());
+            // IMPORTANT: preserve original perlPackage for 'our' variables
+            filteredSnapshot.addVariableWithPackage(entry.name(), entry.decl(), entry.ast(), entry.perlPackage());
         }
 
         // Clone the current package
