@@ -523,7 +523,8 @@ public class GlobalVariable {
     public static boolean isGlobalIODefined(String key) {
         RuntimeGlob glob = globalIORefs.get(key);
         if (glob != null && glob.type == RuntimeScalarType.GLOB) {
-            return glob.value instanceof RuntimeIO;
+            // Check the IO slot, not glob.value - IO is stored in glob.IO
+            return glob.IO != null && glob.IO.getDefinedBoolean();
         }
         return false;
     }
