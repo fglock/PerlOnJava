@@ -46,6 +46,10 @@ public class ReferenceOperators {
      * - Empty string if not a reference
      */
     public static RuntimeScalar ref(RuntimeScalar runtimeScalar) {
+        // Handle special variables that need to compute their value
+        if (runtimeScalar instanceof ScalarSpecialVariable specialVar) {
+            return ref(specialVar.getValueAsScalar());
+        }
         String str;
         int blessId;
         switch (runtimeScalar.type) {

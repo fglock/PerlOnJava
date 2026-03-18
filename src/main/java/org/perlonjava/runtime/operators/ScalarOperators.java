@@ -23,9 +23,20 @@ public class ScalarOperators {
         expr = expr.replace("_", "");
 
         int length = expr.length();
+        
+        // Handle empty string or just "0"
+        if (length == 0) {
+            return scalarZero;
+        }
+        
         int start = 0;
         if (expr.startsWith("0")) {
             start++;
+        }
+
+        // Check if we've consumed the entire string (e.g., input was just "0")
+        if (start >= length) {
+            return scalarZero;
         }
 
         if (expr.charAt(start) == 'x' || expr.charAt(start) == 'X') {

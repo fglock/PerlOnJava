@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.Stack;
@@ -174,11 +175,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         }
 
                         // Get the stash and access the glob
-                        RuntimeHash stash = HashSpecialVariable.getStash(packageName);
+                        // The stash key must end with "::" for package stashes
+                        RuntimeHash stash = HashSpecialVariable.getStash(packageName + "::");
                         RuntimeScalar glob = stash.get(name);
-                        if (glob.type == RuntimeScalarType.GLOB || glob.type == RuntimeScalarType.UNDEF) {
-                            // Return a reference to the glob
-                            yield glob.createReference();
+                        if (glob.type == RuntimeScalarType.GLOB) {
+                            // ${^LAST_FH} returns a GLOB reference (like \*FH)
+                            // This allows *{${^LAST_FH}} to work under strict refs
+                            RuntimeGlob runtimeGlob = (RuntimeGlob) glob.value;
+                            yield runtimeGlob.createReference();
                         }
                     }
                     // Fallback to the RuntimeIO object if no glob name is available
@@ -218,6 +222,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         yield getScalarInt(symbolTable.getStrictOptions());
                     }
                     yield getScalarInt(0);
+                }
+                case REAL_GID -> {
+                    // $( - Real group ID (lazy evaluation to avoid JNA overhead at startup)
+                    yield new RuntimeScalar(NativeUtils.getgid(0));
+                }
+                case EFFECTIVE_GID -> {
+                    // $) - Effective group ID (lazy evaluation to avoid JNA overhead at startup)
+                    yield new RuntimeScalar(NativeUtils.getegid(0));
                 }
             };
             return result;
@@ -301,6 +313,29 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
+     * Dereference as a glob (strict refs version).
+     * This delegates to the computed value's globDeref().
+     *
+     * @return The RuntimeGlob from the computed value.
+     */
+    @Override
+    public RuntimeGlob globDeref() {
+        return this.getValueAsScalar().globDeref();
+    }
+
+    /**
+     * Dereference as a glob (non-strict refs version).
+     * This delegates to the computed value's globDerefNonStrict().
+     *
+     * @param packageName The package name for symbolic reference resolution.
+     * @return The RuntimeGlob from the computed value.
+     */
+    @Override
+    public RuntimeGlob globDerefNonStrict(String packageName) {
+        return this.getValueAsScalar().globDerefNonStrict(packageName);
+    }
+
+    /**
      * Adds this entity to the specified RuntimeList.
      *
      * @param list the RuntimeList to which this entity will be added
@@ -380,6 +415,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
         LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
         HINTS, // $^H - Compile-time hints (strict, etc.)
+        REAL_GID, // $( - Real group ID (lazy, JNA call only on access)
+        EFFECTIVE_GID, // $) - Effective group ID (lazy, JNA call only on access)
     }
 
     private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {

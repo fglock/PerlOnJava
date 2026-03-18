@@ -954,6 +954,14 @@ public abstract class StringSegmentParser {
             return false;
         }
 
+        // In regex patterns, $) should NOT be interpolated as the EGID variable.
+        // The ) typically closes a regex group, so $) means end-of-string anchor + closing paren.
+        // Similarly, $( in regex is usually $ anchor + opening paren, not the real GID variable.
+        // But in double-quoted strings, $( and $) SHOULD interpolate to the GID/EGID values.
+        if (isRegex && "$".equals(sigil) && (")".equals(nextToken.text) || "(".equals(nextToken.text))) {
+            return false;
+        }
+
         // For @ sigil, only allow specific characters that can start array variable names
         // Valid: identifiers, digits, _, {, $, +, -
         // Invalid: ;, /, !, etc. (these are only valid after $ sigil)
@@ -1010,8 +1018,8 @@ public abstract class StringSegmentParser {
      */
     private boolean isNonInterpolatingCharacter(String text) {
         return switch (text) {
-            case ")", "%", "|", "#", "\"", "\\",
-                 "?", "(" -> true;
+            case "%", "|", "#", "\"", "\\",
+                 "?" -> true;
             default -> false;
         };
     }

@@ -42,22 +42,19 @@ public class IdentifierParser {
         // Save the current token index to allow backtracking if needed
         int saveIndex = parser.tokenIndex;
 
-        // Skip horizontal whitespace to find the start of the identifier
-        // (do not skip NEWLINE; "$\n" must be a syntax error)
-        int afterWs = parser.tokenIndex;
-        while (afterWs < parser.tokens.size() && parser.tokens.get(afterWs).type == LexerTokenType.WHITESPACE) {
-            afterWs++;
-        }
+        // Skip whitespace (including newlines) to find the start of the identifier.
+        // Perl allows newlines between sigil and variable name (e.g. "$ \n var" is valid).
+        int afterWs = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         boolean skippedWhitespace = afterWs != parser.tokenIndex;
         parser.tokenIndex = afterWs;
 
         // Whitespace between sigil and an identifier is allowed in Perl (e.g. "$ var"),
         // but whitespace characters themselves are not valid length-1 variable names.
         // If we consumed whitespace and the following token does not look like an identifier,
-        // treat it as a syntax error (e.g. "$\t", "$ ", "$\n").
+        // treat it as a syntax error (e.g. "$\t", "$ ").
         if (skippedWhitespace) {
             LexerToken tokenAfter = parser.tokens.get(parser.tokenIndex);
-            if (tokenAfter.type == LexerTokenType.EOF || tokenAfter.type == LexerTokenType.NEWLINE) {
+            if (tokenAfter.type == LexerTokenType.EOF) {
                 parser.throwError("syntax error");
             }
 
@@ -65,7 +62,7 @@ public class IdentifierParser {
             // For example "$\t = 4" must be a syntax error, not "$= 4".
             if (tokenAfter.type == LexerTokenType.OPERATOR
                     && tokenAfter.text.length() == 1
-                    && "!|/*+-<>&~.=%'?".indexOf(tokenAfter.text.charAt(0)) >= 0) {
+                    && "!|/*+-<>&~.=%'?()".indexOf(tokenAfter.text.charAt(0)) >= 0) {
                 parser.throwError("syntax error");
             }
         }
@@ -140,15 +137,12 @@ public class IdentifierParser {
 
     public static String parseComplexIdentifierInner(Parser parser, boolean insideBraces, boolean isTypeglob) {
         // Perl allows whitespace between the sigil and the variable name (e.g. "$ a" parses as "$a").
+        // Perl also allows newlines between sigil and variable name.
         // But if whitespace is skipped and the next token is not a valid identifier start (e.g. "$\t = 4"),
         // the variable name is missing and we should trigger a plain "syntax error".
         int wsStart = parser.tokenIndex;
-        // Skip horizontal whitespace to find the start of the identifier.
-        // Do not skip NEWLINE here: "$\n" is not a valid variable name.
-        while (parser.tokenIndex < parser.tokens.size()
-                && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.WHITESPACE) {
-            parser.tokenIndex++;
-        }
+        // Skip whitespace (including newlines) to find the start of the identifier.
+        parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         boolean skippedWhitespace = parser.tokenIndex != wsStart;
 
         boolean isFirstToken = true;
@@ -196,9 +190,9 @@ public class IdentifierParser {
             return null;
         }
 
-        // Special case for special variables like `$|`, `$'`, etc.
+        // Special case for special variables like `$|`, `$'`, `$(`, `$)`, etc.
         char firstChar = token.text.charAt(0);
-        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?".indexOf(firstChar) >= 0) {
+        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?()".indexOf(firstChar) >= 0) {
             // Special case: * followed by { is glob dereference when inside braces
             // @{*{expr}} should be parsed as @{ *{expr} }, not @*{expr} (hash slice on @*)
             // But @*{key} outside braces IS a hash slice on @*, so only apply when insideBraces

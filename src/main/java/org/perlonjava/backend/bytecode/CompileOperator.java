@@ -682,6 +682,7 @@ public class CompileOperator {
             case "qx" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.QX);
             case "system" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SYSTEM);
             case "kill" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.KILL);
+            case "gethostbyname" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETHOSTBYNAME);
             case "caller" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CALLER);
             case "pack" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PACK);
             case "unpack" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.UNPACK);
