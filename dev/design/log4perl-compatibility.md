@@ -19,7 +19,7 @@ Failed 23/695 subtests (down from 28)
 | Test File | Failed/Total | Issue Category |
 |-----------|--------------|----------------|
 | t/016Export.t | 1/16 | DESTROY message |
-| t/020Easy.t | 5/21 | Carp.pm undef GLOB reference |
+| t/020Easy.t | 5/21 | Carp.pm undef GLOB reference (4 are filename mismatches) |
 | t/022Wrap.t | 2/5 | caller() stack trace format |
 | t/024WarnDieCarp.t | 11/73 | caller() / Carp line numbers |
 | t/026FileApp.t | 3/27 | File permissions / substr issues |
@@ -27,9 +27,86 @@ Failed 23/695 subtests (down from 28)
 | t/049Unhide.t | 1/1 | Source filter / ###l4p |
 | t/051Extra.t | 2/11 | Line number reporting |
 
+### Current Investigation: t/020Easy.t Carp.pm Error
+
+**Status:** Partially debugged - the error is intermittent and context-dependent.
+
+**Symptom:**
+```
+Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 755
+```
+
+**Key Finding:** The error occurs when:
+1. A bareword filehandle `IN` is opened and read from (`<IN>`)
+2. Log4perl's `%T` layout is used (which calls `Carp::longmess()`)
+3. The `%T` pattern is rendered during logging
+
+**Reproduction Path (simplified):**
+```perl
+open IN, "<", "somefile";
+my @lines = <IN>;  # Sets ${^LAST_FH}
+use Carp;
+my $m = Carp::longmess();  # Sometimes fails with undef GLOB
+```
+
+**What's NOT the issue:**
+- `*{NAME}` slot - now implemented and working
+- `local *$dynamic` - now implemented for interpreter backend
+- `${^LAST_FH}` basic functionality - works in isolation
+
+**Investigation Notes:**
+- The error happens at Carp.pm line 752: `*{"warnings::$_"} = \&$_ foreach @EXPORT;`
+- This code runs when `$warnings::VERSION` is undefined (which it is in PerlOnJava's warnings.pm)
+- The bareword filehandle name check (`*{${^LAST_FH}}{NAME}`) now works
+- Error is NOT reproducible in simple test cases - only in specific call stack contexts
+- May be related to how Carp.pm is loaded/initialized in the presence of active I/O
+
+**Next Steps:**
+1. Add `$VERSION` to PerlOnJava's warnings.pm to skip the problematic code path
+2. Or investigate why `$_` becomes undefined during the foreach loop in certain contexts
+
 ## Completed Fixes
 
-### 1. Bareword Filehandle Method Calls (Committed 2026-03-18)
+### 1. *{NAME} Glob Slot Accessor (Committed 2026-03-18)
+
+**Problem:** `*{$glob}{NAME}` returned empty string instead of the glob's name.
+
+**Root Cause:** The NAME slot was not implemented in RuntimeGlob's `getSlot()` method.
+
+**Fix:** Added case for "NAME" that extracts the name from globName after the last `::`.
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeGlob.java`
+
+**Commit:** 0a5e92556
+
+### 2. Interpreter: local *$dynamic Support (Committed 2026-03-18)
+
+**Problem:** `local *$probe = sub { ... }` failed with "Assignment to unsupported operator: local"
+
+**Root Cause:** The interpreter's `handleLocalAssignment()` only handled static glob names, not dynamic ones like `*$probe`.
+
+**Fix:** Added case for dynamic glob names (when operand is not IdentifierNode) using LOAD_GLOB_DYNAMIC opcode.
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/backend/bytecode/CompileAssignment.java`
+
+**Commit:** 68d295287
+
+### 3. Interpreter: gethostbyname Opcode (Committed 2026-03-18)
+
+**Problem:** `gethostbyname` was not implemented in the interpreter backend.
+
+**Fix:** Added GETHOSTBYNAME opcode (389) and routing to ExtendedNativeUtils.
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/backend/bytecode/Opcodes.java`
+- `src/main/java/org/perlonjava/backend/bytecode/CompileOperator.java`
+- `src/main/java/org/perlonjava/backend/bytecode/MiscOpcodeHandler.java`
+
+**Commit:** 68d295287
+
+### 4. Bareword Filehandle Method Calls (Committed 2026-03-18)
 
 **Problem:** `IN->clearerr()` failed with "Can't locate object method 'clearerr' via package 'IN'"
 
@@ -44,7 +121,7 @@ Failed 23/695 subtests (down from 28)
 
 **Tests Fixed:** Unblocked 15+ tests in t/020Easy.t (from 1 to 16 passing)
 
-### 2. $( and $) Special Variables (Committed 2026-03-18)
+### 5. $( and $) Special Variables (Committed 2026-03-18)
 
 **Problem:** `$(` and `$)` (real/effective GID) were not working - returned literal `$(` in strings.
 
@@ -67,7 +144,7 @@ Failed 23/695 subtests (down from 28)
 
 **Tests Fixed:** t/033UsrCspec.t - all 17 tests now pass (was 5 failing)
 
-### 3. AUTOLOAD $AUTOLOAD Variable (Committed Earlier)
+### 6. AUTOLOAD $AUTOLOAD Variable (Committed Earlier)
 
 **Problem:** `$AUTOLOAD` was not being set correctly in two scenarios:
 1. Method call cache hits were skipping the `$AUTOLOAD` assignment
@@ -83,7 +160,7 @@ Failed 23/695 subtests (down from 28)
 
 **Commit:** 9f2d0aaf2
 
-### 4. Parser/Runtime Fixes (Committed Earlier)
+### 7. Parser/Runtime Fixes (Committed Earlier)
 
 - `sprintf %s` treating "INFO" as Infinity
 - `oct("0")` crash
@@ -92,14 +169,18 @@ Failed 23/695 subtests (down from 28)
 
 ## Remaining Issues
 
-### Issue 1: Carp.pm Undefined GLOB Reference
+### Issue 1: Carp.pm / warnings.pm Interaction
 
-**Symptom:** t/020Easy.t tests 17-21 fail with:
+**Symptom:** t/020Easy.t tests 17-21 - error after %T logging:
 ```
 Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 755
 ```
 
-**Root Cause:** Something in Carp.pm's stack inspection is encountering an undefined glob.
+**Root Cause:** PerlOnJava's warnings.pm lacks `$VERSION`, causing Carp.pm to execute a workaround code path (line 752) that fails in certain contexts.
+
+**Proposed Fix:** Add `our $VERSION = "1.78";` to PerlOnJava's warnings.pm to skip the problematic code path.
+
+**Note:** 4 of the 5 failing tests in t/020Easy.t are just filename pattern mismatches (test expects "020Easy.t" but gets "-" from stdin). Only 1 failure is the Carp.pm error.
 
 **Affected Tests:**
 - t/020Easy.t (tests 17-21)
