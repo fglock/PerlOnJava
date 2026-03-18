@@ -9,8 +9,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add `defer` feature
 - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
-- Add modules: `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`.
-- Add operators: `flock`, `syscall`, `fcntl`, `ioctl`.
+- Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`.
+- Add operators: `flock`, `syscall`, `fcntl`, `ioctl`. 
+- Support for forking patterns with `exec`:
+        my $pid = open FH, "-|"; if ($pid) {...} else { exec @cmd }
+        my $pid = open FH, "-|"; unless ($pid) { exec @cmd } ...
+        open FH, "-|" or exec @cmd;
 - Bugfix: parser now handles `@{${...}}` nested dereference in push/unshift.
 - Bugfix: regex octal escapes `\10`-`\377` now work correctly.
 - Bugfix: operator override in Time::Hires now works.
