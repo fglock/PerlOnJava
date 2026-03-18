@@ -297,6 +297,30 @@ git checkout -- .
 2. **Consider increasing CI timeout** for subprocess-heavy tests (io/through.t has 942 tests)
 3. **Always verify working tree is clean before testing**
 
+### Additional Fixes (2026-03-18)
+
+#### Fix: $( and $) in regex patterns
+The commit adding `$(` and `$)` variable support caused ExifTool.t to fail because regex patterns containing `$)` were incorrectly interpolating the EGID variable instead of treating `$)` as end-of-string anchor + closing paren.
+
+**Fix:** Added check in `StringSegmentParser.shouldInterpolateVariable()` to skip interpolation of `$(` and `$)` specifically in regex context, while still allowing interpolation in double-quoted strings.
+
+#### Fix: sprintf %c with Inf/NaN regression  
+The sprintf fix for "INFO" being treated as Infinity incorrectly moved `%c` handling before the Inf/NaN check, causing `sprintf "%c", Inf` to format a character instead of erroring.
+
+**Fix:** Only skip the Inf/NaN check for `%s` (string) and `%p` (pointer), while `%c` still goes through the Inf/NaN check.
+
+**Result:** op/infnan.t restored from 1041/1088 back to 1071/1088 (same as master).
+
+### Remaining CI Timeout Issues
+
+The following tests timeout in CI but are NOT regressions - they just take a long time due to JVM startup overhead for subprocess-heavy tests:
+
+- **io/crlf_through.t** (942 tests) - spawns many subprocesses via pipe opens
+- **io/through.t** (942 tests) - spawns many subprocesses via pipe opens  
+- **lib/croak.t** (334 tests) - spawns many subprocesses
+
+These tests pass locally but exceed CI timeout limits. The CI may need longer timeouts for these specific tests.
+
 ## How to Test
 
 ```bash
