@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.frontend.astnode.FormatLine;
 import org.perlonjava.frontend.astnode.PictureLine;
 import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
@@ -218,10 +219,25 @@ public class IOOperator {
         String mode = args[1].toString();
         RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));
 
+        // Clear any stale pending fork-open state before new open operation
+        ForkOpenState.clear();
+
         RuntimeIO fh;
 
         if (mode.contains("|")) {
-            // Pipe open
+            // Check for fork-open pattern: open FH, "-|" or open FH, "|-" with no command
+            // This is the 2-arg piped open that normally forks in Perl
+            if (args.length == 2 && (mode.equals("-|") || mode.equals("|-"))) {
+                // Fork-open emulation: set pending state and return 0 (child PID)
+                // The actual pipe will be created when exec() is called
+                ForkOpenState.setPending(fileHandle, 0, "");
+                if (ioDebug) {
+                    System.err.println("[JPERL_IO_DEBUG] Fork-open emulation: pending state set for " + mode);
+                    System.err.flush();
+                }
+                return new RuntimeScalar(0);  // Return 0 = "child" branch
+            }
+            // Pipe open with command (3+ arg form)
             fh = RuntimeIO.openPipe(runtimeList);
         } else if (args.length > 2) {
             // 3-argument open
@@ -386,6 +402,9 @@ public class IOOperator {
      * @return A RuntimeScalar with the result of the close operation.
      */
     public static RuntimeScalar close(int ctx, RuntimeBase... args) {
+        // Clear any pending fork-open state
+        ForkOpenState.clear();
+        
         RuntimeScalar handle = args.length == 1 ? ((RuntimeScalar) args[0]) : select(new RuntimeList(), RuntimeContextType.SCALAR);
         RuntimeIO fh = handle.getRuntimeIO();
 
