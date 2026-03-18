@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.Stack;
@@ -222,6 +223,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     }
                     yield getScalarInt(0);
                 }
+                case REAL_GID -> {
+                    // $( - Real group ID (lazy evaluation to avoid JNA overhead at startup)
+                    yield new RuntimeScalar(NativeUtils.getgid(0));
+                }
+                case EFFECTIVE_GID -> {
+                    // $) - Effective group ID (lazy evaluation to avoid JNA overhead at startup)
+                    yield new RuntimeScalar(NativeUtils.getegid(0));
+                }
             };
             return result;
         } catch (IllegalStateException e) {
@@ -406,6 +415,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
         LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
         HINTS, // $^H - Compile-time hints (strict, etc.)
+        REAL_GID, // $( - Real group ID (lazy, JNA call only on access)
+        EFFECTIVE_GID, // $) - Effective group ID (lazy, JNA call only on access)
     }
 
     private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {
