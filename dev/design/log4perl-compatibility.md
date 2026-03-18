@@ -169,7 +169,38 @@ my $m = Carp::longmess();  # Sometimes fails with undef GLOB
 
 ## Remaining Issues
 
-### Issue 1: Carp.pm / warnings.pm Interaction
+### Issue 1: `local` Package Variable Bug (ROOT CAUSE)
+
+**Symptom:** `$Carp::CarpLevel` set via `local` from outside the Carp package is not visible when accessed inside Carp.pm using the short name `$CarpLevel`.
+
+**Reproduction:**
+```perl
+package Foo;
+our $X = 0;
+sub check { print "X=$X\n"; }  # Uses short name
+
+package main;
+local $Foo::X = 1;
+Foo::check();  # jperl prints "X=0", Perl prints "X=1"
+```
+
+**Root Cause:** When compiling `$X` inside `package Foo`, jperl resolves it to a different storage location than `$Foo::X`. The `local` modifier only affects the fully-qualified name, not the short name used inside the package.
+
+**Impact:** This breaks any module that uses `local $Module::Variable` to temporarily modify package state, including:
+- `$Carp::CarpLevel` - affects all Carp error reporting
+- Many other modules that use this pattern
+
+**Affected Tests:**
+- t/020Easy.t (tests 18-20) - line numbers off due to CarpLevel not working
+- t/022Wrap.t (2 failures) - same root cause
+- t/024WarnDieCarp.t (11 failures) - same root cause
+- t/051Extra.t (2 failures) - same root cause
+
+**Workaround:** Modules can use fully-qualified variable names (`$Carp::CarpLevel` instead of `$CarpLevel`) but this requires patching every affected module.
+
+**Fix Needed:** Investigate how package variables are resolved during compilation. The short name `$X` inside `package Foo` should resolve to the same glob as `$Foo::X`.
+
+### Issue 2: Carp.pm / warnings.pm Interaction
 
 **Symptom:** t/020Easy.t tests 17-21 - error after %T logging:
 ```
@@ -184,25 +215,6 @@ Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 75
 
 **Affected Tests:**
 - t/020Easy.t (tests 17-21)
-
-### Issue 2: caller() Stack Trace Format
-
-**Symptom:** Stack traces from `Carp::shortmess` include internal PerlOnJava frames.
-
-**Example from t/022Wrap.t:**
-```
-Expected: 'File: 022Wrap.t Line number: 70 package: main trace: at 022Wrap.t line 70'
-Got:      'File: 022Wrap.t Line number: 70 package: main trace: Log::Log4perl::Appender::log() called at ... line 1115, ...'
-```
-
-**Root Cause:** The `caller()` implementation is exposing internal call frames that Perl would filter out.
-
-**Fix Needed:** Review `ExceptionFormatter.formatException()` and filter out internal frames from Log::Log4perl's perspective.
-
-**Affected Tests:**
-- t/022Wrap.t (2 failures)
-- t/024WarnDieCarp.t (11 failures) - tests 51-53, 58-62, 67, 69-70
-- t/051Extra.t (2 failures) - line number reporting
 
 ### Issue 3: File Permissions (stat/chmod)
 
@@ -254,8 +266,8 @@ Got:      'File: 022Wrap.t Line number: 70 package: main trace: Log::Log4perl::A
 
 ## Priority Order
 
-1. **Carp.pm undef GLOB** - Blocks 5 tests in t/020Easy.t
-2. **caller() stack trace format** - Affects 15 tests across multiple files
+1. **`local` package variable bug** - ROOT CAUSE affecting 16+ tests across multiple files
+2. **Carp.pm/warnings.pm interaction** - Separate issue, quick fix possible
 3. **DESTROY message** - May be a minor timing/output issue
 4. **File permissions** - Likely straightforward fix
 5. **Safe.pm** - May require significant work
