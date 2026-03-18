@@ -271,7 +271,28 @@ public class StatementParser {
      * @return An IfNode representing the if/unless/elsif statement
      */
     public static Node parseIfStatement(Parser parser) {
+        return parseIfStatementInternal(parser, true);
+    }
+
+    /**
+     * Internal helper for parsing if/unless/elsif statements.
+     * The enterNewScope parameter controls whether to enter a new scope.
+     * For 'if' and 'unless', we enter a new scope; for 'elsif', we don't
+     * (to match Perl's behavior where elsif conditions are in the same scope as the if condition).
+     *
+     * @param parser The Parser instance
+     * @param enterNewScope Whether to enter a new scope before parsing
+     * @return An IfNode representing the if/unless/elsif statement
+     */
+    private static Node parseIfStatementInternal(Parser parser, boolean enterNewScope) {
         LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
+
+        // Enter a new scope for 'if' and 'unless' (but not for 'elsif' which is part of the same chain)
+        int scopeIndex = -1;
+        if (enterNewScope) {
+            scopeIndex = parser.ctx.symbolTable.enterScope();
+        }
+
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         Node condition = parser.parseExpression(0);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
@@ -286,7 +307,13 @@ public class StatementParser {
             elseBranch = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         } else if (token.text.equals("elsif")) {
-            elseBranch = parseIfStatement(parser);
+            // Don't enter new scope for elsif - it's in the same scope as the if condition
+            elseBranch = parseIfStatementInternal(parser, false);
+        }
+
+        // Exit the scope if we entered one
+        if (enterNewScope) {
+            parser.ctx.symbolTable.exitScope(scopeIndex);
         }
 
         // Use a macro to emulate Test::More SKIP blocks
