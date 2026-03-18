@@ -9,9 +9,9 @@ This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass 
 ### Test Results
 
 ```
-Files=73, Tests=670
-Failed 9/73 test programs
-Failed 26/670 subtests
+Files=73, Tests=695
+Failed 8/73 test programs (down from 9)
+Failed 23/695 subtests (down from 28)
 ```
 
 ### Failing Tests Summary
@@ -19,18 +19,55 @@ Failed 26/670 subtests
 | Test File | Failed/Total | Issue Category |
 |-----------|--------------|----------------|
 | t/016Export.t | 1/16 | DESTROY message |
-| t/020Easy.t | 20/21 | Bareword filehandle method calls |
+| t/020Easy.t | 5/21 | Carp.pm undef GLOB reference |
 | t/022Wrap.t | 2/5 | caller() stack trace format |
 | t/024WarnDieCarp.t | 11/73 | caller() / Carp line numbers |
 | t/026FileApp.t | 3/27 | File permissions / substr issues |
-| t/033UsrCspec.t | 5/17 | Custom cspec / caller() |
 | t/041SafeEval.t | 3/23 | Safe.pm / Opcode.pm |
 | t/049Unhide.t | 1/1 | Source filter / ###l4p |
-| t/051Extra.t | parse error | clearerr on bareword filehandle |
+| t/051Extra.t | 2/11 | Line number reporting |
 
 ## Completed Fixes
 
-### 1. AUTOLOAD $AUTOLOAD Variable (Committed)
+### 1. Bareword Filehandle Method Calls (Committed 2026-03-18)
+
+**Problem:** `IN->clearerr()` failed with "Can't locate object method 'clearerr' via package 'IN'"
+
+**Root Cause:** `isGlobalIODefined()` was checking `glob.value instanceof RuntimeIO` but IO handles are stored in `glob.IO`, not `glob.value`.
+
+**Fix:** Changed `isGlobalIODefined()` to check `glob.IO.getDefinedBoolean()` instead.
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalVariable.java`
+
+**Commit:** 3d0bf9b59
+
+**Tests Fixed:** Unblocked 15+ tests in t/020Easy.t (from 1 to 16 passing)
+
+### 2. $( and $) Special Variables (Committed 2026-03-18)
+
+**Problem:** `$(` and `$)` (real/effective GID) were not working - returned literal `$(` in strings.
+
+**Root Cause:** 
+1. Variables not initialized with actual GID values
+2. `(` and `)` not in special variable character lists
+3. `(` and `)` in non-interpolating character list blocked string interpolation
+
+**Fix:**
+- Initialize `$(` and `$)` in GlobalContext with `getgid()`/`getegid()` values
+- Add `(` and `)` to special variable character lists in IdentifierParser
+- Remove `(` and `)` from non-interpolating character list
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java`
+- `src/main/java/org/perlonjava/frontend/parser/IdentifierParser.java`
+- `src/main/java/org/perlonjava/frontend/parser/StringSegmentParser.java`
+
+**Commit:** a82bf0c66
+
+**Tests Fixed:** t/033UsrCspec.t - all 17 tests now pass (was 5 failing)
+
+### 3. AUTOLOAD $AUTOLOAD Variable (Committed Earlier)
 
 **Problem:** `$AUTOLOAD` was not being set correctly in two scenarios:
 1. Method call cache hits were skipping the `$AUTOLOAD` assignment
@@ -46,7 +83,7 @@ Failed 26/670 subtests
 
 **Commit:** 9f2d0aaf2
 
-### 2. Parser/Runtime Fixes (Committed Earlier)
+### 4. Parser/Runtime Fixes (Committed Earlier)
 
 - `sprintf %s` treating "INFO" as Infinity
 - `oct("0")` crash
@@ -55,60 +92,17 @@ Failed 26/670 subtests
 
 ## Remaining Issues
 
-### Issue 1: Bareword Filehandle Method Calls (HIGH PRIORITY)
+### Issue 1: Carp.pm Undefined GLOB Reference
 
-**Symptom:**
-```perl
-open IN, "<file";
-IN->clearerr();  # Fails: Can't locate object method "clearerr" via package "IN"
+**Symptom:** t/020Easy.t tests 17-21 fail with:
+```
+Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 755
 ```
 
-**Root Cause Analysis:**
-
-When `IN->clearerr()` is parsed, the bareword `IN` is converted to a string `"IN"` and passed to `RuntimeCode.call()`. The code attempts to check if `"IN"` is a defined filehandle using `GlobalVariable.isGlobalIODefined("main::IN")`, but this returns `false`.
-
-Investigation revealed that when a filehandle is opened with `open IN, ...`:
-1. A glob entry is created in `globalIORefs` with key `"main::IN"`
-2. The glob's `value` field contains another `RuntimeGlob`, not the `RuntimeIO` directly
-3. The `isGlobalIODefined()` check looks for `glob.value instanceof RuntimeIO` which fails
-
-**Current Code (incomplete fix in RuntimeCode.java):**
-```java
-String normalizedGlobName = NameNormalizer.normalizeVariableName(perlClassName, "main");
-if (GlobalVariable.isGlobalIODefined(normalizedGlobName)) {
-    // This branch is never taken because isGlobalIODefined returns false
-    RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedGlobName);
-    RuntimeScalar globRef = glob.createReference();
-    args.elements.removeFirst();
-    return call(globRef, method, currentSub, args, callContext);
-}
-```
-
-**Fix Needed:**
-
-Option A: Fix `isGlobalIODefined()` to check the glob's `IO` slot instead of `value`:
-```java
-public static boolean isGlobalIODefined(String key) {
-    RuntimeGlob glob = globalIORefs.get(key);
-    if (glob != null) {
-        // Check the IO slot directly, not glob.value
-        RuntimeScalar ioSlot = glob.getIO();
-        return ioSlot != null && ioSlot.value instanceof RuntimeIO;
-    }
-    return false;
-}
-```
-
-Option B: In `RuntimeCode.call()`, check both the glob's `value` and `IO` slot.
+**Root Cause:** Something in Carp.pm's stack inspection is encountering an undefined glob.
 
 **Affected Tests:**
-- t/020Easy.t (20 failures)
-- t/051Extra.t (clearerr call)
-
-**Test Command:**
-```bash
-./jperl -e 'open IN, "</etc/passwd"; IN->clearerr(); print "OK\n"; close IN;'
-```
+- t/020Easy.t (tests 17-21)
 
 ### Issue 2: caller() Stack Trace Format
 
@@ -127,7 +121,7 @@ Got:      'File: 022Wrap.t Line number: 70 package: main trace: Log::Log4perl::A
 **Affected Tests:**
 - t/022Wrap.t (2 failures)
 - t/024WarnDieCarp.t (11 failures) - tests 51-53, 58-62, 67, 69-70
-- t/033UsrCspec.t (5 failures)
+- t/051Extra.t (2 failures) - line number reporting
 
 ### Issue 3: File Permissions (stat/chmod)
 
@@ -179,8 +173,8 @@ Got:      'File: 022Wrap.t Line number: 70 package: main trace: Log::Log4perl::A
 
 ## Priority Order
 
-1. **Bareword filehandle method calls** - Blocks 21+ tests, relatively simple fix
-2. **caller() stack trace format** - Affects 18 tests across multiple files
+1. **Carp.pm undef GLOB** - Blocks 5 tests in t/020Easy.t
+2. **caller() stack trace format** - Affects 15 tests across multiple files
 3. **DESTROY message** - May be a minor timing/output issue
 4. **File permissions** - Likely straightforward fix
 5. **Safe.pm** - May require significant work
@@ -197,14 +191,16 @@ cd ~/.cpan/build/Log-Log4perl-1.57* && /path/to/jperl t/020Easy.t
 
 # Quick test for bareword filehandle
 ./jperl -e 'open IN, "</etc/passwd"; IN->clearerr(); print "OK\n"; close IN;'
+
+# Quick test for $( and $)
+./jperl -e 'print "GID: $(\nEGID: $)\n";'
 ```
 
 ## Files to Investigate
 
-For bareword filehandle fix:
-- `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalVariable.java` - `isGlobalIODefined()`
-- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeGlob.java` - `getIO()`, `setIO()`
-- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - method call dispatch
+For Carp.pm fix:
+- `src/main/perl/lib/Carp.pm` - line 755
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - `caller()` method
 
 For caller() fix:
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - `caller()` method
