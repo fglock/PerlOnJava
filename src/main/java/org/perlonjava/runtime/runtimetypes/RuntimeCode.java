@@ -16,6 +16,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.debugger.DebugState;
@@ -2136,10 +2137,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
+            // Handle fork-open completion (from exec in fork-open emulation)
+            if (targetException instanceof ForkOpenCompleteException forkEx) {
+                // Return the captured output as the subroutine's result
+                return new RuntimeList(new RuntimeScalar(forkEx.capturedOutput));
+            }
             if (targetException instanceof RuntimeException re) {
                 throw re;
             }
             throw new RuntimeException(targetException);
+        } catch (ForkOpenCompleteException e) {
+            // Handle fork-open completion (from exec in fork-open emulation)
+            // Return the captured output as the subroutine's result
+            return new RuntimeList(new RuntimeScalar(e.capturedOutput));
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable e) {
@@ -2214,10 +2224,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
+            // Handle fork-open completion (from exec in fork-open emulation)
+            if (targetException instanceof ForkOpenCompleteException forkEx) {
+                // Return the captured output as the subroutine's result
+                return new RuntimeList(new RuntimeScalar(forkEx.capturedOutput));
+            }
             if (targetException instanceof RuntimeException re) {
                 throw re;
             }
             throw new RuntimeException(targetException);
+        } catch (ForkOpenCompleteException e) {
+            // Handle fork-open completion (from exec in fork-open emulation)
+            // Return the captured output as the subroutine's result
+            return new RuntimeList(new RuntimeScalar(e.capturedOutput));
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable e) {

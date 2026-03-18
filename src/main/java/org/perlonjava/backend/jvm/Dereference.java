@@ -126,8 +126,16 @@ public class Dereference {
                     elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, baseSlot);
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
-                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "arrayDerefGet", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    // Check strict refs at compile time
+                    if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "arrayDerefGet", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    } else {
+                        // Push current package for non-strict symbolic reference resolution
+                        emitterVisitor.pushCurrentPackage();
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "arrayDerefGetNonStrict", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    }
                 } else {
                     // Multiple indices - use slice
                     ListNode nodeRight = right.asListNode();

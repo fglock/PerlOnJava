@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.ForkOpenCompleteException;
+import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
@@ -59,16 +61,18 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar system(RuntimeList args, boolean hasHandle, int ctx) {
-        List<RuntimeBase> elements = args.elements;
-        if (elements.isEmpty()) {
+        // Flatten the arguments - arrays and lists should be expanded to individual elements
+        List<String> flattenedArgs = flattenToStringList(args.elements);
+        
+        if (flattenedArgs.isEmpty()) {
             throw new PerlCompilerException("system: no command specified");
         }
 
         CommandResult result;
 
-        if (!hasHandle && elements.size() == 1) {
+        if (!hasHandle && flattenedArgs.size() == 1) {
             // Single argument - check for shell metacharacters
-            String command = elements.getFirst().toString();
+            String command = flattenedArgs.getFirst();
             if (SHELL_METACHARACTERS.matcher(command).find()) {
                 // Has shell metacharacters, use shell
                 result = executeCommand(command, false);
@@ -79,11 +83,7 @@ public class SystemOperator {
             }
         } else {
             // Multiple arguments - execute directly without shell
-            List<String> commandArgs = new ArrayList<>();
-            for (RuntimeBase element : elements) {
-                commandArgs.add(element.toString());
-            }
-            result = executeCommandDirect(commandArgs);
+            result = executeCommandDirect(flattenedArgs);
         }
 
         // Set $? to the exit status
@@ -96,6 +96,32 @@ public class SystemOperator {
         }
 
         return new RuntimeScalar(result.exitCode);
+    }
+    
+    /**
+     * Flattens a list of RuntimeBase elements into a list of strings.
+     * Arrays and lists are expanded to their individual elements.
+     * This is needed for system() and exec() to properly handle @array arguments.
+     *
+     * @param elements The list of RuntimeBase elements to flatten
+     * @return A list of strings representing individual command arguments
+     */
+    private static List<String> flattenToStringList(List<RuntimeBase> elements) {
+        List<String> result = new ArrayList<>();
+        for (RuntimeBase element : elements) {
+            if (element instanceof RuntimeArray arr) {
+                // Flatten array elements
+                for (RuntimeBase arrElement : arr.elements) {
+                    result.add(arrElement.toString());
+                }
+            } else if (element instanceof RuntimeList list) {
+                // Recursively flatten list elements
+                result.addAll(flattenToStringList(list.elements));
+            } else {
+                result.add(element.toString());
+            }
+        }
+        return result;
     }
 
     /**
@@ -317,9 +343,17 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar exec(RuntimeList args, boolean hasHandle, int ctx) {
-        List<RuntimeBase> elements = args.elements;
-        if (elements.isEmpty()) {
+        // Flatten the arguments - arrays and lists should be expanded to individual elements
+        List<String> flattenedArgs = flattenToStringList(args.elements);
+        
+        if (flattenedArgs.isEmpty()) {
             throw new PerlCompilerException("exec: no command specified");
+        }
+
+        // Check for pending fork-open emulation
+        // If there's a pending fork-open, we complete the pipe instead of exec'ing
+        if (ForkOpenState.hasPending()) {
+            return completeForkOpen(flattenedArgs, hasHandle);
         }
 
         try {
@@ -327,9 +361,9 @@ public class SystemOperator {
 
             int exitCode;
 
-            if (!hasHandle && elements.size() == 1) {
+            if (!hasHandle && flattenedArgs.size() == 1) {
                 // Single argument - check for shell metacharacters
-                String command = elements.getFirst().toString();
+                String command = flattenedArgs.getFirst();
                 if (SHELL_METACHARACTERS.matcher(command).find()) {
                     // Has shell metacharacters, use shell
                     exitCode = execCommand(command);
@@ -340,11 +374,7 @@ public class SystemOperator {
                 }
             } else {
                 // Multiple arguments - execute directly without shell
-                List<String> commandArgs = new ArrayList<>();
-                for (RuntimeBase element : elements) {
-                    commandArgs.add(element.toString());
-                }
-                exitCode = execCommandDirect(commandArgs);
+                exitCode = execCommandDirect(flattenedArgs);
             }
 
             // exec() should never return in Perl, so we terminate the JVM
@@ -355,6 +385,94 @@ public class SystemOperator {
             setGlobalVariable("main::!", e.getMessage());
         }
         return scalarUndef;
+    }
+
+    /**
+     * Completes a pending fork-open by running the command and capturing output.
+     * 
+     * <p>This is called when exec() is invoked with a pending fork-open state
+     * (set by {@code open FH, "-|"}). Instead of exec'ing and terminating,
+     * we run the command, capture its output, and throw ForkOpenCompleteException
+     * to return control to the caller with the captured output.
+     * 
+     * <p>This emulates Perl's fork-open pattern on the JVM where fork() is not available.
+     * 
+     * @param flattenedArgs The command and arguments
+     * @param hasHandle Whether exec was called with an indirect object
+     * @return Never returns normally - throws ForkOpenCompleteException
+     * @throws ForkOpenCompleteException Always thrown with captured output
+     * @see ForkOpenState
+     * @see ForkOpenCompleteException
+     */
+    private static RuntimeScalar completeForkOpen(List<String> flattenedArgs, boolean hasHandle) {
+        ForkOpenState.PendingForkOpen pending = ForkOpenState.getPending();
+        ForkOpenState.clear();
+        
+        try {
+            flushAllHandles();
+            
+            // Build the command
+            List<String> command;
+            if (!hasHandle && flattenedArgs.size() == 1) {
+                String cmdStr = flattenedArgs.getFirst();
+                if (SHELL_METACHARACTERS.matcher(cmdStr).find()) {
+                    // Use shell for metacharacters
+                    if (SystemUtils.osIsWindows()) {
+                        command = Arrays.asList("cmd.exe", "/c", cmdStr);
+                    } else {
+                        command = Arrays.asList("/bin/sh", "-c", cmdStr);
+                    }
+                } else {
+                    // Split simple command
+                    command = Arrays.asList(cmdStr.trim().split("\\s+"));
+                }
+            } else {
+                command = flattenedArgs;
+            }
+            
+            // Run command and capture output
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            processBuilder.directory(new File(System.getProperty("user.dir")));
+            copyPerlEnvToProcessBuilder(processBuilder);
+            processBuilder.redirectErrorStream(false);  // Keep stderr separate
+            
+            Process process = processBuilder.start();
+            
+            // Read all output
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+            
+            // Wait for process to complete
+            int exitCode = process.waitFor();
+            
+            // Set $? to the exit status
+            setGlobalVariable("main::?", String.valueOf(exitCode << 8));
+            
+            // Remove trailing newline if present (to match Perl behavior for single-line output)
+            String capturedOutput = output.toString();
+            
+            // Throw exception to return control to caller with captured output
+            throw new ForkOpenCompleteException(
+                    process.pid(),
+                    capturedOutput,
+                    pending.fileHandle
+            );
+            
+        } catch (ForkOpenCompleteException e) {
+            // Re-throw - this is expected
+            throw e;
+        } catch (Exception e) {
+            // Command failed to run
+            setGlobalVariable("main::!", e.getMessage());
+            // Throw with empty output on failure
+            throw new ForkOpenCompleteException(0, "", pending.fileHandle);
+        }
     }
 
     /**

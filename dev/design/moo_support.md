@@ -325,35 +325,19 @@ All tests meet or exceed the baseline (20260312T075000):
 
 ## Known Issues (Remaining Moo Test Failures)
 
+All remaining test failures are expected and require Java features that are not available:
+
 ### Issue: DEMOLISH Not Being Called (Expected - Not Supported)
-**Tests affected**: t/demolish-basics.t (3 failures)
+**Tests affected**: demolish-*.t (6 failures)
 **Symptom**: Object destructors (DEMOLISH methods) are not called when objects go out of scope
 **Root cause**: DESTROY/fork/threads are not supported in PerlOnJava (they compile but throw at runtime)
 **Status**: Expected failure - these features are out of scope for PerlOnJava
 
-### Issue: SUPER::new Not Working in Extended Classes - FIXED (Phase 13)
-**Tests affected**: t/extends-non-moo.t
-**Symptom**: `Undefined subroutine &Package::SUPER::new called`
-**Root cause**: Only `SUPER::method` was supported, not `Package::SUPER::method`
-**Status**: ✅ FIXED - RuntimeCode.java now handles `::SUPER::` pattern
-
-### Issue: Regex Escaping in Error Messages (quotemeta) - FIXED (Phase 12)
-**Tests affected**: t/accessor-coerce.t, t/accessor-isa.t (many failures)
-**Symptom**: `plus\_three` vs `plus_three`, `less\_than\_three` vs `less_than_three`
-**Root cause**: quotemeta was escaping `_` (underscore) which Perl doesn't escape
-**Status**: ✅ FIXED - StringOperators.java now treats `_` as alphanumeric
-
-### Issue: Role Application Error Messages
-**Tests affected**: t/compose-roles.t (4 failures)  
-**Symptom**: Missing error messages when required attributes are not provided
-**Root cause**: Error throwing in role composition may not propagate correctly
-**Status**: Needs investigation
-
-### Issue: Spurious "Odd number of elements in anonymous hash" Warnings
-**Tests affected**: Various tests when run via TAP::Harness
-**Symptom**: Warnings appear in TAP::Harness but not when running tests directly
-**Root cause**: Unknown - standard Perl does NOT emit these warnings
-**Status**: Needs investigation - add stack trace to RuntimeHash.java to identify source
+### Issue: Weak References Not Supported (Expected - Java GC Limitation)
+**Tests affected**: accessor-weaken*.t (20 failures), no-moo.t (5 failures)
+**Symptom**: Weak references don't work as expected in Java's garbage collector
+**Root cause**: Java's GC is fundamentally different from Perl's reference counting
+**Status**: Expected failure - would require extensive changes to RuntimeScalar
 
 ## Remaining jcpan Improvements
 
@@ -686,33 +670,25 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
     - `parseStackTraceElement()` returns the `#line`-adjusted filename for caller() reporting
   - **Result**: Tests 15, 18 now PASS; tests 19-26 now run (were previously skipped due to parse errors)
 
+- [x] Phase 38: croak-locations.t tests 27-28 now passing (2026-03-17)
+  - Tests 27-28 were listed as failing but now pass without additional changes
+  - The fixes from Phase 29 (correct line numbers) and Phase 37 (#line directive) resolved these
+  - Test 27: Delegated method croak now correctly reports call site
+  - Test 28: Role default isa now correctly reports application location
+  - **Result**: croak-locations.t 29/29 tests passing (100%)
+
 ### Current Status
 
-**Test Results (after Phase 37):**
-- **Moo**: 64/71 test programs passing (90%), 806/839 subtests passing (96%)
+**Test Results (after Phase 38 - croak-locations.t fully passing):**
+- **Moo**: 65/71 test programs passing (91.5%), 808/839 subtests passing (96.3%)
 - **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
 
-**Remaining Failures (categorized):**
-1. **accessor-weaken tests** (20 failures) - Expected, weak references not supported in Java GC
-2. **croak-locations.t** (2 failures) - Tests 27, 28: delegated method croak and role default isa
-3. **demolish tests** (6 failures) - Expected, DESTROY not supported
-4. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+**Remaining Failures (all expected - require Java features not available):**
+1. **accessor-weaken*.t** (20 failures) - Weak references not supported in Java GC
+2. **demolish-*.t** (6 failures) - DESTROY not supported
+3. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
 
-**croak-locations.t test 27 analysis**:
-- Test: `Method::Generate::Accessor::_generate_delegation - user croak`
-- Expected: `LocationTestFile line 22` (where delegated method is called)
-- Got: `(eval N) line 50` (internal constructor code)
-- Issue: Carp is blaming the generated constructor instead of the user's call site
-- This is a deeper Carp stack-walking issue with Sub::Quote-generated code
-
-**croak-locations.t test 28 analysis**:
-- Test: `Moo::Role::create_class_with_roles - default fails isa`
-- Expected: `LocationTestFile line 21` (where `apply_roles_to_object` is called)
-- Got: `LocationTestFile line 18` (where the object was created)
-- Issue: Carp is blaming object creation instead of role application
-- Related to how default values and isa checks interact with stack walking
-
-**Expected failures** (not fixable without fundamental changes):
+**All remaining failures require fundamental Java GC limitations:**
 - Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
 - DESTROY/GC: demolish tests (6)
 
@@ -799,15 +775,11 @@ that didn't communicate with the compiler's strict checking.
 #### Phase 36: croak-locations.t Tests 15, 18 (Completed)
 **Status**: Completed 2026-03-17 (merged into Phase 37 above)
 
-Tests 15 and 18 are now fixed. The remaining tests 27-28 involve:
-- Test 27: Delegated method croak - Carp blames generated code instead of call site
-- Test 28: Role default isa - Carp blames object creation instead of role application
-
-These require deeper investigation into how Carp walks the stack for Sub::Quote-generated code.
+Tests 15 and 18 are now fixed. Tests 27-28 were also fixed by Phase 29 and 37 (see Phase 38).
 
 ---
 
-**Revised Priority Order** (considering deferred implementations):
+**Revised Priority Order** (all high-impact items completed):
 
 | Priority | Phase | Impact | Status | Effort |
 |----------|-------|--------|--------|--------|
@@ -815,20 +787,20 @@ These require deeper investigation into how Carp walks the stack for Sub::Quote-
 | 2 | ~~Mo strict.t (35)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
 | 3 | ~~Interpreter caller() (34)~~ | ~~Parity~~ | **Completed** | ~~Medium~~ |
 | 4 | ~~croak-locations.t 15,18 (36/37)~~ | ~~2 tests~~ | **Completed** | ~~Medium~~ |
-| 5 | **croak-locations.t 27,28** | 2 tests | Complex | High |
+| 5 | ~~croak-locations.t 27,28~~ | ~~2 tests~~ | **Completed** | ~~High~~ |
 | 6 | DESTROY (31) | 6 tests | **Deferred** | High |
 | 7 | Weak References (32) | 25 tests | **Deferred** | High |
 
-**Actionable items** (can be investigated):
-1. **croak-locations.t 27-28**: Complex Carp stack walking for Sub::Quote-generated code
-
-**Deferred** (need design maturation):
-- Phase 31 (DESTROY): Requires scope-based tracking, complex GC interaction
+**All actionable items completed!** Remaining failures (31 subtests) require:
+- Phase 31 (DESTROY): Scope-based tracking, complex GC interaction
 - Phase 32 (Weak refs): Memory impact concern, need alternative to adding field
 
-**Achievable test improvement without deferred features**:
-- Current: 64/71 Moo tests (90%), 806/839 subtests (96%), 28/28 Mo tests (100%)
-- The bulk of remaining failures (31 tests) require DESTROY or weak refs
+**Final achievable state reached**:
+- Moo: 65/71 test programs (91.5%), 808/839 subtests (96.3%)
+- Mo: 28/28 test programs (100%), 144/144 subtests (100%)
+
+The 31 remaining failing subtests all require DESTROY or weak reference support,
+which are fundamentally limited by Java's GC model.
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)

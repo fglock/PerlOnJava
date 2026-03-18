@@ -496,6 +496,10 @@ my @copy = @{$z};         # ERROR
   - 3-argument forms with explicit modes
   - In-memory files
   - support for pipe input and output like: `-|`, `|-`, `ls|`, `|sort`.
+    - # forking patterns with `exec`:
+        my $pid = open FH, "-|"; if ($pid) {...} else { exec @cmd }
+        my $pid = open FH, "-|"; unless ($pid) { exec @cmd } ...
+        open FH, "-|" or exec @cmd;
   - ✅ file descriptor duplication modes: `<&`, `>&`, `<&=`, `>&=` (duplicate existing file descriptors)
 
 - ✅  **`readline`**: Reading lines from filehandles

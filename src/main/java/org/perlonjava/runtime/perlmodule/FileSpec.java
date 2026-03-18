@@ -98,14 +98,21 @@ public class FileSpec extends PerlModuleBase {
         StringBuilder result = new StringBuilder();
         boolean isWindows = SystemUtils.osIsWindows();
         String separator = File.separator;
+        boolean isFirst = true;
 
         for (int i = 1; i < args.size(); i++) {
             String part = args.get(i).toString();
 
-            // Skip empty parts
+            // Empty first element represents root directory on Unix
             if (part.isEmpty()) {
+                if (isFirst && !isWindows) {
+                    // First empty element = absolute path (root)
+                    result.append(separator);
+                }
+                isFirst = false;
                 continue;
             }
+            isFirst = false;
 
             // For Windows, normalize slashes to the system separator
             if (isWindows) {
@@ -254,6 +261,10 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for file_name_is_absolute() method");
         }
         String path = args.get(1).toString();
+        // PerlOnJava: Also recognize jar: paths as absolute
+        if (path.startsWith("jar:")) {
+            return new RuntimeScalar(true).getList();
+        }
         boolean isAbsolute = Paths.get(path).isAbsolute();
         return new RuntimeScalar(isAbsolute).getList();
     }
@@ -425,6 +436,11 @@ public class FileSpec extends PerlModuleBase {
         }
         String path = args.get(1).toString();
         String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
+
+        // PerlOnJava: jar: paths are already absolute, return as-is
+        if (path.startsWith("jar:")) {
+            return new RuntimeScalar(path).getList();
+        }
 
         // If the path is already absolute, return it as-is (normalized)
         if (Paths.get(path).isAbsolute()) {

@@ -2,7 +2,7 @@ package ExtUtils::MakeMaker;
 use strict;
 use warnings;
 
-our $VERSION = '7.70_perlonjava';
+our $VERSION = '7.70';
 
 use Exporter 'import';
 our @EXPORT = qw(WriteMakefile prompt);

@@ -256,6 +256,14 @@ public class FileHandle {
     public static Node parseBarewordHandle(Parser parser, String name) {
         name = normalizeBarewordHandle(parser, name);
 
+        // Check if this name has a CODE ref defined (it's a subroutine, not a filehandle)
+        // This handles the case where a subroutine was imported via typeglob assignment
+        // (e.g., *main::myconfig = \&Config::myconfig), creating a glob entry but
+        // with only a CODE slot, not an IO slot.
+        if (GlobalVariable.isGlobalCodeRefDefined(name)) {
+            return null;  // Not a filehandle, it's a subroutine
+        }
+
         // Check if this is a known file handle in the global I/O table
         // This helps distinguish between file handles and other barewords
         if (GlobalVariable.existsGlobalIO(name) || isStandardFilehandle(name)) {

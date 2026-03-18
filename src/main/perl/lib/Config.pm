@@ -207,6 +207,24 @@ $os_name =~ s/\s+/_/g;
     prefixexp => '/usr/local',
     installprefix => '/usr/local',
     installprefixexp => '/usr/local',
+    
+    # Site installation paths (for user-installed modules via jcpan)
+    siteprefix => $user_home . '/.perlonjava',
+    siteprefixexp => $user_home . '/.perlonjava',
+    installsitelib => $user_home . '/.perlonjava/lib',
+    installsitearch => $user_home . '/.perlonjava/lib',
+    installsitebin => $user_home . '/.perlonjava/bin',
+    installsitescript => $user_home . '/.perlonjava/bin',
+    installsiteman1dir => '',
+    installsiteman3dir => '',
+    
+    # Core installation paths (read-only, in JAR)
+    installprivlib => 'jar:PERL5LIB',
+    installarchlib => 'jar:PERL5LIB',
+    installbin => 'jar:PERL5BIN',
+    installscript => 'jar:PERL5BIN',
+    installman1dir => '',
+    installman3dir => '',
 
     # Perl tests use this
     useperlio => 'define',
@@ -223,6 +241,25 @@ $os_name =~ s/\s+/_/g;
 
 sub non_bincompat_options() {}
 sub bincompat_options() {}
+
+# Return a string describing the perl configuration (like perl -V)
+sub myconfig {
+    my $config = "Summary of my perl5 (revision 5 version 42 subversion 0) configuration:\n";
+    $config .= "   \n";  # Blank line with leading spaces (matches Perl format)
+    $config .= "  Platform:\n";
+    $config .= "    osname=$Config{osname}\n";
+    $config .= "    osvers=$Config{osvers}\n";
+    $config .= "    archname=$Config{archname}\n";
+    $config .= "  Compiler:\n";
+    $config .= "    cc=$Config{cc}\n";
+    $config .= "  Linker and Libraries:\n";
+    $config .= "    ld=$Config{ld}\n";
+    $config .= "    so=$Config{so}\n";
+    $config .= "  Dynamic Linking:\n";
+    $config .= "    dlext=$Config{dlext}\n";
+    $config .= "\n\n";  # Trailing newlines to match Perl format
+    return $config;
+}
 
 # Helper functions
 sub _determine_byteorder {

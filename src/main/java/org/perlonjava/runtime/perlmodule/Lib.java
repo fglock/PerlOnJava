@@ -29,6 +29,8 @@ public class Lib extends PerlModuleBase {
      */
     public static void initialize() {
         Lib lib = new Lib();
+        // Set $VERSION so CPAN.pm can detect our bundled version
+        GlobalVariable.getGlobalVariable("lib::VERSION").set(new RuntimeScalar("0.65"));
         lib.initializeExporter();
         lib.defineExport("EXPORT_OK", "useLib", "noLib", "restoreOrigInc");
         try {

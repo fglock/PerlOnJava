@@ -7,6 +7,6 @@ use Exporter 'import';
 
 our @EXPORT = qw(Load Dump);
 our @EXPORT_OK = qw(LoadFile DumpFile);
-our $VERSION = '0.01';
+our $VERSION = '1.31';  # Match CPAN YAML version; we wrap YAML::PP
 
 1;

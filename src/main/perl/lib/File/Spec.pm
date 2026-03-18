@@ -20,6 +20,8 @@ package File::Spec;
 use warnings;
 use strict;
 
+our $VERSION = '3.95';  # Match perl5 PathTools version
+
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/perlmodule/FileSpec.java
 

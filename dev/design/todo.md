@@ -1,5 +1,8 @@
 # TODO
 
+## Warnings to Implement
+- `"my" variable $x masks earlier declaration in same scope` warning
+
 ## More Difficult, and Low Impact
 - `goto()` to jump to a label in the call stack
 - Thread

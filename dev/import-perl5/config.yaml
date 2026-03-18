@@ -164,6 +164,10 @@ imports:
   - source: perl5/lib/File/Basename.t
     target: perl5_t/File/Basename.t
 
+  # File::Compare - file comparison functions (required by Module::Build)
+  - source: perl5/lib/File/Compare.pm
+    target: src/main/perl/lib/File/Compare.pm
+
   # From core library
   - source: perl5/lib/Tie/Array.pm
     target: src/main/perl/lib/Tie/Array.pm
@@ -537,6 +541,10 @@ imports:
     target: src/main/perl/lib/CPAN/Meta/Requirements
     type: directory
 
+  # ExtUtils::Manifest - Check MANIFEST and build dist list (required by Module::Build)
+  - source: perl5/cpan/ExtUtils-Manifest/lib/ExtUtils/Manifest.pm
+    target: src/main/perl/lib/ExtUtils/Manifest.pm
+
   # ExtUtils::MakeMaker - PerlOnJava custom implementations
   # These are protected because they have PerlOnJava-specific logic
   
@@ -558,6 +566,36 @@ imports:
 
   # MM_PerlOnJava.pm - PerlOnJava-specific MakeMaker subclass (no upstream source)
   # This file is created by PerlOnJava, not imported from perl5
+
+  # Text::Abbrev - Abbreviation matching (required by Module::Build)
+  - source: perl5/dist/Text-Abbrev/lib/Text/Abbrev.pm
+    target: src/main/perl/lib/Text/Abbrev.pm
+
+  # File::Temp - Temporary files (PerlOnJava custom implementation)
+  # Protected because we have a custom implementation
+  - source: perl5/cpan/File-Temp/lib/File/Temp.pm
+    target: src/main/perl/lib/File/Temp.pm
+    protected: true
+
+  # IO::Dir - Directory operations (required by tests)
+  - source: perl5/dist/IO/lib/IO/Dir.pm
+    target: src/main/perl/lib/IO/Dir.pm
+
+  # JSON::PP - Pure Perl JSON (required by tests)
+  - source: perl5/cpan/JSON-PP/lib/JSON/PP.pm
+    target: src/main/perl/lib/JSON/PP.pm
+
+  - source: perl5/cpan/JSON-PP/lib/JSON/PP
+    target: src/main/perl/lib/JSON/PP
+    type: directory
+
+  # utf8 pragma
+  - source: perl5/lib/utf8.pm
+    target: src/main/perl/lib/utf8.pm
+
+  # vars pragma
+  - source: perl5/lib/vars.pm
+    target: src/main/perl/lib/vars.pm
 
   # Add more imports below as needed
   # Example with minimal fields:

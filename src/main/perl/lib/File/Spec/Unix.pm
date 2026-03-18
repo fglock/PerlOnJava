@@ -3,7 +3,7 @@ package File::Spec::Unix;
 use strict;
 use Cwd ();
 
-our $VERSION = '3.94';
+our $VERSION = '3.95';
 $VERSION =~ tr/_//d;
 
 =head1 NAME
@@ -242,6 +242,8 @@ L<File::Spec::VMS/file_name_is_absolute>).
 
 sub file_name_is_absolute {
     my ($self,$file) = @_;
+    # PerlOnJava: Also recognize jar: paths as absolute
+    return 1 if $file =~ /^jar:/;
     return scalar($file =~ m:^/:s);
 }
 
