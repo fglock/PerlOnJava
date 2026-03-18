@@ -1389,6 +1389,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (perlClassName.isEmpty()) {
                 throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
             }
+            
+            // Check if this string is a bareword filehandle (like IN, OUT, etc.)
+            // If so, look up the glob and call the method on it
+            String normalizedGlobName = NameNormalizer.normalizeVariableName(perlClassName, "main");
+            if (GlobalVariable.isGlobalIODefined(normalizedGlobName)) {
+                // This is a filehandle - get the glob reference and recurse
+                RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedGlobName);
+                RuntimeScalar globRef = glob.createReference();
+                // Remove the invocant we already added and re-add with the glob reference
+                args.elements.removeFirst();
+                return call(globRef, method, currentSub, args, callContext);
+            }
+            
             if (perlClassName.endsWith("::")) {
                 perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
             }
