@@ -62,7 +62,7 @@ public class IdentifierParser {
             // For example "$\t = 4" must be a syntax error, not "$= 4".
             if (tokenAfter.type == LexerTokenType.OPERATOR
                     && tokenAfter.text.length() == 1
-                    && "!|/*+-<>&~.=%'?".indexOf(tokenAfter.text.charAt(0)) >= 0) {
+                    && "!|/*+-<>&~.=%'?()".indexOf(tokenAfter.text.charAt(0)) >= 0) {
                 parser.throwError("syntax error");
             }
         }
@@ -190,9 +190,9 @@ public class IdentifierParser {
             return null;
         }
 
-        // Special case for special variables like `$|`, `$'`, etc.
+        // Special case for special variables like `$|`, `$'`, `$(`, `$)`, etc.
         char firstChar = token.text.charAt(0);
-        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?".indexOf(firstChar) >= 0) {
+        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?()".indexOf(firstChar) >= 0) {
             // Special case: * followed by { is glob dereference when inside braces
             // @{*{expr}} should be parsed as @{ *{expr} }, not @*{expr} (hash slice on @*)
             // But @*{key} outside braces IS a hash slice on @*, so only apply when insideBraces

@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.perlmodule.*;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
@@ -80,8 +81,8 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::>");  // TODO
         GlobalVariable.getGlobalVariable("main::<");  // TODO
         GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034
-        GlobalVariable.getGlobalVariable("main::(");  // TODO
-        GlobalVariable.getGlobalVariable("main::)");  // TODO
+        GlobalVariable.getGlobalVariable("main::(").set(NativeUtils.getgid(0));  // $( - real GID
+        GlobalVariable.getGlobalVariable("main::)").set(NativeUtils.getegid(0));  // $) - effective GID
         GlobalVariable.getGlobalVariable("main::=");  // TODO
         GlobalVariable.getGlobalVariable("main::^");  // TODO
         GlobalVariable.getGlobalVariable("main:::");  // TODO
