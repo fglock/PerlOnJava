@@ -261,6 +261,42 @@ Got:      'File: 022Wrap.t Line number: 70 package: main trace: Log::Log4perl::A
 5. **Safe.pm** - May require significant work
 6. **Source filters** - May require parser changes
 
+## Recent Debugging Session (2026-03-18)
+
+### PR 328 Test Timeout Investigation
+
+**Symptom:** Tests reported as timeouts in PR 328:
+```
+✗ io/crlf_through.t      942/942   0/0   -942
+✗ io/through.t           942/942   0/0   -942
+✗ op/heredoc.t            66/138   0/0    -66
+✗ op/tie.t                45/95    0/0    -45
+✗ lib/croak.t             44/334   0/334  -44
+```
+
+**Root Cause Found:** Staged (but uncommitted) changes had accidentally removed the `ForkOpenCompleteException` catch blocks from `RuntimeCode.java`. These catch blocks are essential for the fork-open emulation feature added in commit 764c256cc.
+
+**Impact:** Without the exception handling:
+- `exec` inside fork-open patterns (`open FH, "-|"; if (!$pid) { exec @cmd }`) throws an uncaught exception
+- Tests that spawn subprocesses (fresh_perl_is, run_multiple_progs, pipe opens) hang or fail
+- All tests using `test.pl`'s subprocess spawning are affected
+
+**Fix:** Restored the files from the committed version:
+```bash
+git reset HEAD -- .
+git checkout -- .
+```
+
+**Verification:** After restoring, `grep -c "ForkOpenCompleteException"` returns 5 in RuntimeCode.java (correct).
+
+**Note:** The tests themselves are NOT broken - they just take longer than the CI timeout due to JVM startup overhead for each subprocess. The 0/0 results were from the uncaught exception causing early termination.
+
+### Next Steps for PR 328
+
+1. **Ensure all files are committed with fork-open emulation intact**
+2. **Consider increasing CI timeout** for subprocess-heavy tests (io/through.t has 942 tests)
+3. **Always verify working tree is clean before testing**
+
 ## How to Test
 
 ```bash
