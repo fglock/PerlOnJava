@@ -17,6 +17,7 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.operators.UmaskOperator.applyUmask;
 
 public class Directory {
 
@@ -259,7 +260,9 @@ public class Directory {
 
             // Set permissions only if the file system supports POSIX permissions
             if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
-                Set<PosixFilePermission> permissions = getPosixFilePermissions(mode);
+                // Apply umask to the mode (Perl: effective_mode = mode & ~umask)
+                int effectiveMode = applyUmask(mode);
+                Set<PosixFilePermission> permissions = getPosixFilePermissions(effectiveMode);
                 Files.setPosixFilePermissions(path, permissions);
             }
             // On Windows and other non-POSIX systems, permissions are handled by the OS
