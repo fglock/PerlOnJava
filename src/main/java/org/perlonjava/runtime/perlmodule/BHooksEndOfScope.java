@@ -2,17 +2,34 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Java XS implementation for B::Hooks::EndOfScope.
  * 
- * Uses PerlOnJava's defer mechanism (DeferBlock + DynamicVariableManager)
- * to implement scope-end callbacks.
+ * Implements compile-time scope-end callbacks for modules like namespace::clean
+ * and namespace::autoclean. When a file uses on_scope_end, the callback fires
+ * when that file finishes loading (compilation), not when the current function
+ * returns.
  * 
- * B::Hooks::EndOfScope provides on_scope_end() which registers a callback
- * to execute when the current scope exits. This is used by modules like
- * namespace::autoclean to clean up imported functions.
+ * This differs from Perl's runtime scope exit - it specifically handles the
+ * compile-time use case that namespace::clean requires.
  */
 public class BHooksEndOfScope extends PerlModuleBase {
+
+    /**
+     * Registry of callbacks keyed by the file that registered them.
+     * When a file finishes loading, callbacks registered for that file are fired in LIFO order.
+     */
+    private static final Map<String, Deque<RuntimeScalar>> fileCallbacks = new ConcurrentHashMap<>();
+    
+    /**
+     * Stack of currently-loading files. Each doFile/require pushes onto this stack,
+     * and pops when done. This allows us to know which file is being loaded when
+     * on_scope_end is called.
+     */
+    private static final ThreadLocal<Deque<String>> loadingFileStack = ThreadLocal.withInitial(ArrayDeque::new);
 
     public BHooksEndOfScope() {
         super("B::Hooks::EndOfScope", false);
@@ -30,16 +47,59 @@ public class BHooksEndOfScope extends PerlModuleBase {
             System.err.println("Warning: Missing B::Hooks::EndOfScope method: " + e.getMessage());
         }
     }
+    
+    /**
+     * Called by ModuleOperators.doFile before executing a file.
+     * Pushes the filename onto the loading stack.
+     */
+    public static void beginFileLoad(String fileName) {
+        loadingFileStack.get().push(fileName);
+    }
+    
+    /**
+     * Called by ModuleOperators.doFile after executing a file.
+     * Pops the filename from the loading stack and fires any registered callbacks.
+     */
+    public static void endFileLoad(String fileName) {
+        Deque<String> stack = loadingFileStack.get();
+        if (!stack.isEmpty() && stack.peek().equals(fileName)) {
+            stack.pop();
+        }
+        
+        // Fire callbacks registered for this file in LIFO order
+        Deque<RuntimeScalar> callbacks = fileCallbacks.remove(fileName);
+        if (callbacks != null) {
+            while (!callbacks.isEmpty()) {
+                RuntimeScalar codeRef = callbacks.pop();
+                try {
+                    if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
+                        code.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                    }
+                } catch (Exception e) {
+                    // Log but don't propagate - callbacks shouldn't break file loading
+                    System.err.println("Warning: on_scope_end callback error: " + e.getMessage());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Get the current file being loaded (top of stack), or null if not in a file load.
+     */
+    private static String getCurrentLoadingFile() {
+        Deque<String> stack = loadingFileStack.get();
+        return stack.isEmpty() ? null : stack.peek();
+    }
 
     /**
-     * Registers a callback to be executed when the current scope exits.
+     * Registers a callback to be executed when the calling file finishes loading.
      * 
      * Usage in Perl:
      *   use B::Hooks::EndOfScope;
      *   on_scope_end { print "scope ended\n" };
      * 
-     * The callback is executed in LIFO order with other defer blocks
-     * when the scope is exited (via normal flow, return, die, etc.)
+     * The callback is executed in LIFO order when the file that called on_scope_end
+     * finishes loading (i.e., when require/do returns).
      * 
      * @param args The arguments: args[0] is the code reference (callback)
      * @param ctx The runtime context
@@ -57,10 +117,18 @@ public class BHooksEndOfScope extends PerlModuleBase {
             throw new RuntimeException("on_scope_end requires a code reference, got " + codeRef.type);
         }
         
-        // Create a DeferBlock and push it onto the dynamic variable stack
-        // This will cause the callback to be executed when the scope exits
-        DeferBlock deferBlock = new DeferBlock(codeRef);
-        DynamicVariableManager.pushLocalVariable(deferBlock);
+        // Find which file is currently being loaded
+        String currentFile = getCurrentLoadingFile();
+        
+        if (currentFile != null) {
+            // Register callback for end of file load
+            fileCallbacks.computeIfAbsent(currentFile, k -> new ArrayDeque<>()).push(codeRef);
+        } else {
+            // Fallback: if not in a file load context (e.g., main script or eval),
+            // use defer mechanism for immediate scope exit
+            DeferBlock deferBlock = new DeferBlock(codeRef);
+            DynamicVariableManager.pushLocalVariable(deferBlock);
+        }
         
         return new RuntimeList();
     }
