@@ -17,29 +17,50 @@ The goal is to produce a unified or complementary SBOM that documents the comple
 
 ---
 
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **SBOM** | Software Bill of Materials - a formal inventory of software components |
+| **CycloneDX** | An OWASP standard for SBOM format (JSON/XML), now ECMA-424 |
+| **SPDX** | Alternative SBOM standard from Linux Foundation, focused on licensing |
+| **PURL** | Package URL - a standard format for identifying software packages (e.g., `pkg:maven/org.ow2.asm/asm@9.9.1`) |
+| **VEX** | Vulnerability Exploitability eXchange - documents whether vulnerabilities affect a product |
+| **Shaded/Uber JAR** | A JAR file that bundles all dependencies into a single archive |
+| **Maven Central** | The primary repository for Java libraries (like CPAN for Perl) |
+| **CPAN** | Comprehensive Perl Archive Network - the primary repository for Perl modules |
+
+---
+
 ## Background
 
 ### What is SBOM?
 
-A **Software Bill of Materials (SBOM)** is a nested inventory - a list of ingredients that make up software components. SBOMs are increasingly required for:
+A **Software Bill of Materials (SBOM)** is a formal, machine-readable inventory of all components in a software product. Think of it as a "ingredients list" for software.
 
+**Why it matters:**
+- **Security teams** can quickly check if a product contains vulnerable components
+- **Legal/compliance teams** can verify license obligations
+- **Procurement** can assess supply chain risk before adoption
+
+SBOMs are increasingly required for:
 - **US Government contracts** (Executive Order 14028, May 2021)
 - **Supply chain security** and vulnerability management
 - **License compliance** tracking
 - **Security auditing** and incident response
-- **Regulatory compliance** (FDA, EU Cyber Resilience Act)
+- **Regulatory compliance** (FDA for medical devices, EU Cyber Resilience Act)
 
-### CycloneDX Standard
+### Why CycloneDX?
 
 **CycloneDX** is the recommended SBOM standard for PerlOnJava because:
 
 1. **Security-focused** - Designed by OWASP for application security contexts
 2. **Lightweight** - Simple JSON/XML format, easy to generate and consume
-3. **Well-supported** - Extensive tooling for Java (Gradle, Maven) and Perl
-4. **Standardized** - ECMA-424 international standard
-5. **Comprehensive** - Supports dependencies, licenses, vulnerabilities (VEX)
+3. **Well-supported** - Mature plugins for Gradle, Maven; Perl library available on CPAN
+4. **Standardized** - ECMA-424 international standard (December 2024)
+5. **Comprehensive** - Supports dependencies, licenses, and vulnerability status (VEX)
 
-Alternative: **SPDX** (Linux Foundation) is more focused on license compliance but has less mature Java tooling.
+**Alternative:** SPDX (Linux Foundation) is another respected standard, more focused on license compliance. Both have good tooling; CycloneDX is chosen here for its security focus and simpler format.
 
 ---
 
@@ -47,9 +68,11 @@ Alternative: **SPDX** (Linux Foundation) is more focused on license compliance b
 
 ### Java Dependencies (from pom.xml / build.gradle)
 
+These are external libraries downloaded from Maven Central during build:
+
 | Dependency | Version | License | Purpose |
 |------------|---------|---------|---------|
-| org.ow2.asm:asm | 9.9.1 | BSD-3-Clause | Bytecode manipulation |
+| org.ow2.asm:asm | 9.9.1 | BSD-3-Clause | JVM bytecode generation |
 | org.ow2.asm:asm-util | 9.9.1 | BSD-3-Clause | ASM utilities |
 | com.ibm.icu:icu4j | 78.2 | ICU License | Unicode support |
 | com.alibaba.fastjson2:fastjson2 | 2.0.61 | Apache-2.0 | JSON processing |
@@ -58,20 +81,20 @@ Alternative: **SPDX** (Linux Foundation) is more focused on license compliance b
 | org.apache.commons:commons-csv | 1.14.1 | Apache-2.0 | CSV processing |
 | com.github.jnr:jnr-posix | 3.1.19 | LGPL-2.1+ | Native POSIX access |
 
-Test dependencies (not in runtime SBOM):
+Test dependencies (excluded from runtime SBOM):
 - org.junit.jupiter (JUnit 5) - test scope only
 
 ### Bundled Perl Modules (511 files in src/main/perl/lib/)
 
-Categories of bundled Perl modules:
+These are Perl modules bundled with PerlOnJava to provide standard library functionality:
 
 | Category | Examples | License | Notes |
 |----------|----------|---------|-------|
-| Core modules | strict.pm, warnings.pm | Perl Artistic-2.0 | Re-implemented for PerlOnJava |
-| CPAN modules | CPAN.pm, CPAN::Meta | Various | Ported from CPAN |
-| Pod modules | Pod::Text, Pod::Man | GPL-1.0+ OR Artistic-1.0 | Documentation tools |
-| Test modules | Test::More, Test::Builder | Perl Artistic-2.0 | Testing infrastructure |
-| Utility modules | File::Spec, Cwd | Perl Artistic-2.0 | Standard utilities |
+| Pragmas | strict.pm, warnings.pm | Perl Artistic-2.0 | Compile-time behavior controls |
+| CPAN client | CPAN.pm, CPAN::Meta | Various | Module installation tools |
+| Pod modules | Pod::Text, Pod::Man | GPL-1.0+ OR Artistic-1.0 | Documentation processing |
+| Test modules | Test::More, Test::Builder | Perl Artistic-2.0 | Testing framework |
+| Utility modules | File::Spec, Cwd | Perl Artistic-2.0 | Cross-platform utilities |
 
 ---
 
@@ -79,40 +102,34 @@ Categories of bundled Perl modules:
 
 ### Phase 1: Java SBOM Generation
 
-Add CycloneDX plugins to both Gradle and Maven builds.
+Add CycloneDX plugins to both Gradle and Maven builds. These plugins automatically scan dependencies and generate compliant SBOMs.
 
 #### Gradle Configuration
 
 Add to `gradle/libs.versions.toml`:
 ```toml
 [plugins]
-cyclonedx = "org.cyclonedx.bom:3.2.2"
+cyclonedx = { id = "org.cyclonedx.bom", version = "3.2.2" }
 ```
 
 Add to `build.gradle`:
 ```groovy
 plugins {
-    id 'org.cyclonedx.bom' version '3.2.2'
+    id 'org.cyclonedx.bom'
 }
 
-// Configure CycloneDX
-tasks.cyclonedxBom {
+// Configure CycloneDX (optional - defaults are sensible)
+cyclonedxBom {
     projectType = "application"
     schemaVersion = "1.6"
     includeLicenseText = false
     includeBomSerialNumber = true
-    includeBuildSystem = true
-    
-    // Output configuration
-    destination = file("$buildDir/reports/sbom")
-    outputName = "perlonjava-java"
-    outputFormat = "all"  // json and xml
     
     // Component metadata
     componentName = "perlonjava"
     componentVersion = project.version
     
-    // Organization metadata
+    // Organization metadata  
     organizationalEntity {
         name = "PerlOnJava Project"
         urls = ["https://github.com/fglock/PerlOnJava"]
@@ -120,9 +137,13 @@ tasks.cyclonedxBom {
 }
 ```
 
+Run with: `./gradlew cyclonedxBom`
+
+**Output:** `build/reports/cyclonedx/bom.json` and `bom.xml`
+
 #### Maven Configuration
 
-Add to `pom.xml`:
+Add to `pom.xml` in the `<plugins>` section:
 ```xml
 <plugin>
     <groupId>org.cyclonedx</groupId>
@@ -142,23 +163,29 @@ Add to `pom.xml`:
         <includeBomSerialNumber>true</includeBomSerialNumber>
         <includeLicenseText>false</includeLicenseText>
         <outputFormat>all</outputFormat>
-        <outputName>perlonjava-java</outputName>
+        <outputName>bom</outputName>
     </configuration>
 </plugin>
 ```
 
-**Output:** `build/reports/sbom/perlonjava-java.json` (Gradle) or `target/perlonjava-java.json` (Maven)
+Run with: `mvn package` (SBOM generated automatically) or `mvn cyclonedx:makeAggregateBom`
+
+**Output:** `target/bom.json` and `bom.xml`
 
 ### Phase 2: Perl SBOM Generation
 
-Use **SBOM::CycloneDX** (v1.07) to generate SBOM for bundled Perl modules.
+Generate SBOM for the 511 bundled Perl modules. Since these aren't downloaded from a package manager, we need a custom approach.
 
-#### Option A: Use Native Perl (if available)
+**Recommended approach:** Use native Perl with the `SBOM::CycloneDX` module from CPAN.
+
+#### Prerequisites
 
 ```bash
-# Install SBOM::CycloneDX
+# Install from CPAN (requires native Perl)
 cpanm SBOM::CycloneDX
 ```
+
+#### Generation Script
 
 Create `dev/tools/generate-perl-sbom.pl`:
 ```perl
@@ -166,72 +193,62 @@ Create `dev/tools/generate-perl-sbom.pl`:
 use strict;
 use warnings;
 use SBOM::CycloneDX;
-use SBOM::CycloneDX::Enum qw(COMPONENT_TYPE);
+use SBOM::CycloneDX::Component;
+use SBOM::CycloneDX::License;
+use SBOM::CycloneDX::Enum qw(:component_type);
 use File::Find;
-use JSON::PP;
 
-my $bom = SBOM::CycloneDX->new;
+my $bom = SBOM::CycloneDX->new(spec_version => '1.6');
 
-# Root component
+# Define the root component (PerlOnJava itself)
 my $root = SBOM::CycloneDX::Component->new(
-    type     => COMPONENT_TYPE->APPLICATION,
+    type     => COMPONENT_TYPE_APPLICATION,
     name     => 'perlonjava-perl-modules',
-    version  => '5.42.0',
-    licenses => [SBOM::CycloneDX::License->new('Artistic-2.0')],
+    version  => $ENV{VERSION} // '5.42.0',
+    licenses => [SBOM::CycloneDX::License->new(id => 'Artistic-2.0')],
     bom_ref  => 'perlonjava-perl'
 );
 
 $bom->metadata->component($root);
-$bom->metadata->tools->add(SBOM::CycloneDX::cyclonedx_tool());
 
-# Scan Perl modules
-my @modules;
+# Scan and add all Perl modules
 find(sub {
     return unless /\.pm$/;
     my $path = $File::Find::name;
+    
+    # Convert path to module name: lib/Foo/Bar.pm -> Foo::Bar
     my $module = $path;
     $module =~ s{.*/lib/}{};
     $module =~ s{/}{::}g;
     $module =~ s{\.pm$}{};
     
-    # Extract version from module if available
-    my $version = extract_version($path);
+    # Try to extract version from module
+    my $version = extract_version($path) // 'bundled';
     
-    push @modules, {
-        name    => $module,
-        version => $version // 'bundled',
-        path    => $path,
-    };
-}, 'src/main/perl/lib');
-
-# Add components
-for my $mod (@modules) {
     my $component = SBOM::CycloneDX::Component->new(
-        type    => COMPONENT_TYPE->LIBRARY,
-        name    => $mod->{name},
-        version => $mod->{version},
-        bom_ref => "perl:$mod->{name}",
-        purl    => URI::PackageURL->new(
-            type => 'cpan',
-            name => $mod->{name},
-            version => $mod->{version},
-        ),
+        type    => COMPONENT_TYPE_LIBRARY,
+        name    => $module,
+        version => $version,
+        bom_ref => "perl:$module",
     );
+    
     $bom->components->add($component);
-    $bom->add_dependency($root, [$component]);
-}
+    $bom->dependencies->add($root->bom_ref, $component->bom_ref);
+    
+}, 'src/main/perl/lib');
 
 # Validate and output
 my @errors = $bom->validate;
-die "Validation errors: @errors" if @errors;
+die "SBOM validation failed: @errors\n" if @errors;
 
-print $bom->to_string;
+print $bom->to_json;
 
 sub extract_version {
     my ($path) = @_;
     open my $fh, '<', $path or return;
     while (<$fh>) {
-        if (/(?:our\s+)?\$VERSION\s*=\s*['"]?([0-9._]+)/) {
+        # Match: our $VERSION = '1.23'; or $VERSION = "1.23";
+        if (/\$VERSION\s*=\s*['"]?([0-9][0-9._]*)/) {
             return $1;
         }
     }
@@ -239,20 +256,14 @@ sub extract_version {
 }
 ```
 
-#### Option B: Use PerlOnJava (self-hosting)
-
-Once SBOM::CycloneDX is ported to PerlOnJava:
+Run with:
 ```bash
-./jperl dev/tools/generate-perl-sbom.pl > build/reports/sbom/perlonjava-perl.json
+perl dev/tools/generate-perl-sbom.pl > build/reports/cyclonedx/perl-bom.json
 ```
 
-#### Option C: Static JSON Generation
+#### Alternative: Simpler Static Approach
 
-For initial implementation, generate a static inventory:
-```bash
-# Create a simple inventory script
-perl dev/tools/generate-perl-sbom-simple.pl > build/reports/sbom/perlonjava-perl.json
-```
+If `SBOM::CycloneDX` dependencies are problematic, generate a minimal compliant SBOM using core Perl modules only. See `dev/tools/generate-perl-sbom-simple.pl` (to be created).
 
 ### Phase 3: Combined SBOM (Optional)
 
@@ -283,20 +294,20 @@ During build, SBOMs are generated to:
 
 | Build System | Location | Files |
 |--------------|----------|-------|
-| Gradle | `build/reports/sbom/` | `bom.json`, `bom.xml` |
+| Gradle | `build/reports/cyclonedx/` | `bom.json`, `bom.xml` |
 | Maven | `target/` | `bom.json`, `bom.xml` |
+| Perl script | `build/reports/cyclonedx/` | `perl-bom.json` |
 
 ### Distribution: JAR File
 
-SBOMs should be embedded inside the JAR following CycloneDX conventions:
+SBOMs can be embedded inside the JAR for easy discovery:
 
 ```
 perlonjava-5.42.0.jar
 ├── META-INF/
 │   ├── MANIFEST.MF
 │   └── sbom/
-│       ├── bom.json          # CycloneDX JSON format
-│       └── bom.xml           # CycloneDX XML format (optional)
+│       └── bom.json          # CycloneDX JSON format
 └── ... (other contents)
 ```
 
@@ -304,9 +315,9 @@ To include SBOM in JAR, add to `build.gradle`:
 ```groovy
 // Copy SBOM into JAR's META-INF/sbom/
 shadowJar {
-    from("$buildDir/reports/sbom") {
+    from("$buildDir/reports/cyclonedx") {
         into 'META-INF/sbom'
-        include '*.json', '*.xml'
+        include 'bom.json'
     }
 }
 
@@ -314,32 +325,7 @@ shadowJar {
 shadowJar.dependsOn cyclonedxBom
 ```
 
-For Maven, add to `pom.xml`:
-```xml
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-resources-plugin</artifactId>
-    <executions>
-        <execution>
-            <id>copy-sbom</id>
-            <phase>package</phase>
-            <goals><goal>copy-resources</goal></goals>
-            <configuration>
-                <outputDirectory>${project.build.outputDirectory}/META-INF/sbom</outputDirectory>
-                <resources>
-                    <resource>
-                        <directory>${project.build.directory}</directory>
-                        <includes>
-                            <include>bom.json</include>
-                            <include>bom.xml</include>
-                        </includes>
-                    </resource>
-                </resources>
-            </configuration>
-        </execution>
-    </executions>
-</plugin>
-```
+For Maven, the shade plugin can include the SBOM automatically if it's in the resources directory during build.
 
 ### Distribution: DEB Package
 
@@ -373,9 +359,9 @@ ospackage {
     // ... existing config ...
     
     // Include SBOM in package
-    from("$buildDir/reports/sbom") {
+    from("$buildDir/reports/cyclonedx") {
         into '/opt/perlonjava/share/sbom'
-        include '*.json', '*.xml'
+        include 'bom.json'
     }
 }
 ```
@@ -436,27 +422,24 @@ Include SBOM in GitHub releases:
 
 ---
 
-## SBOM::CycloneDX Module Details
+## SBOM::CycloneDX Perl Module
+
+The `SBOM::CycloneDX` module on CPAN provides a full implementation of the CycloneDX specification for Perl.
 
 ### Module Information
 
 - **CPAN:** https://metacpan.org/pod/SBOM::CycloneDX
-- **Version:** 1.07 (as of 2026-01-21)
-- **Author:** Giuseppe Di Terlizzi (GDT)
 - **License:** Artistic-2.0
-- **Perl Version:** v5.16.0+
+- **Minimum Perl:** v5.16.0
 
-### Dependencies
+### Key Dependencies
 
-Core dependencies required:
-- Cpanel::JSON::XS
-- JSON::Validator
-- List::Util (core)
-- Moo
-- Type::Tiny
-- URI::PackageURL
-- UUID::Tiny
-- namespace::autoclean
+- Cpanel::JSON::XS (fast JSON encoding)
+- JSON::Validator (schema validation)
+- Moo (object system)
+- Type::Tiny (type constraints)
+- URI::PackageURL (PURL support)
+- UUID::Tiny (serial number generation)
 
 ### Supported CycloneDX Versions
 
@@ -485,16 +468,17 @@ Add SBOM generation to the Makefile:
 .PHONY: sbom sbom-java sbom-perl sbom-clean
 
 sbom: sbom-java sbom-perl
-	@echo "SBOM generated in build/reports/sbom/"
+	@echo "SBOM generated in build/reports/cyclonedx/"
 
 sbom-java:
 	./gradlew cyclonedxBom
 
 sbom-perl:
-	perl dev/tools/generate-perl-sbom.pl > build/reports/sbom/perlonjava-perl.json
+	@mkdir -p build/reports/cyclonedx
+	perl dev/tools/generate-perl-sbom.pl > build/reports/cyclonedx/perl-bom.json
 
 sbom-clean:
-	rm -rf build/reports/sbom/
+	rm -rf build/reports/cyclonedx/
 ```
 
 ---
@@ -504,8 +488,8 @@ sbom-clean:
 ### Validate Generated SBOM
 
 ```bash
-# Using CycloneDX CLI
-cyclonedx validate --input-file build/reports/sbom/perlonjava-java.json
+# Using CycloneDX CLI (install via npm: npm install -g @cyclonedx/cyclonedx-cli)
+cyclonedx validate --input-file build/reports/cyclonedx/bom.json
 
 # Using online validator
 # https://cyclonedx.github.io/sbom-validator/
@@ -564,15 +548,14 @@ The CycloneDX plugins automatically include hashes for Java dependencies:
 #### 2. Perl Modules → **Optional (skip individual hashes)**
 
 For the 511 bundled Perl modules, individual hashes are **not required** because:
-- They are internal bundled files, not external dependencies
-- No CPAN hash database exists for vulnerability matching
+- They are bundled source files, not downloaded artifacts
+- CPAN does publish checksums, but there's no standard vulnerability database keyed by hash
 - Version tracking via `$VERSION` is sufficient for identification
 
 The Perl SBOM should include:
 - Module name and version
-- License information
-- PURL (e.g., `pkg:cpan/Test::More@1.302195`)
-- **Hashes: omitted** (or optionally included for strict compliance)
+- License information (where known)
+- **Hashes: omitted** (simplifies generation; can be added later if needed)
 
 #### 3. Distribution Artifacts → **Single hash file**
 
