@@ -5,7 +5,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## v5.42.3: Unreleased - Next minor version
 
-- Perl debugger with `-d`
+- Security: added `SECURITY.md` and `dev/design/sbom.md`
+- Tools: added `jcpan` and `jperldoc`
+- Perl debugger with `-d` command line option
 - Add `defer` feature
 - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
