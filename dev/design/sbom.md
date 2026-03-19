@@ -276,6 +276,127 @@ Alternatively, keep them separate:
 
 ---
 
+## SBOM Storage Locations
+
+### Build Output (Development)
+
+During build, SBOMs are generated to:
+
+| Build System | Location | Files |
+|--------------|----------|-------|
+| Gradle | `build/reports/sbom/` | `bom.json`, `bom.xml` |
+| Maven | `target/` | `bom.json`, `bom.xml` |
+
+### Distribution: JAR File
+
+SBOMs should be embedded inside the JAR following CycloneDX conventions:
+
+```
+perlonjava-5.42.0.jar
+├── META-INF/
+│   ├── MANIFEST.MF
+│   └── sbom/
+│       ├── bom.json          # CycloneDX JSON format
+│       └── bom.xml           # CycloneDX XML format (optional)
+└── ... (other contents)
+```
+
+To include SBOM in JAR, add to `build.gradle`:
+```groovy
+// Copy SBOM into JAR's META-INF/sbom/
+shadowJar {
+    from("$buildDir/reports/sbom") {
+        into 'META-INF/sbom'
+        include '*.json', '*.xml'
+    }
+}
+
+// Ensure SBOM is generated before JAR
+shadowJar.dependsOn cyclonedxBom
+```
+
+For Maven, add to `pom.xml`:
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-resources-plugin</artifactId>
+    <executions>
+        <execution>
+            <id>copy-sbom</id>
+            <phase>package</phase>
+            <goals><goal>copy-resources</goal></goals>
+            <configuration>
+                <outputDirectory>${project.build.outputDirectory}/META-INF/sbom</outputDirectory>
+                <resources>
+                    <resource>
+                        <directory>${project.build.directory}</directory>
+                        <includes>
+                            <include>bom.json</include>
+                            <include>bom.xml</include>
+                        </includes>
+                    </resource>
+                </resources>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+### Distribution: DEB Package
+
+For Debian packages, SBOMs go in the standard documentation directory:
+
+```
+/opt/perlonjava/
+├── bin/
+│   └── jperl
+├── lib/
+│   └── perlonjava-5.42.0.jar
+└── share/
+    └── sbom/
+        ├── bom.json
+        └── bom.xml
+```
+
+Alternative location (Debian convention):
+```
+/usr/share/doc/perlonjava/
+├── copyright
+├── changelog.gz
+└── sbom/
+    ├── bom.json
+    └── bom.xml
+```
+
+To include in DEB package, update `build.gradle`:
+```groovy
+ospackage {
+    // ... existing config ...
+    
+    // Include SBOM in package
+    from("$buildDir/reports/sbom") {
+        into '/opt/perlonjava/share/sbom'
+        include '*.json', '*.xml'
+    }
+}
+```
+
+### GitHub Release Artifacts
+
+SBOMs should also be attached as separate release artifacts:
+
+```
+Release v5.42.0
+├── perlonjava-5.42.0.jar
+├── perlonjava_5.42.0_amd64.deb
+├── perlonjava-5.42.0-sbom.json      # Standalone SBOM
+└── perlonjava-5.42.0-sbom.xml       # Standalone SBOM (XML)
+```
+
+This allows consumers to inspect the SBOM without downloading/extracting the full package.
+
+---
+
 ## CI/CD Integration
 
 ### GitHub Actions
