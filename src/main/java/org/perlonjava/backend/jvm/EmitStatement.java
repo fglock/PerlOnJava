@@ -181,7 +181,29 @@ public class EmitStatement {
                         isUnlabeledTarget);
 
                 // Visit the loop body
-                node.body.accept(voidVisitor);
+                // For simple blocks (bare blocks like { ... }) in non-void context,
+                // use register spilling to capture the result: allocate a local variable,
+                // tell the block to store its last element's value there, then load it after.
+                // This ensures consistent stack state across all code paths.
+                // Only apply for SCALAR/LIST contexts, not RUNTIME (which is for subroutine bodies).
+                boolean needsReturnValue = node.isSimpleBlock
+                        && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                            || emitterVisitor.ctx.contextType == RuntimeContextType.LIST);
+                if (needsReturnValue) {
+                    // Allocate a local variable for the result
+                    int resultReg = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    // Initialize it to undef
+                    EmitOperator.emitUndef(mv);
+                    mv.visitVarInsn(Opcodes.ASTORE, resultReg);
+                    // Tell the block to store its last element's value in this register
+                    node.body.setAnnotation("resultRegister", resultReg);
+                    // Visit body in VOID context (consistent stack state)
+                    node.body.accept(voidVisitor);
+                    // Load the result
+                    mv.visitVarInsn(Opcodes.ALOAD, resultReg);
+                } else {
+                    node.body.accept(voidVisitor);
+                }
 
             } else {
                 // Within a `while` modifier, next/redo/last labels are not active
@@ -228,7 +250,11 @@ public class EmitStatement {
             }
 
             // If the context is not VOID, push "undef" to the stack
-            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            // Exception: for simple blocks in SCALAR/LIST context, we already loaded the result from the register
+            boolean simpleBlockHandled = node.isSimpleBlock
+                    && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                        || emitterVisitor.ctx.contextType == RuntimeContextType.LIST);
+            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID && !simpleBlockHandled) {
                 EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             }
 

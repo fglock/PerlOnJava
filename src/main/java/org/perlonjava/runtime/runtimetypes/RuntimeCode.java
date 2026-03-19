@@ -368,6 +368,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
 
+        // Handle missing eval context - this can happen when compiled code (e.g., INIT blocks
+        // with eval) is executed after the runtime has been reset. In JUnit parallel tests,
+        // PerlLanguageProvider.resetAll() clears evalContext between tests, but compiled
+        // bytecode (which references specific evalTags) survives and may be re-executed.
+        if (ctx == null) {
+            throw new RuntimeException(
+                    "Eval context not found for tag: " + evalTag +
+                    ". This can happen when eval is called from code that was compiled " +
+                    "in a previous session (e.g., INIT blocks in cached modules). " +
+                    "The module may need to be reloaded. " +
+                    "If this occurs in tests, ensure module caches are cleared along with eval contexts.");
+        }
+
         // Save the current scope so we can restore it after eval compilation.
         // This is critical because eval may be called from code compiled with different
         // warning/feature flags than the caller, and we must not leak the eval's scope.
@@ -817,6 +830,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+
+        // Handle missing eval context - this can happen when compiled code (e.g., INIT blocks
+        // with eval) is executed after the runtime has been reset. In JUnit parallel tests,
+        // PerlLanguageProvider.resetAll() clears evalContext between tests, but compiled
+        // bytecode (which references specific evalTags) survives and may be re-executed.
+        if (ctx == null) {
+            throw new RuntimeException(
+                    "Eval context not found for tag: " + evalTag +
+                    ". This can happen when eval is called from code that was compiled " +
+                    "in a previous session (e.g., INIT blocks in cached modules). " +
+                    "The module may need to be reloaded. " +
+                    "If this occurs in tests, ensure module caches are cleared along with eval contexts.");
+        }
 
         // Save the current scope so we can restore it after eval execution.
         // This is critical because eval may be called from code compiled with different

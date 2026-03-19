@@ -581,38 +581,46 @@ DateTime.pm
 | Issue | Module Affected | Status |
 |-------|-----------------|--------|
 | ~~`${ $stash{NAME} }` dereference~~ | ~~Module::Implementation~~ | **FIXED** |
-| Package::Stash::PP doesn't return true | Package::Stash | **BUG - needs investigation** |
+| evalContext null in parallel tests | Test2::API INIT blocks | **FIXED** |
+| Bare block return value at file level | Package::Stash::PP | **PARTIAL - TODO tests added** |
 
-### Proposed Solutions
+### evalContext Issue Resolution (2026-03-19)
 
-#### Option A: Fix Package::Stash::PP (Recommended)
+The JUnit parallel test failures ("ctx is null" errors) were caused by stale INIT blocks referencing cleared evalContext entries.
 
-Investigate why Package::Stash::PP.pm doesn't return a true value.
+**Root cause:**
+1. Test A loads Test2::API which has `INIT { eval '...' }`
+2. The INIT block's compiled bytecode references a specific evalTag
+3. `resetAll()` clears evalContext but INIT blocks persisted
+4. Test B triggers the stale INIT block → evalContext.get() returns null → NPE
 
-**Files to investigate:**
-- `~/.perlonjava/lib/Package/Stash/PP.pm` - Check for compilation errors
+**Fix applied:**
+1. Added null check in `RuntimeCode.evalStringHelper()` with descriptive error
+2. Clear special blocks (INIT/END/CHECK) in `GlobalVariable.resetAllGlobals()`
+3. Updated JUnit test harness to skip TODO tests (`# TODO` in TAP output)
 
-#### Option B: Create Bundled DateTime.pm
+### Bare Block Return Value Issue
 
-Create a simplified `DateTime.pm` in `src/main/perl/lib/` that:
-1. Skips heavy dependencies (namespace::autoclean, Specio)
-2. Uses our Java XS implementation or DateTime::PP
-3. Provides core DateTime functionality
+**Problem:** Files ending with a bare block `{ ... }` return `undef` instead of the block's last expression value.
 
-### Investigation Commands
-
-```bash
-# Test symbol table dereference (NOW FIXED)
-./jperl -e 'package Foo; our $VERSION = "1.0"; print ${ $Foo::{VERSION} }, "\n"'
-# Output: 1.0 (correct)
-
-# Test DateTime - still blocked by namespace::autoclean
-./jperl -MDateTime -e 'print DateTime->now->ymd, "\n"'
-# Error: Can't locate namespace/autoclean.pm
+**Example:**
+```perl
+# File ends with:
+{ 42; }
+# do "file" returns undef in PerlOnJava, 42 in Perl
 ```
+
+**Attempted fix:** Change context for bare blocks in RUNTIME context (EmitBlock.java/EmitStatement.java)
+
+**Result:** Causes ASM stack frame verification failures because changing context for the block affects bytecode generation for ALL statements inside it, not just the return value capture.
+
+**Current status:** Tests for this feature are marked as TODO. The fix requires a more sophisticated approach that captures the return value without changing how interior statements compile.
+
+**Files changed:**
+- `src/test/resources/unit/bare_block_return.t` - TODO tests for bare block return values
 
 ### Next Steps
 
-1. **Install namespace::autoclean dependencies** via jcpan to test further
-2. **If blocked by Package::Stash::PP**, investigate why modules ending with `sub foo { }` return undef
+1. **Investigate bare block return value fix** - Need to capture last expression value without changing interior statement compilation
+2. **Test Package::Stash::PP loading** - May need explicit `1;` at end of file
 3. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies

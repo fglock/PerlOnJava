@@ -22,6 +22,24 @@ require ExtUtils::MM;
 # Installation directory (configurable via environment)
 our $INSTALL_BASE = $ENV{PERLONJAVA_LIB};
 
+# Parse command-line arguments like INSTALL_BASE=/path
+# This is called by Makefile.PL scripts that use MY->parse_args(@ARGV)
+sub parse_args {
+    my ($self, @args) = @_;
+    $self = {} unless ref $self;
+    foreach (@args) {
+        next unless m/(.*?)=(.*)/;
+        my ($name, $value) = ($1, $2);
+        # Expand ~ in paths
+        if ($value =~ m/^~/) {
+            my $home = $ENV{HOME} || $ENV{USERPROFILE} || '.';
+            $value =~ s/^~/$home/;
+        }
+        $self->{ARGS}{uc $name} = $self->{uc $name} = $value;
+    }
+    return $self;
+}
+
 # Find the default lib directory
 sub _default_install_base {
     # Check if running from JAR

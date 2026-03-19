@@ -255,11 +255,21 @@ public class EmitBlock {
 
                 ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
+                // Check if this block should store its result in a register (for bare block expressions)
+                Object resultRegObj = node.getAnnotation("resultRegister");
+                int resultReg = (resultRegObj instanceof Integer) ? (Integer) resultRegObj : -1;
+
                 // Emit the statement with current context
                 if (i == lastNonNullIndex) {
                     // Special case for the last element
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Last element: " + element);
-                    element.accept(emitterVisitor);
+                    if (resultReg >= 0) {
+                        // Visit in SCALAR context to get a value, store it, then pop
+                        element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        mv.visitVarInsn(Opcodes.ASTORE, resultReg);
+                    } else {
+                        element.accept(emitterVisitor);
+                    }
                 } else {
                     // General case for all other elements
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Element: " + element);
