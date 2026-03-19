@@ -88,3 +88,4 @@ Image-ExifTool-*
 # Ignore xxx/ directory (temporary module staging area)
 xxx/
 *.jfr
+report.txt
