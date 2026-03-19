@@ -433,50 +433,34 @@ For chmod/umask:
 
 ## Related: Try::Tiny Test Analysis (2026-03-19)
 
-### Test Results
+### Test Results (After Fix)
 ```
 Files=11, Tests=67
-Failed 5/11 test programs, 9/67 subtests failed
+Failed 4/11 test programs, 7/67 subtests failed
 ```
 
-### Failure Categories
+**Improvement:** Was 5/11 failing, 9/67 subtests. Fixed shift bug in t/basic.t.
+
+### Fixed Bug: `shift` in `(&)` Prototype Blocks
+
+**Commit:** da227ff44
+
+**Root Cause:** When a block was captured via `(&)` prototype (e.g., Try::Tiny's `catch { }`), the parser was not setting `isInSubroutineBody` flag. This caused implicit `shift`/`pop` to default to `@ARGV` instead of `@_`.
+
+**Fix:** In `PrototypeArgs.handleCodeReferenceArgument()`, save and set `isInSubroutineBody(true)` before parsing the block, then restore it afterward.
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/frontend/parser/PrototypeArgs.java`
+
+### Remaining Failures (Expected/Acceptable)
 
 | Test | Failed | Category | Details |
 |------|--------|----------|---------|
-| t/basic.t | 2/25 | **BUG: shift in (&) prototype** | `shift` returns undef in prototype-captured blocks |
-| t/context.t | 12/25 | DESTROY (expected) | `finally` blocks use DESTROY scope guards |
-| t/finally.t | 19/30 | DESTROY (expected) | Same - finally not running |
-| t/global_destruction_forked.t | 3/3 | DESTROY (expected) | Tests global destruction with fork |
-| t/named.t | 3/3 | caller() limitation | `set_subname` works but `caller()[3]` doesn't reflect it |
-
-### Real Bug Found: `shift` in Prototype-Captured Blocks
-
-**Symptom:** `shift` returns `undef` even though `@_` is populated correctly.
-
-**Reproduction:**
-```perl
-sub capture_block (&) { return $_[0]; }
-
-my $block = capture_block {
-    print scalar(@_), "\n";  # prints "1"
-    print $_[0], "\n";       # prints "test"  
-    print shift // "UNDEF";  # prints "UNDEF" - BUG!
-};
-
-$block->("test");
-```
-
-**Impact:** Try::Tiny's `catch` uses `(&)` prototype, so `my $err = shift` in catch blocks returns undef. Workaround: use `$_` or `$_[0]` instead of `shift`.
-
-**Root Cause:** Needs investigation in how PerlOnJava compiles blocks captured via `(&)` prototype.
-
-### Acceptable Failures (DESTROY-related)
-
-The following failures are expected because Try::Tiny's `finally` uses DESTROY-based scope guards:
-- t/context.t tests 14-25 (finally blocks)
-- t/finally.t (most tests)
-- t/global_destruction_forked.t (all tests)
+| t/context.t | 12/25 | DESTROY | `finally` blocks use DESTROY scope guards |
+| t/finally.t | 19/30 | DESTROY | Same - finally not running |
+| t/global_destruction_forked.t | 3/3 | DESTROY | Tests global destruction with fork |
+| t/named.t | 3/3 | caller() | `set_subname` works but `caller()[3]` doesn't reflect it |
 
 ### Separate Issue: caller() and set_subname
 
-`Sub::Util::set_subname` correctly stores the name (verified via `subname()`), but `caller(0)[3]` doesn't return it. This affects t/named.t but is a separate issue from the `shift` bug.
+`Sub::Util::set_subname` correctly stores the name (verified via `subname()`), but `caller(0)[3]` doesn't return it. This affects t/named.t but is a separate issue.
