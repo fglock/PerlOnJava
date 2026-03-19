@@ -223,22 +223,24 @@ BEGIN failed--compilation aborted at -e line 1, near ""
 **Affected Tests:**
 - t/016Export.t (1 failure)
 
-### Issue 4: File Permissions (stat/chmod)
+### Issue 4: Multiple File Appenders (Pre-existing)
 
-**Status:** Unchanged - needs investigation.
+**Status:** Pre-existing bug - NOT a regression.
 
-**Symptom:** t/026FileApp.t tests 6-7 fail comparing expected vs actual file permissions.
+**Symptom:** t/026FileApp.t tests 6-7 fail - when using two file appenders, both messages go to the second file and the first file is empty.
 
-**Example:**
+**Test:**
 ```perl
-# Expected: '488' (octal 0750)
-# Got: '511' (octal 0777)
+# Two appenders configured: FileAppndr1 -> file1, FileAppndr2 -> file2
+$log->info("Shu-wa-chi!");
+# Expected: Each file gets "INFO - Shu-wa-chi!"
+# Got: file1 is empty, file2 gets the message twice
 ```
 
-**Root Cause:** Likely issue with `umask` handling or `chmod` implementation.
+**Root Cause:** Unknown - possibly related to how multiple file handles are managed when opening different files with similar configurations.
 
 **Affected Tests:**
-- t/026FileApp.t (tests 6-7, 25)
+- t/026FileApp.t (tests 6-7)
 
 ### Issue 5: Safe.pm Compartment Restrictions
 
@@ -414,16 +416,18 @@ For chmod/umask:
 - [x] caller() line number fix (2026-03-19) - Fixed 7/8 failures
 - [x] eval block "(eval)" name in caller() (2026-03-19) - Fixed test 62
 - [x] local $OurVariable fix (2026-03-19) - Fixed %T stack trace format
+- [x] mkdir umask handling (2026-03-19, PR #338) - Fixed t/026FileApp.t test 25
+- [x] local *GLOB semantics (2026-03-19, PR #338) - Correct file handle capture
 
 ### Active Issues
 - [ ] DESTROY during global destruction (1 test)
-- [ ] chmod/file permissions (3 tests)
+- [ ] Multiple file appenders - pre-existing (2 tests) - tests 6-7 in t/026FileApp.t
 - [ ] Safe.pm restrictions (3 tests)
 - [ ] Source filters (1 test)
 
 ### Next Steps
-1. Investigate DESTROY during global destruction
-2. Investigate chmod/file permissions issue
+1. Investigate multiple file appenders bug
+2. Investigate DESTROY during global destruction
 
 ---
 
