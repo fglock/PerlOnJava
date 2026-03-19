@@ -524,3 +524,107 @@ cpan> install Module::Name
 
 ### Active Development
 - [ ] Phase 10: Further compatibility improvements (low priority)
+- [ ] Phase 11: DateTime dependency chain fixes (blocking)
+
+---
+
+## Phase 11: DateTime Dependency Investigation (2026-03-19)
+
+### Problem Statement
+
+When running `jcpan install DateTime`, CPAN reports "DateTime is up to date (1.66)" because:
+1. We have a Java XS implementation in `DateTime.java`
+2. CPAN detects the version via XSLoader
+
+However, when actually using DateTime, the CPAN-installed `DateTime.pm` fails to load due to missing dependencies.
+
+### Dependency Chain Analysis
+
+```
+DateTime.pm
+├── namespace::autoclean 0.19
+│   └── B::Hooks::EndOfScope (XS - MISSING)
+├── Params::ValidationCompiler 0.26 ✓
+├── Specio::Subs
+│   └── Specio
+│       └── Module::Implementation
+│           └── BUG: ${ $Package::{NAME} } returns empty
+├── Try::Tiny ✓
+├── DateTime::Locale 1.06
+├── DateTime::TimeZone 2.44
+└── POSIX (built-in) ✓
+```
+
+### Root Cause: Symbol Table Dereference Bug
+
+**Bug discovered**: `${ $Package::{NAME} }` returns empty instead of the variable value.
+
+```perl
+# PerlOnJava - BROKEN
+package Foo;
+our $VERSION = "1.0";
+my $glob = $Foo::{VERSION};
+print ${$glob};  # prints empty string (should print "1.0")
+
+# Perl5 - WORKS
+package Foo;
+our $VERSION = "1.0";
+my $glob = $Foo::{VERSION};
+print ${$glob};  # prints "1.0"
+```
+
+This bug blocks `Module::Implementation` which is used by `Specio` which is used by `DateTime`.
+
+### Blocking Issues Summary
+
+| Issue | Module Affected | Status |
+|-------|-----------------|--------|
+| `${ $stash{NAME} }` dereference | Module::Implementation | **BUG - needs fix** |
+| B::Hooks::EndOfScope (XS) | namespace::autoclean | XS module - needs stub or Java impl |
+
+### Proposed Solutions
+
+#### Option A: Fix Symbol Table Dereference (Recommended)
+
+Fix the bug where `${ $glob_from_stash }` doesn't properly dereference to the scalar value.
+
+**Files to investigate:**
+- `RuntimeScalar.java` - scalar dereference
+- `RuntimeGlob.java` - glob handling
+- `GlobalContext.java` - symbol table access
+
+#### Option B: Create Bundled DateTime.pm
+
+Create a simplified `DateTime.pm` in `src/main/perl/lib/` that:
+1. Skips heavy dependencies (namespace::autoclean, Specio)
+2. Uses our Java XS implementation or DateTime::PP
+3. Provides core DateTime functionality
+
+This is a fallback if Option A is too complex.
+
+#### Option C: Document DateTime as Requiring Manual Setup
+
+Document that DateTime requires additional setup and can't be installed via jcpan directly.
+
+### Investigation Commands
+
+```bash
+# Test symbol table dereference
+./jperl -e 'package Foo; our $VERSION = "1.0"; print ${ $Foo::{VERSION} }, "\n"'
+
+# Compare with Perl5
+perl -e 'package Foo; our $VERSION = "1.0"; print ${ $Foo::{VERSION} }, "\n"'
+
+# Test Module::Implementation
+./jperl -e 'use Module::Implementation; print "OK\n"'
+
+# Test DateTime after fix
+./jperl -MDateTime -e 'print DateTime->now->ymd, "\n"'
+```
+
+### Next Steps
+
+1. **Investigate** `RuntimeScalar.java` and `RuntimeGlob.java` for scalar dereference from stash glob
+2. **Fix** the `${ $glob }` pattern when glob comes from `%Package::` stash
+3. **Test** Module::Implementation, Specio, DateTime in sequence
+4. **Alternative**: If fix is complex, create bundled DateTime.pm wrapper
