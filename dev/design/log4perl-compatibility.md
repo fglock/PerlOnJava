@@ -4,7 +4,7 @@
 
 This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass its test suite on PerlOnJava.
 
-## Current Status (2026-03-19, Updated)
+## Current Status (2026-03-19, Verified)
 
 ### Test Results
 
@@ -14,7 +14,7 @@ Failed 6/73 test programs
 Failed 18/700 subtests
 ```
 
-**Improvement from previous run:** Was 8/73 programs, 26/700 subtests failing.
+**Stable since 2026-03-19:** Test count unchanged. All remaining failures are documented architectural limitations.
 
 ### Failing Tests Summary
 
