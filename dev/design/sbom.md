@@ -527,32 +527,32 @@ The generated SBOM must include:
 
 ## Component Hashes
 
-### Supported Hash Algorithms
+### PerlOnJava Distribution Model
 
-CycloneDX supports these hash algorithms:
-- **MD5** (legacy, included for compatibility)
-- **SHA-1** (legacy, included for compatibility)
-- **SHA-256** (recommended)
-- **SHA-384**, **SHA-512**
-- **SHA3-256**, **SHA3-384**, **SHA3-512**
-- **BLAKE2b-256**, **BLAKE2b-384**, **BLAKE2b-512**
-- **BLAKE3**
+PerlOnJava ships as a **shaded/uber JAR** containing everything:
+```
+perlonjava-5.42.0.jar
+├── org/perlonjava/...        (PerlOnJava Java classes)
+├── org/ow2/asm/...           (shaded ASM library)
+├── com/ibm/icu/...           (shaded ICU4J library)
+├── lib/*.pm                  (511 bundled Perl modules)
+└── META-INF/sbom/bom.json    (embedded SBOM)
+```
 
-### Java Dependencies (Automatic)
+### Hash Strategy
 
-The CycloneDX Gradle and Maven plugins **automatically include hashes** for all dependencies:
+#### 1. Java Dependencies → **Automatic (per-component)**
 
-1. Hashes are retrieved from Maven Central repository metadata
-2. SHA-256 is computed from downloaded artifacts
-3. Multiple hash algorithms are included (MD5, SHA-1, SHA-256)
+The CycloneDX plugins automatically include hashes for Java dependencies:
+- These are hashes of the **original Maven artifacts** (before shading)
+- Used to identify exact versions and match against CVE databases
+- Hashes are retrieved from Maven Central metadata
 
-Example output:
 ```json
 {
   "type": "library",
   "name": "asm",
   "version": "9.9.1",
-  "group": "org.ow2.asm",
   "purl": "pkg:maven/org.ow2.asm/asm@9.9.1",
   "hashes": [
     {"alg": "MD5", "content": "..."},
@@ -562,44 +562,55 @@ Example output:
 }
 ```
 
-**No additional configuration needed** - hashes are included by default.
+#### 2. Perl Modules → **Optional (skip individual hashes)**
 
-### Perl Modules (Manual)
+For the 511 bundled Perl modules, individual hashes are **not required** because:
+- They are internal bundled files, not external dependencies
+- No CPAN hash database exists for vulnerability matching
+- Version tracking via `$VERSION` is sufficient for identification
 
-For bundled Perl modules, hashes must be computed manually. Update the SBOM generation script:
+The Perl SBOM should include:
+- Module name and version
+- License information
+- PURL (e.g., `pkg:cpan/Test::More@1.302195`)
+- **Hashes: omitted** (or optionally included for strict compliance)
 
-```perl
-use Digest::SHA qw(sha256_hex);
-use SBOM::CycloneDX::Hash;
+#### 3. Distribution Artifacts → **Single hash file**
 
-sub compute_hash {
-    my ($path) = @_;
-    open my $fh, '<:raw', $path or return;
-    local $/;
-    my $content = <$fh>;
-    close $fh;
-    return sha256_hex($content);
-}
+The final distribution artifacts should have accompanying hash files:
 
-# When creating component:
-my $hash = SBOM::CycloneDX::Hash->new(
-    alg     => 'SHA-256',
-    content => compute_hash($path)
-);
-$component->hashes->add($hash);
+```
+Release v5.42.0/
+├── perlonjava-5.42.0.jar
+├── perlonjava-5.42.0.jar.sha256      # echo "abc123... perlonjava-5.42.0.jar"
+├── perlonjava_5.42.0_amd64.deb
+├── perlonjava_5.42.0_amd64.deb.sha256
+└── perlonjava-5.42.0-sbom.json       # SBOM (contains component hashes)
 ```
 
-### Hash Verification
+Generate with:
+```bash
+sha256sum perlonjava-5.42.0.jar > perlonjava-5.42.0.jar.sha256
+```
 
-Consumers can verify component integrity by:
-1. Downloading the component from its source (PURL)
-2. Computing the hash locally
-3. Comparing with the hash in the SBOM
+### Supported Hash Algorithms
 
-This enables detection of:
-- Tampered dependencies
-- Man-in-the-middle attacks
-- Compromised build artifacts
+CycloneDX supports:
+- **MD5**, **SHA-1** (legacy, for compatibility)
+- **SHA-256** (recommended)
+- **SHA-384**, **SHA-512**
+- **SHA3-256**, **SHA3-384**, **SHA3-512**
+- **BLAKE2b-256**, **BLAKE2b-384**, **BLAKE2b-512**
+- **BLAKE3**
+
+### Summary
+
+| What | Individual Hashes? | Notes |
+|------|-------------------|-------|
+| Java dependencies | ✅ Yes (automatic) | Pre-shading artifact hashes from Maven Central |
+| Perl modules | ❌ No (optional) | Version/license is sufficient |
+| Final JAR | ✅ Yes (single file) | `.sha256` file alongside release |
+| Final DEB | ✅ Yes (single file) | `.sha256` file alongside release |
 
 ---
 
