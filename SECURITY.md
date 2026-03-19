@@ -25,14 +25,14 @@ Please include as much of the following as possible:
 - The version of PerlOnJava affected
 - Any suggested mitigations, if known
 
-### Response Timeline
+### Response Process
 
-We aim to:
-- **Acknowledge** your report within **7 days**
-- **Provide an initial assessment** within **14 days**
-- **Coordinate disclosure** within **90 days** (or sooner if a fix is available)
+After receiving your report, we will:
+- **Acknowledge** receipt of your report
+- **Assess** the vulnerability and determine its severity
+- **Coordinate** with you on disclosure timing and any fixes
 
-These are targets, not guarantees. Complex issues may take longer. We appreciate your patience and your effort in responsible disclosure.
+This is a volunteer-maintained project, so response times may vary. We appreciate your patience and your effort in responsible disclosure.
 
 ## Security Considerations
 
