@@ -325,6 +325,59 @@ This aligns with "Option A" in the design doc but requires changes at the **vari
 
 The key insight is: **`our` variables should still be captured in closures (to maintain constructor signatures), but the captured value should be ignored at access time in favor of a fresh global lookup.**
 
+### Approach 2: Make `our` variables non-lexical in EmitVariable.java (2024-03-19)
+
+**What Was Tried:**
+
+Modified `EmitVariable.java` to treat `our` variables as non-lexical:
+1. Removed `our` from the `isLexical` check (lines 383-389)
+2. Added `@_` as a special exception (it's declared as `our` but is actually passed as a parameter)
+3. Added `isOurDeclaration` to `createIfNotExists` to allow `our` variable access
+
+Also modified:
+- `ScopedSymbolTable.java`: Added overload `addVariable(name, decl, perlPackage, ast)` to preserve package
+- `SubroutineParser.java`: Used new overload for `our` variables when copying to subroutine scope
+
+**Result:** 
+- Basic `our`/`local` test cases PASSED (`X=1` printed correctly)
+- `@_` continued to work correctly
+- BUT: Test::More and Test2 modules FAILED with "Can't call method 'stack' on an undefined value"
+
+**Root Cause of Test2 Failure:**
+
+The Test2 framework uses a pattern like:
+```perl
+my $INST;
+use Test2::API::Instance(\$INST);  # Sets $INST via import
+my $STACK = $INST->stack;          # $INST is undef here!
+```
+
+When loading a module, the `use` statement runs at compile time (as a BEGIN block). The lexical `$INST` declared with `my` should persist from the BEGIN block to the subsequent runtime code.
+
+**Investigation revealed:** This is a pre-existing issue with how lexical variables work in BEGIN blocks:
+```perl
+my $x = 1;
+BEGIN { $x = 99; }
+print "x = $x\n";  # Prints "x = 1", not "x = 99"
+```
+
+This behavior exists BOTH with and without the `our` fix. However, the Test2/Test::More modules work in the current codebase through some mechanism that my changes apparently break.
+
+The interaction between my `our` variable changes and the BEGIN/lexical behavior needs further investigation. The changes to symbol table handling during subroutine compilation (SubroutineParser.java) may be affecting how lexicals are captured in BEGIN blocks.
+
+### Current Status
+
+- **Test cases added:** `local.t` now contains test cases for cross-package `our`/`local` (in `__END__` section, documented as known failures)
+- **Design documented:** This file contains the full analysis
+- **Fix NOT committed:** The fix breaks Test::More due to complex interactions with BEGIN blocks
+
+### Next Investigation Steps
+
+1. Understand why Test2::API works without the fix - what mechanism allows `$INST` to persist?
+2. Investigate how the symbol table is being used differently in BEGIN blocks vs regular subroutines
+3. Consider if there's a way to apply the `our` fix only to named subroutines, not BEGIN blocks
+4. Look into how Perl itself handles this - does it use a different storage mechanism for lexicals that need to persist across compile/runtime?
+
 ## References
 
 - Perl `our` documentation: https://perldoc.perl.org/functions/our
