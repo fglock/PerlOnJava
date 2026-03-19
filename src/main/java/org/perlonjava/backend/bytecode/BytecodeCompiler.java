@@ -3535,9 +3535,23 @@ public class BytecodeCompiler implements Visitor {
                     emit(currentSubroutineBeginId);
 
                     lastResultReg = rd;
-                } else if (hasVariable(varName)) {
-                    // Lexical variable - use existing register
+                } else if (hasVariable(varName) && !isOurVariable(varName)) {
+                    // Lexical variable (my/state) - use existing register
                     lastResultReg = getVariableRegister(varName);
+                } else if (hasVariable(varName) && isOurVariable(varName)) {
+                    // 'our' variable - must load from global table to see local() changes
+                    // This ensures 'local $Pkg::Var' modifications are visible inside subroutines
+                    String globalVarName = varName.substring(1); // Remove $ sigil
+                    globalVarName = NameNormalizer.normalizeVariableName(
+                            globalVarName,
+                            getCurrentPackage()
+                    );
+                    int rd = allocateRegister();
+                    int nameIdx = addToStringPool(globalVarName);
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emitReg(rd);
+                    emit(nameIdx);
+                    lastResultReg = rd;
                 } else {
                     // Global variable - check strict vars then load
                     if (shouldBlockGlobalUnderStrictVars(varName)) {
@@ -3643,9 +3657,17 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(arrayReg);
                     emit(nameIdx);
                     emit(currentSubroutineBeginId);
-                } else if (hasVariable(varName)) {
-                    // Lexical array - use existing register
+                } else if (hasVariable(varName) && !isOurVariable(varName)) {
+                    // Lexical array (my/state) - use existing register
                     arrayReg = getVariableRegister(varName);
+                } else if (hasVariable(varName) && isOurVariable(varName)) {
+                    // 'our' array - must load from global table to see local() changes
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
                 } else {
                     // Global array - load it
                     arrayReg = allocateRegister();
@@ -3750,8 +3772,17 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(hashReg);
                     emit(nameIdx);
                     emit(currentSubroutineBeginId);
-                } else if (hasVariable(varName)) {
+                } else if (hasVariable(varName) && !isOurVariable(varName)) {
+                    // Lexical hash (my/state) - use existing register
                     hashReg = getVariableRegister(varName);
+                } else if (hasVariable(varName) && isOurVariable(varName)) {
+                    // 'our' hash - must load from global table to see local() changes
+                    hashReg = allocateRegister();
+                    String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalHashName);
+                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                    emitReg(hashReg);
+                    emit(nameIdx);
                 } else {
                     hashReg = allocateRegister();
                     String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
