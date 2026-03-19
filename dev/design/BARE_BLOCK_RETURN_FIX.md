@@ -10,93 +10,65 @@ When attempting to fix this by adding `blockIsSubroutine` to the bare block hand
 
 ### Discovery
 
-Through debugging, we found TWO issues:
+Through debugging, we found TWO separate issues:
 
-1. **Bare block return value** - The original issue where `sub foo { { 99 } }` returns undef
-2. **Indirect object syntax bug** - A separate bug that causes Test2 to break
+1. **Indirect object syntax bug** - `(release $ctx, "V")` was dropping the "V" (FIXED)
+2. **Bare block return value** - `sub foo { { 99 } }` returns undef (STILL BLOCKED)
 
-### The Indirect Object Syntax Bug
+### The Indirect Object Syntax Bug (FIXED)
 
 Perl's indirect object syntax `release $ctx, expr` should:
 1. Call `$ctx->release()`
 2. Evaluate `expr`
 3. Return a list containing both results
 
-**Perl behavior:**
-```perl
-my @result = (release $ctx, "V");
-# Result: R V  (two elements)
-```
+**Fix applied:** Modified `SubroutineParser.java` to only consume the object argument when detecting indirect object syntax, leaving trailing arguments for the outer list context.
 
-**PerlOnJava behavior:**
-```perl
-my @result = (release $ctx, "V");
-# Result: R  (only one element - "V" is lost!)
-```
+### The Bare Block Return Value Issue
 
-This bug causes Test2's context handling to fail because:
-- `release $ctx, $self->cmp_ok(...)` should return the result of `cmp_ok`
-- But PerlOnJava drops the second value
-- This breaks Test2's expectation of what gets returned
+Adding `blockIsSubroutine` to the EmitBlock.java condition breaks Test2 because it affects ALL bare blocks inside subroutines, not just the specific `sub { { 99 } }` pattern.
+
+**Affected Test2 code:**
+- `Test2/Event.pm:145` - `[map {{ %{$_} }} @{$self->{+AMNESTY}}]`
+- `Test2/Event/V2.pm:70` - Similar pattern
+
+These patterns use `{{ ... }}` where the outer `{}` is a bare block that returns the inner hash ref. When visited in SCALAR context instead of RUNTIME context, it affects Test2's context depth tracking.
+
+**Why the simple fix doesn't work:**
+
+The `blockIsSubroutine` annotation is set on the outer subroutine block, but the condition affects the INNER For3Node (bare block). This means:
+- `sub foo { { 99 } }` - the inner `{ 99 }` gets SCALAR context (desired)
+- `map { { hash } } @list` - the inner `{ hash }` ALSO gets SCALAR context (breaks Test2)
 
 ## Fix Strategy
 
-### Phase 1: Fix Indirect Object Syntax (MUST DO FIRST)
+### Phase 1: Fix Indirect Object Syntax ✓ COMPLETED
 
-The indirect object syntax `method OBJECT, ARGS` is parsed incorrectly. When followed by a comma and additional expressions, the additional expressions should be included in the result list.
+**Files modified:**
+- `src/main/java/org/perlonjava/frontend/parser/SubroutineParser.java` - Fixed to only consume the object, not trailing args
 
-**Files to investigate:**
-- `src/main/java/org/perlonjava/frontend/parser/` - Parser handling of indirect object calls
-- Specifically look for how `method OBJECT LIST` is parsed
+**Test added:**
+- Added test cases to `src/test/resources/unit/indirect_object_syntax.t`
 
-**Test case:**
-```perl
-package Ctx;
-sub new { bless {}, shift }
-sub release { return "R" }
+### Phase 2: Fix Bare Block Return Value (NEEDS DIFFERENT APPROACH)
 
-package main;
-my $ctx = Ctx->new;
-my @result = (release $ctx, "V");
-print "@result\n";  # Should print: R V
-```
+The simple approach of adding `blockIsSubroutine` to the condition doesn't work. A different approach is needed:
 
-### Phase 2: Fix Bare Block Return Value
+**Option A: Mark the specific For3Node**
+Set an annotation on the bare block itself (the For3Node) when it's the direct last element of a subroutine that needs to return a value. This would require modifying SubroutineParser or EmitterMethodCreator.
 
-Once the indirect object syntax is fixed, re-enable the `blockIsSubroutine` check in `EmitBlock.java`:
+**Option B: Check for specific patterns**
+Instead of just checking `blockIsSubroutine`, also verify that:
+- The bare block is the ONLY element in the block
+- Or the bare block doesn't contain a hash/array constructor as its value
 
-```java
-} else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-        && (node.getBooleanAnnotation("isFileLevelBlock") || node.getBooleanAnnotation("blockIsSubroutine"))
-        && element instanceof For3Node for3
-        && for3.isSimpleBlock
-        && for3.labelName == null) {
-    element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-}
-```
+**Option C: Fix at a different level**
+Handle this in EmitSubroutine when generating the return value, rather than in EmitBlock.
 
 ## Verification
 
-**IMPORTANT: All tests must pass in BOTH JVM backend and interpreter mode.**
-
-### JVM Backend Tests
-1. Run `./jperl -e 'sub foo { { 99 } } print foo(), "\n"'` - should print 99
-2. Run `make` - all unit tests should pass
-3. Run `./jperl src/test/resources/unit/context_semantics.t` - test 5 should pass
-4. Run `./jperl src/test/resources/unit/transliterate.t` - should pass (no Test2 errors)
-
-### Interpreter Mode Tests
-1. Run with interpreter fallback enabled to verify bytecode interpreter also works
-2. Use `JPERL_SHOW_FALLBACK=1` to detect when interpreter is used
-3. For interpreter changes, test with both backends:
-   ```bash
-   ./jperl -e 'code'           # JVM backend
-   ./jperl --int -e 'code'     # Interpreter (if available)
-   ```
-
-### Indirect Object Syntax Test
+### Indirect Object Syntax (PASSES)
 ```perl
-# This must work identically in both backends:
 package Ctx;
 sub new { bless {}, shift }
 sub release { return "R" }
@@ -104,27 +76,42 @@ sub release { return "R" }
 package main;
 my $ctx = Ctx->new;
 my @result = (release $ctx, "V");
-print "@result\n";  # Must print: R V
+# Result: R V  (two elements) ✓
+```
+
+### Bare Block Return Value (STILL FAILS)
+```bash
+./jperl -e 'sub foo { { 99 } } print foo(), "\n"'
+# Expected: 99
+# Actual: (empty/undef)
+```
+
+### Test2 (MUST NOT BREAK)
+```bash
+./jperl src/test/resources/unit/transliterate.t
+# Must pass without "context() was called" errors
 ```
 
 ## Current State
 
 - **Branch:** `feature/cpan-client-phase11`
-- **File-level bare blocks:** FIXED (tests 12-20 in bare_block_return.t pass)
-- **SCALAR/LIST context bare blocks:** FIXED (tests 3-11 pass)
-- **Subroutine bare blocks:** BLOCKED by indirect object syntax bug
+- **Indirect object syntax:** ✓ FIXED
+- **File-level bare blocks:** ✓ FIXED (tests 12-20 in bare_block_return.t pass)
+- **SCALAR/LIST context bare blocks:** ✓ FIXED (tests 3-11 pass)
+- **Subroutine bare blocks:** BLOCKED - needs different approach
 
-## Files Modified (so far)
+## Files Modified
 
 1. `src/main/java/org/perlonjava/frontend/parser/Parser.java` - Added `isFileLevelBlock` annotation
 2. `src/main/java/org/perlonjava/backend/jvm/EmitBlock.java` - Handle file-level bare blocks
 3. `src/main/java/org/perlonjava/backend/jvm/EmitStatement.java` - Register spilling for SCALAR/LIST bare blocks
-4. `src/test/resources/unit/bare_block_return.t` - Comprehensive test file
+4. `src/main/java/org/perlonjava/frontend/parser/SubroutineParser.java` - Fixed indirect object syntax
+5. `src/test/resources/unit/indirect_object_syntax.t` - Added tests for comma-separated args
+6. `src/test/resources/unit/bare_block_return.t` - Comprehensive test file
 
 ## Next Steps
 
-1. Create unit test for indirect object syntax
-2. Find and fix the parser bug for `method OBJECT, ARGS` 
-3. Re-enable `blockIsSubroutine` in EmitBlock.java
-4. Verify all tests pass
-5. Update context_semantics.t to remove TODO from test 5
+1. ~~Create unit test for indirect object syntax~~ ✓ DONE
+2. ~~Find and fix the parser bug for `method OBJECT, ARGS`~~ ✓ DONE
+3. Investigate Option A, B, or C for the bare block return value fix
+4. Update context_semantics.t test 5 once fixed

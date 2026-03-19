@@ -275,8 +275,10 @@ public class EmitBlock {
                         // Special case: bare block (no label) as last statement in file-level RUNTIME context.
                         // This handles do "file" and require where the file ends with a bare block.
                         // Visit with SCALAR context to get the block's return value.
-                        // NOTE: blockIsSubroutine is NOT included here yet because of an indirect object
-                        // syntax bug that breaks Test2. See dev/design/BARE_BLOCK_RETURN_FIX.md
+                        // NOTE: blockIsSubroutine case is NOT handled here because it also affects
+                        // internal bare blocks like in `map {{ %{$_} }} @list` which breaks Test2.
+                        // The sub { { 99 } } case needs a different fix - the annotation needs to be
+                        // on the bare block itself, not just the outer subroutine block.
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     } else {
                         element.accept(emitterVisitor);

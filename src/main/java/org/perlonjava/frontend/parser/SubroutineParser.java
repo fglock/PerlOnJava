@@ -297,25 +297,36 @@ public class SubroutineParser {
                     && nextTok.type != LexerTokenType.IDENTIFIER
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
+                // Check if this looks like indirect object syntax: method $object, args
+                // In Perl, "release $ctx, V" means ($ctx->release(), "V") - a list of two elements
+                // NOT $ctx->release("V") - we don't pass additional args to the method
+                if (nextTok.text.equals("$")) {
+                    // This might be indirect object syntax - only consume the object
+                    ListNode objectArg = consumeArgsWithPrototype(parser, "$");
+                    if (objectArg.elements.size() > 0) {
+                        Node firstArg = objectArg.elements.get(0);
+                        if (firstArg instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                            Node object = firstArg;
+                            // Create method call: object->method()
+                            // The remaining args (after comma) are left for the outer context
+                            Node methodCall = new BinaryOperatorNode("(",
+                                    new OperatorNode("&", nameNode, currentIndex),
+                                    new ListNode(currentIndex),
+                                    currentIndex);
+                            return new BinaryOperatorNode("->", object, methodCall, currentIndex);
+                        }
+                    }
+                    // Not indirect object syntax - treat the parsed arg as a regular call
+                    return new BinaryOperatorNode("(",
+                            new OperatorNode("&", nameNode, currentIndex),
+                            objectArg,
+                            currentIndex);
+                }
+
                 // If the next token is "{", treat it as a block argument (like grep/map).
                 // This matches Perl5's behavior: func { ... } @args treats { } as a block.
                 String proto = nextTok.text.equals("{") ? "&@" : "@";
                 ListNode arguments = consumeArgsWithPrototype(parser, proto);
-
-                // Check if this is indirect object syntax like "s2 $f"
-                if (arguments.elements.size() > 0) {
-                    Node firstArg = arguments.elements.get(0);
-                    if (firstArg instanceof OperatorNode opNode && opNode.operator.equals("$")) {
-                        Node object = firstArg;
-                        // Create method call: object->method()
-                        // Need to wrap the method name like other method calls do
-                        Node methodCall = new BinaryOperatorNode("(",
-                                new OperatorNode("&", nameNode, currentIndex),
-                                new ListNode(currentIndex),
-                                currentIndex);
-                        return new BinaryOperatorNode("->", object, methodCall, currentIndex);
-                    }
-                }
 
                 return new BinaryOperatorNode("(",
                         new OperatorNode("&", nameNode, currentIndex),
