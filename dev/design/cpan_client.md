@@ -644,8 +644,23 @@ This approach:
 - `EmitterMethodCreator.java` - Add annotation to file-level bare blocks
 - `EmitStatement.java` - Check for annotation in RUNTIME context
 
+### Failed Approaches (2026-03-19)
+
+**Approach 1: Register spilling for RUNTIME context**
+- Modified `EmitStatement.emitFor3()` to use resultRegister mechanism for RUNTIME (like SCALAR/LIST)
+- Result: JVM verification errors in tests with complex control flow (tie_scalar.t, typeglob.t, etc.)
+- Reason: The resultRegister mechanism changes local variable state, causing inconsistent stack frames at merge points
+
+**Approach 2: Visit body in RUNTIME context directly**
+- Modified `EmitStatement.emitFor3()` to call `node.body.accept(emitterVisitor)` for RUNTIME simple blocks
+- Result: Same JVM verification errors
+- Reason: Visiting body in non-VOID context changes bytecode generation throughout the block, affecting control flow
+
+**Root cause:** The issue is not just about capturing the return value. It's that any change to how the bare block body is compiled (different context, register spilling) affects the entire bytecode structure, causing JVM verifier failures when there are complex control flow constructs like `local`, tied variables, or nested blocks with jumps.
+
 ### Next Steps
 
-1. **Implement file-level annotation approach** for bare block return values
-2. **Test Package::Stash::PP loading** - Verify the fix works
-3. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
+1. **Investigate alternative approaches** - File-level AST transformation before compilation
+2. **Consider interpreter fallback** - For files ending with bare blocks, use interpreter backend
+3. **Test Package::Stash::PP** - May need workaround (explicit `1;` at file end)
+4. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
