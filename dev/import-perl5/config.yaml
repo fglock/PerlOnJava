@@ -463,6 +463,11 @@ imports:
     target: src/main/perl/lib/File/Spec
     type: directory
 
+  # File::Spec::Unix - PerlOnJava patch for jar: paths
+  - source: perl5/dist/PathTools/lib/File/Spec/Unix.pm
+    target: src/main/perl/lib/File/Spec/Unix.pm
+    patch: Unix.pm.patch
+
   # Phase 2: Archive::Tar - Tar archive handling
   - source: perl5/cpan/Archive-Tar/lib/Archive/Tar.pm
     target: src/main/perl/lib/Archive/Tar.pm
