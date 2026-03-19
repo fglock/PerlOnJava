@@ -714,14 +714,18 @@ PerlOnJava's original B::Hooks::EndOfScope implementation used DeferBlock (runti
 
 DateTime installation via jcpan completes but the module doesn't load due to issues in its deep dependency chain:
 
-1. **Role::Tiny line 312**: "Not a SCALAR reference" error during role application
+1. ~~**Role::Tiny line 312**: "Not a SCALAR reference" error during role application~~ **FIXED**
 2. **Specio**: Complex type system with many dependencies
+3. **IO::Dir/File::stat**: Bytecode verification error with Perl 5.38+ syntax (`v5.38`)
 
-These are separate issues from the B::Hooks::EndOfScope fix and may require additional investigation.
+The Role::Tiny issue was caused by scalar dereferencing glob references. Perl semantics:
+- `$$g` where `$g` is a glob (type GLOB) → returns scalar slot
+- `$$g` where `$g` is a glob reference (type GLOBREFERENCE) → returns the glob itself
 
 ### Files Changed (Phase 11 Continued)
 - `src/main/java/org/perlonjava/runtime/perlmodule/BHooksEndOfScope.java` - Complete rewrite for file-level callbacks
 - `src/main/java/org/perlonjava/runtime/operators/ModuleOperators.java` - beginFileLoad/endFileLoad integration
 - `src/main/perl/lib/B.pm` - Added perlstring() and Exporter support
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` - GLOBREFERENCE scalar dereference fix
 - `~/.perlonjava/lib/Package/Stash/PP.pm` - PerlOnJava workaround (user-installed)
 - `~/.perlonjava/lib/namespace/autoclean.pm` - Preserve on_scope_end etc. (user-installed)
