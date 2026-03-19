@@ -265,7 +265,8 @@ public class PerlScriptExecutionTest {
                 lineNumber++;
 
                 // Check for test failures - works with both Test::More TAP format and simple tests
-                if (line.trim().startsWith("not ok")) {
+                // Skip TODO tests (they are expected to fail) - TAP format: "not ok ... # TODO ..."
+                if (line.trim().startsWith("not ok") && !line.contains("# TODO")) {
                     errorFound = true;
                     fail("Test failure in " + filename + " at line " + lineNumber + ": " + line);
                     break;

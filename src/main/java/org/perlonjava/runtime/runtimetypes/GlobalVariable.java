@@ -76,6 +76,13 @@ public class GlobalVariable {
 
         RuntimeCode.clearCaches();
 
+        // Clear special blocks (INIT, END, CHECK, UNITCHECK) to prevent stale code references.
+        // When the classloader is replaced, old INIT blocks may reference evalTags that no longer
+        // exist in the cleared evalContext, causing "ctx is null" errors.
+        SpecialBlock.initBlocks.elements.clear();
+        SpecialBlock.endBlocks.elements.clear();
+        SpecialBlock.checkBlocks.elements.clear();
+
         // Method resolution caches can grow across test scripts.
         InheritanceResolver.invalidateCache();
 

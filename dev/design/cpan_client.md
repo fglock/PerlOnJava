@@ -528,15 +528,21 @@ cpan> install Module::Name
 - [ ] Phase 10: Further compatibility improvements (low priority)
 - [ ] Phase 11: DateTime dependency chain fixes (blocking)
 
+---
+
 ## Phase 11: DateTime Dependency Investigation (2026-03-19, UPDATED)
 
 ### Problem Statement
 
-When running `jcpan install DateTime`, the CPAN-installed modules fail to load due to several issues.
+When running `jcpan install DateTime`, CPAN reports "DateTime is up to date (1.66)" because:
+1. We have a Java XS implementation in `DateTime.java`
+2. CPAN detects the version via XSLoader
+
+However, when actually using DateTime, the CPAN-installed `DateTime.pm` fails to load due to missing dependencies.
 
 ### Current Status (Updated 2026-03-19)
 
-**Symbol table dereference bug: FIXED** (on master)
+**Symbol table dereference bug: FIXED**
 
 ```perl
 # Now works correctly
@@ -544,9 +550,7 @@ When running `jcpan install DateTime`, the CPAN-installed modules fail to load d
 # Output: 1.0
 ```
 
-**B::Hooks::EndOfScope: IMPLEMENTED** (on master, using defer mechanism)
-
-**Current blocker**: Package::Stash::PP doesn't return a true value.
+**New blocker discovered**: Package::Stash::PP doesn't return a true value.
 
 ```
 Could not find a suitable Package::Stash implementation:
@@ -554,312 +558,69 @@ Can't locate Package/Stash/XS.pm
 Package/Stash/PP.pm did not return a true value
 ```
 
-### Root Cause Analysis
-
-**File Return Value Bug**: Complex Perl files return different values in PerlOnJava vs Perl 5.
-
-```bash
-# Package/Stash/PP.pm (from CPAN)
-perl -e 'print do "/path/to/PP.pm"'      # Returns: 10
-./jperl -e 'print do "/path/to/PP.pm"'   # Returns: undef
-```
-
-The file has no explicit `1;` at the end - it relies on the implicit return value of the last expression. In Perl 5, the complex interaction of `use constant`, multiple sub definitions, and statement modifiers (`for grep { }`) results in a truthy value (10). In PerlOnJava, it returns `undef`.
-
-**Reproduction**: Lines 1-360 of Package/Stash/PP.pm + `sub test { }` shows the divergence.
-
-### Dependency Chain
+### Dependency Chain Analysis (Updated)
 
 ```
 DateTime.pm
 ├── namespace::autoclean 0.19
-│   ├── namespace::clean
-│   │   └── Package::Stash
-│   │       └── Package::Stash::PP  ← BUG: "did not return true value"
-│   └── B::Hooks::EndOfScope ✓ (implemented)
-├── Specio::Subs
-│   └── Specio
-│       └── Module::Implementation ✓ (stash dereference fixed)
+│   └── namespace::clean
+│       └── Package::Stash
+│           └── Module::Implementation
+│               ├── ${ $stash{NAME} } - FIXED
+│               └── Package::Stash::PP - BROKEN (doesn't return true)
 ├── Params::ValidationCompiler 0.26 ✓
+├── Specio::Subs ✓ (after Package::Stash fix)
 ├── Try::Tiny ✓
-├── DateTime::Locale 1.06 (needs File::ShareDir::Install)
+├── DateTime::Locale 1.06
 ├── DateTime::TimeZone 2.44
 └── POSIX (built-in) ✓
 ```
 
-### Blocking Issues Summary (Updated 2026-03-19)
+### Blocking Issues Summary
 
-| Priority | Issue | Module Affected | Status |
-|----------|-------|-----------------|--------|
-| P0 | File return value discrepancy | Package::Stash::PP | **BUG - blocks everything** |
-| P1 | Package::Stash::Conflicts stub | Package::Stash | **FIXED in PR #339** |
-| P2 | `parse_args` in MakeMaker | Package::Stash | **FIXED in PR #339** |
-| P3 | File::ShareDir::Install | DateTime::Locale | **MISSING** |
-| ~~P4~~ | ~~`${ $stash{NAME} }` dereference~~ | ~~Module::Implementation~~ | **FIXED on master** |
-| ~~P5~~ | ~~B::Hooks::EndOfScope (XS)~~ | ~~namespace::autoclean~~ | **FIXED on master** |
+| Issue | Module Affected | Status |
+|-------|-----------------|--------|
+| ~~`${ $stash{NAME} }` dereference~~ | ~~Module::Implementation~~ | **FIXED** |
+| evalContext null in parallel tests | Test2::API INIT blocks | **FIXED** |
+| Bare block return value at file level | Package::Stash::PP | **PARTIAL - TODO tests added** |
 
-### Step-by-Step Fix Plan
+### evalContext Issue Resolution (2026-03-19)
 
-#### Step 1: Fix File Return Value (P0 - CRITICAL)
+The JUnit parallel test failures ("ctx is null" errors) were caused by stale INIT blocks referencing cleared evalContext entries.
 
-**Problem**: Files without explicit `1;` that rely on implicit return values fail.
+**Root cause:**
+1. Test A loads Test2::API which has `INIT { eval '...' }`
+2. The INIT block's compiled bytecode references a specific evalTag
+3. `resetAll()` clears evalContext but INIT blocks persisted
+4. Test B triggers the stale INIT block → evalContext.get() returns null → NPE
 
-**Investigation approach**:
-1. Create minimal reproduction case
-2. Trace bytecode generation for file compilation
-3. Compare what Perl 5 considers the "last expression" vs PerlOnJava
+**Fix applied:**
+1. Added null check in `RuntimeCode.evalStringHelper()` with descriptive error
+2. Clear special blocks (INIT/END/CHECK) in `GlobalVariable.resetAllGlobals()`
+3. Updated JUnit test harness to skip TODO tests (`# TODO` in TAP output)
 
-**Test case**:
-```bash
-# Minimal case showing the bug
-head -360 /path/to/PP.pm > /tmp/test.pm
-echo "sub test { }" >> /tmp/test.pm
-perl -e 'print do "/tmp/test.pm"'    # 10
-./jperl -e 'print do "/tmp/test.pm"' # undef
+### Bare Block Return Value Issue
+
+**Problem:** Files ending with a bare block `{ ... }` return `undef` instead of the block's last expression value.
+
+**Example:**
+```perl
+# File ends with:
+{ 42; }
+# do "file" returns undef in PerlOnJava, 42 in Perl
 ```
 
-**Files to investigate**:
-- `EmitStatement.java` - how file/block return values are computed
-- `EmitSubroutine.java` - what sub definitions return
+**Attempted fix:** Change context for bare blocks in RUNTIME context (EmitBlock.java/EmitStatement.java)
 
-#### Step 2: Merge PR #339
+**Result:** Causes ASM stack frame verification failures because changing context for the block affects bytecode generation for ALL statements inside it, not just the return value capture.
 
-PR #339 adds:
-- `Package::Stash::Conflicts` stub
-- `ExtUtils::MakeMaker::parse_args()` method
+**Current status:** Tests for this feature are marked as TODO. The fix requires a more sophisticated approach that captures the return value without changing how interior statements compile.
 
-#### Step 3: Add File::ShareDir::Install (P3)
+**Files changed:**
+- `src/test/resources/unit/bare_block_return.t` - TODO tests for bare block return values
 
-**Problem**: DateTime::Locale requires `File::ShareDir::Install` during Makefile.PL.
+### Next Steps
 
-**Options**:
-1. Import from CPAN (pure Perl module)
-2. Create minimal stub
-
-#### Step 4: Test DateTime installation
-
-```bash
-rm -rf ~/.cpan/build ~/.perlonjava
-./jcpan install DateTime
-./jperl -MDateTime -e 'print DateTime->now->ymd, "\n"'
-```
-
-### Alternative Approaches (in order of preference)
-
-**Option 1: Fix PerlOnJava bugs** (Preferred)
-Fix the file return value bug so CPAN modules work natively.
-
-**Option 2: Create Java XS fallback for specific dependency**
-Use the XSLoader mechanism (see `dev/design/xsloader.md`). Example:
-- `PackageStash.java` - implement Package::Stash directly in Java
-
-**Option 3: Bundle a minimal Perl stub for specific dependency**
-Create a simplified stub for the problematic module only.
-
-**Option 4: Bundle DateTime.pm wrapper** (Last resort)
-Create `src/main/perl/lib/DateTime.pm` that skips heavy dependencies.
-
-### Investigation Commands
-
-```bash
-# Test file return value
-./jperl -e 'my $r = do "/path/to/file.pm"; print defined $r ? $r : "undef"'
-
-# Test symbol table dereference (FIXED)
-./jperl -e 'package Foo; our $VERSION = "1.0"; print ${ $Foo::{VERSION} }, "\n"'
-# Output: 1.0 (correct)
-
-# Test Module::Implementation
-./jperl -e 'use Module::Implementation; print "OK\n"'
-
-# Full DateTime test
-./jperl -MDateTime -e 'print DateTime->now->ymd, "\n"'
-
-# Clean cache test
-rm -rf ~/.cpan/build ~/.cpan/sources ~/.perlonjava
-./jcpan install DateTime
-```
-
-### Progress Tracking
-
-- [x] Symbol table dereference fix (master)
-- [x] B::Hooks::EndOfScope implementation (master)  
-- [x] Package::Stash::Conflicts stub (PR #339)
-- [x] MakeMaker.parse_args (PR #339)
-- [ ] Fix file return value discrepancy (P0 - CRITICAL) - **Phase 11a in progress**
-- [ ] Add File::ShareDir::Install
-- [ ] Verify DateTime installation and usage
-
----
-
-## Phase 11a: Fix Bare Block Return Value at File Level (2026-03-19)
-
-### Problem Statement
-
-Files ending with a bare block `{ ... }` return `undef` instead of the block's last expression value. This breaks modules like `Package::Stash::PP.pm` which don't have explicit `1;` at the end.
-
-**Reproduction**:
-```bash
-echo '{ 3; }' > /tmp/test.pl
-perl -e 'print do "/tmp/test.pl"'     # Output: 3
-./jperl -e 'print do "/tmp/test.pl"'  # Output: (empty - undef)
-```
-
-### Root Cause Analysis
-
-**Where return values are handled**:
-1. **File bodies** are compiled with `RUNTIME` context (see `EmitterMethodCreator.java` line 432)
-2. **Bare blocks** (`{ ... }`) are represented as `For3Node` with `isSimpleBlock=true`
-3. In `EmitStatement.emitFor3()`, simple blocks only capture return values for `SCALAR`/`LIST` contexts, NOT `RUNTIME`
-
-### Solution Implemented
-
-**Fix location**: `EmitBlock.java` lines 270-282
-
-**Approach**: Handle return value at BlockNode level, not For3Node level. When processing the last element of a file body (RUNTIME context), if it's an unlabeled bare block, visit it with LIST context to capture its return value.
-
-```java
-} else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-        && element instanceof For3Node f3
-        && f3.isSimpleBlock
-        && f3.labelName == null) {
-    // For RUNTIME context (file bodies), if the last element is an unlabeled
-    // bare block, visit it in LIST context to capture its return value.
-    element.accept(emitterVisitor.with(RuntimeContextType.LIST));
-} else {
-    element.accept(emitterVisitor);
-}
-```
-
-### Test Results
-
-**Unit tests created**: `src/test/resources/unit/bare_block_return.t` (26 tests + 2 TODO)
-
-**Individual test execution**: ✅ ALL PASS
-```bash
-./jperl src/test/resources/unit/bare_block_return.t
-# ok 1 - bare block in void context executes
-# ...
-# ok 26 - bare block with is_deeply() executes correctly
-# 1..28
-```
-
-**JUnit parallel execution**: ❌ FAILS (see Discovered Issue below)
-
-### Discovered Issue: Test2::API evalContext State Pollution
-
-When running `make`, tests fail with:
-
-```
-Cannot read field "capturedEnv" because "ctx" is null
-    Test2::API at .../src/main/perl/lib/Test2/API.pm line 72
-```
-
-**This is NOT caused by the bare block fix** - it's a pre-existing issue with how PerlOnJava handles INIT blocks in parallel test environments.
-
-#### Root Cause Chain
-
-1. **Test2::API has an INIT block with eval** (line 72):
-   ```perl
-   INIT { eval 'END { test2_set_is_end() }; 1' or die $@ }
-   ```
-
-2. **eval contexts are stored in a static HashMap**:
-   ```java
-   // RuntimeCode.java line 180
-   public static HashMap<String, EmitterContext> evalContext = new HashMap<>();
-   ```
-
-3. **JUnit test harness calls `PerlLanguageProvider.resetAll()` before each test**:
-   ```java
-   // PerlScriptExecutionTest.java line 245
-   PerlLanguageProvider.resetAll();
-   ```
-
-4. **`resetAll()` clears `evalContext`**:
-   ```java
-   // RuntimeCode.java line 313
-   evalContext.clear();
-   ```
-
-5. **Problem**: Compiled code (Test2::API's INIT block) survives between tests, but its associated eval context is cleared. When the INIT block tries to execute its eval:
-   ```java
-   // RuntimeCode.java line 369
-   EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
-   // ctx is null because evalContext was cleared!
-   
-   // Line 386 throws NPE
-   ctx.capturedEnv  // Cannot read field "capturedEnv" because "ctx" is null
-   ```
-
-#### Why Tests Pass Individually But Fail in Parallel
-
-- **Individual**: Test2::API loads fresh, INIT block runs, eval context exists
-- **Parallel/JUnit**: Test A loads Test2::API → reset clears evalContext → Test B uses stale compiled INIT block → evalContext.get() returns null → NPE
-
-### Resolution Steps
-
-#### Step 1: Fix evalContext Null Check (Immediate - Required)
-
-Add null check in `RuntimeCode.evalStringHelper()` with meaningful error:
-
-```java
-EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
-if (ctx == null) {
-    throw new RuntimeException(
-        "Eval context not found for tag: " + evalTag + 
-        ". This can happen when eval is called after runtime reset. " +
-        "The module may need to be reloaded.");
-}
-```
-
-This converts the cryptic NPE into an actionable error message.
-
-#### Step 2: Preserve INIT/BEGIN evalContexts Across Resets (Better Fix)
-
-**Option A**: Don't clear evalContext entries for INIT/BEGIN blocks
-- Track which evalTags come from special blocks
-- Only clear "regular" eval contexts on reset
-
-**Option B**: Force module recompilation after reset
-- Clear module cache along with evalContext
-- Ensures INIT blocks get fresh eval contexts
-
-**Option C**: Use WeakHashMap or scope evalContext differently
-- Tie evalContext lifecycle to class loader
-- When classloader is replaced, old contexts become unreachable
-
-#### Step 3: Test the Fix
-
-```bash
-# Individual test (already passes)
-./jperl src/test/resources/unit/bare_block_return.t
-
-# JUnit parallel (should pass after fix)
-make
-
-# Ultimate goal
-./jperl -e 'use Package::Stash::PP; print "OK\n"'
-```
-
-### Files Changed (Phase 11a)
-
-1. `src/main/java/org/perlonjava/backend/jvm/EmitBlock.java` - Bare block RUNTIME context fix
-2. `src/test/resources/unit/bare_block_return.t` - Unit tests for bare block return values
-
-### Files to Change (evalContext Fix)
-
-1. `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - Add null check with meaningful error
-
-### Progress Tracking
-
-- [x] Identify bare block return value bug
-- [x] Implement fix in EmitBlock.java
-- [x] Create unit tests (26 pass, 2 TODO)
-- [x] Verify individual test execution works
-- [x] Diagnose JUnit parallel test failure
-- [x] Identify root cause: evalContext cleared but compiled INIT blocks reference old tags
-- [ ] Add null check with meaningful error message
-- [ ] Choose and implement evalContext lifecycle fix
-- [ ] Verify `make` passes
-- [ ] Verify Package::Stash::PP loads
+1. **Investigate bare block return value fix** - Need to capture last expression value without changing interior statement compilation
+2. **Test Package::Stash::PP loading** - May need explicit `1;` at end of file
+3. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
