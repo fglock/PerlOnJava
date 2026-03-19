@@ -33,7 +33,7 @@ Failed 11/700 subtests
 |-----------|----------|---------|---------------|
 | t/020Easy.t | 3/21 failed | All pass | local $pkg::var bug fixed, bareword IO handles |
 | t/051Extra.t | 2/11 failed | All pass | Line number reporting improvements |
-| t/024WarnDieCarp.t | 11/73 failed | 8/73 failed | Partial improvement in caller() |
+| t/024WarnDieCarp.t | 11/73 failed | 1/73 failed | caller() line number fix (getLineNumberAccurate) |
 
 ### Resolved: t/020Easy.t Carp.pm Error
 
