@@ -4,17 +4,17 @@
 
 This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass its test suite on PerlOnJava.
 
-## Current Status (2026-03-19, Updated)
+## Current Status (2026-03-19, IMPROVED)
 
 ### Test Results
 
 ```
 Files=73, Tests=700
 Failed 6/73 test programs
-Failed 18/700 subtests
+Failed 11/700 subtests
 ```
 
-**Improvement from previous run:** Was 8/73 programs, 26/700 subtests failing.
+**Improvement from previous:** Was 18/700 subtests failing. Fixed 7 caller() line number issues.
 
 ### Failing Tests Summary
 
@@ -22,7 +22,7 @@ Failed 18/700 subtests
 |-----------|--------------|----------------|
 | t/016Export.t | 1/16 | DESTROY message during global destruction |
 | t/022Wrap.t | 2/5 | %T (stack trace) format - too many frames |
-| t/024WarnDieCarp.t | 8/73 | caller() line numbers wrong (reports EOF) |
+| t/024WarnDieCarp.t | 1/73 | One remaining caller() issue (test 62) |
 | t/026FileApp.t | 3/27 | File permissions / chmod |
 | t/041SafeEval.t | 3/23 | Safe.pm compartment restrictions |
 | t/049Unhide.t | 1/1 | Source filter / ###l4p |
@@ -172,25 +172,20 @@ BEGIN failed--compilation aborted at -e line 1, near ""
 
 ## Remaining Issues (Updated 2026-03-19)
 
-### Issue 1: caller() Line Number Reporting - ACTIVE
+### Issue 1: caller() Line Number Reporting - MOSTLY FIXED
 
-**Status:** Partially working but still has issues in some contexts.
+**Status:** Fixed 7 of 8 failures. One remaining issue (test 62).
 
-**Symptom:** t/024WarnDieCarp.t tests fail because caller() reports wrong line numbers. Instead of the actual call site, it reports line 397 (end of file).
+**Fix Applied:** Changed `ByteCodeSourceMapper.saveSourceLocation()` to use `getLineNumberAccurate()` 
+instead of `getLineNumber()`. The forward-only cache in `getLineNumber()` was returning stale 
+values during deferred subroutine compilation.
 
-**Example failure:**
-```
-got: 't/024WarnDieCarp.t-397: Inferno! at t/024WarnDieCarp.t line 193.'
-expected to match: '184' (the line where logcroak was called)
-```
+**Remaining failure (test 62):** Needs further investigation - may be a different root cause.
 
-**Affected Tests:**
-- t/024WarnDieCarp.t (8 failures: tests 51-53, 58, 60, 62, 67, 69)
+**Files Changed:**
+- `src/main/java/org/perlonjava/backend/jvm/ByteCodeSourceMapper.java`
 
-**Investigation Notes:**
-- The file line (193 in example) is correct for the immediate caller
-- The logging line (397) is the end of file - suggests stack frame issue
-- May be related to how Log4perl wraps caller() for %F/%L/%T patterns
+**Design Document:** `dev/design/caller_line_number_fix.md`
 
 ### Issue 2: Stack Trace Format (%T) - ACTIVE
 
@@ -405,7 +400,7 @@ For chmod/umask:
 
 ## Progress Tracking
 
-### Current Status: 18/700 subtests failing (was 26/700)
+### Current Status: 11/700 subtests failing (was 18/700)
 
 ### Completed
 - [x] *{NAME} glob slot accessor (2026-03-18)
@@ -415,9 +410,10 @@ For chmod/umask:
 - [x] $( and $) special variables (2026-03-18)
 - [x] exit() inside BEGIN blocks (2026-03-19)
 - [x] local $Pkg::Var bug fix (2026-03-19, PR #333)
+- [x] caller() line number fix (2026-03-19) - Fixed 7/8 failures
 
 ### Active Issues
-- [ ] caller() line number reporting (8 tests)
+- [ ] caller() test 62 (1 test) - needs investigation
 - [ ] %T stack trace format (2 tests)
 - [ ] DESTROY during global destruction (1 test)
 - [ ] chmod/file permissions (3 tests)
@@ -425,9 +421,9 @@ For chmod/umask:
 - [ ] Source filters (1 test)
 
 ### Next Steps
-1. Investigate caller() line number issue in t/024WarnDieCarp.t
-2. Consider Log4perl's caller level adjustment mechanism
-3. Check if Carp.pm @CARP_NOT is being respected
+1. Investigate remaining caller() test 62 failure
+2. Consider improving Carp.pm @CARP_NOT handling for %T format
+3. Investigate DESTROY during global destruction
 
 ---
 

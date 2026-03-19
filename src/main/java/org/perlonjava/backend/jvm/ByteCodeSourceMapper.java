@@ -163,7 +163,11 @@ public class ByteCodeSourceMapper {
         }
         
         // First time seeing this tokenIndex - compute and store
-        int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
+        // Use getLineNumberAccurate() instead of getLineNumber() because subroutine
+        // bodies may be compiled out-of-order (deferred closure compilation).
+        // getLineNumber() uses a forward-only cache that returns stale values for
+        // out-of-order access, causing caller() to report wrong line numbers.
+        int lineNumber = ctx.errorUtil.getLineNumberAccurate(tokenIndex);
         int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
         
         // Store the #line-adjusted filename (may differ from ctx.compilerOptions.fileName)
