@@ -275,10 +275,8 @@ public class EmitBlock {
                         // Special case: bare block (no label) as last statement in file-level RUNTIME context.
                         // This handles do "file" and require where the file ends with a bare block.
                         // Visit with SCALAR context to get the block's return value.
-                        // The "isFileLevelBlock" annotation is set by Parser.parse() for non-top-level files.
-                        // NOTE: We intentionally do NOT include blockIsSubroutine here because it
-                        // breaks Test2 context handling. The subroutine bare block case (sub foo { { 99 } })
-                        // requires a different solution that doesn't affect Test2.
+                        // NOTE: blockIsSubroutine is NOT included here yet because of an indirect object
+                        // syntax bug that breaks Test2. See dev/design/BARE_BLOCK_RETURN_FIX.md
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     } else {
                         element.accept(emitterVisitor);
