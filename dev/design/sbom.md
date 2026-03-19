@@ -452,6 +452,44 @@ The `SBOM::CycloneDX` module on CPAN provides a full implementation of the Cyclo
 
 ---
 
+## CPAN Security Group (CPANSec)
+
+The [CPAN Security Group](https://security.metacpan.org/) is a community effort for supporting and responding to security incidents in the Perl/CPAN ecosystem.
+
+### Why CPANSec Matters for SBOM
+
+1. **CVE Numbering Authority (CNA)**: As of February 2025, CPANSec is the official [CVE Numbering Authority](https://www.cve.org/PartnerInformation/ListofPartners) for Perl and CPAN. This means:
+   - All CPAN-related CVEs go through CPANSec
+   - Vulnerability IDs in SBOMs can be traced to authoritative sources
+   - Security advisories are coordinated through proper channels
+
+2. **CPANSA Feed**: The [cpansa-feed](https://github.com/CPAN-Security/cpansa-feed) provides automatically updated security advisory data for CPAN modules in a structured JSON format. This can be used to:
+   - Check bundled Perl modules against known vulnerabilities
+   - Generate VEX (Vulnerability Exploitability eXchange) data
+   - Integrate with vulnerability scanning tools
+
+3. **SBOM Guidelines**: CPANSec maintains [perl-SBOM-Examples](https://github.com/CPAN-Security/perl-SBOM-Examples) with guidance on:
+   - When to create/update SBOM files
+   - Required metadata fields for Perl distributions
+   - Handling vendored (bundled) dependencies
+
+### CPANSec Resources
+
+| Resource | Description |
+|----------|-------------|
+| [Security Advisory Database](https://security.metacpan.org/) | Main website, CVE announcements |
+| [cpansa-feed](https://github.com/CPAN-Security/cpansa-feed) | Machine-readable security advisory data |
+| [perl-SBOM-Examples](https://github.com/CPAN-Security/perl-SBOM-Examples) | SBOM best practices for Perl |
+| [Test-CVE](https://metacpan.org/pod/Test::CVE) | Test distributions for CVE vulnerabilities |
+| [Net-CVE](https://metacpan.org/pod/Net::CVE) | Fetch CVE data from cve.org |
+| [CVE Announcements](https://lists.security.metacpan.org/cve-announce/) | Mailing list archive |
+
+### Integration Opportunity
+
+Future enhancement: Integrate CPANSA feed checking into CI/CD to automatically flag if any bundled Perl modules have known vulnerabilities. This would complement the SBOM by providing actionable security status.
+
+---
+
 ## Makefile Integration
 
 Add SBOM generation to the Makefile:
@@ -641,7 +679,10 @@ CycloneDX supports:
 ### Perl Resources
 - [SBOM::CycloneDX on CPAN](https://metacpan.org/pod/SBOM::CycloneDX)
 - [CPAN](https://metacpan.org/) - Comprehensive Perl Archive Network
-- [CPAN Security Advisory Database](https://security.metacpan.org/) - Vulnerability database for Perl modules
+- [CPAN Security Group (CPANSec)](https://security.metacpan.org/) - CVE Numbering Authority for Perl/CPAN
+- [CPANSA Feed](https://github.com/CPAN-Security/cpansa-feed) - Machine-readable security advisories
+- [perl-SBOM-Examples](https://github.com/CPAN-Security/perl-SBOM-Examples) - SBOM best practices for Perl
+- [CPANSec CVE Announcements](https://lists.security.metacpan.org/cve-announce/) - Mailing list archive
 
 ### Java Resources
 - [Maven Central](https://central.sonatype.com/) - Primary Java package repository
