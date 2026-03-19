@@ -529,20 +529,15 @@ cpan> install Module::Name
 - [ ] Phase 11: DateTime dependency chain fixes (blocking)
 
 ---
-
 ## Phase 11: DateTime Dependency Investigation (2026-03-19, UPDATED)
 
 ### Problem Statement
 
-When running `jcpan install DateTime`, CPAN reports "DateTime is up to date (1.66)" because:
-1. We have a Java XS implementation in `DateTime.java`
-2. CPAN detects the version via XSLoader
-
-However, when actually using DateTime, the CPAN-installed `DateTime.pm` fails to load due to missing dependencies.
+When running `jcpan install DateTime`, the CPAN-installed modules fail to load due to several issues.
 
 ### Current Status (Updated 2026-03-19)
 
-**Symbol table dereference bug: FIXED**
+**Symbol table dereference bug: FIXED** (on master)
 
 ```perl
 # Now works correctly
@@ -550,7 +545,9 @@ However, when actually using DateTime, the CPAN-installed `DateTime.pm` fails to
 # Output: 1.0
 ```
 
-**New blocker discovered**: Package::Stash::PP doesn't return a true value.
+**B::Hooks::EndOfScope: IMPLEMENTED** (on master, using defer mechanism)
+
+**Current blocker**: Package::Stash::PP doesn't return a true value.
 
 ```
 Could not find a suitable Package::Stash implementation:
@@ -558,61 +555,138 @@ Can't locate Package/Stash/XS.pm
 Package/Stash/PP.pm did not return a true value
 ```
 
-### Dependency Chain Analysis (Updated)
+### Root Cause Analysis
+
+**File Return Value Bug**: Complex Perl files return different values in PerlOnJava vs Perl 5.
+
+```bash
+# Package/Stash/PP.pm (from CPAN)
+perl -e 'print do "/path/to/PP.pm"'      # Returns: 10
+./jperl -e 'print do "/path/to/PP.pm"'   # Returns: undef
+```
+
+The file has no explicit `1;` at the end - it relies on the implicit return value of the last expression. In Perl 5, the complex interaction of `use constant`, multiple sub definitions, and statement modifiers (`for grep { }`) results in a truthy value (10). In PerlOnJava, it returns `undef`.
+
+**Reproduction**: Lines 1-360 of Package/Stash/PP.pm + `sub test { }` shows the divergence.
+
+### Dependency Chain
 
 ```
 DateTime.pm
 ├── namespace::autoclean 0.19
-│   └── namespace::clean
-│       └── Package::Stash
-│           └── Module::Implementation
-│               ├── ${ $stash{NAME} } - FIXED
-│               └── Package::Stash::PP - BROKEN (doesn't return true)
+│   ├── namespace::clean
+│   │   └── Package::Stash
+│   │       └── Package::Stash::PP  ← BUG: "did not return true value"
+│   └── B::Hooks::EndOfScope ✓ (implemented)
+├── Specio::Subs
+│   └── Specio
+│       └── Module::Implementation ✓ (stash dereference fixed)
 ├── Params::ValidationCompiler 0.26 ✓
-├── Specio::Subs ✓ (after Package::Stash fix)
 ├── Try::Tiny ✓
-├── DateTime::Locale 1.06
+├── DateTime::Locale 1.06 (needs File::ShareDir::Install)
 ├── DateTime::TimeZone 2.44
 └── POSIX (built-in) ✓
 ```
 
-### Blocking Issues Summary
+### Blocking Issues Summary (Updated 2026-03-19)
 
-| Issue | Module Affected | Status |
-|-------|-----------------|--------|
-| ~~`${ $stash{NAME} }` dereference~~ | ~~Module::Implementation~~ | **FIXED** |
-| Package::Stash::PP doesn't return true | Package::Stash | **BUG - needs investigation** |
+| Priority | Issue | Module Affected | Status |
+|----------|-------|-----------------|--------|
+| P0 | File return value discrepancy | Package::Stash::PP | **BUG - blocks everything** |
+| P1 | Package::Stash::Conflicts stub | Package::Stash | **FIXED in PR #339** |
+| P2 | `parse_args` in MakeMaker | Package::Stash | **FIXED in PR #339** |
+| P3 | File::ShareDir::Install | DateTime::Locale | **MISSING** |
+| ~~P4~~ | ~~`${ $stash{NAME} }` dereference~~ | ~~Module::Implementation~~ | **FIXED on master** |
+| ~~P5~~ | ~~B::Hooks::EndOfScope (XS)~~ | ~~namespace::autoclean~~ | **FIXED on master** |
 
-### Proposed Solutions
+### Step-by-Step Fix Plan
 
-#### Option A: Fix Package::Stash::PP (Recommended)
+#### Step 1: Fix File Return Value (P0 - CRITICAL)
 
-Investigate why Package::Stash::PP.pm doesn't return a true value.
+**Problem**: Files without explicit `1;` that rely on implicit return values fail.
 
-**Files to investigate:**
-- `~/.perlonjava/lib/Package/Stash/PP.pm` - Check for compilation errors
+**Investigation approach**:
+1. Create minimal reproduction case
+2. Trace bytecode generation for file compilation
+3. Compare what Perl 5 considers the "last expression" vs PerlOnJava
 
-#### Option B: Create Bundled DateTime.pm
+**Test case**:
+```bash
+# Minimal case showing the bug
+head -360 /path/to/PP.pm > /tmp/test.pm
+echo "sub test { }" >> /tmp/test.pm
+perl -e 'print do "/tmp/test.pm"'    # 10
+./jperl -e 'print do "/tmp/test.pm"' # undef
+```
 
-Create a simplified `DateTime.pm` in `src/main/perl/lib/` that:
-1. Skips heavy dependencies (namespace::autoclean, Specio)
-2. Uses our Java XS implementation or DateTime::PP
-3. Provides core DateTime functionality
+**Files to investigate**:
+- `EmitStatement.java` - how file/block return values are computed
+- `EmitSubroutine.java` - what sub definitions return
+
+#### Step 2: Merge PR #339
+
+PR #339 adds:
+- `Package::Stash::Conflicts` stub
+- `ExtUtils::MakeMaker::parse_args()` method
+
+#### Step 3: Add File::ShareDir::Install (P3)
+
+**Problem**: DateTime::Locale requires `File::ShareDir::Install` during Makefile.PL.
+
+**Options**:
+1. Import from CPAN (pure Perl module)
+2. Create minimal stub
+
+#### Step 4: Test DateTime installation
+
+```bash
+rm -rf ~/.cpan/build ~/.perlonjava
+./jcpan install DateTime
+./jperl -MDateTime -e 'print DateTime->now->ymd, "\n"'
+```
+
+### Alternative Approaches (in order of preference)
+
+**Option 1: Fix PerlOnJava bugs** (Preferred)
+Fix the file return value bug so CPAN modules work natively.
+
+**Option 2: Create Java XS fallback for specific dependency**
+Use the XSLoader mechanism (see `dev/design/xsloader.md`). Example:
+- `PackageStash.java` - implement Package::Stash directly in Java
+
+**Option 3: Bundle a minimal Perl stub for specific dependency**
+Create a simplified stub for the problematic module only.
+
+**Option 4: Bundle DateTime.pm wrapper** (Last resort)
+Create `src/main/perl/lib/DateTime.pm` that skips heavy dependencies.
 
 ### Investigation Commands
 
 ```bash
-# Test symbol table dereference (NOW FIXED)
+# Test file return value
+./jperl -e 'my $r = do "/path/to/file.pm"; print defined $r ? $r : "undef"'
+
+# Test symbol table dereference (FIXED)
 ./jperl -e 'package Foo; our $VERSION = "1.0"; print ${ $Foo::{VERSION} }, "\n"'
 # Output: 1.0 (correct)
 
-# Test DateTime - still blocked by namespace::autoclean
+# Test Module::Implementation
+./jperl -e 'use Module::Implementation; print "OK\n"'
+
+# Full DateTime test
 ./jperl -MDateTime -e 'print DateTime->now->ymd, "\n"'
-# Error: Can't locate namespace/autoclean.pm
+
+# Clean cache test
+rm -rf ~/.cpan/build ~/.cpan/sources ~/.perlonjava
+./jcpan install DateTime
 ```
 
-### Next Steps
+### Progress Tracking
 
-1. **Install namespace::autoclean dependencies** via jcpan to test further
-2. **If blocked by Package::Stash::PP**, investigate why modules ending with `sub foo { }` return undef
-3. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
+- [x] Symbol table dereference fix (master)
+- [x] B::Hooks::EndOfScope implementation (master)  
+- [x] Package::Stash::Conflicts stub (PR #339)
+- [x] MakeMaker.parse_args (PR #339)
+- [ ] Fix file return value discrepancy (P0 - CRITICAL)
+- [ ] Add File::ShareDir::Install
+- [ ] Verify DateTime installation and usage
