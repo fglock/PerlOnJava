@@ -250,6 +250,10 @@ public class SpecialBlockParser {
                     new BlockNode(nodes, tokenIndex),
                     parser.tokens,
                     parsedArgs);
+        } catch (PerlExitException e) {
+            // exit() inside BEGIN block should terminate the program, not cause compilation error
+            // Re-throw so it propagates to the CLI (Main.main()) which will call System.exit()
+            throw e;
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
