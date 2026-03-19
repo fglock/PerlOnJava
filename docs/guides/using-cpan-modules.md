@@ -62,12 +62,15 @@ At runtime, when the module calls `XSLoader::load()`:
 
 Many popular XS modules include their own pure Perl fallbacks that activate automatically. The module's `.pm` file handles this transparently.
 
+For a complete list of XS modules and their compatibility status, see the [XS Compatibility Reference](../reference/xs-compatibility.md).
+
 ### Built-in Java Implementations
 
 PerlOnJava includes Java implementations of XS functions for several modules:
 
 | Module | Notes |
 |--------|-------|
+| DateTime | Uses java.time APIs with JulianFields.RATA_DIE |
 | JSON | Fast JSON encode/decode using fastjson2 |
 | Digest::MD5 | Java MessageDigest API |
 | Digest::SHA | Java MessageDigest API |
