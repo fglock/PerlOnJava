@@ -10,18 +10,17 @@ This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass 
 
 ```
 Files=73, Tests=700
-Failed 5/73 test programs
-Failed 10/700 subtests
+Failed 4/73 test programs
+Failed 8/700 subtests
 ```
 
-**Improvement from previous:** Was 11/700 subtests failing. Fixed eval block name in caller().
+**Improvement from previous:** Was 10/700 subtests failing. Fixed `local $OurVariable` bug affecting %T stack trace format.
 
 ### Failing Tests Summary
 
 | Test File | Failed/Total | Issue Category |
 |-----------|--------------|----------------|
 | t/016Export.t | 1/16 | DESTROY message during global destruction |
-| t/022Wrap.t | 2/5 | %T (stack trace) format - @CARP_NOT handling |
 | t/026FileApp.t | 3/27 | File permissions / chmod |
 | t/041SafeEval.t | 3/23 | Safe.pm compartment restrictions |
 | t/049Unhide.t | 1/1 | Source filter / ###l4p |
@@ -33,6 +32,7 @@ Failed 10/700 subtests
 | t/020Easy.t | 3/21 failed | All pass | local $pkg::var bug fixed, bareword IO handles |
 | t/051Extra.t | 2/11 failed | All pass | Line number reporting improvements |
 | t/024WarnDieCarp.t | 11/73 failed | All pass | caller() line number fix + eval block name |
+| t/022Wrap.t | 2/5 failed | All pass | local $OurVariable fix for %T stack trace |
 
 ### Resolved: t/020Easy.t Carp.pm Error
 
@@ -189,23 +189,22 @@ BEGIN failed--compilation aborted at -e line 1, near ""
 
 **Design Document:** `dev/design/caller_line_number_fix.md`
 
-### Issue 2: Stack Trace Format (%T) - ACTIVE
+### Issue 2: Stack Trace Format (%T) - FIXED
 
-**Status:** Working but includes too many frames.
+**Status:** FIXED - `local $Carp::CarpLevel` now works correctly inside subroutines.
 
-**Symptom:** t/022Wrap.t tests fail because %T (Carp::longmess) includes internal Log4perl frames.
+**Root Cause:** When `local $VarName` was used inside a subroutine where `$VarName` was declared with `our` in an outer scope, the localization didn't work correctly:
+1. JVM Backend: `EmitOperatorLocal` checked if variable was in symbol table and used wrong path
+2. Interpreter Backend: `BytecodeCompiler` used cached register for `our` variables instead of loading from global table
 
-**Example:**
-```
-got: 'trace: Log::Log4perl::Layout::PatternLayout::render() called at ... line 306, 
-      Log::Log4perl::Appender::log() called at ... line 1115, ...'
-expected: 'trace: at 022Wrap.t line 69'
-```
+**Fix Applied:**
+- `EmitOperatorLocal.java`: Check for `our` variables when handling `local` and use `GlobalRuntimeScalar.makeLocal()` for them
+- `BytecodeCompiler.java`: For scalars/arrays/hashes declared with `our`, use `LOAD_GLOBAL_*` instead of cached register
 
-**Root Cause:** PerlOnJava's Carp::longmess includes all stack frames. Perl's version filters out internal frames based on `@CARP_NOT` and caller level adjustments that Log4perl uses.
+**Commit:** 4737089da
 
-**Affected Tests:**
-- t/022Wrap.t (2 failures: tests 1-2)
+**Tests Fixed:**
+- t/022Wrap.t (2 tests) - `%T` format now correctly filters internal frames
 
 ### Issue 3: DESTROY During Global Destruction
 
@@ -402,7 +401,7 @@ For chmod/umask:
 
 ## Progress Tracking
 
-### Current Status: 10/700 subtests failing (was 11/700)
+### Current Status: 8/700 subtests failing (was 10/700)
 
 ### Completed
 - [x] *{NAME} glob slot accessor (2026-03-18)
@@ -414,18 +413,17 @@ For chmod/umask:
 - [x] local $Pkg::Var bug fix (2026-03-19, PR #333)
 - [x] caller() line number fix (2026-03-19) - Fixed 7/8 failures
 - [x] eval block "(eval)" name in caller() (2026-03-19) - Fixed test 62
+- [x] local $OurVariable fix (2026-03-19) - Fixed %T stack trace format
 
 ### Active Issues
-- [ ] %T stack trace format (2 tests) - needs @CARP_NOT handling
 - [ ] DESTROY during global destruction (1 test)
 - [ ] chmod/file permissions (3 tests)
 - [ ] Safe.pm restrictions (3 tests)
 - [ ] Source filters (1 test)
 
 ### Next Steps
-1. Implement @CARP_NOT handling in Carp.pm for %T format (2 tests)
-2. Investigate DESTROY during global destruction
-3. Investigate chmod/file permissions issue
+1. Investigate DESTROY during global destruction
+2. Investigate chmod/file permissions issue
 
 ---
 
