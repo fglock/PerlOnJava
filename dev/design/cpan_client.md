@@ -664,3 +664,64 @@ This approach:
 2. **Consider interpreter fallback** - For files ending with bare blocks, use interpreter backend
 3. **Test Package::Stash::PP** - May need workaround (explicit `1;` at file end)
 4. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
+
+---
+
+## Phase 11 Continued: B::Hooks::EndOfScope and namespace::clean fixes (2026-03-19)
+
+### Problem Discovery
+
+When testing namespace::clean, callbacks registered via `on_scope_end` were firing immediately when `import()` returned instead of when the calling file finished loading. This broke namespace::autoclean which depends on `on_scope_end` being available in its import() method.
+
+### Root Cause
+
+PerlOnJava's original B::Hooks::EndOfScope implementation used DeferBlock (runtime scope exit), but namespace::clean requires compile-time scope semantics - callbacks should fire when the *file that called* `use namespace::clean` finishes loading.
+
+### Fixes Applied
+
+1. **B::Hooks::EndOfScope rewrite** (`BHooksEndOfScope.java`)
+   - Added file-level callback tracking via `loadingFileStack` ThreadLocal
+   - `beginFileLoad(fileName)`: Called before executing a file
+   - `endFileLoad(fileName)`: Called after, fires registered callbacks in LIFO order
+   - Fallback to DeferBlock for non-file contexts (main script, eval)
+
+2. **ModuleOperators.doFile integration**
+   - Added `BHooksEndOfScope.beginFileLoad()` before `executePerlCode()`
+   - Added `BHooksEndOfScope.endFileLoad()` in finally block
+
+3. **Package::Stash::PP workaround** (installed in ~/.perlonjava/lib)
+   - Added PerlOnJava detection: `$Config{archname} =~ /^java/`
+   - Forces `BROKEN_GLOB_ASSIGNMENT = true` to avoid glob aliasing issue
+   - Glob aliasing via `local *pkg:: = $stash` doesn't vivify entries in PerlOnJava
+
+4. **namespace::autoclean patch** (installed in ~/.perlonjava/lib)
+   - Changed `use namespace::clean 0.20;` to `-except => [qw(on_scope_end first subname)]`
+   - Preserves functions needed by import() after file loads
+
+5. **B.pm enhancements**
+   - Added `perlstring()` function for Specio and similar modules
+   - Added Exporter support with `@EXPORT_OK`
+
+### Test Results
+
+```bash
+./jperl -e 'use namespace::clean; print "OK\n"'     # Works
+./jperl -e 'use namespace::autoclean; print "OK\n"' # Works
+./jperl -e 'use Package::Stash; print "OK\n"'       # Works
+```
+
+### Remaining Issues: DateTime Dependency Chain
+
+DateTime installation via jcpan completes but the module doesn't load due to issues in its deep dependency chain:
+
+1. **Role::Tiny line 312**: "Not a SCALAR reference" error during role application
+2. **Specio**: Complex type system with many dependencies
+
+These are separate issues from the B::Hooks::EndOfScope fix and may require additional investigation.
+
+### Files Changed (Phase 11 Continued)
+- `src/main/java/org/perlonjava/runtime/perlmodule/BHooksEndOfScope.java` - Complete rewrite for file-level callbacks
+- `src/main/java/org/perlonjava/runtime/operators/ModuleOperators.java` - beginFileLoad/endFileLoad integration
+- `src/main/perl/lib/B.pm` - Added perlstring() and Exporter support
+- `~/.perlonjava/lib/Package/Stash/PP.pm` - PerlOnJava workaround (user-installed)
+- `~/.perlonjava/lib/namespace/autoclean.pm` - Preserve on_scope_end etc. (user-installed)
