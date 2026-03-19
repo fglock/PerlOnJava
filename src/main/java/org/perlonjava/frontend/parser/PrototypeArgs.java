@@ -499,12 +499,22 @@ public class PrototypeArgs {
 
         if (TokenUtils.peek(parser).text.equals("{")) {
             TokenUtils.consume(parser);
-            Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-            // Code references/blocks are evaluated in SCALAR context
-            block.setAnnotation("context", "SCALAR");
-            args.elements.add(block);
-            return false;
+            
+            // Save and set subroutine body context so that shift/pop default to @_ instead of @ARGV
+            boolean previousInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
+            parser.ctx.symbolTable.setInSubroutineBody(true);
+            
+            try {
+                Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                // Code references/blocks are evaluated in SCALAR context
+                block.setAnnotation("context", "SCALAR");
+                args.elements.add(block);
+                return false;
+            } finally {
+                // Restore previous subroutine body context
+                parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
+            }
         }
 
         Node codeRef = parseRequiredArgument(parser, isOptional);
