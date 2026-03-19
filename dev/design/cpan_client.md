@@ -729,3 +729,64 @@ The Role::Tiny issue was caused by scalar dereferencing glob references. Perl se
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` - GLOBREFERENCE scalar dereference fix
 - `~/.perlonjava/lib/Package/Stash/PP.pm` - PerlOnJava workaround (user-installed)
 - `~/.perlonjava/lib/namespace/autoclean.pm` - Preserve on_scope_end etc. (user-installed)
+
+### Phase 11 Update (2026-03-19)
+
+**map/grep blocks accessing outer @_ fixed:**
+
+Code like `map { $_ . $_[0] }` inside a subroutine now correctly accesses the outer @_:
+
+```perl
+sub test_it {
+    my @result = map { $_ . $_[0] } (1, 2, 3);
+    print join(",", @result), "\n";  # 1x,2x,3x
+}
+test_it("x");
+```
+
+**Fix:** Pass the outer @_ array to map/grep/all/any block execution. Files changed:
+- `ListOperators.java` - Added outerArgs parameter to map/grep/all/any methods
+- `OperatorHandler.java` - Updated method signatures
+- `EmitOperator.java` - Push @_ (slot 1) onto stack for map/grep/all/any
+
+**Scalar::Util::blessed fixed:**
+- Now returns undef for unblessed references (was returning class name for blessId=0)
+
+**B module improved:**
+- B::CV::GV now uses Sub::Util::subname to get actual subroutine name
+- B::CV::STASH now returns the correct package from subname
+- Enables proper introspection for namespace::autoclean
+
+**DateTime pure Perl mode working:**
+
+DateTime now works in pure Perl mode (PERL_DATETIME_PP=1):
+
+```perl
+use DateTime;
+my $dt = DateTime->new(year => 2024, month => 3, day => 15);
+print $dt->ymd;  # 2024-03-15
+```
+
+**Patch required:** DateTime.pm must exclude PP methods from namespace::autoclean:
+```perl
+use namespace::autoclean 0.19 -except => [qw(
+    _time_as_seconds _rd2ymd _ymd2rd _seconds_as_components
+    _end_of_last_month_day_of_year _is_leap_year _day_length
+    _accumulated_leap_seconds _normalize_tai_seconds
+    _normalize_leap_seconds _normalize_seconds try catch finally
+)];
+```
+
+### Remaining DateTime Issues
+
+1. **DateTime::Locale methods** - day_name() etc. fail because locale data methods
+   are auto-generated and cleaned by namespace::autoclean
+2. **Clone/arithmetic** - May fail due to missing methods from Try::Tiny cleanup
+3. **XS fallback** - Default mode tries XS first; forced PP mode required for now
+
+### Files Changed (Phase 11 map/grep fix)
+- `src/main/java/org/perlonjava/runtime/operators/ListOperators.java` - outerArgs parameter
+- `src/main/java/org/perlonjava/runtime/operators/OperatorHandler.java` - Updated signatures
+- `src/main/java/org/perlonjava/backend/jvm/EmitOperator.java` - Push @_ for blocks
+- `src/main/perl/lib/B.pm` - Use Sub::Util::subname for introspection
+- `src/main/java/org/perlonjava/runtime/perlmodule/ScalarUtil.java` - blessed() returns undef for unblessed
