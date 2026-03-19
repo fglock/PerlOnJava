@@ -24,6 +24,12 @@ import java.time.temporal.JulianFields;
  */
 public class DateTime extends PerlModuleBase {
 
+    /**
+     * Version of the DateTime XS API this implementation is compatible with.
+     * Used by XSLoader to warn if the Perl module expects a different version.
+     */
+    public static final String XS_VERSION = "1.65";
+    
     private static final int SECONDS_PER_DAY = 86400;
     
     // Leap seconds table (from DateTime's leap_seconds.h)
