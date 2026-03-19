@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use File::Temp qw(tempfile);
 
 # Unit test to document and verify context semantics for different Perl block types
 # This test helps understand how PerlOnJava should handle contexts
@@ -61,12 +62,10 @@ print $nested == 123 ? "ok 6 - nested bare blocks return innermost value\n"
                      : "not ok 6 - nested bare blocks return innermost value (got $nested)\n";
 
 # Test 7: File loaded via 'do' runs in scalar context and returns last value
-my $tmpfile = "/tmp/context_do_test_$$.pl";
-open my $fh, '>', $tmpfile or die "Cannot create $tmpfile: $!";
+my ($fh, $tmpfile) = tempfile(SUFFIX => '.pl', UNLINK => 1);
 print $fh "{ 456 }\n";
 close $fh;
 my $do_result = do $tmpfile;
-unlink $tmpfile;
 if ($do_result && $do_result == 456) {
     print "ok 7 - do file with bare block returns block value\n";
 } else {
@@ -93,8 +92,7 @@ print $multi_stmt == 30 ? "ok 10 - bare block returns last expression value\n"
                         : "not ok 10 - bare block returns last expression value (got $multi_stmt)\n";
 
 # Test 11: File ending with VERSION and BEGIN still returns VERSION
-my $tmpfile2 = "/tmp/context_version_test_$$.pl";
-open my $fh2, '>', $tmpfile2 or die "Cannot create $tmpfile2: $!";
+my ($fh2, $tmpfile2) = tempfile(SUFFIX => '.pl', UNLINK => 1);
 print $fh2 q{
 our $VERSION = "1.23";
 BEGIN { }
@@ -102,20 +100,17 @@ $VERSION;
 };
 close $fh2;
 my $version_result = do $tmpfile2;
-unlink $tmpfile2;
 print $version_result eq "1.23" ? "ok 11 - file with VERSION and BEGIN returns VERSION\n"
                                 : "not ok 11 - file with VERSION and BEGIN returns VERSION (got " . ($version_result // "undef") . ")\n";
 
 # Test 12: File ending with bare block after other statements
-my $tmpfile3 = "/tmp/context_mixed_test_$$.pl";
-open my $fh3, '>', $tmpfile3 or die "Cannot create $tmpfile3: $!";
+my ($fh3, $tmpfile3) = tempfile(SUFFIX => '.pl', UNLINK => 1);
 print $fh3 q{
 my $x = 1;
 { 999 }
 };
 close $fh3;
 my $mixed_result = do $tmpfile3;
-unlink $tmpfile3;
 if ($mixed_result && $mixed_result == 999) {
     print "ok 12 - file ending with bare block returns block value\n";
 } else {
