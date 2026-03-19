@@ -1121,7 +1121,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().scalarDeref();
             case GLOBREFERENCE -> {
-                // GLOBREFERENCE (like *STDOUT{IO}) is not a scalar reference
+                // Dereferencing a glob reference (e.g., $${\*Foo::bar}) returns the glob itself
+                // This is Perl semantics: $$glob_ref returns the glob, not the scalar slot
+                if (value instanceof RuntimeGlob glob) {
+                    RuntimeScalar result = new RuntimeScalar();
+                    result.type = RuntimeScalarType.GLOB;
+                    result.value = glob;
+                    yield result;
+                }
+                // For IO handles stored as GLOBREFERENCE (like *STDOUT{IO})
                 throw new PerlCompilerException("Not a SCALAR reference");
             }
             default -> throw new PerlCompilerException("Not a SCALAR reference");
@@ -1151,6 +1159,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Dereferencing a glob as scalar returns the scalar slot
                 if (value instanceof RuntimeGlob glob) {
                     yield GlobalVariable.getGlobalVariable(glob.globName);
+                }
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalVariable(varName);
+            }
+            case GLOBREFERENCE -> {
+                // Dereferencing a glob reference (e.g., $${\*Foo::bar}) returns the glob itself
+                // This is Perl semantics: $$glob_ref returns the glob, not the scalar slot
+                if (value instanceof RuntimeGlob glob) {
+                    RuntimeScalar result = new RuntimeScalar();
+                    result.type = RuntimeScalarType.GLOB;
+                    result.value = glob;
+                    yield result;
                 }
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);
