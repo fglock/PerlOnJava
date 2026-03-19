@@ -303,4 +303,4 @@ ok($result3 < $file_end - 10, "caller() line is not near EOF (was: $result3, EOF
 - [x] Unit test passing
 - [x] Log::Log4perl tests improved (8→1 failures in t/024WarnDieCarp.t)
 - [x] Full test suite passing (no regressions)
-- [ ] Code committed and merged
+- [x] Code committed and merged (commit d4993893f)
