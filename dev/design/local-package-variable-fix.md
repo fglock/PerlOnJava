@@ -288,6 +288,43 @@ If Phase 4 shows performance issues:
 - Log4perl compatibility: `dev/design/log4perl-compatibility.md`
 - Affects: t/020Easy.t, t/022Wrap.t, t/024WarnDieCarp.t, t/051Extra.t
 
+## Implementation Attempt Notes (2024-03-19)
+
+### What Was Tried
+
+**Approach 1: Skip `our` variables from closure capture**
+
+Attempted to modify `SubroutineParser.java` and `EmitSubroutine.java` to skip `our` variables when building the closure variable list, so they wouldn't be captured at subroutine definition time and would instead be looked up fresh at runtime.
+
+**Files modified:**
+- `SubroutineParser.java` (lines ~706-812): Skip variables with `declarationType.equals("our")` in closure capture loop
+- `EmitSubroutine.java` (lines ~102-138): Filter `our` from `visibleVariables` for anonymous subs
+
+**Result:** The basic test case passed (`X=1` was printed correctly), but it broke Test::More and other modules with a subroutine constructor mismatch error:
+
+```
+Subroutine error: org.perlonjava.anon51.<init>(org.perlonjava.runtime.runtimetypes.RuntimeHash,org.perlonjava.runtime.runtimetypes.RuntimeScalar,...) at jar:PERL5LIB/Test2/Util.pm line 8
+```
+
+**Root Cause of Failure:** The issue is that when we skip `our` variables from closure capture, the generated class constructor signature changes (fewer parameters), but existing code that creates instances of those anonymous subroutines still passes the old number of arguments. This creates a method signature mismatch at runtime.
+
+### Deeper Analysis Required
+
+The fix needs to be more surgical:
+
+1. **Don't change constructor signatures** - `our` variables still need to be in the closure capture list to maintain API compatibility
+2. **Change how captured `our` variables are used** - Instead of using the captured value, emit code to re-fetch from the global symbol table at access time
+
+This aligns with "Option A" in the design doc but requires changes at the **variable access** level, not at the **closure capture** level.
+
+### Recommended Next Steps
+
+1. **Phase 1:** Implement `getOurVariableGlobalName()` in `ScopedSymbolTable.java` - track which variables are `our` and their fully-qualified global names
+2. **Phase 2:** In `EmitVariable.java` (JVM backend) and `BytecodeCompiler.java` (interpreter), when emitting code to access a variable, check if it's an `our` variable and if so, emit `LOAD_GLOBAL_*` instead of using the register
+3. **Phase 3:** Test with both the basic reproduction case AND Test::More
+
+The key insight is: **`our` variables should still be captured in closures (to maintain constructor signatures), but the captured value should be ignored at access time in favor of a fresh global lookup.**
+
 ## References
 
 - Perl `our` documentation: https://perldoc.perl.org/functions/our
