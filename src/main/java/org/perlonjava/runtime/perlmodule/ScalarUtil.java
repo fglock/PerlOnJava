@@ -64,6 +64,10 @@ public class ScalarUtil extends PerlModuleBase {
         }
 
         int blessId = blessedId(args.get(0));
+        // Return undef for unblessed references (blessId == 0)
+        if (blessId == 0) {
+            return new RuntimeScalar().getList();  // undef
+        }
         return new RuntimeScalar(NameNormalizer.getBlessStr(blessId)).getList();
     }
 
