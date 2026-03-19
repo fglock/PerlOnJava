@@ -1104,6 +1104,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield newScalar;
             }
             case REFERENCE -> (RuntimeScalar) value;
+            case GLOB -> {
+                // Dereferencing a glob as scalar returns the scalar slot
+                // e.g., ${*Foo::VERSION} or ${$glob} where $glob is a glob
+                if (value instanceof RuntimeGlob glob) {
+                    yield GlobalVariable.getGlobalVariable(glob.globName);
+                }
+                throw new PerlCompilerException("Not a SCALAR reference");
+            }
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().scalarDeref();
@@ -1134,6 +1142,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
+            case GLOB -> {
+                // Dereferencing a glob as scalar returns the scalar slot
+                if (value instanceof RuntimeGlob glob) {
+                    yield GlobalVariable.getGlobalVariable(glob.globName);
+                }
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalVariable(varName);
+            }
             case TIED_SCALAR -> tiedFetch().scalarDerefNonStrict(packageName);
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);

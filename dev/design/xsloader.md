@@ -200,3 +200,91 @@ public class GenerateXSLoaderMappings {
 4. **Memory**: Smaller footprint for simple cases
 5. **Build-time optimization**: Module discovery happens at build time
 
+---
+
+## Known XS Module Dependency Issues (2026-03-19)
+
+### DateTime Dependency Chain
+
+When installing DateTime via jcpan, the module has several XS-dependent dependencies:
+
+```
+DateTime.pm
+├── namespace::autoclean 0.19
+│   └── B::Hooks::EndOfScope (XS) ← BLOCKER
+│       └── Variable::Magic (XS)
+├── Params::ValidationCompiler 0.26 ✓
+├── Specio::Subs ✓
+│   └── Specio ✓
+│       └── Module::Implementation ✓ (fixed: symbol table dereference bug)
+├── Try::Tiny ✓
+├── DateTime::Locale 1.06
+├── DateTime::TimeZone 2.44
+└── POSIX (built-in) ✓
+```
+
+### B::Hooks::EndOfScope
+
+This is an XS module that provides lexical cleanup hooks. It's used by `namespace::autoclean` to remove imported functions at end of scope.
+
+**Why it's hard to implement:**
+- Requires compile-time hooks into Perl's scope management
+- Uses Variable::Magic (another XS module) for magic variable handling
+- Deeply tied to Perl internals for tracking scope entry/exit
+
+**Workarounds:**
+
+1. **Stub implementation**: Create `B/Hooks/EndOfScope.pm` that does nothing
+   - Risk: modules relying on cleanup behavior will leak functions
+   - Benefit: DateTime and other modules will load
+
+2. **Replace namespace::autoclean**: Some modules can use `namespace::clean` instead
+   - namespace::clean has a pure Perl fallback mode
+
+3. **Bundle modified DateTime.pm**: Skip `namespace::autoclean` in DateTime
+   - Perl DateTime.pm already works without it (just won't auto-clean namespace)
+
+### Recommended Solution
+
+Create a stub `B/Hooks/EndOfScope.pm`:
+
+```perl
+package B::Hooks::EndOfScope;
+use strict;
+use warnings;
+our $VERSION = '0.26';
+
+# PerlOnJava stub - scope cleanup hooks not implemented
+# Modules using this will load but won't have automatic namespace cleanup
+
+use Exporter 'import';
+our @EXPORT = qw(on_scope_end);
+our @EXPORT_OK = qw(on_scope_end);
+
+sub on_scope_end (&) {
+    # No-op: PerlOnJava doesn't support compile-time scope hooks
+    # The cleanup callback is silently ignored
+}
+
+1;
+```
+
+This allows DateTime and other modules to load while documenting the limitation.
+
+### Progress Tracking
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| `${ $stash{NAME} }` dereference | **FIXED** | RuntimeScalar.scalarDeref() now handles GLOB type |
+| Module::Implementation | **FIXED** | Works after symbol table fix |
+| Specio | **FIXED** | Works after symbol table fix |
+| B::Hooks::EndOfScope | **TODO** | Needs stub implementation |
+| namespace::autoclean | **BLOCKED** | Waiting on B::Hooks::EndOfScope |
+| DateTime full install | **BLOCKED** | Waiting on namespace::autoclean |
+
+### Files Changed for Symbol Table Fix
+
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java`
+  - Added `GLOB` case to `scalarDeref()` - returns scalar slot of glob
+  - Added `GLOB` case to `scalarDerefNonStrict()` - same behavior
+
