@@ -8,7 +8,15 @@ Only the latest release of PerlOnJava receives security fixes. We recommend alwa
 
 If you discover a security vulnerability in PerlOnJava, please **do not** open a public GitHub issue. Instead, use one of the following private disclosure channels:
 
-- **GitHub Private Advisory**: [Report a vulnerability](https://github.com/fglock/PerlOnJava/security/advisories/new) via GitHub's Security Advisories feature.
+- **GitHub Private Advisory** (preferred): [Report a vulnerability](https://github.com/fglock/PerlOnJava/security/advisories/new) via GitHub's Security Advisories feature.
+
+- **Email**: Contact the maintainer directly (see [GitHub profile](https://github.com/fglock)).
+
+### For Bundled Perl Module Vulnerabilities
+
+If the vulnerability is in a Perl module bundled with PerlOnJava (rather than PerlOnJava itself), you may also contact the [CPAN Security Group](https://security.metacpan.org/) at [cpan-security@security.metacpan.org](mailto:cpan-security@security.metacpan.org). CPANSec is the CVE Numbering Authority for Perl and CPAN.
+
+### What to Include
 
 Please include as much of the following as possible:
 
@@ -17,7 +25,14 @@ Please include as much of the following as possible:
 - The version of PerlOnJava affected
 - Any suggested mitigations, if known
 
-We will do our best to respond promptly, but cannot guarantee a specific response timeline. We appreciate your patience and your effort in responsible disclosure.
+### Response Timeline
+
+We aim to:
+- **Acknowledge** your report within **7 days**
+- **Provide an initial assessment** within **14 days**
+- **Coordinate disclosure** within **90 days** (or sooner if a fix is available)
+
+These are targets, not guarantees. Complex issues may take longer. We appreciate your patience and your effort in responsible disclosure.
 
 ## Security Considerations
 
@@ -59,7 +74,15 @@ PerlOnJava supports calling Java classes and methods from Perl (JSR-223). This s
 
 ### Dependency Vulnerabilities
 
-PerlOnJava depends on third-party Java libraries. These dependencies may themselves contain vulnerabilities. Keep your dependencies up to date and monitor them with tools such as [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/) or GitHub's Dependabot.
+PerlOnJava depends on third-party Java libraries and bundles Perl modules. These dependencies may themselves contain vulnerabilities.
+
+**Java dependencies**: Keep your dependencies up to date and monitor them with tools such as [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/) or GitHub's Dependabot.
+
+**Bundled Perl modules**: Check the [CPAN Security Advisory Database](https://security.metacpan.org/) and the [CPANSA feed](https://github.com/CPAN-Security/cpansa-feed) for known vulnerabilities in Perl modules.
+
+<!-- TODO: Once SBOM is implemented, add:
+**SBOM**: A Software Bill of Materials (SBOM) listing all components is available at [location]. Use this with vulnerability scanning tools to check for known issues.
+-->
 
 ## Recommendations for Safe Deployment
 
@@ -81,4 +104,11 @@ The following are generally not considered security vulnerabilities for this pro
 ## Acknowledgements
 
 We are grateful to security researchers who responsibly disclose vulnerabilities. Confirmed reporters will be credited in the release notes for the fixing version, unless they prefer to remain anonymous.
+
+## Related Resources
+
+- [CPAN Security Group](https://security.metacpan.org/) - CVE Numbering Authority for Perl/CPAN
+- [Perl Security Policy](https://perldoc.perl.org/perlsecpolicy) - Security handling for Perl itself
+- [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/) - Vulnerability scanner for Java dependencies
+- [GitHub Security Advisories](https://github.com/fglock/PerlOnJava/security/advisories) - Published advisories for this project
 
