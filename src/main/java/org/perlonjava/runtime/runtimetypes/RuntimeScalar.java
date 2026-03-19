@@ -148,6 +148,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.type = UNDEF;
         } else {
             this.type = value.type;
+            // Create a detached copy so that `local *GLOB` restore doesn't affect
+            // scalars that captured the glob value during the local scope.
+            // This implements Perl's behavior where `my $fh = *FH` inside a local
+            // scope retains the IO even after the scope ends.
+            value = value.createDetachedCopy();
         }
         this.value = value;
     }
@@ -173,7 +178,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case RuntimeGlob v -> {
                 RuntimeScalar tmp = new RuntimeScalar(v);
                 this.type = tmp.type;
-                this.value = v;
+                this.value = tmp.value;  // Use the detached copy from the constructor
             }
             case RuntimeIO v -> {
                 RuntimeScalar tmp = new RuntimeScalar(v);

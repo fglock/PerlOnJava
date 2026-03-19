@@ -70,7 +70,15 @@ public class OperatorParser {
         if (token.type == OPERATOR && token.text.equals("{")) {
             // If the next token is '{', parse a block
             TokenUtils.consume(parser, OPERATOR, "{");
-            block = ParseBlock.parseBlock(parser);
+            // Set subroutine context to "(eval)" BEFORE parsing the block
+            // This ensures source locations are saved with the correct context
+            String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
+            parser.ctx.symbolTable.setCurrentSubroutine("(eval)");
+            try {
+                block = ParseBlock.parseBlock(parser);
+            } finally {
+                parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
+            }
             TokenUtils.consume(parser, OPERATOR, "}");
             // Perl semantics: eval BLOCK behaves like a bare block for loop control.
             // `last/next/redo` inside the eval block must target the eval block itself,
@@ -80,8 +88,9 @@ public class OperatorParser {
             }
             // transform:  eval { 123 }
             // into:  sub { 123 }->()  with useTryCatch flag
+            // Use name "(eval)" so caller() reports this as an eval block (Perl behavior)
             return new BinaryOperatorNode("->",
-                    new SubroutineNode(null, null, null, block, true, parser.tokenIndex), ParserNodeUtils.atUnderscoreArgs(parser), index);
+                    new SubroutineNode("(eval)", null, null, block, true, parser.tokenIndex), ParserNodeUtils.atUnderscoreArgs(parser), index);
         } else {
             // Otherwise, parse an expression, and default to $_
             operand = ListParser.parseZeroOrOneList(parser, 0);

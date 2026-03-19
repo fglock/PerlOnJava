@@ -10,19 +10,17 @@ This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass 
 
 ```
 Files=73, Tests=700
-Failed 6/73 test programs
-Failed 11/700 subtests
+Failed 4/73 test programs
+Failed 8/700 subtests
 ```
 
-**Improvement from previous:** Was 18/700 subtests failing. Fixed 7 caller() line number issues.
+**Improvement from previous:** Was 10/700 subtests failing. Fixed `local $OurVariable` bug affecting %T stack trace format.
 
 ### Failing Tests Summary
 
 | Test File | Failed/Total | Issue Category |
 |-----------|--------------|----------------|
 | t/016Export.t | 1/16 | DESTROY message during global destruction |
-| t/022Wrap.t | 2/5 | %T (stack trace) format - too many frames |
-| t/024WarnDieCarp.t | 1/73 | One remaining caller() issue (test 62) |
 | t/026FileApp.t | 3/27 | File permissions / chmod |
 | t/041SafeEval.t | 3/23 | Safe.pm compartment restrictions |
 | t/049Unhide.t | 1/1 | Source filter / ###l4p |
@@ -33,7 +31,8 @@ Failed 11/700 subtests
 |-----------|----------|---------|---------------|
 | t/020Easy.t | 3/21 failed | All pass | local $pkg::var bug fixed, bareword IO handles |
 | t/051Extra.t | 2/11 failed | All pass | Line number reporting improvements |
-| t/024WarnDieCarp.t | 11/73 failed | 8/73 failed | Partial improvement in caller() |
+| t/024WarnDieCarp.t | 11/73 failed | All pass | caller() line number fix + eval block name |
+| t/022Wrap.t | 2/5 failed | All pass | local $OurVariable fix for %T stack trace |
 
 ### Resolved: t/020Easy.t Carp.pm Error
 
@@ -172,38 +171,40 @@ BEGIN failed--compilation aborted at -e line 1, near ""
 
 ## Remaining Issues (Updated 2026-03-19)
 
-### Issue 1: caller() Line Number Reporting - MOSTLY FIXED
+### Issue 1: caller() Line Number Reporting - FIXED
 
-**Status:** Fixed 7 of 8 failures. One remaining issue (test 62).
+**Status:** All tests passing. Both line numbers and eval block names now work correctly.
 
-**Fix Applied:** Changed `ByteCodeSourceMapper.saveSourceLocation()` to use `getLineNumberAccurate()` 
-instead of `getLineNumber()`. The forward-only cache in `getLineNumber()` was returning stale 
-values during deferred subroutine compilation.
-
-**Remaining failure (test 62):** Needs further investigation - may be a different root cause.
+**Fixes Applied:**
+1. Changed `ByteCodeSourceMapper.saveSourceLocation()` to use `getLineNumberAccurate()` 
+   instead of `getLineNumber()` (fixed 7 tests)
+2. Set subroutine context to "(eval)" during `eval { BLOCK }` parsing (fixed test 62)
+3. Don't add package prefix to special names like "(eval)" in ExceptionFormatter
 
 **Files Changed:**
 - `src/main/java/org/perlonjava/backend/jvm/ByteCodeSourceMapper.java`
+- `src/main/java/org/perlonjava/frontend/parser/OperatorParser.java`
+- `src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ExceptionFormatter.java`
 
 **Design Document:** `dev/design/caller_line_number_fix.md`
 
-### Issue 2: Stack Trace Format (%T) - ACTIVE
+### Issue 2: Stack Trace Format (%T) - FIXED
 
-**Status:** Working but includes too many frames.
+**Status:** FIXED - `local $Carp::CarpLevel` now works correctly inside subroutines.
 
-**Symptom:** t/022Wrap.t tests fail because %T (Carp::longmess) includes internal Log4perl frames.
+**Root Cause:** When `local $VarName` was used inside a subroutine where `$VarName` was declared with `our` in an outer scope, the localization didn't work correctly:
+1. JVM Backend: `EmitOperatorLocal` checked if variable was in symbol table and used wrong path
+2. Interpreter Backend: `BytecodeCompiler` used cached register for `our` variables instead of loading from global table
 
-**Example:**
-```
-got: 'trace: Log::Log4perl::Layout::PatternLayout::render() called at ... line 306, 
-      Log::Log4perl::Appender::log() called at ... line 1115, ...'
-expected: 'trace: at 022Wrap.t line 69'
-```
+**Fix Applied:**
+- `EmitOperatorLocal.java`: Check for `our` variables when handling `local` and use `GlobalRuntimeScalar.makeLocal()` for them
+- `BytecodeCompiler.java`: For scalars/arrays/hashes declared with `our`, use `LOAD_GLOBAL_*` instead of cached register
 
-**Root Cause:** PerlOnJava's Carp::longmess includes all stack frames. Perl's version filters out internal frames based on `@CARP_NOT` and caller level adjustments that Log4perl uses.
+**Commit:** 4737089da
 
-**Affected Tests:**
-- t/022Wrap.t (2 failures: tests 1-2)
+**Tests Fixed:**
+- t/022Wrap.t (2 tests) - `%T` format now correctly filters internal frames
 
 ### Issue 3: DESTROY During Global Destruction
 
@@ -400,7 +401,7 @@ For chmod/umask:
 
 ## Progress Tracking
 
-### Current Status: 11/700 subtests failing (was 18/700)
+### Current Status: 8/700 subtests failing (was 10/700)
 
 ### Completed
 - [x] *{NAME} glob slot accessor (2026-03-18)
@@ -411,19 +412,18 @@ For chmod/umask:
 - [x] exit() inside BEGIN blocks (2026-03-19)
 - [x] local $Pkg::Var bug fix (2026-03-19, PR #333)
 - [x] caller() line number fix (2026-03-19) - Fixed 7/8 failures
+- [x] eval block "(eval)" name in caller() (2026-03-19) - Fixed test 62
+- [x] local $OurVariable fix (2026-03-19) - Fixed %T stack trace format
 
 ### Active Issues
-- [ ] caller() test 62 (1 test) - needs investigation
-- [ ] %T stack trace format (2 tests)
 - [ ] DESTROY during global destruction (1 test)
 - [ ] chmod/file permissions (3 tests)
 - [ ] Safe.pm restrictions (3 tests)
 - [ ] Source filters (1 test)
 
 ### Next Steps
-1. Investigate remaining caller() test 62 failure
-2. Consider improving Carp.pm @CARP_NOT handling for %T format
-3. Investigate DESTROY during global destruction
+1. Investigate DESTROY during global destruction
+2. Investigate chmod/file permissions issue
 
 ---
 

@@ -94,7 +94,8 @@ public class EmitSubroutine {
         // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
         // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
         // 'our sub foo' from incorrectly capturing the 'our sub' as a closure variable.
-        boolean isPackageSub = node.name != null && !node.name.equals("<anon>");
+        // Note: "(eval)" is a special name for eval blocks which should capture variables like anonymous subs
+        boolean isPackageSub = node.name != null && !node.name.equals("<anon>") && !node.name.equals("(eval)");
         if (isPackageSub) {
             // Package subs should not capture any closure variables
             // They can only access global variables and their parameters
@@ -127,7 +128,12 @@ public class EmitSubroutine {
 
         // Copy package, subroutine, and flags from the current context
         newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(), ctx.symbolTable.currentPackageIsClass());
-        newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
+        // For eval blocks "(eval)", set the subroutine name so caller() reports it correctly
+        if ("(eval)".equals(node.name)) {
+            newSymbolTable.setCurrentSubroutine("(eval)");
+        } else {
+            newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
+        }
         newSymbolTable.warningFlagsStack.pop();
         newSymbolTable.warningFlagsStack.push(ctx.symbolTable.warningFlagsStack.peek());
         newSymbolTable.featureFlagsStack.pop();

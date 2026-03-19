@@ -157,7 +157,8 @@ public class ExceptionFormatter {
                         }
 
                         String subName = frame.subroutineName();
-                        if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
+                        // Don't add package prefix if subName already contains "::" or is a special name like "(eval)"
+                        if (subName != null && !subName.isEmpty() && !subName.contains("::") && !subName.startsWith("(")) {
                             subName = pkg + "::" + subName;
                         }
 
@@ -180,7 +181,8 @@ public class ExceptionFormatter {
                     String subName = loc.subroutineName();
 
                     // Prepend package name if subroutine name doesn't already include it
-                    if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
+                    // Don't add package prefix for special names like "(eval)"
+                    if (subName != null && !subName.isEmpty() && !subName.contains("::") && !subName.startsWith("(")) {
                         subName = loc.packageName() + "::" + subName;
                     }
 

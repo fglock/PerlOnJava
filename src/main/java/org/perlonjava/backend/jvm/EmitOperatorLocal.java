@@ -25,12 +25,21 @@ public class EmitOperatorLocal {
                 Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {
-            // Check if the variable is global
+            // Check if the variable is global or 'our' variable
             if (opNode.operand instanceof IdentifierNode idNode) {
                 String varName = opNode.operator + idNode.name;
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
-                if (varIndex == -1) {
-                    // Variable is global
+                // Use GlobalRuntimeScalar.makeLocal() for:
+                // 1. Truly global variables (not in symbol table)
+                // 2. 'our' variables (even if in symbol table, they're global package variables)
+                // This ensures 'local $OurVar' works correctly inside subroutines
+                boolean isOurVariable = false;
+                if (varIndex != -1) {
+                    var symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(varName);
+                    isOurVariable = symbolEntry != null && "our".equals(symbolEntry.decl());
+                }
+                if (varIndex == -1 || isOurVariable) {
+                    // Variable is global or 'our' - use makeLocal
                     String fullName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                     mv.visitLdcInsn(fullName);
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
