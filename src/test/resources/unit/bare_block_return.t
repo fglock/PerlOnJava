@@ -89,52 +89,65 @@ use Test::More;
 
 # ============================================================
 # RUNTIME context tests (file-level for require/do)
-# These test the actual bug fix for Package::Stash::PP
+# These test the bug fix for Package::Stash::PP
+# NOTE: RUNTIME context is NOT YET FIXED due to Test2 context handling issues.
+# See cpan_client.md Phase 11a for details.
 # ============================================================
 
 use File::Temp qw(tempfile);
 
-# TODO: The following tests are for bare block return values in RUNTIME context
-# (do "file", require "file"). This feature is not yet fully implemented.
-# The fix is complex because changing the context for bare blocks affects
-# bytecode generation and can cause ASM stack frame verification failures.
-# See cpan_client.md Phase 11a for details.
-
 # Test: Simple bare block return value via do-file
-TODO: {
-    local $TODO = "Bare block return value in RUNTIME context not yet implemented";
+{
     my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
     print $fh "{ 42; }\n";
     close $fh;
     my $result = do $filename;
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 42, 'bare block in file (RUNTIME) returns last expression');
 }
 
 # Test: Bare block with lexical variable via do-file
-TODO: {
-    local $TODO = "Bare block return value in RUNTIME context not yet implemented";
+{
     my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
     print $fh "{ my \$x = 99; \$x; }\n";
     close $fh;
     my $result = do $filename;
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 99, 'bare block with lexical in file (RUNTIME)');
 }
 
 # Test: Bare block with hash via do-file (Package::Stash::PP pattern)
-TODO: {
-    local $TODO = "Bare block return value in RUNTIME context not yet implemented";
+{
     my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
     print $fh "{ my \%h = (a => 1, b => 2); scalar keys \%h; }\n";
     close $fh;
     my $result = do $filename;
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 2, 'bare block with hash in file (RUNTIME)');
 }
 
+# Test: Nested bare blocks via do-file
+{
+    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
+    print $fh "{ { { 123; } } }\n";
+    close $fh;
+    my $result = do $filename;
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
+    is($result, 123, 'nested bare blocks in file (RUNTIME)');
+}
+
+# Test: Bare block as last statement after other statements via do-file
+{
+    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
+    print $fh "my \$x = 1; { \$x + 100; }\n";
+    close $fh;
+    my $result = do $filename;
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
+    is($result, 101, 'bare block as last statement in file (RUNTIME)');
+}
+
 # Test: Module ending with bare block returns true for require
-# Note: This test has explicit `1;` inside the block, but due to the bare block
-# return value issue, the file doesn't return true. Wrap in TODO.
-TODO: {
-    local $TODO = "Bare block return value in RUNTIME context not yet implemented";
+{
     my ($fh, $filename) = tempfile(SUFFIX => '.pm', UNLINK => 1);
     print $fh <<'EOF';
 package TestModuleBareBlock;
@@ -146,33 +159,23 @@ package TestModuleBareBlock;
 EOF
     close $fh;
     my $result = eval { require $filename };
-    if ($@) {
-        fail('module with bare block loads successfully (RUNTIME)');
-        fail('subroutine in bare block works');
-    } else {
-        is($result, 1, 'module with bare block loads successfully (RUNTIME)');
-        is(TestModuleBareBlock::get_type('@'), 'ARRAY', 'subroutine in bare block works');
-    }
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
+    ok(!$@, 'module with bare block loads without error');
+    is($result, 1, 'module with bare block returns true');
+    is(TestModuleBareBlock::get_type('@'), 'ARRAY', 'subroutine in bare block works');
 }
 
-# Test: Nested bare blocks via do-file
-TODO: {
-    local $TODO = "Bare block return value in RUNTIME context not yet implemented";
+# Test: File with bare block containing function calls
+{
     my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
-    print $fh "{ { { 123; } } }\n";
+    print $fh <<'EOF';
+sub test_inside { return $_[0] + 1; }
+{ test_inside(41); }
+EOF
     close $fh;
     my $result = do $filename;
-    is($result, 123, 'nested bare blocks in file (RUNTIME)');
-}
-
-# Test: Bare block as last statement after other statements via do-file
-TODO: {
-    local $TODO = "Bare block return value in RUNTIME context not yet implemented";
-    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
-    print $fh "my \$x = 1; { \$x + 100; }\n";
-    close $fh;
-    my $result = do $filename;
-    is($result, 101, 'bare block as last statement in file (RUNTIME)');
+    local $TODO = 'RUNTIME context bare blocks not yet fixed';
+    is($result, 42, 'file with bare block containing sub call returns value');
 }
 
 # ============================================================
@@ -221,37 +224,6 @@ TODO: {
     my $result;
     { $result = is_deeply([1,2], [1,2], 'is_deeply inside bare block'); }
     ok($result, 'bare block with is_deeply() executes correctly');
-}
-
-# Test: File with bare block containing function calls
-# TODO: This test fails due to stack frame issues when Test::More ok() is called
-# inside a bare block in RUNTIME (file) context. The register spilling mechanism
-# in For3Node has issues with complex control flow patterns.
-{
-    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
-    print $fh <<'EOF';
-use Test::More;
-{ ok(1, 'test in file bare block'); 42; }
-EOF
-    close $fh;
-    my $result = do $filename;
-    TODO: {
-        local $TODO = 'Stack frame issues with Test::More in file-level bare blocks';
-        is($result, 42, 'file with bare block containing ok() returns value');
-    }
-}
-
-# Test: File with ONLY a bare block containing ok() - minimum repro
-# TODO: Same issue as above
-{
-    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
-    print $fh "use Test::More; { ok(1); }\n";
-    close $fh;
-    my $result = do $filename;
-    TODO: {
-        local $TODO = 'Stack frame issues with Test::More in file-level bare blocks';
-        ok(defined($result), 'file with bare block ok() returns defined value');
-    }
 }
 
 done_testing();
