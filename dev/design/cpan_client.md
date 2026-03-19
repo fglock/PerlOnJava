@@ -427,35 +427,65 @@ When a built-in function like `shift`, `pop`, `caller`, etc. is followed by `->`
 **Files changed**:
 - `src/main/java/org/perlonjava/frontend/parser/Variable.java` - Added check for built-in functions followed by `->`
 
-### Next Steps
-
-#### Phase 9: Extended Compatibility
-1. **Module::Build support** - Medium priority
-   - Some CPAN modules use Module::Build instead of MakeMaker
-   - Needs stub similar to ExtUtils::MakeMaker
-   - Blocks: modules that only provide Build.PL
-
-2. ~~**Core module detection**~~ - ✅ Resolved
-   - CPAN::DistnameInfo now installable via jcpan
-   - Warning about it no longer appears
-
-3. **Test running improvements** - Low priority
-   - `make test` uses fork which isn't supported in PerlOnJava
-   - Current workaround: `notest("install", "Module")`
-   - Long-term: Consider IPC::Open3 for test harness
-
-4. ~~**YAML.pm improvements**~~ - ✅ FIXED
-   - Updated YAML.pm version to 1.31 (matches CPAN version)
-   - "YAML version '0.01' is too low" warning no longer appears
-   - Our YAML.pm wraps YAML::PP which provides full functionality
-
 - [x] **Phase 9a: YAML version update** (2026-03-17)
   - Updated YAML.pm $VERSION from 0.01 to 1.31
   - Silences "YAML version too low" warning in CPAN.pm
   - CPAN.pm requires >= 0.60; our YAML::PP-based implementation is fully capable
 
+- [x] **Phase 9b: Module::Build partial support** (2026-03-18)
+  - Added `Module::Build::Base` stub that overrides `have_forkpipe()` to return 0
+  - When Module::Build is installed via system Perl's CPAN, PerlOnJava can use it
+  - Fork pipes are disabled, forcing backticks/system() instead
+  - This allows some Module::Build-based distributions to work
+  - **Limitation**: Module::Build itself is not bundled; must be installed separately
+
+### Files Changed (Phase 9b)
+- `src/main/perl/lib/Module/Build/Base.pm` - Stub that loads real Module::Build and disables fork pipes
+
+### Next Steps
+
+#### Phase 10: Further Compatibility Improvements
+
+1. **Test harness improvements** - Low priority
+   - `make test` uses fork which isn't fully supported
+   - Current workaround: `notest("install", "Module")` or use `-f` flag
+   - Test::Harness subprocess spawning could be improved
+
+2. **CPAN shell experience** - Medium priority
+   - Some warnings during module installation could be suppressed
+   - Better error messages for XS module detection
+
+3. **Dependency graph improvements** - Low priority
+   - CPAN.pm sometimes tries to install core modules unnecessarily
+   - Could benefit from better @INC handling
+
+### Current jcpan Capabilities (as of 2026-03-19)
+
+**Working well:**
+```bash
+# Install pure Perl module
+jcpan install Try::Tiny
+
+# Install with force (skip tests)
+jcpan -f install Module::Name
+
+# Test a module
+jcpan -t Module::Name
+
+# Interactive shell
+jcpan
+cpan> install Module::Name
+```
+
+**Known limitations:**
+- XS modules require manual porting (see `.cognition/skills/port-cpan-module/`)
+- Module::Build-only modules need Module::Build installed separately
+- Tests that heavily use fork may fail or skip
+- Safe.pm compartment restrictions are not enforced
+
 ### Open Questions
 - How important is Safe compartmentalization for users?
+- Should we bundle Module::Build or keep it as an optional external dependency?
 
 ### Resolved Questions
 - ✅ User-friendly installer: `jcpan` wrapper script provides `jcpan install Module` command
@@ -467,3 +497,30 @@ When a built-in function like `shift`, `pop`, `caller`, etc. is followed by `->`
 - ✅ Try::Tiny compatibility: `try`/`catch` now feature-gated, module works correctly
 - ✅ parse_version: Implemented using regex extraction to avoid package block scoping issues in compiled modules
 - ✅ Makefile creation: Stub Makefile satisfies CPAN.pm's checks
+- ✅ YAML version: Updated to 1.31, silences "version too low" warning
+- ✅ Module::Build partial: Base.pm stub disables fork pipes, allowing external Module::Build to work
+
+## Progress Tracking (Updated 2026-03-19)
+
+### Current Status: Phase 9 complete - CPAN client fully functional for pure Perl modules
+
+### Summary Statistics
+- **Phases completed:** 9 (plus sub-phases 9a, 9b)
+- **Pure Perl modules:** Can be installed via `jcpan install Module::Name`
+- **Test harness:** Works with some limitations (fork-heavy tests may skip)
+- **Build systems:** ExtUtils::MakeMaker (native), Module::Build (partial via external)
+
+### Completed Phases
+- [x] Phase 1: Low-hanging fruit (DirHandle, Dumpvalue, Sys::Hostname, flock)
+- [x] Phase 2: Archive/Network (IO::Socket, Archive::Tar, Net::FTP)
+- [x] Phase 3: Process Control (IPC::Open2, IPC::Open3)
+- [x] Phase 4: Archive::Zip + cpanm analysis
+- [x] Phase 5: ExtUtils::MakeMaker implementation
+- [x] Phase 6: CPAN.pm support + Safe.pm stub
+- [x] Phase 7: Errno dualvar + regex fixes
+- [x] Phase 8: jcpan wrapper script
+- [x] Phase 9a: YAML version update
+- [x] Phase 9b: Module::Build partial support
+
+### Active Development
+- [ ] Phase 10: Further compatibility improvements (low priority)

@@ -1240,18 +1240,7 @@ public class RegexPreprocessor {
 
         StringBuilder rejected = new StringBuilder();
         offset = RegexPreprocessorHelper.handleRegexCharacterClassEscape(offset, s, sb, length, flag_xx, rejected);
-        if (!rejected.isEmpty()) {
-            // Process \b inside character class
-            String subseq;
-            if ((sb.length() - len) == 2) {
-                subseq = "(?:" + rejected + ")";
-            } else {
-                subseq = "(?:" + sb.substring(len) + "|" + rejected + ")";
-            }
-            rejected.setLength(0);
-            sb.setLength(len);
-            sb.append(subseq);
-        }
+        // Note: rejected is kept for future use but currently \b is handled by direct substitution to \x08
         return offset;
     }
 
