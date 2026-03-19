@@ -92,7 +92,12 @@ public class Dereference {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                // Only force FETCH for "get" operations - delete/exists can return null
+                if (arrayOperation.equals("get")) {
+                    EmitOperator.handleVoidContextForTied(emitterVisitor);
+                } else {
+                    EmitOperator.handleVoidContext(emitterVisitor);
+                }
                 return;
             }
             if (sigil.equals("$") && sigilNode.operand instanceof BlockNode) {
@@ -136,6 +141,14 @@ public class Dereference {
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                                 "arrayDerefGetNonStrict", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     }
+
+                    if (pooledBase) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+
+                    // Force FETCH for tied variables in void context (single-element access only)
+                    EmitOperator.handleVoidContextForTied(emitterVisitor);
+                    return;
                 } else {
                     // Multiple indices - use slice
                     ListNode nodeRight = right.asListNode();
@@ -152,14 +165,13 @@ public class Dereference {
                     } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                         emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
                     }
-                }
 
-                if (pooledBase) {
-                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-                }
+                    if (pooledBase) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
-                return;
+                    return;
+                }
             }
             if (sigil.equals("@")) {
                 /*  @a[10, 20]
@@ -427,7 +439,12 @@ public class Dereference {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                // Only force FETCH for "get" operations - delete/exists can return null
+                if (hashOperation.equals("get")) {
+                    EmitOperator.handleVoidContextForTied(emitterVisitor);
+                } else {
+                    EmitOperator.handleVoidContext(emitterVisitor);
+                }
                 return;
             }
             if (sigil.equals("$") && sigilNode.operand instanceof BlockNode) {
@@ -489,7 +506,7 @@ public class Dereference {
                     }
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                EmitOperator.handleVoidContextForTied(emitterVisitor);
                 return;
             }
             if (sigil.equals("@")) {
@@ -989,6 +1006,18 @@ public class Dereference {
             if (pooledIndex) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
+
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+
+            // Only force FETCH for "get" operations - delete/exists can return null
+            if (arrayOperation.equals("get")) {
+                EmitOperator.handleVoidContextForTied(emitterVisitor);
+            } else {
+                EmitOperator.handleVoidContext(emitterVisitor);
+            }
+            return;
         } else {
             // Multiple indices: use slice method (only for get operation)
             if (!arrayOperation.equals("get")) {
@@ -1024,13 +1053,12 @@ public class Dereference {
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
             }
-        }
 
-        if (pooledLeft) {
-            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
         }
-
-        EmitOperator.handleVoidContext(emitterVisitor);
+        // No handleVoidContextForTied here - slices already handle void context with POP above
     }
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
@@ -1105,6 +1133,12 @@ public class Dereference {
         if (pooledLeft) {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
-        EmitOperator.handleVoidContext(emitterVisitor);
+
+        // Only force FETCH for "get" operations - delete/exists can return null
+        if (hashOperation.equals("get")) {
+            EmitOperator.handleVoidContextForTied(emitterVisitor);
+        } else {
+            EmitOperator.handleVoidContext(emitterVisitor);
+        }
     }
 }
