@@ -268,17 +268,13 @@ public class EmitBlock {
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                         mv.visitVarInsn(Opcodes.ASTORE, resultReg);
                     } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-                            && node.getBooleanAnnotation("isFileLevelBlock")
+                            && (node.getBooleanAnnotation("isFileLevelBlock") || node.getBooleanAnnotation("blockIsSubroutine"))
                             && element instanceof For3Node for3
                             && for3.isSimpleBlock
                             && for3.labelName == null) {
-                        // Special case: bare block (no label) as last statement in file-level RUNTIME context.
-                        // This handles do "file" and require where the file ends with a bare block.
+                        // Bare block (no label) as last statement in file-level RUNTIME context
+                        // or inside a subroutine. This handles do "file", require, and sub { { 99 } }.
                         // Visit with SCALAR context to get the block's return value.
-                        // NOTE: blockIsSubroutine case is NOT handled here because it also affects
-                        // internal bare blocks like in `map {{ %{$_} }} @list` which breaks Test2.
-                        // The sub { { 99 } } case needs a different fix - the annotation needs to be
-                        // on the bare block itself, not just the outer subroutine block.
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     } else {
                         element.accept(emitterVisitor);

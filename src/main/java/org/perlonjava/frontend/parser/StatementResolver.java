@@ -739,8 +739,17 @@ public class StatementResolver {
         boolean hasHashIndicator = false;  // Found =>, or comma in hash-like context
         boolean hasBlockIndicator = false; // Found ;, or statement modifier
         boolean hasContent = false; // Track if we've seen any content
+        boolean firstTokenIsSigil = false; // Track if first token is % or @ (hash/array)
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral START - initial braceCount: " + braceCount);
+
+        // Check if the first token is % or @ - this strongly suggests a hash literal
+        // e.g., { %hash } or { @array } or { %{$_} }
+        LexerToken firstToken = TokenUtils.peek(parser);
+        if (firstToken.text.equals("%") || firstToken.text.equals("@")) {
+            firstTokenIsSigil = true;
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral first token is sigil: " + firstToken.text);
+        }
 
         while (braceCount > 0) {
             LexerToken token = consume(parser);
@@ -869,9 +878,11 @@ public class StatementResolver {
         // - If we found => it's definitely a hash
         // - If we found block indicators, it's a block
         // - Empty {} is a hash ref
+        // - If first token is % or @ (sigil) and no block indicators, it's a hash
+        //   e.g., { %hash }, { @array }, { %{$ref} }
         // - Otherwise, default to block (safer when parsing is incomplete)
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral FINAL DECISION - hasHashIndicator:" + hasHashIndicator +
-                " hasBlockIndicator:" + hasBlockIndicator + " hasContent:" + hasContent);
+                " hasBlockIndicator:" + hasBlockIndicator + " hasContent:" + hasContent + " firstTokenIsSigil:" + firstTokenIsSigil);
 
         if (hasHashIndicator) {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - hash indicator found");
@@ -882,6 +893,10 @@ public class StatementResolver {
         } else if (!hasContent) {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - empty {} is hash ref");
             return true; // Empty {} is a hash ref
+        } else if (firstTokenIsSigil) {
+            // { %hash } or { @array } or { %{$ref} } - treat as hash constructor
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - starts with sigil (% or @)");
+            return true;
         } else {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
             return false; // Default: assume block when we can't determine
