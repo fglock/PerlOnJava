@@ -89,8 +89,11 @@ public class SpecialBlockParser {
         // Execute other special blocks normally
         runSpecialBlock(parser, blockName, block);
 
-        // Return an undefined operator node
-        return new OperatorNode("undef", null, parser.tokenIndex);
+        // Return an undefined operator node marked as compile-time-only
+        // so it doesn't affect the file's return value
+        OperatorNode result = new OperatorNode("undef", null, parser.tokenIndex);
+        result.setAnnotation("compileTimeOnly", true);
+        return result;
     }
 
     /**
