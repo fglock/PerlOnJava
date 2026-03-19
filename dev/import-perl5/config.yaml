@@ -34,6 +34,10 @@ imports:
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 
+  # Net::Ping - Network ping module (required by CPAN::Mirrors)
+  - source: perl5/dist/Net-Ping/lib/Net/Ping.pm
+    target: src/main/perl/lib/Net/Ping.pm
+
   # Module tests go to perl5_t/ (external, not in git)
   - source: perl5/lib/Benchmark.t
     target: perl5_t/Benchmark/Benchmark.t
@@ -348,7 +352,7 @@ imports:
     target: perl5_t/Test
     type: directory
 
-  # From core distribution
+  # From core distribution (has built-in pure Perl fallback when XS unavailable)
   - source: perl5/dist/Unicode-Normalize/Normalize.pm
     target: src/main/perl/lib/Unicode/Normalize.pm
 
@@ -375,7 +379,7 @@ imports:
     target: perl5_t/File-Find
     type: directory
 
-  # From core distribution
+  # From core distribution (has built-in pure Perl fallback when XS unavailable)
   - source: perl5/dist/Data-Dumper/Dumper.pm
     target: src/main/perl/lib/Data/Dumper.pm
 
@@ -434,7 +438,7 @@ imports:
   - source: perl5/dist/Dumpvalue/lib/Dumpvalue.pm
     target: src/main/perl/lib/Dumpvalue.pm
 
-  # Sys::Hostname - Get system hostname
+  # Sys::Hostname - Get system hostname (uses pure Perl fallback)
   - source: perl5/ext/Sys-Hostname/Hostname.pm
     target: src/main/perl/lib/Sys/Hostname.pm
 
@@ -458,6 +462,11 @@ imports:
   - source: perl5/dist/PathTools/lib/File/Spec
     target: src/main/perl/lib/File/Spec
     type: directory
+
+  # File::Spec::Unix - PerlOnJava patch for jar: paths
+  - source: perl5/dist/PathTools/lib/File/Spec/Unix.pm
+    target: src/main/perl/lib/File/Spec/Unix.pm
+    patch: Unix.pm.patch
 
   # Phase 2: Archive::Tar - Tar archive handling
   - source: perl5/cpan/Archive-Tar/lib/Archive/Tar.pm

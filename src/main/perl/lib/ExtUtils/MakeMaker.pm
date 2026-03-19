@@ -128,33 +128,34 @@ sub _find_xs_files {
 sub _handle_xs_module {
     my ($name, $xs_files, $args) = @_;
     
+    # PerlOnJava cannot compile XS/C code, but we install .pm files anyway.
+    # At runtime:
+    #   - If PerlOnJava has a Java XS implementation, it will be used (fast path)
+    #   - If not, XSLoader returns "loadable object" error
+    #   - Modules with built-in PP fallback (like DateTime) will use it automatically
+    #   - Modules without fallback will fail at runtime
+    
     print "\n";
-    print "XS MODULE DETECTED: $name\n";
+    print "XS MODULE: $name\n";
     print "=" x 60, "\n";
     print "\n";
-    print "This module contains XS/C code that cannot be used directly.\n";
-    print "PerlOnJava compiles to JVM bytecode, not native code.\n\n";
+    print "This module contains XS/C code. PerlOnJava cannot compile native code.\n\n";
     
-    print "XS/C files found:\n";
+    print "XS/C files found (will not be compiled):\n";
     for my $xs (sort @$xs_files) {
         print "  - $xs\n";
     }
     print "\n";
     
-    print "Options:\n";
-    print "  1. Check if PerlOnJava already has a Java implementation\n";
-    print "     (Many common XS modules are pre-ported)\n\n";
-    print "  2. Look for a pure Perl alternative module on CPAN\n\n";
-    print "  3. Port the XS code to Java:\n";
-    print "     - Use the port-cpan-module skill in Devin\n";
-    print "     - Create a Java class extending PerlModuleBase\n";
-    print "     - Register it with XSLoader\n\n";
+    print "Installing .pm files anyway. At runtime:\n";
+    print "  - If PerlOnJava has a Java implementation, it will be used\n";
+    print "  - Otherwise, the module's pure Perl fallback will be used (if available)\n";
+    print "  - If no fallback exists, the module will fail to load\n";
+    print "\n";
     
-    print "See: docs/guides/using-cpan-modules.md\n";
-    print "=" x 60, "\n\n";
-    
-    # Return a stub MM object
-    return PerlOnJava::MM::XSStub->new($name, $xs_files, $args);
+    # Install the .pm files
+    my $version = $args->{VERSION} || ($args->{VERSION_FROM} && _extract_version($args->{VERSION_FROM})) || '0';
+    return _install_pure_perl($name, $version, $args);
 }
 
 sub _install_pure_perl {

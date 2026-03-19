@@ -33,10 +33,15 @@ public class Socket extends PerlModuleBase {
     public static final int SO_KEEPALIVE = 9;
     public static final int SO_BROADCAST = 6;
     public static final int SO_LINGER = 13;
+    public static final int SO_ERROR = 4;
     public static final int TCP_NODELAY = 1;
     public static final int IPPROTO_TCP = 6;
     public static final int IPPROTO_UDP = 17;
     public static final int IPPROTO_ICMP = 1;
+    public static final int IPPROTO_IP = 0;
+    public static final int IPPROTO_IPV6 = 41;
+    public static final int IP_TOS = 1;
+    public static final int IP_TTL = 2;
     public static final int SHUT_RD = 0;
     public static final int SHUT_WR = 1;
     public static final int SHUT_RDWR = 2;
@@ -59,32 +64,38 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("inet_aton", null);
             socket.registerMethod("inet_ntoa", null);
             socket.registerMethod("sockaddr_in", null);
+            socket.registerMethod("getnameinfo", null);
 
-            // Register constants as subroutines
-            socket.registerMethod("AF_INET", null);
-            socket.registerMethod("AF_INET6", null);
-            socket.registerMethod("AF_UNIX", null);
-            socket.registerMethod("PF_INET", null);
-            socket.registerMethod("PF_INET6", null);
-            socket.registerMethod("PF_UNIX", null);
-            socket.registerMethod("SOCK_STREAM", null);
-            socket.registerMethod("SOCK_DGRAM", null);
-            socket.registerMethod("SOCK_RAW", null);
-            socket.registerMethod("SOL_SOCKET", null);
-            socket.registerMethod("SO_REUSEADDR", null);
-            socket.registerMethod("SO_KEEPALIVE", null);
-            socket.registerMethod("SO_BROADCAST", null);
-            socket.registerMethod("SO_LINGER", null);
-            socket.registerMethod("TCP_NODELAY", null);
-            socket.registerMethod("IPPROTO_TCP", null);
-            socket.registerMethod("IPPROTO_UDP", null);
-            socket.registerMethod("IPPROTO_ICMP", null);
-            socket.registerMethod("SHUT_RD", null);
-            socket.registerMethod("SHUT_WR", null);
-            socket.registerMethod("SHUT_RDWR", null);
-            socket.registerMethod("INADDR_ANY", null);
-            socket.registerMethod("INADDR_LOOPBACK", null);
-            socket.registerMethod("INADDR_BROADCAST", null);
+            // Register constants as subroutines with empty prototype (like use constant)
+            socket.registerMethod("AF_INET", "");
+            socket.registerMethod("AF_INET6", "");
+            socket.registerMethod("AF_UNIX", "");
+            socket.registerMethod("PF_INET", "");
+            socket.registerMethod("PF_INET6", "");
+            socket.registerMethod("PF_UNIX", "");
+            socket.registerMethod("SOCK_STREAM", "");
+            socket.registerMethod("SOCK_DGRAM", "");
+            socket.registerMethod("SOCK_RAW", "");
+            socket.registerMethod("SOL_SOCKET", "");
+            socket.registerMethod("SO_REUSEADDR", "");
+            socket.registerMethod("SO_KEEPALIVE", "");
+            socket.registerMethod("SO_BROADCAST", "");
+            socket.registerMethod("SO_LINGER", "");
+            socket.registerMethod("SO_ERROR", "");
+            socket.registerMethod("TCP_NODELAY", "");
+            socket.registerMethod("IPPROTO_TCP", "");
+            socket.registerMethod("IPPROTO_UDP", "");
+            socket.registerMethod("IPPROTO_ICMP", "");
+            socket.registerMethod("IPPROTO_IP", "");
+            socket.registerMethod("IPPROTO_IPV6", "");
+            socket.registerMethod("IP_TOS", "");
+            socket.registerMethod("IP_TTL", "");
+            socket.registerMethod("SHUT_RD", "");
+            socket.registerMethod("SHUT_WR", "");
+            socket.registerMethod("SHUT_RDWR", "");
+            socket.registerMethod("INADDR_ANY", "");
+            socket.registerMethod("INADDR_LOOPBACK", "");
+            socket.registerMethod("INADDR_BROADCAST", "");
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Socket method: " + e.getMessage());
@@ -255,6 +266,54 @@ public class Socket extends PerlModuleBase {
         return pack_sockaddr_in(args, ctx);
     }
 
+    /**
+     * getnameinfo(SOCKADDR, FLAGS)
+     * Converts a socket address to a hostname and service name.
+     * Returns ($host, $service) in list context.
+     */
+    public static RuntimeList getnameinfo(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            return scalarUndef.getList();
+        }
+
+        try {
+            String sockaddr = args.get(0).toString();
+            // int flags = args.size() > 1 ? args.get(1).getInt() : 0;
+
+            if (sockaddr.length() < 8) {
+                return scalarUndef.getList();
+            }
+
+            byte[] sockBytes = sockaddr.getBytes(StandardCharsets.ISO_8859_1);
+
+            // Extract port (bytes 2-3, big endian)
+            int port = ((sockBytes[2] & 0xFF) << 8) | (sockBytes[3] & 0xFF);
+
+            // Extract IP address (bytes 4-7)
+            String ipAddress = String.format("%d.%d.%d.%d",
+                    sockBytes[4] & 0xFF, sockBytes[5] & 0xFF,
+                    sockBytes[6] & 0xFF, sockBytes[7] & 0xFF);
+
+            // Try to resolve hostname
+            String hostname;
+            try {
+                InetAddress addr = InetAddress.getByName(ipAddress);
+                hostname = addr.getHostName();
+            } catch (Exception e) {
+                hostname = ipAddress;  // Fall back to IP if resolution fails
+            }
+
+            // Return (hostname, port) in list context
+            RuntimeList result = new RuntimeList();
+            result.add(new RuntimeScalar(hostname));
+            result.add(new RuntimeScalar(String.valueOf(port)));
+            return result;
+
+        } catch (Exception e) {
+            return scalarUndef.getList();
+        }
+    }
+
     // Constant methods
     public static RuntimeList AF_INET(RuntimeArray args, int ctx) {
         return new RuntimeScalar(AF_INET).getList();
@@ -312,6 +371,10 @@ public class Socket extends PerlModuleBase {
         return new RuntimeScalar(SO_LINGER).getList();
     }
 
+    public static RuntimeList SO_ERROR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SO_ERROR).getList();
+    }
+
     public static RuntimeList TCP_NODELAY(RuntimeArray args, int ctx) {
         return new RuntimeScalar(TCP_NODELAY).getList();
     }
@@ -326,6 +389,22 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList IPPROTO_ICMP(RuntimeArray args, int ctx) {
         return new RuntimeScalar(IPPROTO_ICMP).getList();
+    }
+
+    public static RuntimeList IPPROTO_IP(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPPROTO_IP).getList();
+    }
+
+    public static RuntimeList IPPROTO_IPV6(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPPROTO_IPV6).getList();
+    }
+
+    public static RuntimeList IP_TOS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IP_TOS).getList();
+    }
+
+    public static RuntimeList IP_TTL(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IP_TTL).getList();
     }
 
     public static RuntimeList SHUT_RD(RuntimeArray args, int ctx) {

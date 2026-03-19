@@ -25,6 +25,7 @@ How-to guides for common tasks:
 Technical reference documentation:
 
 - **[Feature Matrix](reference/feature-matrix.md)** - What Perl features are implemented
+- **[XS Compatibility](reference/xs-compatibility.md)** - XS modules and Java implementations
 - **[CLI Options](reference/cli-options.md)** - Command-line reference
 - **[Testing](reference/testing.md)** - Test suite information
 - **[Architecture](reference/architecture.md)** - How PerlOnJava works

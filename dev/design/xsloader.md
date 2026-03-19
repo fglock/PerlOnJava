@@ -200,3 +200,77 @@ public class GenerateXSLoaderMappings {
 4. **Memory**: Smaller footprint for simple cases
 5. **Build-time optimization**: Module discovery happens at build time
 
+---
+
+## Known XS Module Dependency Issues (2026-03-19)
+
+### DateTime Dependency Chain
+
+When installing DateTime via jcpan, the module has several XS-dependent dependencies:
+
+```
+DateTime.pm
+├── namespace::autoclean 0.19
+│   └── B::Hooks::EndOfScope ✓ (implemented using defer mechanism)
+├── Params::ValidationCompiler 0.26 ✓
+├── Specio::Subs ✓
+│   └── Specio ✓
+│       └── Module::Implementation ✓ (fixed: symbol table dereference bug)
+├── Try::Tiny ✓
+├── DateTime::Locale 1.06
+├── DateTime::TimeZone 2.44
+└── POSIX (built-in) ✓
+```
+
+### B::Hooks::EndOfScope - IMPLEMENTED
+
+This module provides `on_scope_end` which registers a callback to execute when the current scope exits.
+
+**PerlOnJava Implementation:**
+
+Instead of using Perl's compile-time B:: hooks, we leverage PerlOnJava's existing `defer` mechanism:
+- `DeferBlock` class wraps a code reference for scope-exit execution
+- `DynamicVariableManager` manages the stack of deferred blocks
+- Callbacks execute in LIFO order when scope exits (same as Perl)
+
+**How it works:**
+
+```perl
+use B::Hooks::EndOfScope;
+{
+    on_scope_end { print "cleanup\n" };
+    print "in scope\n";
+}
+# Output: "in scope" then "cleanup"
+```
+
+The Java XS implementation (`BHooksEndOfScope.java`) simply creates a `DeferBlock` and pushes it onto `DynamicVariableManager`, reusing the same infrastructure that powers Perl's `defer` feature. The `&` prototype allows bare block syntax.
+
+### Progress Tracking
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| `${ $stash{NAME} }` dereference | **FIXED** | RuntimeScalar.scalarDeref() now handles GLOB type |
+| Module::Implementation | **FIXED** | Works after symbol table fix |
+| Specio | **FIXED** | Works after symbol table fix |
+| B::Hooks::EndOfScope | **IMPLEMENTED** | Uses defer mechanism (DeferBlock + DynamicVariableManager) |
+| namespace::autoclean | **NEEDS TESTING** | Should work now with B::Hooks::EndOfScope |
+| DateTime full install | **NEEDS TESTING** | Should work now - test with jcpan |
+
+### Files Changed
+
+**Symbol Table Fix:**
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java`
+  - Added `GLOB` case to `scalarDeref()` - returns scalar slot of glob
+  - Added `GLOB` case to `scalarDerefNonStrict()` - same behavior
+
+**B::Hooks::EndOfScope Implementation:**
+- `src/main/java/org/perlonjava/runtime/perlmodule/BHooksEndOfScope.java` - Java XS module
+- `src/main/perl/lib/B/Hooks/EndOfScope.pm` - Perl wrapper with XSLoader
+
+### Next Steps
+
+1. Test `namespace::autoclean` - should work now
+2. Test DateTime full installation via `jcpan install DateTime`
+3. If issues remain, check DateTime::Locale and DateTime::TimeZone dependencies
+

@@ -2,36 +2,97 @@
 
 ## Overview
 
-PerlOnJava includes many common CPAN modules and supports adding additional pure Perl modules to your projects. It also includes a custom `ExtUtils::MakeMaker` that allows you to install pure Perl CPAN modules directly without needing `make` or native compilation.
+PerlOnJava includes many common CPAN modules and supports installing additional modules from CPAN. It provides `jcpan`, a CPAN client that works with PerlOnJava, and a custom `ExtUtils::MakeMaker` that handles module installation without requiring native compilation tools.
 
-## Quick Start: Installing a CPAN Module
+## Quick Start: Installing Modules with jcpan
 
-For pure Perl modules with a standard `Makefile.PL`:
+The recommended way to install CPAN modules is using `jcpan`:
 
 ```bash
-# Download and extract the module
+# Install a module
+jcpan install Try::Tiny
+
+# Install with force (ignore test failures)
+jcpan -f install Module::Name
+
+# Run a module's test suite
+jcpan -t Module::Name
+
+# Interactive CPAN shell
+jcpan
+```
+
+Modules are installed to `~/.perlonjava/lib/`, which is automatically included in `@INC`.
+
+## Manual Installation
+
+For modules not on CPAN or when you need more control:
+
+```bash
+# Download and extract
 curl -O https://cpan.metacpan.org/authors/id/X/XX/AUTHOR/Module-Name-1.00.tar.gz
 tar xzf Module-Name-1.00.tar.gz
 cd Module-Name-1.00
 
-# Install with jperl (no make needed!)
+# Install with jperl (no make needed)
 jperl Makefile.PL
-
-# The module is now installed to ~/.perlonjava/lib/
-# and automatically available in @INC
 ```
+
+## Module Compatibility
+
+### Pure Perl Modules
+
+Pure Perl modules (those with only `.pm` files) work directly with PerlOnJava. Most CPAN modules fall into this category.
+
+### XS Modules
+
+XS modules contain C code that must be compiled to native machine code. Since PerlOnJava compiles to JVM bytecode rather than native code, XS modules require special handling.
+
+When you install an XS module, PerlOnJava's MakeMaker:
+
+1. Detects the XS/C files
+2. Installs the `.pm` files (but not the XS code)
+3. Prints guidance about what will happen at runtime
+
+At runtime, when the module calls `XSLoader::load()`:
+
+1. **Java implementation available**: If PerlOnJava includes a Java implementation of the XS functions, it loads automatically
+2. **Pure Perl fallback**: If no Java implementation exists, XSLoader returns an error that many modules catch to fall back to a pure Perl implementation
+3. **No fallback**: If the module has no fallback, it fails to load
+
+Many popular XS modules include their own pure Perl fallbacks that activate automatically. The module's `.pm` file handles this transparently.
+
+For a complete list of XS modules and their compatibility status, see the [XS Compatibility Reference](../reference/xs-compatibility.md).
+
+### Built-in Java Implementations
+
+PerlOnJava includes Java implementations of XS functions for several modules:
+
+| Module | Notes |
+|--------|-------|
+| DateTime | Uses java.time APIs with JulianFields.RATA_DIE |
+| JSON | Fast JSON encode/decode using fastjson2 |
+| Digest::MD5 | Java MessageDigest API |
+| Digest::SHA | Java MessageDigest API |
+| Time::HiRes | Java System.nanoTime() |
+| DBI | JDBC backend |
+| Compress::Zlib | Java zip libraries |
+
+When these modules are loaded, the Java implementation is used automatically for best performance.
 
 ## Checking Module Availability
 
-To check if a module is available in PerlOnJava:
-
 ```bash
+# Check if a module is available
 ./jperl -e 'use Module::Name; print "Available\n"'
+
+# Check if a module uses XS
+./jperl -e 'use Module::Name; print Module::Name->can("is_xs") ? "XS" : "PP"'
 ```
 
-## Available Modules
+## Available Built-in Modules
 
-PerlOnJava includes:
+PerlOnJava includes these modules without installation:
 
 ### Core Modules
 - `strict`, `warnings`, `utf8`, `feature`
@@ -39,14 +100,13 @@ PerlOnJava includes:
 - `File::Spec`, `File::Basename`, `File::Copy`, `File::Find`, `File::Path`, `File::Temp`
 - `IO::File`, `IO::Handle`, `FileHandle`, `DirHandle`
 - `Getopt::Long`, `Getopt::Std`
-- `Sys::Hostname` - System hostname
-- `Symbol` - Symbol manipulation
+- `Sys::Hostname`, `Symbol`
 
 ### Process Control
-- `IPC::Open2`, `IPC::Open3` - Bi-directional process communication
+- `IPC::Open2`, `IPC::Open3`
 
 ### Build Tools
-- `ExtUtils::MakeMaker` - Module installation (PerlOnJava version)
+- `ExtUtils::MakeMaker` (PerlOnJava version)
 
 ### Data Processing
 - `JSON` - JSON encoding/decoding
@@ -57,180 +117,94 @@ PerlOnJava includes:
 - `Storable` - Data serialization
 
 ### Cryptography & Encoding
-- `Digest::MD5`, `Digest::SHA` - Hash algorithms
-- `MIME::Base64`, `MIME::QuotedPrint` - Encoding
-- `Encode` - Character encoding
+- `Digest::MD5`, `Digest::SHA`
+- `MIME::Base64`, `MIME::QuotedPrint`
+- `Encode`
 
 ### Network & Web
-- `HTTP::Tiny` - HTTP client
-- `Socket` - Low-level socket support
-- `IO::Socket::INET`, `IO::Socket::UNIX` - TCP/IP and Unix sockets
-- `Net::FTP` - FTP client
-- `Net::SMTP` - SMTP client
-- `Net::POP3` - POP3 client
-- `Net::NNTP` - NNTP client
+- `HTTP::Tiny`
+- `Socket`
+- `IO::Socket::INET`, `IO::Socket::UNIX`
+- `Net::FTP`, `Net::SMTP`, `Net::POP3`, `Net::NNTP`
 
 ### Archives
-- `Archive::Tar` - Tar file handling
-- `Archive::Zip` - Zip file handling
-- `Compress::Zlib` - Compression
-- `IO::Zlib` - Compressed I/O
+- `Archive::Tar`, `Archive::Zip`
+- `Compress::Zlib`, `IO::Zlib`
 
 ### Database
-- `DBI` - Database interface (with JDBC backend)
+- `DBI` (with JDBC backend)
 
 ### Testing
 - `Test::More`, `Test::Simple`, `Test::Builder`
 
 ### Time
-- `Time::HiRes` - High-resolution time
-- `Time::Piece` - Time manipulation
-- `POSIX` - POSIX functions including strftime
+- `Time::HiRes`, `Time::Piece`
+- `POSIX` (including strftime)
 
-## Adding Pure Perl Modules
+## Alternative Installation Methods
 
-If you need a CPAN module that's not included, you can often add pure Perl modules directly.
-
-### Method 1: ExtUtils::MakeMaker (Recommended)
-
-PerlOnJava includes a custom `ExtUtils::MakeMaker` that installs pure Perl modules directly:
-
-```bash
-# Download and extract
-tar xzf Some-Module-1.00.tar.gz
-cd Some-Module-1.00
-
-# Run Makefile.PL with jperl
-jperl Makefile.PL
-```
-
-**What happens:**
-- For **pure Perl modules**: `.pm` files are copied to `~/.perlonjava/lib/`
-- For **XS modules**: You'll see guidance on porting options
-
-**Customizing the install location:**
-```bash
-# Install to a specific directory
-PERLONJAVA_LIB=/path/to/my/libs jperl Makefile.PL
-```
-
-The default `~/.perlonjava/lib/` directory is automatically included in `@INC`, so installed modules work immediately.
-
-### Method 2: Local lib Directory
-
-Create a `lib` directory in your project and add modules there:
+### Local lib Directory
 
 ```bash
 mkdir -p myproject/lib
-cp /path/to/Some/Module.pm myproject/lib/Some/Module.pm
-```
-
-Run with:
-
-```bash
+cp -r Module-Name/lib/* myproject/lib/
 ./jperl -Imyproject/lib myscript.pl
 ```
 
-### Method 3: PERL5LIB Environment Variable
+### PERL5LIB Environment Variable
 
 ```bash
 export PERL5LIB=/path/to/your/modules
 ./jperl myscript.pl
 ```
 
-### Finding Pure Perl Modules
-
-To check if a CPAN module is pure Perl:
-
-1. Visit https://metacpan.org/pod/Module::Name
-2. Look at the source files
-3. If there's only `.pm` files (no `.xs` or `.c` files), it's pure Perl
-
-### Example: Adding a Simple Module
+### Custom Install Location
 
 ```bash
-# Download a module from CPAN
-curl -O https://cpan.metacpan.org/authors/id/X/XX/XXXX/Module-Name-1.00.tar.gz
-
-# Extract
-tar xzf Module-Name-1.00.tar.gz
-
-# Copy the lib directory
-cp -r Module-Name-1.00/lib/* myproject/lib/
+PERLONJAVA_LIB=/path/to/libs jperl Makefile.PL
 ```
 
-## Modules with XS Components
+## Finding Pure Perl Alternatives
 
-Some CPAN modules have XS (C/C++) components that won't work directly. PerlOnJava's `ExtUtils::MakeMaker` automatically detects XS modules and provides guidance:
+When an XS module doesn't work and has no fallback:
 
-```
-XS MODULE DETECTED: Some::XS::Module
-============================================================
+1. Visit https://metacpan.org/pod/Module::Name
+2. Check the source files - if there are `.xs` or `.c` files, it's XS
+3. Search for pure Perl alternatives (often named `Module::Name::PP` or `Module::Name::Pure`)
 
-This module contains XS/C code that cannot be used directly.
-PerlOnJava compiles to JVM bytecode, not native code.
+Common substitutions:
 
-XS/C files found:
-  - Module.xs
+| XS Module | Pure Perl Alternative |
+|-----------|----------------------|
+| JSON::XS | JSON (built-in) or JSON::PP |
+| List::Util (XS parts) | List::Util::PP |
+| Params::Util | Params::Util::PP |
 
-Options:
-  1. Check if PerlOnJava already has a Java implementation
-  2. Look for a pure Perl alternative module on CPAN
-  3. Port the XS code to Java
-```
+## Working with Archives
 
-For XS modules, your options are:
-
-1. **Check if PerlOnJava has a Java port** - Many common XS modules have Java implementations
-2. **Look for pure Perl alternatives** - e.g., use `JSON` instead of `JSON::XS`
-3. **Request a port** - Open an issue at the PerlOnJava repository
-
-### Common XS Modules with Java Alternatives
-
-| XS Module | Java Alternative in PerlOnJava |
-|-----------|-------------------------------|
-| JSON::XS | JSON (built-in) |
-| Compress::Raw::Zlib | Compress::Zlib (built-in) |
-| Digest::MD5 (XS part) | Digest::MD5 (Java implementation) |
-| DBI (XS part) | DBI (JDBC backend) |
-| Time::HiRes (XS part) | Time::HiRes (Java implementation) |
-
-## Working with Archive Files
-
-### Reading a Zip File
+### Zip Files
 
 ```perl
 use Archive::Zip qw(:ERROR_CODES);
 
+# Read
 my $zip = Archive::Zip->new();
-my $status = $zip->read('archive.zip');
-die "Read failed" unless $status == AZ_OK;
+$zip->read('archive.zip') == AZ_OK or die;
+print $_->fileName, "\n" for $zip->members();
 
-for my $member ($zip->members()) {
-    print $member->fileName(), "\n";
-}
-```
-
-### Creating a Zip File
-
-```perl
-use Archive::Zip qw(:ERROR_CODES);
-
+# Create
 my $zip = Archive::Zip->new();
 $zip->addFile('document.txt');
-$zip->addString("Hello!", 'hello.txt');
-
-my $status = $zip->writeToFileNamed('output.zip');
+$zip->writeToFileNamed('output.zip');
 ```
 
-### Working with Tar Files
+### Tar Files
 
 ```perl
 use Archive::Tar;
 
 # Read
 my $tar = Archive::Tar->new('archive.tar.gz');
-my @files = $tar->list_files();
 $tar->extract();
 
 # Create
@@ -245,100 +219,53 @@ $tar->write('output.tar.gz', COMPRESS_GZIP);
 use HTTP::Tiny;
 
 my $http = HTTP::Tiny->new();
-my $response = $http->get('https://api.github.com/repos/perl/perl5');
+my $response = $http->get('https://api.example.com/data');
 
 if ($response->{success}) {
     print $response->{content};
 }
 ```
 
-## Downloading and Extracting CPAN Modules
-
-Here's a helper script to download and extract a CPAN module:
-
-```perl
-#!/usr/bin/env jperl
-use strict;
-use warnings;
-use HTTP::Tiny;
-use Archive::Tar;
-use File::Temp qw(tempfile);
-use File::Path qw(make_path);
-
-my $module = shift or die "Usage: $0 Module::Name\n";
-my $dest = shift || 'lib';
-
-# Convert module name to path
-(my $path = $module) =~ s/::/-/g;
-
-# Query MetaCPAN for download URL
-my $http = HTTP::Tiny->new();
-my $resp = $http->get("https://fastapi.metacpan.org/v1/download_url/$module");
-
-if (!$resp->{success}) {
-    die "Could not find $module on CPAN\n";
-}
-
-# Parse JSON response
-use JSON;
-my $data = decode_json($resp->{content});
-my $url = $data->{download_url};
-
-print "Downloading $url\n";
-my $tarball = $http->get($url);
-
-if (!$tarball->{success}) {
-    die "Download failed\n";
-}
-
-# Save to temp file
-my ($fh, $filename) = tempfile(SUFFIX => '.tar.gz');
-print $fh $tarball->{content};
-close $fh;
-
-# Extract
-my $tar = Archive::Tar->new($filename);
-my @files = $tar->list_files();
-
-make_path($dest);
-for my $file (@files) {
-    next unless $file =~ m{/lib/(.+\.pm)$};
-    my $target = "$dest/$1";
-    my $dir = $target;
-    $dir =~ s{/[^/]+$}{};
-    make_path($dir);
-    
-    my $content = $tar->get_content($file);
-    open my $out, '>', $target or die "Cannot write $target: $!";
-    print $out $content;
-    close $out;
-    print "Installed $target\n";
-}
-
-unlink $filename;
-print "Done!\n";
-```
-
 ## Troubleshooting
 
 ### "Can't locate Module.pm in @INC"
 
-The module is not installed. Check:
-1. Is it a pure Perl module? XS modules won't work directly.
-2. Is the module in your lib path? Use `-I/path/to/lib`
+The module is not installed:
 
-### "Can't load Java XS module"
+1. Install it: `jcpan install Module::Name`
+2. Or add it to your lib path: `./jperl -I/path/to/lib script.pl`
 
-This means the module requires an XS implementation that hasn't been ported to Java. Check if there's a pure Perl alternative.
+### "Can't load loadable object for module X"
+
+This indicates an XS module without a Java implementation or pure Perl fallback. Options:
+
+1. Check if PerlOnJava has a built-in alternative (see table above)
+2. Look for a pure Perl alternative on CPAN
+3. Request a Java implementation via GitHub issues
 
 ### Module loads but functions don't work
 
-Some modules may load but have unsupported features:
-- Check if the module uses XS functions internally
-- Some Perl built-in functions may not be fully implemented
+Some modules may partially work:
+
+- Check if specific functions require XS (look for `XSLoader::load` in the source)
+- Some Perl built-ins may not be fully implemented - check the feature matrix
+
+### Installation succeeds but module fails at runtime
+
+For XS modules, installation only copies `.pm` files. The XS functions aren't available unless:
+
+- PerlOnJava has a Java implementation
+- The module has a pure Perl fallback
+
+Check the module's documentation for fallback behavior.
+
+## See Also
+
+- [XS Compatibility Reference](../reference/xs-compatibility.md) - Detailed XS module compatibility
+- [Module Porting Guide](module-porting.md) - How to port modules to PerlOnJava
+- [Feature Matrix](../reference/feature-matrix.md) - Perl feature compatibility
 
 ## Getting Help
 
 - **PerlOnJava Repository**: https://github.com/fglock/PerlOnJava
 - **Issues**: Report missing modules or compatibility problems
-- **Feature Matrix**: See `docs/reference/feature-matrix.md` for supported features
