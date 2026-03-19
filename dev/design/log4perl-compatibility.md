@@ -4,66 +4,49 @@
 
 This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass its test suite on PerlOnJava.
 
-## Current Status (2026-03-19)
+## Current Status (2026-03-19, Updated)
 
 ### Test Results
 
 ```
 Files=73, Tests=700
-Failed 8/73 test programs
-Failed 26/700 subtests
+Failed 6/73 test programs
+Failed 18/700 subtests
 ```
+
+**Improvement from previous run:** Was 8/73 programs, 26/700 subtests failing.
 
 ### Failing Tests Summary
 
 | Test File | Failed/Total | Issue Category |
 |-----------|--------------|----------------|
-| t/016Export.t | 1/16 | DESTROY message |
-| t/020Easy.t | 3/21 | caller() / Carp line numbers |
-| t/022Wrap.t | 2/5 | caller() stack trace format |
-| t/024WarnDieCarp.t | 11/73 | caller() / Carp line numbers |
-| t/026FileApp.t | 3/27 | File permissions / substr issues |
-| t/041SafeEval.t | 3/23 | Safe.pm / Opcode.pm |
+| t/016Export.t | 1/16 | DESTROY message during global destruction |
+| t/022Wrap.t | 2/5 | %T (stack trace) format - too many frames |
+| t/024WarnDieCarp.t | 8/73 | caller() line numbers wrong (reports EOF) |
+| t/026FileApp.t | 3/27 | File permissions / chmod |
+| t/041SafeEval.t | 3/23 | Safe.pm compartment restrictions |
 | t/049Unhide.t | 1/1 | Source filter / ###l4p |
-| t/051Extra.t | 2/11 | Line number reporting |
 
-### Current Investigation: t/020Easy.t Carp.pm Error
+### Tests Now Passing (since original doc)
 
-**Status:** Partially debugged - the error is intermittent and context-dependent.
+| Test File | Previous | Current | What Fixed It |
+|-----------|----------|---------|---------------|
+| t/020Easy.t | 3/21 failed | All pass | local $pkg::var bug fixed, bareword IO handles |
+| t/051Extra.t | 2/11 failed | All pass | Line number reporting improvements |
+| t/024WarnDieCarp.t | 11/73 failed | 8/73 failed | Partial improvement in caller() |
 
-**Symptom:**
-```
-Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 755
-```
+### Resolved: t/020Easy.t Carp.pm Error
 
-**Key Finding:** The error occurs when:
-1. A bareword filehandle `IN` is opened and read from (`<IN>`)
-2. Log4perl's `%T` layout is used (which calls `Carp::longmess()`)
-3. The `%T` pattern is rendered during logging
+**Status:** FIXED - all 21 tests now pass.
 
-**Reproduction Path (simplified):**
-```perl
-open IN, "<", "somefile";
-my @lines = <IN>;  # Sets ${^LAST_FH}
-use Carp;
-my $m = Carp::longmess();  # Sometimes fails with undef GLOB
-```
+The Carp.pm error (`Can't use an undefined value as a GLOB reference`) was fixed by a combination of:
+- `local $pkg::var` bug fix (PR #333)
+- Bareword filehandle method call fix (`IN->clearerr()`)
+- `*{NAME}` glob slot implementation
 
-**What's NOT the issue:**
-- `*{NAME}` slot - now implemented and working
-- `local *$dynamic` - now implemented for interpreter backend
-- `${^LAST_FH}` basic functionality - works in isolation
-
-**Investigation Notes:**
-- The error happens at Carp.pm line 752: `*{"warnings::$_"} = \&$_ foreach @EXPORT;`
-- This code runs when `$warnings::VERSION` is undefined (which it is in PerlOnJava's warnings.pm)
-- The bareword filehandle name check (`*{${^LAST_FH}}{NAME}`) now works
-- Error is NOT reproducible in simple test cases - only in specific call stack contexts
-- May be related to how Carp.pm is loaded/initialized in the presence of active I/O
-
-**Next Steps:**
-1. Add `$VERSION` to PerlOnJava's warnings.pm to skip the problematic code path
-2. Or investigate why `$_` becomes undefined during the foreach loop in certain contexts
+The investigation notes below are kept for historical reference:
+- The error happened at Carp.pm line 752 when `$warnings::VERSION` was undefined
+- Fixed without needing to add `$VERSION` to warnings.pm - the underlying glob/local issues were resolved
 
 ## Completed Fixes
 
@@ -187,44 +170,66 @@ BEGIN failed--compilation aborted at -e line 1, near ""
 - `splitpath()` returning wrong component
 - Newlines between sigil and variable name
 
-## Remaining Issues
+## Remaining Issues (Updated 2026-03-19)
 
-### Issue 1: `local` Package Variable Bug - VERIFIED FIXED
+### Issue 1: caller() Line Number Reporting - ACTIVE
 
-**Status:** The basic reproduction case now works correctly. Need to verify if Log4perl tests improved.
+**Status:** Partially working but still has issues in some contexts.
 
-**Verification (2026-03-19):**
-```perl
-package Foo;
-our $X = 0;
-sub check { print "X=$X\n"; }
+**Symptom:** t/024WarnDieCarp.t tests fail because caller() reports wrong line numbers. Instead of the actual call site, it reports line 397 (end of file).
 
-package main;
-local $Foo::X = 1;
-Foo::check();  # jperl now correctly prints "X=1"
+**Example failure:**
 ```
-
-The issue may have been fixed by earlier changes (possibly the `our` variable handling in SymbolTable). The design doc at `dev/design/local-package-variable-fix.md` was created but implementation may not have been needed.
-
-**Note:** Some Log4perl tests still fail with caller() / Carp line number issues - these may be separate from the `local` issue.
-
-### Issue 2: Carp.pm / warnings.pm Interaction
-
-**Symptom:** t/020Easy.t tests 17-21 - error after %T logging:
+got: 't/024WarnDieCarp.t-397: Inferno! at t/024WarnDieCarp.t line 193.'
+expected to match: '184' (the line where logcroak was called)
 ```
-Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 755
-```
-
-**Root Cause:** PerlOnJava's warnings.pm lacks `$VERSION`, causing Carp.pm to execute a workaround code path (line 752) that fails in certain contexts.
-
-**Proposed Fix:** Add `our $VERSION = "1.78";` to PerlOnJava's warnings.pm to skip the problematic code path.
-
-**Note:** 4 of the 5 failing tests in t/020Easy.t are just filename pattern mismatches (test expects "020Easy.t" but gets "-" from stdin). Only 1 failure is the Carp.pm error.
 
 **Affected Tests:**
-- t/020Easy.t (tests 17-21)
+- t/024WarnDieCarp.t (8 failures: tests 51-53, 58, 60, 62, 67, 69)
 
-### Issue 3: File Permissions (stat/chmod)
+**Investigation Notes:**
+- The file line (193 in example) is correct for the immediate caller
+- The logging line (397) is the end of file - suggests stack frame issue
+- May be related to how Log4perl wraps caller() for %F/%L/%T patterns
+
+### Issue 2: Stack Trace Format (%T) - ACTIVE
+
+**Status:** Working but includes too many frames.
+
+**Symptom:** t/022Wrap.t tests fail because %T (Carp::longmess) includes internal Log4perl frames.
+
+**Example:**
+```
+got: 'trace: Log::Log4perl::Layout::PatternLayout::render() called at ... line 306, 
+      Log::Log4perl::Appender::log() called at ... line 1115, ...'
+expected: 'trace: at 022Wrap.t line 69'
+```
+
+**Root Cause:** PerlOnJava's Carp::longmess includes all stack frames. Perl's version filters out internal frames based on `@CARP_NOT` and caller level adjustments that Log4perl uses.
+
+**Affected Tests:**
+- t/022Wrap.t (2 failures: tests 1-2)
+
+### Issue 3: DESTROY During Global Destruction
+
+**Status:** DESTROY not called or output not captured.
+
+**Symptom:** t/016Export.t test 16 fails - expected DESTROY message not appearing.
+
+**Test:**
+```perl
+# Expected: 'Log::Log4perl::Appender::TestBuffer destroyed'
+# Got: ''
+```
+
+**Root Cause:** The `DESTROY` method on TestBuffer may not be called during global destruction, or the message is printed but not captured by the test framework.
+
+**Affected Tests:**
+- t/016Export.t (1 failure)
+
+### Issue 4: File Permissions (stat/chmod)
+
+**Status:** Unchanged - needs investigation.
 
 **Symptom:** t/026FileApp.t tests 6-7 fail comparing expected vs actual file permissions.
 
@@ -239,47 +244,60 @@ Can't use an undefined value as a GLOB reference at jar:PERL5LIB/Carp.pm line 75
 **Affected Tests:**
 - t/026FileApp.t (tests 6-7, 25)
 
-### Issue 4: Safe.pm / Opcode.pm
+### Issue 5: Safe.pm Compartment Restrictions
 
-**Symptom:** t/041SafeEval.t tests 4-5, 20 fail.
+**Status:** Safe.pm stub doesn't enforce opcode restrictions.
 
-**Root Cause:** PerlOnJava's Safe.pm implementation may not properly restrict opcodes.
+**Symptom:** t/041SafeEval.t tests 4-5, 20 fail. Code that should be blocked by restrictive Safe settings still executes.
+
+**Test expectation:** When `ALLOW_CODE_IN_CONFIG_FILE` is true with a restrictive mask, harmful code should be blocked.
+
+**Root Cause:** PerlOnJava's Safe.pm stub uses plain `eval` with `no strict 'vars'` - it doesn't actually restrict any operations.
 
 **Affected Tests:**
 - t/041SafeEval.t (3 failures)
 
-### Issue 5: Source Filters (###l4p)
+### Issue 6: Source Filters (###l4p)
+
+**Status:** Source filters not supported.
 
 **Symptom:** t/049Unhide.t fails - the `###l4p` source filter mechanism doesn't work.
 
-**Root Cause:** Log::Log4perl uses a source filter to hide/unhide statements prefixed with `###l4p`. PerlOnJava may not support this source filtering.
+**Root Cause:** Log::Log4perl uses a source filter to hide/unhide statements prefixed with `###l4p`. PerlOnJava doesn't support source filtering.
 
 **Affected Tests:**
 - t/049Unhide.t (1 failure)
 
-### Issue 6: DESTROY Message
+## Resolved Issues
 
-**Symptom:** t/016Export.t test 16 fails - expected DESTROY message not appearing.
+### RESOLVED: Issue 1 (Previous): `local` Package Variable Bug
 
-**Test:**
+**Status:** FIXED in PR #333 (2026-03-19)
+
 ```perl
-# Expected: 'Log::Log4perl::Appender::TestBuffer destroyed'
-# Got: ''
+package Foo;
+our $X = 0;
+sub check { print "X=$X\n"; }
+
+package main;
+local $Foo::X = 1;
+Foo::check();  # jperl now correctly prints "X=1"
 ```
 
-**Root Cause:** The `DESTROY` method on TestBuffer may not be called during global destruction, or the message is not being captured correctly.
+### RESOLVED: Issue 2 (Previous): Carp.pm / warnings.pm Interaction  
 
-**Affected Tests:**
-- t/016Export.t (1 failure)
+**Status:** FIXED - t/020Easy.t now passes all 21 tests.
 
-## Priority Order
+The Carp.pm error was resolved by fixing the underlying `local` and glob issues.
 
-1. **`local` package variable bug** - ROOT CAUSE affecting 16+ tests across multiple files
-2. **Carp.pm/warnings.pm interaction** - Separate issue, quick fix possible
-3. **DESTROY message** - May be a minor timing/output issue
-4. **File permissions** - Likely straightforward fix
-5. **Safe.pm** - May require significant work
-6. **Source filters** - May require parser changes
+## Priority Order (Updated)
+
+1. **caller() line number reporting** - Affects 8+ tests, needs stack frame investigation
+2. **%T stack trace filtering** - Affects 2 tests, may need Carp.pm adjustments
+3. **DESTROY during global destruction** - 1 test, may be fundamental JVM limitation
+4. **File permissions** - 3 tests, likely straightforward fix
+5. **Safe.pm restrictions** - 3 tests, requires significant architectural work
+6. **Source filters** - 1 test, requires parser changes
 
 ## Recent Debugging Session (2026-03-18)
 
@@ -348,27 +366,65 @@ These tests pass locally but exceed CI timeout limits. The CI may need longer ti
 ./jcpan -t Log::Log4perl
 
 # Run a specific test
-cd ~/.cpan/build/Log-Log4perl-1.57* && /path/to/jperl t/020Easy.t
+cd ~/.cpan/build/Log-Log4perl-1.57* && /path/to/jperl t/024WarnDieCarp.t
 
 # Quick test for bareword filehandle
 ./jperl -e 'open IN, "</etc/passwd"; IN->clearerr(); print "OK\n"; close IN;'
 
 # Quick test for $( and $)
 ./jperl -e 'print "GID: $(\nEGID: $)\n";'
+
+# Test caller() behavior
+./jperl -e 'sub foo { print caller(), "\n"; } sub bar { foo(); } bar();'
 ```
 
 ## Files to Investigate
 
-For Carp.pm fix:
-- `src/main/perl/lib/Carp.pm` - line 755
-- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - `caller()` method
-
-For caller() fix:
+For caller() line number fix:
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - `caller()` method
 - `src/main/java/org/perlonjava/runtime/ExceptionFormatter.java`
+- `src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java` - line number tracking
+
+For %T (Carp) stack trace:
+- `src/main/perl/lib/Carp.pm` - longmess(), shortmess()
+- May need @CARP_NOT handling adjustments
+
+For DESTROY:
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeHash.java` - object destruction
+- Global destruction order in Main.java
+
+For chmod/umask:
+- `src/main/java/org/perlonjava/runtime/operators/IOOperator.java` - chmod implementation
+- Check umask application
 
 ## Related Documentation
 
 - Perl's IO::Handle: https://perldoc.perl.org/IO::Handle
 - Perl's caller(): https://perldoc.perl.org/functions/caller
 - Log::Log4perl: https://metacpan.org/pod/Log::Log4perl
+
+## Progress Tracking
+
+### Current Status: 18/700 subtests failing (was 26/700)
+
+### Completed
+- [x] *{NAME} glob slot accessor (2026-03-18)
+- [x] local *$dynamic interpreter support (2026-03-18)
+- [x] gethostbyname interpreter opcode (2026-03-18)
+- [x] Bareword filehandle method calls (2026-03-18)
+- [x] $( and $) special variables (2026-03-18)
+- [x] exit() inside BEGIN blocks (2026-03-19)
+- [x] local $Pkg::Var bug fix (2026-03-19, PR #333)
+
+### Active Issues
+- [ ] caller() line number reporting (8 tests)
+- [ ] %T stack trace format (2 tests)
+- [ ] DESTROY during global destruction (1 test)
+- [ ] chmod/file permissions (3 tests)
+- [ ] Safe.pm restrictions (3 tests)
+- [ ] Source filters (1 test)
+
+### Next Steps
+1. Investigate caller() line number issue in t/024WarnDieCarp.t
+2. Consider Log4perl's caller level adjustment mechanism
+3. Check if Carp.pm @CARP_NOT is being respected
