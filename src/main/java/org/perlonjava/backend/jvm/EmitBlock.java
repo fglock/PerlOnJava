@@ -267,6 +267,15 @@ public class EmitBlock {
                         // Visit in SCALAR context to get a value, store it, then pop
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                         mv.visitVarInsn(Opcodes.ASTORE, resultReg);
+                    } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                            && (node.getBooleanAnnotation("isFileLevelBlock") || node.getBooleanAnnotation("blockIsSubroutine"))
+                            && element instanceof For3Node for3
+                            && for3.isSimpleBlock
+                            && for3.labelName == null) {
+                        // Bare block (no label) as last statement in file-level RUNTIME context
+                        // or inside a subroutine. This handles do "file", require, and sub { { 99 } }.
+                        // Visit with SCALAR context to get the block's return value.
+                        element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     } else {
                         element.accept(emitterVisitor);
                     }

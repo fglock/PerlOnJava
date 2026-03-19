@@ -163,6 +163,20 @@ public class EmitStatement {
             Label redoLabel = new Label();
             mv.visitLabel(redoLabel);
 
+            // For simple blocks (bare blocks like { ... }) in non-void context,
+            // use register spilling to capture the result: allocate a local variable,
+            // tell the block to store its last element's value there, then load it after endLabel.
+            // This ensures consistent stack state across all code paths (including last/next jumps).
+            // Apply for SCALAR/LIST contexts - bare blocks always return their value in Perl.
+            // Note: Only apply to UNLABELED bare blocks. Labeled blocks like TODO: { ... } should
+            // not return their value (this would break Test::More's TODO handling).
+            // RUNTIME context is NOT included because it causes issues with Test2 context handling.
+            boolean needsReturnValue = node.isSimpleBlock
+                    && node.labelName == null  // Only bare blocks, not labeled blocks
+                    && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                        || emitterVisitor.ctx.contextType == RuntimeContextType.LIST);
+            int resultReg = -1;
+
             if (node.useNewScope) {
                 // Register next/redo/last labels
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
@@ -181,26 +195,18 @@ public class EmitStatement {
                         isUnlabeledTarget);
 
                 // Visit the loop body
-                // For simple blocks (bare blocks like { ... }) in non-void context,
-                // use register spilling to capture the result: allocate a local variable,
-                // tell the block to store its last element's value there, then load it after.
-                // This ensures consistent stack state across all code paths.
-                // Only apply for SCALAR/LIST contexts, not RUNTIME (which is for subroutine bodies).
-                boolean needsReturnValue = node.isSimpleBlock
-                        && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
-                            || emitterVisitor.ctx.contextType == RuntimeContextType.LIST);
                 if (needsReturnValue) {
                     // Allocate a local variable for the result
-                    int resultReg = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-                    // Initialize it to undef
+                    resultReg = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    // Initialize it to undef (in case last/next is called before last statement)
                     EmitOperator.emitUndef(mv);
                     mv.visitVarInsn(Opcodes.ASTORE, resultReg);
                     // Tell the block to store its last element's value in this register
                     node.body.setAnnotation("resultRegister", resultReg);
                     // Visit body in VOID context (consistent stack state)
                     node.body.accept(voidVisitor);
-                    // Load the result
-                    mv.visitVarInsn(Opcodes.ALOAD, resultReg);
+                    // NOTE: Don't load the result here! We load it after endLabel so that
+                    // all paths (normal, last, next) converge with empty stack, then load.
                 } else {
                     node.body.accept(voidVisitor);
                 }
@@ -249,12 +255,13 @@ public class EmitStatement {
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
-            // If the context is not VOID, push "undef" to the stack
-            // Exception: for simple blocks in SCALAR/LIST context, we already loaded the result from the register
-            boolean simpleBlockHandled = node.isSimpleBlock
-                    && (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
-                        || emitterVisitor.ctx.contextType == RuntimeContextType.LIST);
-            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID && !simpleBlockHandled) {
+            // If the context is not VOID, push a value to the stack
+            // For simple blocks with resultReg, load the captured result
+            // Otherwise, push undef
+            if (needsReturnValue && resultReg >= 0) {
+                // Load the result from the register (all paths converge here with empty stack)
+                mv.visitVarInsn(Opcodes.ALOAD, resultReg);
+            } else if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             }
 

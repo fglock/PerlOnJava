@@ -619,8 +619,48 @@ The JUnit parallel test failures ("ctx is null" errors) were caused by stale INI
 **Files changed:**
 - `src/test/resources/unit/bare_block_return.t` - TODO tests for bare block return values
 
+### Proposed Approach: File-Level Annotation
+
+The key insight is that RUNTIME context is used for both:
+- File-level code (where bare blocks SHOULD return values)
+- Subroutine bodies (where the existing behavior is correct)
+
+**Solution:** Annotate only file-level bare blocks before compilation.
+
+**Implementation:**
+1. In `EmitterMethodCreator.createClassWithMethod()`, before visiting the AST:
+   - Check if the last statement is a For3Node with `isSimpleBlock=true`
+   - If so, add annotation `"fileLevelReturnValue" = true` to that node
+2. In `EmitStatement.emitFor3()`:
+   - Check for `"fileLevelReturnValue"` annotation
+   - If present AND context is RUNTIME, use the register-spilling approach (same as SCALAR/LIST)
+
+This approach:
+- Only affects file-level bare blocks (targeted annotation)
+- Doesn't change how subroutine bodies compile
+- Uses existing register-spilling mechanism that's already proven to work
+
+**Files to modify:**
+- `EmitterMethodCreator.java` - Add annotation to file-level bare blocks
+- `EmitStatement.java` - Check for annotation in RUNTIME context
+
+### Failed Approaches (2026-03-19)
+
+**Approach 1: Register spilling for RUNTIME context**
+- Modified `EmitStatement.emitFor3()` to use resultRegister mechanism for RUNTIME (like SCALAR/LIST)
+- Result: JVM verification errors in tests with complex control flow (tie_scalar.t, typeglob.t, etc.)
+- Reason: The resultRegister mechanism changes local variable state, causing inconsistent stack frames at merge points
+
+**Approach 2: Visit body in RUNTIME context directly**
+- Modified `EmitStatement.emitFor3()` to call `node.body.accept(emitterVisitor)` for RUNTIME simple blocks
+- Result: Same JVM verification errors
+- Reason: Visiting body in non-VOID context changes bytecode generation throughout the block, affecting control flow
+
+**Root cause:** The issue is not just about capturing the return value. It's that any change to how the bare block body is compiled (different context, register spilling) affects the entire bytecode structure, causing JVM verifier failures when there are complex control flow constructs like `local`, tied variables, or nested blocks with jumps.
+
 ### Next Steps
 
-1. **Investigate bare block return value fix** - Need to capture last expression value without changing interior statement compilation
-2. **Test Package::Stash::PP loading** - May need explicit `1;` at end of file
-3. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
+1. **Investigate alternative approaches** - File-level AST transformation before compilation
+2. **Consider interpreter fallback** - For files ending with bare blocks, use interpreter backend
+3. **Test Package::Stash::PP** - May need workaround (explicit `1;` at file end)
+4. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies

@@ -338,6 +338,44 @@ subtest "Return values and context" => sub {
     isa_ok($result[0], 'TestClass', 'List context item is correct type');
 };
 
+subtest "Indirect method call followed by comma in list context" => sub {
+    # Bug fix test: (method $object, "V") should return two elements:
+    # 1. The result of $object->method()
+    # 2. The string "V"
+    # Previously, the "V" was being dropped incorrectly
+    
+    package CtxTest {
+        sub new { bless {}, shift }
+        sub release { return "R" }
+    }
+    
+    package main;
+    my $ctx = CtxTest->new;
+    
+    # Test 1: Method call followed by string in list context
+    my @result1 = (release $ctx, "V");
+    is(scalar @result1, 2, 'List has 2 elements');
+    is($result1[0], "R", 'First element is method result');
+    is($result1[1], "V", 'Second element is the trailing value');
+    
+    # Test 2: Multiple values after the method call
+    my @result2 = (release $ctx, "A", "B", "C");
+    is(scalar @result2, 4, 'List has 4 elements');
+    is($result2[0], "R", 'First element is method result');
+    is($result2[1], "A", 'Second element is A');
+    is($result2[2], "B", 'Third element is B');
+    is($result2[3], "C", 'Fourth element is C');
+    
+    # Test 3: Just the method call (no trailing args)
+    my @result3 = (release $ctx);
+    is(scalar @result3, 1, 'Single element when no trailing args');
+    is($result3[0], "R", 'Element is method result');
+    
+    # Test 4: Method call in scalar context should still work
+    my $scalar = (release $ctx, "V");
+    is($scalar, "V", 'Comma operator returns last value in scalar context');
+};
+
 done_testing();
 
 
