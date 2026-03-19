@@ -275,14 +275,14 @@ npm install -g @cyclonedx/cyclonedx-cli
 
 # Merge SBOMs
 cyclonedx merge \
-    --input-files build/reports/sbom/perlonjava-java.json \
-                  build/reports/sbom/perlonjava-perl.json \
-    --output-file build/reports/sbom/perlonjava-complete.json
+    --input-files build/reports/cyclonedx/bom.json \
+                  build/reports/cyclonedx/perl-bom.json \
+    --output-file build/reports/cyclonedx/combined-bom.json
 ```
 
 Alternatively, keep them separate:
-- `perlonjava-java.json` - Java dependencies (automatically updated by build)
-- `perlonjava-perl.json` - Perl modules (manually curated)
+- `bom.json` - Java dependencies (automatically updated by build)
+- `perl-bom.json` - Perl modules (generated separately)
 
 ---
 
@@ -395,17 +395,8 @@ Add to `.github/workflows/ci.yml`:
   uses: actions/upload-artifact@v4
   with:
     name: sbom
-    path: build/reports/sbom/
+    path: build/reports/cyclonedx/
     retention-days: 90
-
-# Optional: Upload to Dependency-Track or similar
-- name: Upload to Dependency-Track
-  if: github.ref == 'refs/heads/master'
-  run: |
-    curl -X POST "$DT_URL/api/v1/bom" \
-      -H "X-Api-Key: $DT_API_KEY" \
-      -H "Content-Type: application/json" \
-      -d @build/reports/sbom/perlonjava-java.json
 ```
 
 ### Release Artifacts
@@ -417,7 +408,7 @@ Include SBOM in GitHub releases:
   with:
     files: |
       target/perlonjava-*-all.jar
-      build/reports/sbom/perlonjava-*.json
+      build/reports/cyclonedx/bom.json
 ```
 
 ---
