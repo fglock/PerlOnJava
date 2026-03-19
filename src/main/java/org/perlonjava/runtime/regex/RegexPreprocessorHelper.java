@@ -630,9 +630,16 @@ public class RegexPreprocessorHelper {
                             RegexPreprocessor.regexError(s, offset, "Missing right brace on \\o{}");
                         }
                     } else if (s.codePointAt(offset) == 'b') {
-                        rejected.append("\\b"); // Java doesn't support \b inside [...]
-                        offset++;
-                        lastChar = -1;
+                        // \b inside character class = backspace in Perl
+                        // Java doesn't support \b in [...], so convert to \x08
+                        // Remove the \ that was already appended to sb
+                        sb.setLength(sb.length() - 1);
+                        // Use \x08 directly in the class (works for ranges too)
+                        sb.append("\\x08");
+                        // Don't increment offset here - the outer loop will do it
+                        lastChar = 0x08;  // Backspace character for range validation
+                        first = false;
+                        afterCaret = false;
                     } else {
                         int c2 = s.codePointAt(offset);
                         if (c2 >= '0' && c2 <= '7') {
