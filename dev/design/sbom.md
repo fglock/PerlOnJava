@@ -22,13 +22,13 @@ The goal is to produce a unified or complementary SBOM that documents the comple
 | Term | Definition |
 |------|------------|
 | **SBOM** | Software Bill of Materials - a formal inventory of software components |
-| **CycloneDX** | An OWASP standard for SBOM format (JSON/XML), now ECMA-424 |
-| **SPDX** | Alternative SBOM standard from Linux Foundation, focused on licensing |
-| **PURL** | Package URL - a standard format for identifying software packages (e.g., `pkg:maven/org.ow2.asm/asm@9.9.1`) |
-| **VEX** | Vulnerability Exploitability eXchange - documents whether vulnerabilities affect a product |
+| **[CycloneDX](https://cyclonedx.org/)** | An OWASP standard for SBOM format (JSON/XML), now ECMA-424 |
+| **[SPDX](https://spdx.dev/)** | Alternative SBOM standard from Linux Foundation, focused on licensing |
+| **[PURL](https://github.com/package-url/purl-spec)** | Package URL - a standard format for identifying software packages (e.g., `pkg:maven/org.ow2.asm/asm@9.9.1`) |
+| **[VEX](https://cyclonedx.org/capabilities/vex/)** | Vulnerability Exploitability eXchange - documents whether vulnerabilities affect a product |
 | **Shaded/Uber JAR** | A JAR file that bundles all dependencies into a single archive |
-| **Maven Central** | The primary repository for Java libraries (like CPAN for Perl) |
-| **CPAN** | Comprehensive Perl Archive Network - the primary repository for Perl modules |
+| **[Maven Central](https://central.sonatype.com/)** | The primary repository for Java libraries (like CPAN for Perl) |
+| **[CPAN](https://metacpan.org/)** | Comprehensive Perl Archive Network - the primary repository for Perl modules |
 
 ---
 
@@ -624,11 +624,29 @@ CycloneDX supports:
 
 ## References
 
-- [CycloneDX Specification](https://cyclonedx.org/specification/overview/)
+### SBOM Standards
+- [CycloneDX Specification](https://cyclonedx.org/specification/overview/) - OWASP SBOM standard
+- [CycloneDX ECMA-424](https://ecma-international.org/publications-and-standards/standards/ecma-424/) - International standard (Dec 2024)
+- [SPDX Specification](https://spdx.dev/specifications/) - Linux Foundation SBOM standard
+- [PURL Specification](https://github.com/package-url/purl-spec) - Package URL format
+- [VEX Specification](https://cyclonedx.org/capabilities/vex/) - Vulnerability Exploitability eXchange
+
+### CycloneDX Tooling
 - [CycloneDX Gradle Plugin](https://github.com/CycloneDX/cyclonedx-gradle-plugin)
 - [CycloneDX Maven Plugin](https://github.com/CycloneDX/cyclonedx-maven-plugin)
-- [SBOM::CycloneDX Perl Module](https://metacpan.org/pod/SBOM::CycloneDX)
-- [CISA SBOM Resources](https://www.cisa.gov/sbom)
-- [NTIA SBOM Minimum Elements](https://www.ntia.gov/files/ntia/publications/sbom_minimum_elements_report.pdf)
-- [US Executive Order 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/)
-- [CycloneDX Tool Center](https://cyclonedx.org/tool-center/)
+- [CycloneDX CLI](https://github.com/CycloneDX/cyclonedx-cli) - Merge, validate, convert SBOMs
+- [CycloneDX Tool Center](https://cyclonedx.org/tool-center/) - Full list of tools
+- [CycloneDX Online Validator](https://cyclonedx.github.io/sbom-validator/)
+
+### Perl Resources
+- [SBOM::CycloneDX on CPAN](https://metacpan.org/pod/SBOM::CycloneDX)
+- [CPAN](https://metacpan.org/) - Comprehensive Perl Archive Network
+
+### Java Resources
+- [Maven Central](https://central.sonatype.com/) - Primary Java package repository
+
+### Regulatory & Government
+- [US Executive Order 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/) - Improving the Nation's Cybersecurity (May 2021)
+- [CISA SBOM Resources](https://www.cisa.gov/sbom) - US guidance and tools
+- [NTIA SBOM Minimum Elements](https://www.ntia.gov/files/ntia/publications/sbom_minimum_elements_report.pdf) - Required fields
+- [EU Cyber Resilience Act](https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act) - European regulation
