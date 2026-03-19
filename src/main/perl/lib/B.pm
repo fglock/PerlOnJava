@@ -72,11 +72,32 @@ package B::CV {
     
     sub GV {
         my $self = shift;
+        my $code = $self->{ref};
+        
+        # Use Sub::Util::subname to get the actual name
+        require Sub::Util;
+        my $fullname = Sub::Util::subname($code);
+        
+        if (defined $fullname && $fullname ne '__ANON__' && $fullname =~ /^(.+)::([^:]+)$/) {
+            my ($pkg, $name) = ($1, $2);
+            return B::GV->new($name, $pkg);
+        }
+        
         return B::GV->new("__ANON__", "main");
     }
     
     sub STASH {
         my $self = shift;
+        my $code = $self->{ref};
+        
+        # Use Sub::Util::subname to get the package
+        require Sub::Util;
+        my $fullname = Sub::Util::subname($code);
+        
+        if (defined $fullname && $fullname ne '__ANON__' && $fullname =~ /^(.+)::/) {
+            return B::STASH->new($1);
+        }
+        
         return B::STASH->new("main");
     }
     
