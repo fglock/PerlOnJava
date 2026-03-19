@@ -641,6 +641,7 @@ CycloneDX supports:
 ### Perl Resources
 - [SBOM::CycloneDX on CPAN](https://metacpan.org/pod/SBOM::CycloneDX)
 - [CPAN](https://metacpan.org/) - Comprehensive Perl Archive Network
+- [CPAN Security Advisory Database](https://security.metacpan.org/) - Vulnerability database for Perl modules
 
 ### Java Resources
 - [Maven Central](https://central.sonatype.com/) - Primary Java package repository
