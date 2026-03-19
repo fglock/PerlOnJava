@@ -525,6 +525,84 @@ The generated SBOM must include:
 
 ---
 
+## Component Hashes
+
+### Supported Hash Algorithms
+
+CycloneDX supports these hash algorithms:
+- **MD5** (legacy, included for compatibility)
+- **SHA-1** (legacy, included for compatibility)
+- **SHA-256** (recommended)
+- **SHA-384**, **SHA-512**
+- **SHA3-256**, **SHA3-384**, **SHA3-512**
+- **BLAKE2b-256**, **BLAKE2b-384**, **BLAKE2b-512**
+- **BLAKE3**
+
+### Java Dependencies (Automatic)
+
+The CycloneDX Gradle and Maven plugins **automatically include hashes** for all dependencies:
+
+1. Hashes are retrieved from Maven Central repository metadata
+2. SHA-256 is computed from downloaded artifacts
+3. Multiple hash algorithms are included (MD5, SHA-1, SHA-256)
+
+Example output:
+```json
+{
+  "type": "library",
+  "name": "asm",
+  "version": "9.9.1",
+  "group": "org.ow2.asm",
+  "purl": "pkg:maven/org.ow2.asm/asm@9.9.1",
+  "hashes": [
+    {"alg": "MD5", "content": "..."},
+    {"alg": "SHA-1", "content": "..."},
+    {"alg": "SHA-256", "content": "..."}
+  ]
+}
+```
+
+**No additional configuration needed** - hashes are included by default.
+
+### Perl Modules (Manual)
+
+For bundled Perl modules, hashes must be computed manually. Update the SBOM generation script:
+
+```perl
+use Digest::SHA qw(sha256_hex);
+use SBOM::CycloneDX::Hash;
+
+sub compute_hash {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or return;
+    local $/;
+    my $content = <$fh>;
+    close $fh;
+    return sha256_hex($content);
+}
+
+# When creating component:
+my $hash = SBOM::CycloneDX::Hash->new(
+    alg     => 'SHA-256',
+    content => compute_hash($path)
+);
+$component->hashes->add($hash);
+```
+
+### Hash Verification
+
+Consumers can verify component integrity by:
+1. Downloading the component from its source (PURL)
+2. Computing the hash locally
+3. Comparing with the hash in the SBOM
+
+This enables detection of:
+- Tampered dependencies
+- Man-in-the-middle attacks
+- Compromised build artifacts
+
+---
+
 ## Open Questions
 
 1. **Perl module licensing:** Should we manually curate licenses for all 511 bundled modules, or use a default?
