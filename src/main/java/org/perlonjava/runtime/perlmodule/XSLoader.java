@@ -80,8 +80,11 @@ public class XSLoader extends PerlModuleBase {
             initialize.invoke(null);
             return scalarTrue.getList();
         } catch (Exception e) {
+            // Error message matches pattern /object version|loadable object/ that many
+            // CPAN modules (DateTime, JSON::XS, etc.) expect for pure Perl fallback
             return WarnDie.die(
-                    new RuntimeScalar("Can't load Java XS module: " + moduleName),
+                    new RuntimeScalar("Can't load loadable object for module " + moduleName + 
+                                      ": no Java XS implementation available"),
                     new RuntimeScalar("\n")
             ).getList();
         }
