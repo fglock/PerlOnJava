@@ -267,6 +267,16 @@ public class EmitBlock {
                         // Visit in SCALAR context to get a value, store it, then pop
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                         mv.visitVarInsn(Opcodes.ASTORE, resultReg);
+                    } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                            && node.getBooleanAnnotation("isFileLevelBlock")
+                            && element instanceof For3Node for3
+                            && for3.isSimpleBlock
+                            && for3.labelName == null) {
+                        // Special case: bare block (no label) as last statement in file-level RUNTIME context.
+                        // This handles do "file" and require where the file ends with a bare block.
+                        // Visit with SCALAR context to get the block's return value.
+                        // The "isFileLevelBlock" annotation is set by Parser.parse() for non-top-level files.
+                        element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     } else {
                         element.accept(emitterVisitor);
                     }

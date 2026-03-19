@@ -90,8 +90,6 @@ use Test::More;
 # ============================================================
 # RUNTIME context tests (file-level for require/do)
 # These test the bug fix for Package::Stash::PP
-# NOTE: RUNTIME context is NOT YET FIXED due to Test2 context handling issues.
-# See cpan_client.md Phase 11a for details.
 # ============================================================
 
 use File::Temp qw(tempfile);
@@ -102,7 +100,6 @@ use File::Temp qw(tempfile);
     print $fh "{ 42; }\n";
     close $fh;
     my $result = do $filename;
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 42, 'bare block in file (RUNTIME) returns last expression');
 }
 
@@ -112,7 +109,6 @@ use File::Temp qw(tempfile);
     print $fh "{ my \$x = 99; \$x; }\n";
     close $fh;
     my $result = do $filename;
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 99, 'bare block with lexical in file (RUNTIME)');
 }
 
@@ -122,7 +118,6 @@ use File::Temp qw(tempfile);
     print $fh "{ my \%h = (a => 1, b => 2); scalar keys \%h; }\n";
     close $fh;
     my $result = do $filename;
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 2, 'bare block with hash in file (RUNTIME)');
 }
 
@@ -132,7 +127,6 @@ use File::Temp qw(tempfile);
     print $fh "{ { { 123; } } }\n";
     close $fh;
     my $result = do $filename;
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 123, 'nested bare blocks in file (RUNTIME)');
 }
 
@@ -142,7 +136,6 @@ use File::Temp qw(tempfile);
     print $fh "my \$x = 1; { \$x + 100; }\n";
     close $fh;
     my $result = do $filename;
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 101, 'bare block as last statement in file (RUNTIME)');
 }
 
@@ -159,7 +152,6 @@ package TestModuleBareBlock;
 EOF
     close $fh;
     my $result = eval { require $filename };
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     ok(!$@, 'module with bare block loads without error');
     is($result, 1, 'module with bare block returns true');
     is(TestModuleBareBlock::get_type('@'), 'ARRAY', 'subroutine in bare block works');
@@ -174,7 +166,6 @@ sub test_inside { return $_[0] + 1; }
 EOF
     close $fh;
     my $result = do $filename;
-    local $TODO = 'RUNTIME context bare blocks not yet fixed';
     is($result, 42, 'file with bare block containing sub call returns value');
 }
 

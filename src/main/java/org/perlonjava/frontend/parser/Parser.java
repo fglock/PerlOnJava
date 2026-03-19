@@ -3,6 +3,7 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.FormatNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
@@ -126,6 +127,12 @@ public class Parser {
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
         }
         Node ast = ParseBlock.parseBlock(this);
+        // Mark the AST as a top-level file block for proper bare block return value handling
+        // This annotation is checked in EmitBlock to handle RUNTIME context bare blocks
+        if (!isTopLevelScript && ast instanceof AbstractNode) {
+            // For do "file" and require, mark the block so bare blocks return their value
+            ((AbstractNode) ast).setAnnotation("isFileLevelBlock", true);
+        }
         if (!getHeredocNodes().isEmpty()) {
             ParseHeredoc.heredocError(this);
         }
