@@ -34,6 +34,10 @@ imports:
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 
+  # Net::Ping - Network ping module (required by CPAN::Mirrors)
+  - source: perl5/dist/Net-Ping/lib/Net/Ping.pm
+    target: src/main/perl/lib/Net/Ping.pm
+
   # Module tests go to perl5_t/ (external, not in git)
   - source: perl5/lib/Benchmark.t
     target: perl5_t/Benchmark/Benchmark.t
