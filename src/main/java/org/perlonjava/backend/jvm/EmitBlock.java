@@ -267,6 +267,19 @@ public class EmitBlock {
                         // Visit in SCALAR context to get a value, store it, then pop
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                         mv.visitVarInsn(Opcodes.ASTORE, resultReg);
+                    } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                            && element instanceof For3Node f3
+                            && f3.isSimpleBlock
+                            && f3.labelName == null) {
+                        // For RUNTIME context (file bodies), if the last element is an unlabeled
+                        // bare block, visit it in LIST context to capture its return value.
+                        // This fixes files like Package::Stash::PP.pm that end with { ... }
+                        // and rely on the block's implicit return value for require/do.
+                        //
+                        // NOTE: This can cause stack frame issues when the block contains
+                        // complex control flow (like Test::More functions). In such cases,
+                        // the module should use explicit `1;` at the end of the block.
+                        element.accept(emitterVisitor.with(RuntimeContextType.LIST));
                     } else {
                         element.accept(emitterVisitor);
                     }

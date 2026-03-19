@@ -686,6 +686,180 @@ rm -rf ~/.cpan/build ~/.cpan/sources ~/.perlonjava
 - [x] B::Hooks::EndOfScope implementation (master)  
 - [x] Package::Stash::Conflicts stub (PR #339)
 - [x] MakeMaker.parse_args (PR #339)
-- [ ] Fix file return value discrepancy (P0 - CRITICAL)
+- [ ] Fix file return value discrepancy (P0 - CRITICAL) - **Phase 11a in progress**
 - [ ] Add File::ShareDir::Install
 - [ ] Verify DateTime installation and usage
+
+---
+
+## Phase 11a: Fix Bare Block Return Value at File Level (2026-03-19)
+
+### Problem Statement
+
+Files ending with a bare block `{ ... }` return `undef` instead of the block's last expression value. This breaks modules like `Package::Stash::PP.pm` which don't have explicit `1;` at the end.
+
+**Reproduction**:
+```bash
+echo '{ 3; }' > /tmp/test.pl
+perl -e 'print do "/tmp/test.pl"'     # Output: 3
+./jperl -e 'print do "/tmp/test.pl"'  # Output: (empty - undef)
+```
+
+### Root Cause Analysis
+
+**Where return values are handled**:
+1. **File bodies** are compiled with `RUNTIME` context (see `EmitterMethodCreator.java` line 432)
+2. **Bare blocks** (`{ ... }`) are represented as `For3Node` with `isSimpleBlock=true`
+3. In `EmitStatement.emitFor3()`, simple blocks only capture return values for `SCALAR`/`LIST` contexts, NOT `RUNTIME`
+
+### Solution Implemented
+
+**Fix location**: `EmitBlock.java` lines 270-282
+
+**Approach**: Handle return value at BlockNode level, not For3Node level. When processing the last element of a file body (RUNTIME context), if it's an unlabeled bare block, visit it with LIST context to capture its return value.
+
+```java
+} else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+        && element instanceof For3Node f3
+        && f3.isSimpleBlock
+        && f3.labelName == null) {
+    // For RUNTIME context (file bodies), if the last element is an unlabeled
+    // bare block, visit it in LIST context to capture its return value.
+    element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+} else {
+    element.accept(emitterVisitor);
+}
+```
+
+### Test Results
+
+**Unit tests created**: `src/test/resources/unit/bare_block_return.t` (26 tests + 2 TODO)
+
+**Individual test execution**: ✅ ALL PASS
+```bash
+./jperl src/test/resources/unit/bare_block_return.t
+# ok 1 - bare block in void context executes
+# ...
+# ok 26 - bare block with is_deeply() executes correctly
+# 1..28
+```
+
+**JUnit parallel execution**: ❌ FAILS (see Discovered Issue below)
+
+### Discovered Issue: Test2::API evalContext State Pollution
+
+When running `make`, tests fail with:
+
+```
+Cannot read field "capturedEnv" because "ctx" is null
+    Test2::API at .../src/main/perl/lib/Test2/API.pm line 72
+```
+
+**This is NOT caused by the bare block fix** - it's a pre-existing issue with how PerlOnJava handles INIT blocks in parallel test environments.
+
+#### Root Cause Chain
+
+1. **Test2::API has an INIT block with eval** (line 72):
+   ```perl
+   INIT { eval 'END { test2_set_is_end() }; 1' or die $@ }
+   ```
+
+2. **eval contexts are stored in a static HashMap**:
+   ```java
+   // RuntimeCode.java line 180
+   public static HashMap<String, EmitterContext> evalContext = new HashMap<>();
+   ```
+
+3. **JUnit test harness calls `PerlLanguageProvider.resetAll()` before each test**:
+   ```java
+   // PerlScriptExecutionTest.java line 245
+   PerlLanguageProvider.resetAll();
+   ```
+
+4. **`resetAll()` clears `evalContext`**:
+   ```java
+   // RuntimeCode.java line 313
+   evalContext.clear();
+   ```
+
+5. **Problem**: Compiled code (Test2::API's INIT block) survives between tests, but its associated eval context is cleared. When the INIT block tries to execute its eval:
+   ```java
+   // RuntimeCode.java line 369
+   EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+   // ctx is null because evalContext was cleared!
+   
+   // Line 386 throws NPE
+   ctx.capturedEnv  // Cannot read field "capturedEnv" because "ctx" is null
+   ```
+
+#### Why Tests Pass Individually But Fail in Parallel
+
+- **Individual**: Test2::API loads fresh, INIT block runs, eval context exists
+- **Parallel/JUnit**: Test A loads Test2::API → reset clears evalContext → Test B uses stale compiled INIT block → evalContext.get() returns null → NPE
+
+### Resolution Steps
+
+#### Step 1: Fix evalContext Null Check (Immediate - Required)
+
+Add null check in `RuntimeCode.evalStringHelper()` with meaningful error:
+
+```java
+EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+if (ctx == null) {
+    throw new RuntimeException(
+        "Eval context not found for tag: " + evalTag + 
+        ". This can happen when eval is called after runtime reset. " +
+        "The module may need to be reloaded.");
+}
+```
+
+This converts the cryptic NPE into an actionable error message.
+
+#### Step 2: Preserve INIT/BEGIN evalContexts Across Resets (Better Fix)
+
+**Option A**: Don't clear evalContext entries for INIT/BEGIN blocks
+- Track which evalTags come from special blocks
+- Only clear "regular" eval contexts on reset
+
+**Option B**: Force module recompilation after reset
+- Clear module cache along with evalContext
+- Ensures INIT blocks get fresh eval contexts
+
+**Option C**: Use WeakHashMap or scope evalContext differently
+- Tie evalContext lifecycle to class loader
+- When classloader is replaced, old contexts become unreachable
+
+#### Step 3: Test the Fix
+
+```bash
+# Individual test (already passes)
+./jperl src/test/resources/unit/bare_block_return.t
+
+# JUnit parallel (should pass after fix)
+make
+
+# Ultimate goal
+./jperl -e 'use Package::Stash::PP; print "OK\n"'
+```
+
+### Files Changed (Phase 11a)
+
+1. `src/main/java/org/perlonjava/backend/jvm/EmitBlock.java` - Bare block RUNTIME context fix
+2. `src/test/resources/unit/bare_block_return.t` - Unit tests for bare block return values
+
+### Files to Change (evalContext Fix)
+
+1. `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - Add null check with meaningful error
+
+### Progress Tracking
+
+- [x] Identify bare block return value bug
+- [x] Implement fix in EmitBlock.java
+- [x] Create unit tests (26 pass, 2 TODO)
+- [x] Verify individual test execution works
+- [x] Diagnose JUnit parallel test failure
+- [x] Identify root cause: evalContext cleared but compiled INIT blocks reference old tags
+- [ ] Add null check with meaningful error message
+- [ ] Choose and implement evalContext lifecycle fix
+- [ ] Verify `make` passes
+- [ ] Verify Package::Stash::PP loads
