@@ -33,6 +33,33 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.IO = new RuntimeScalar();
     }
 
+    /**
+     * Creates a detached copy of this glob that shares the current IO slot reference.
+     * Used when assigning a glob to a scalar: `my $fh = *FH`
+     * 
+     * <p>This is crucial for `local *GLOB` semantics. When you do:
+     * <pre>
+     *   local *FH;
+     *   open FH, ...; 
+     *   my $captured = *FH;
+     *   return $captured;
+     * </pre>
+     * After the local scope ends, *FH's IO is restored, but $captured should
+     * still have the IO that was opened. This method creates a new RuntimeGlob
+     * that points to the CURRENT IO object, so when local restores the original
+     * glob, the captured copy is unaffected.
+     * 
+     * <p>Subclasses (like RuntimeStashEntry) should override this to return 
+     * the same instance, preserving their special ref() behavior.
+     *
+     * @return A new RuntimeGlob with the same globName and IO reference.
+     */
+    public RuntimeGlob createDetachedCopy() {
+        RuntimeGlob copy = new RuntimeGlob(this.globName);
+        copy.IO = this.IO;  // Share the current IO reference
+        return copy;
+    }
+
     public static boolean isGlobAssigned(String globName) {
         return GlobalVariable.globalGlobs.getOrDefault(globName, false);
     }
@@ -612,21 +639,28 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeArray savedArray = GlobalVariable.getGlobalArray(this.globName);
         RuntimeHash savedHash = GlobalVariable.getGlobalHash(this.globName);
         RuntimeScalar savedCode = GlobalVariable.getGlobalCodeRef(this.globName);
-        globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode));
+        // Save the current IO object reference (not its state) so we can restore it later.
+        // This allows captured glob references to keep the "local" IO even after restore.
+        RuntimeScalar savedIO = this.IO;
+        globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO));
 
         savedCode.dynamicSaveState();
         savedArray.dynamicSaveState();
         savedHash.dynamicSaveState();
         savedScalar.dynamicSaveState();
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
-        this.IO.dynamicSaveState();
+        // Create a NEW IO slot for the local scope.
+        // Any code that captures this glob during local will get this new IO object.
+        this.IO = new RuntimeScalar();
     }
 
     @Override
     public void dynamicRestoreState() {
-        this.IO.dynamicRestoreState();
-
         GlobSlotSnapshot snap = globSlotStack.pop();
+
+        // Restore the saved IO object reference (not modify in place).
+        // This leaves any captured references pointing to the "local" IO.
+        this.IO = snap.io;
 
         GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
         snap.scalar.dynamicRestoreState();
@@ -649,6 +683,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeScalar scalar,
             RuntimeArray array,
             RuntimeHash hash,
-            RuntimeScalar code) {
+            RuntimeScalar code,
+            RuntimeScalar io) {
     }
 }

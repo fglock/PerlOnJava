@@ -25,6 +25,17 @@ public class RuntimeStashEntry extends RuntimeGlob {
         // System.out.println("Stash Entry create: " + globName + " " + isDefined);
     }
 
+    /**
+     * Stash entries should not be detached - they need to preserve their type
+     * for ref() to return empty string correctly.
+     * 
+     * @return this same instance
+     */
+    @Override
+    public RuntimeGlob createDetachedCopy() {
+        return this;
+    }
+
 // Note on Stash Operations:
 //
 // In Perl, a typeglob is a structure that holds a symbol table entry and a key (or slot).
