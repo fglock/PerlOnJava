@@ -24,7 +24,8 @@ public class BHooksEndOfScope extends PerlModuleBase {
     public static void initialize() {
         BHooksEndOfScope module = new BHooksEndOfScope();
         try {
-            module.registerMethod("on_scope_end", null);
+            // Prototype "&" means first argument is a code block
+            module.registerMethod("on_scope_end", "on_scope_end", "&");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing B::Hooks::EndOfScope method: " + e.getMessage());
         }

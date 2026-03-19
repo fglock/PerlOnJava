@@ -238,17 +238,13 @@ Instead of using Perl's compile-time B:: hooks, we leverage PerlOnJava's existin
 ```perl
 use B::Hooks::EndOfScope;
 {
-    on_scope_end(sub { print "cleanup\n" });
+    on_scope_end { print "cleanup\n" };
     print "in scope\n";
 }
 # Output: "in scope" then "cleanup"
 ```
 
-The Java XS implementation (`BHooksEndOfScope.java`) simply creates a `DeferBlock` and pushes it onto `DynamicVariableManager`, reusing the same infrastructure that powers Perl's `defer` feature.
-
-**Limitation:** The original B::Hooks::EndOfScope uses compile-time hooks, so `on_scope_end { BLOCK }` syntax with bare blocks works. Our implementation requires `on_scope_end(sub { BLOCK })` syntax (explicit sub). This is sufficient for namespace::autoclean and most use cases.
-
-**Future enhancement:** Could add parser special-case for `on_scope_end { }` to auto-wrap in `sub { }`, similar to how `sort { }` works.
+The Java XS implementation (`BHooksEndOfScope.java`) simply creates a `DeferBlock` and pushes it onto `DynamicVariableManager`, reusing the same infrastructure that powers Perl's `defer` feature. The `&` prototype allows bare block syntax.
 
 ### Progress Tracking
 
