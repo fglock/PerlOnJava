@@ -378,14 +378,20 @@ public class EmitVariable {
             // Note: @_ is lexical in PerlOnJava (unlike standard Perl where it's package-scoped)
             boolean isDeclared = symbolEntry != null;
 
-            // A variable is lexical if it was declared with my/our/state
-            // These are stored in JVM local variable slots, not in GlobalVariable registry
+            // A variable is lexical if it was declared with my/state.
+            // 'our' variables have special handling:
+            // - For BEGIN block captures (package starts with "PerlOnJava::_BEGIN_"): treat as lexical
+            //   This is needed because BEGIN blocks re-declare outer 'my' variables as 'our' for persistence
+            // - For regular 'our' variables: NOT lexical - must look up from GlobalVariable
+            //   This ensures 'local $Pkg::Var' changes are visible inside subroutines
+            boolean isOurInBeginCapture = isDeclared 
+                    && symbolEntry.decl().equals("our")
+                    && symbolEntry.perlPackage().startsWith("PerlOnJava::_BEGIN_");
             boolean isLexical = isDeclared && (
                     symbolEntry.decl().equals("my")
                             || symbolEntry.decl().equals("state")
-                            || symbolEntry.decl().equals("our")
-                    // Note: @_ special handling is disabled as it breaks some tests
-                    // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
+                            || isOurInBeginCapture  // 'our' in BEGIN captures are lexical
+                            || symbolEntry.name().equals("@_")  // @_ is always lexical
             );
 
             if (!isLexical) {
@@ -430,6 +436,9 @@ public class EmitVariable {
                     }
                 }
 
+                // Check if this is an 'our' declaration (not in BEGIN capture) - these create global vars
+                boolean isOurDeclaration = isDeclared && symbolEntry.decl().equals("our") && !isOurInBeginCapture;
+
                 // Compute createIfNotExists flag - determines if variable can be auto-vivified
                 boolean createIfNotExists = name.contains("::")  // Fully qualified: $Package::var
                         || (ScalarUtils.isInteger(name) && !name.startsWith("0"))  // Regex capture: $1, $2, etc.
@@ -440,13 +449,14 @@ public class EmitVariable {
                         || isNonAsciiLengthOneScalarAllowedUnderNoUtf8(emitterVisitor.ctx, sigil, name)
                         || allowIfAlreadyExists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
-                        || (isDeclared && isLexical);            // Lexically declared (my/our/state)
+                        || isOurDeclaration                      // 'our' declarations (global variable aliases)
+                        || (isDeclared && isLexical);            // Lexically declared (my/state)
 
                 // Fetch the global variable (may throw exception if strict and not allowed)
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // ===== LEXICAL VARIABLE ACCESS =====
-                // Variable is lexical (my/our/state), load it from JVM local variable slot
+                // Variable is lexical (my/state/@_/BEGIN-captured-our), load it from JVM local variable slot
                 mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
             }
 

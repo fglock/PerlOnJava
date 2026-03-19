@@ -365,18 +365,43 @@ This behavior exists BOTH with and without the `our` fix. However, the Test2/Tes
 
 The interaction between my `our` variable changes and the BEGIN/lexical behavior needs further investigation. The changes to symbol table handling during subroutine compilation (SubroutineParser.java) may be affecting how lexicals are captured in BEGIN blocks.
 
+### Successful Fix (2024-03-19)
+
+**Root Cause Identified:** The issue had two components:
+
+1. **`our` variables were treated as lexical:** In `EmitVariable.java`, `our` variables were stored in JVM local variable slots, capturing the value at subroutine definition time. This meant `local $Pkg::Var` changes weren't visible inside subroutines.
+
+2. **Package information was lost:** When copying variables to subroutine scopes (in `EmitSubroutine.java` and `SubroutineParser.java`), the 3-argument `addVariable()` was used, which used `getCurrentPackage()` instead of preserving the original `perlPackage`.
+
+**The Key Insight:** BEGIN blocks use `our` declarations in `PerlOnJava::_BEGIN_*` packages to capture outer `my` variables for persistence across compile/runtime. The fix must distinguish these from regular `our` variables:
+- `our` in `PerlOnJava::_BEGIN_*` packages → treat as lexical (use JVM slot)
+- Regular `our` → NOT lexical (look up from GlobalVariable)
+
+**Files Modified:**
+
+1. **`EmitVariable.java`** (lines 381-395, 439-453):
+   - Added `isOurInBeginCapture` check: `our` variables in `PerlOnJava::_BEGIN_*` packages are treated as lexical
+   - Regular `our` variables are now looked up from GlobalVariable at runtime
+   - Added `isOurDeclaration` to `createIfNotExists` for proper variable creation
+   - Added `@_` to `isLexical` (it's declared as `our` but is always lexical)
+
+2. **`EmitSubroutine.java`** (line 125):
+   - Changed from 3-argument to 4-argument `addVariable()` to preserve `perlPackage`
+
+3. **`SubroutineParser.java`** (line 788):
+   - Changed from 3-argument to 4-argument `addVariable()` to preserve `perlPackage`
+
+**Test Results:**
+- All existing tests pass
+- New cross-package `our`/`local` tests pass (54 tests in local.t)
+- Test::More/Test2 modules work correctly
+- BEGIN block lexical persistence works correctly
+
 ### Current Status
 
-- **Test cases added:** `local.t` now contains test cases for cross-package `our`/`local` (in `__END__` section, documented as known failures)
+- **Fix implemented and tested:** All tests pass
+- **Test cases enabled:** Cross-package `our`/`local` tests moved from `__END__` section to active tests
 - **Design documented:** This file contains the full analysis
-- **Fix NOT committed:** The fix breaks Test::More due to complex interactions with BEGIN blocks
-
-### Next Investigation Steps
-
-1. Understand why Test2::API works without the fix - what mechanism allows `$INST` to persist?
-2. Investigate how the symbol table is being used differently in BEGIN blocks vs regular subroutines
-3. Consider if there's a way to apply the `our` fix only to named subroutines, not BEGIN blocks
-4. Look into how Perl itself handles this - does it use a different storage mechanism for lexicals that need to persist across compile/runtime?
 
 ## References
 

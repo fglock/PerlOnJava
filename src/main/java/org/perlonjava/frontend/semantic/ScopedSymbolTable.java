@@ -237,6 +237,22 @@ public class ScopedSymbolTable {
         return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage(), ast);
     }
 
+    /**
+     * Adds a variable to the current scope with an explicit package.
+     * This is needed when copying 'our' variables to subroutine scopes,
+     * where the original package must be preserved for correct global lookup.
+     *
+     * @param name The name of the variable to add.
+     * @param variableDeclType The declaration type (my/our/state).
+     * @param perlPackage The Perl package where the variable was declared.
+     * @param ast The AST node for the declaration.
+     * @return The index of the variable in the current scope.
+     */
+    public int addVariable(String name, String variableDeclType, String perlPackage, OperatorNode ast) {
+        clearVisibleVariablesCache();
+        return symbolTableStack.peek().addVariable(name, variableDeclType, perlPackage, ast);
+    }
+
     public void addVariableWithIndex(String name, int index, String variableDeclType) {
         clearVisibleVariablesCache();
         symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, getCurrentPackage());

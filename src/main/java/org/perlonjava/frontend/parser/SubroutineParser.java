@@ -771,6 +771,9 @@ public class SubroutineParser {
         filteredSnapshot.enterScope();
 
         // Copy all visible variables except field declarations and code references
+        // IMPORTANT: Use the 4-argument version to preserve the original perlPackage
+        // This is critical for 'our' variables which must retain their declared package
+        // for correct global lookup (especially with the 'local' fix)
         Map<Integer, SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : visibleVars.values()) {
             // Skip field declarations when creating snapshot for bytecode generation
@@ -782,7 +785,7 @@ public class SubroutineParser {
             if (sigil.equals("&")) {
                 continue;
             }
-            filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.ast());
+            filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
         }
 
         // Clone the current package

@@ -118,8 +118,11 @@ public class EmitSubroutine {
         newSymbolTable.enterScope();
 
         // Add only the filtered visible variables (excluding 'our sub' entries)
+        // IMPORTANT: Use the 4-argument version to preserve the original perlPackage
+        // This is critical for 'our' variables declared in BEGIN captures (PerlOnJava::_BEGIN_*)
+        // which must retain their original package to work correctly with the 'local' fix
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
-            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
         }
 
         // Copy package, subroutine, and flags from the current context

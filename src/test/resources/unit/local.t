@@ -176,14 +176,6 @@ ok(!defined($global_hash{key_new}), 'local hash element restored');
 }
 ok(scalar(@global_array) < 10, 'local array element restored, array size ' . scalar(@global_array));
 
-done_testing();
-
-__END__
-
-#----- TODO: Tests for cross-package local with our variable --------
-# These tests document a known bug where subroutines don't see 'local'ized values
-# of 'our' variables set from outside their package. See dev/design/local-package-variable-fix.md
-
 # Test for cross-package local with our variable (short name in sub)
 {
     package CrossPkgTest;
@@ -194,7 +186,7 @@ __END__
     is(CrossPkgTest::check(), 0, 'cross-package our variable before local');
     {
         local $CrossPkgTest::X = 1;
-        is(CrossPkgTest::check(), 1, 'cross-package our variable inside local');  # FAILS: returns 0
+        is(CrossPkgTest::check(), 1, 'cross-package our variable inside local');
     }
     is(CrossPkgTest::check(), 0, 'cross-package our variable after local');
 }
@@ -208,7 +200,7 @@ __END__
     main::is(main::check_main_x(), 10, 'our alias persists across package change - before local');
     {
         local $main::x = 99;
-        main::is(main::check_main_x(), 99, 'our alias persists across package change - inside local');  # FAILS: returns 10
+        main::is(main::check_main_x(), 99, 'our alias persists across package change - inside local');
     }
     main::is(main::check_main_x(), 10, 'our alias persists across package change - after local');
     
@@ -226,10 +218,14 @@ __END__
     is(NestedTest::outer(), 0, 'nested sub with our - before local');
     {
         local $NestedTest::level = 5;
-        is(NestedTest::outer(), 5, 'nested sub with our - inside local');  # FAILS: returns 0
+        is(NestedTest::outer(), 5, 'nested sub with our - inside local');
     }
     is(NestedTest::outer(), 0, 'nested sub with our - after local');
 }
+
+done_testing();
+
+__END__
 
 #----- TODO: localizing filehandles --------
 
