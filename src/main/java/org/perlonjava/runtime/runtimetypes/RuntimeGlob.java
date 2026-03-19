@@ -392,7 +392,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeScalar io) {
-        this.IO = io;
+        // If IO slot is tied (TIED_SCALAR with TieHandle), replace it entirely
+        // Otherwise use set() to modify in place, preserving sharing with detached copies
+        if (this.IO.type == RuntimeScalarType.TIED_SCALAR) {
+            this.IO = io;
+        } else {
+            this.IO.type = io.type;
+            this.IO.value = io.value;
+        }
         // If the IO scalar contains a RuntimeIO, set its glob name
         if (io.value instanceof RuntimeIO runtimeIO) {
             runtimeIO.globName = this.globName;
@@ -403,7 +410,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeGlob setIO(RuntimeIO io) {
         // Set the glob name in the RuntimeIO for proper stringification
         io.globName = this.globName;
-        this.IO = new RuntimeScalar(io);
+        // If IO slot is tied (TIED_SCALAR with TieHandle), replace it entirely
+        // Otherwise modify in place, preserving sharing with detached copies
+        if (this.IO.type == RuntimeScalarType.TIED_SCALAR) {
+            this.IO = new RuntimeScalar(io);
+        } else {
+            this.IO.type = RuntimeScalarType.GLOB;  // RuntimeIO is stored as GLOB type
+            this.IO.value = io;
+        }
         return this;
     }
 
