@@ -619,8 +619,33 @@ The JUnit parallel test failures ("ctx is null" errors) were caused by stale INI
 **Files changed:**
 - `src/test/resources/unit/bare_block_return.t` - TODO tests for bare block return values
 
+### Proposed Approach: File-Level Annotation
+
+The key insight is that RUNTIME context is used for both:
+- File-level code (where bare blocks SHOULD return values)
+- Subroutine bodies (where the existing behavior is correct)
+
+**Solution:** Annotate only file-level bare blocks before compilation.
+
+**Implementation:**
+1. In `EmitterMethodCreator.createClassWithMethod()`, before visiting the AST:
+   - Check if the last statement is a For3Node with `isSimpleBlock=true`
+   - If so, add annotation `"fileLevelReturnValue" = true` to that node
+2. In `EmitStatement.emitFor3()`:
+   - Check for `"fileLevelReturnValue"` annotation
+   - If present AND context is RUNTIME, use the register-spilling approach (same as SCALAR/LIST)
+
+This approach:
+- Only affects file-level bare blocks (targeted annotation)
+- Doesn't change how subroutine bodies compile
+- Uses existing register-spilling mechanism that's already proven to work
+
+**Files to modify:**
+- `EmitterMethodCreator.java` - Add annotation to file-level bare blocks
+- `EmitStatement.java` - Check for annotation in RUNTIME context
+
 ### Next Steps
 
-1. **Investigate bare block return value fix** - Need to capture last expression value without changing interior statement compilation
-2. **Test Package::Stash::PP loading** - May need explicit `1;` at end of file
+1. **Implement file-level annotation approach** for bare block return values
+2. **Test Package::Stash::PP loading** - Verify the fix works
 3. **Alternative**: Create bundled DateTime.pm wrapper that skips heavy dependencies
