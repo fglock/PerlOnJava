@@ -618,6 +618,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - `DBI.java` - Java implementation that registers methods like `connect`, `prepare`, `execute` as Perl subroutines
   - From Perl's perspective, it's using a normal XS module, but the implementation is actually Java code
 
+  See [XS Compatibility](xs-compatibility.md) for a complete list of modules with Java implementations.
+
 
 ### Pragmas
 

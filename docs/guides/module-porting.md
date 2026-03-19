@@ -357,3 +357,9 @@ public class Dbi extends PerlModuleBase {
 - [ ] Functionality verification
 - [ ] Performance validation
 - [ ] Compatibility testing
+
+## See Also
+
+- [XS Compatibility Reference](../reference/xs-compatibility.md) - List of XS modules with Java implementations and PP fallbacks
+- [Using CPAN Modules](using-cpan-modules.md) - Installing and using CPAN modules
+- [Feature Matrix](../reference/feature-matrix.md) - Perl feature compatibility

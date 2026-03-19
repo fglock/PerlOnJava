@@ -259,8 +259,13 @@ For XS modules, installation only copies `.pm` files. The XS functions aren't av
 
 Check the module's documentation for fallback behavior.
 
+## See Also
+
+- [XS Compatibility Reference](../reference/xs-compatibility.md) - Detailed XS module compatibility
+- [Module Porting Guide](module-porting.md) - How to port modules to PerlOnJava
+- [Feature Matrix](../reference/feature-matrix.md) - Perl feature compatibility
+
 ## Getting Help
 
 - **PerlOnJava Repository**: https://github.com/fglock/PerlOnJava
 - **Issues**: Report missing modules or compatibility problems
-- **Feature Matrix**: See `docs/reference/feature-matrix.md` for supported features

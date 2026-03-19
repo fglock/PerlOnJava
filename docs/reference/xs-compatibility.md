@@ -96,5 +96,7 @@ public class ModuleName extends PerlModuleBase {
 
 ## See Also
 
-- [Using CPAN Modules](../guides/using-cpan-modules.md) - Installation guide
-- [Module Porting Guide](../guides/module-porting.md) - How to port modules
+- [Using CPAN Modules](../guides/using-cpan-modules.md) - Installing and using CPAN modules
+- [Module Porting Guide](../guides/module-porting.md) - How to port Perl modules to PerlOnJava
+- [Feature Matrix](feature-matrix.md) - Complete Perl feature compatibility
+- [Architecture](architecture.md) - How PerlOnJava works internally
