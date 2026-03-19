@@ -2,7 +2,6 @@
 
 ## Status: Planned
 
-**Author:** Devin AI  
 **Date:** 2026-03-19  
 **Related:** US Executive Order 14028, CISA SBOM Guidelines, CycloneDX ECMA-424
 
