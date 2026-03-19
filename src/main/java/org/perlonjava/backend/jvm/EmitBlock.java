@@ -276,6 +276,9 @@ public class EmitBlock {
                         // This handles do "file" and require where the file ends with a bare block.
                         // Visit with SCALAR context to get the block's return value.
                         // The "isFileLevelBlock" annotation is set by Parser.parse() for non-top-level files.
+                        // NOTE: We intentionally do NOT include blockIsSubroutine here because it
+                        // breaks Test2 context handling. The subroutine bare block case (sub foo { { 99 } })
+                        // requires a different solution that doesn't affect Test2.
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     } else {
                         element.accept(emitterVisitor);
