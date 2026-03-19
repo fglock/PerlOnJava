@@ -774,6 +774,30 @@ public class EmitOperator {
     }
 
     /**
+     * Handles void context for hash/array element access, forcing evaluation of tied variables.
+     * <p>
+     * For tied hashes/arrays, accessing an element returns a lazy proxy that only calls FETCH
+     * when the value is actually used. In void context, we need to force the FETCH to happen
+     * because tied variable access may have side effects (logging, caching, exceptions, etc.).
+     * <p>
+     * This is different from plain variable access ($x, @a, %h) which can be optimized out
+     * because they don't have subscript expressions that might have side effects.
+     *
+     * @param emitterVisitor The visitor for emitting bytecode
+     * @see <a href="https://github.com/fglock/PerlOnJava/issues/20">GitHub Issue #20</a>
+     */
+    static void handleVoidContextForTied(EmitterVisitor emitterVisitor) {
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            // Force evaluation of tied scalars by calling getBoolean(), which triggers FETCH
+            // for TIED_SCALAR types. Then discard the boolean result.
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "getBoolean", "()Z", false);
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    /**
      * Ensures the value on the stack is converted to RuntimeScalar if needed,
      * based on the node's return type.
      *

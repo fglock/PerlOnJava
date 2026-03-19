@@ -92,7 +92,7 @@ public class Dereference {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                EmitOperator.handleVoidContextForTied(emitterVisitor);
                 return;
             }
             if (sigil.equals("$") && sigilNode.operand instanceof BlockNode) {
@@ -158,7 +158,7 @@ public class Dereference {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                EmitOperator.handleVoidContextForTied(emitterVisitor);
                 return;
             }
             if (sigil.equals("@")) {
@@ -427,7 +427,7 @@ public class Dereference {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                EmitOperator.handleVoidContextForTied(emitterVisitor);
                 return;
             }
             if (sigil.equals("$") && sigilNode.operand instanceof BlockNode) {
@@ -489,7 +489,7 @@ public class Dereference {
                     }
                 }
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                EmitOperator.handleVoidContextForTied(emitterVisitor);
                 return;
             }
             if (sigil.equals("@")) {
@@ -1030,7 +1030,7 @@ public class Dereference {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        EmitOperator.handleVoidContext(emitterVisitor);
+        EmitOperator.handleVoidContextForTied(emitterVisitor);
     }
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
@@ -1105,6 +1105,6 @@ public class Dereference {
         if (pooledLeft) {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
-        EmitOperator.handleVoidContext(emitterVisitor);
+        EmitOperator.handleVoidContextForTied(emitterVisitor);
     }
 }
