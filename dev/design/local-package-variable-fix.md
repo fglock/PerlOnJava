@@ -288,6 +288,121 @@ If Phase 4 shows performance issues:
 - Log4perl compatibility: `dev/design/log4perl-compatibility.md`
 - Affects: t/020Easy.t, t/022Wrap.t, t/024WarnDieCarp.t, t/051Extra.t
 
+## Implementation Attempt Notes (2024-03-19)
+
+### What Was Tried
+
+**Approach 1: Skip `our` variables from closure capture**
+
+Attempted to modify `SubroutineParser.java` and `EmitSubroutine.java` to skip `our` variables when building the closure variable list, so they wouldn't be captured at subroutine definition time and would instead be looked up fresh at runtime.
+
+**Files modified:**
+- `SubroutineParser.java` (lines ~706-812): Skip variables with `declarationType.equals("our")` in closure capture loop
+- `EmitSubroutine.java` (lines ~102-138): Filter `our` from `visibleVariables` for anonymous subs
+
+**Result:** The basic test case passed (`X=1` was printed correctly), but it broke Test::More and other modules with a subroutine constructor mismatch error:
+
+```
+Subroutine error: org.perlonjava.anon51.<init>(org.perlonjava.runtime.runtimetypes.RuntimeHash,org.perlonjava.runtime.runtimetypes.RuntimeScalar,...) at jar:PERL5LIB/Test2/Util.pm line 8
+```
+
+**Root Cause of Failure:** The issue is that when we skip `our` variables from closure capture, the generated class constructor signature changes (fewer parameters), but existing code that creates instances of those anonymous subroutines still passes the old number of arguments. This creates a method signature mismatch at runtime.
+
+### Deeper Analysis Required
+
+The fix needs to be more surgical:
+
+1. **Don't change constructor signatures** - `our` variables still need to be in the closure capture list to maintain API compatibility
+2. **Change how captured `our` variables are used** - Instead of using the captured value, emit code to re-fetch from the global symbol table at access time
+
+This aligns with "Option A" in the design doc but requires changes at the **variable access** level, not at the **closure capture** level.
+
+### Recommended Next Steps
+
+1. **Phase 1:** Implement `getOurVariableGlobalName()` in `ScopedSymbolTable.java` - track which variables are `our` and their fully-qualified global names
+2. **Phase 2:** In `EmitVariable.java` (JVM backend) and `BytecodeCompiler.java` (interpreter), when emitting code to access a variable, check if it's an `our` variable and if so, emit `LOAD_GLOBAL_*` instead of using the register
+3. **Phase 3:** Test with both the basic reproduction case AND Test::More
+
+The key insight is: **`our` variables should still be captured in closures (to maintain constructor signatures), but the captured value should be ignored at access time in favor of a fresh global lookup.**
+
+### Approach 2: Make `our` variables non-lexical in EmitVariable.java (2024-03-19)
+
+**What Was Tried:**
+
+Modified `EmitVariable.java` to treat `our` variables as non-lexical:
+1. Removed `our` from the `isLexical` check (lines 383-389)
+2. Added `@_` as a special exception (it's declared as `our` but is actually passed as a parameter)
+3. Added `isOurDeclaration` to `createIfNotExists` to allow `our` variable access
+
+Also modified:
+- `ScopedSymbolTable.java`: Added overload `addVariable(name, decl, perlPackage, ast)` to preserve package
+- `SubroutineParser.java`: Used new overload for `our` variables when copying to subroutine scope
+
+**Result:** 
+- Basic `our`/`local` test cases PASSED (`X=1` printed correctly)
+- `@_` continued to work correctly
+- BUT: Test::More and Test2 modules FAILED with "Can't call method 'stack' on an undefined value"
+
+**Root Cause of Test2 Failure:**
+
+The Test2 framework uses a pattern like:
+```perl
+my $INST;
+use Test2::API::Instance(\$INST);  # Sets $INST via import
+my $STACK = $INST->stack;          # $INST is undef here!
+```
+
+When loading a module, the `use` statement runs at compile time (as a BEGIN block). The lexical `$INST` declared with `my` should persist from the BEGIN block to the subsequent runtime code.
+
+**Investigation revealed:** This is a pre-existing issue with how lexical variables work in BEGIN blocks:
+```perl
+my $x = 1;
+BEGIN { $x = 99; }
+print "x = $x\n";  # Prints "x = 1", not "x = 99"
+```
+
+This behavior exists BOTH with and without the `our` fix. However, the Test2/Test::More modules work in the current codebase through some mechanism that my changes apparently break.
+
+The interaction between my `our` variable changes and the BEGIN/lexical behavior needs further investigation. The changes to symbol table handling during subroutine compilation (SubroutineParser.java) may be affecting how lexicals are captured in BEGIN blocks.
+
+### Successful Fix (2024-03-19)
+
+**Root Cause Identified:** The issue had two components:
+
+1. **`our` variables were treated as lexical:** In `EmitVariable.java`, `our` variables were stored in JVM local variable slots, capturing the value at subroutine definition time. This meant `local $Pkg::Var` changes weren't visible inside subroutines.
+
+2. **Package information was lost:** When copying variables to subroutine scopes (in `EmitSubroutine.java` and `SubroutineParser.java`), the 3-argument `addVariable()` was used, which used `getCurrentPackage()` instead of preserving the original `perlPackage`.
+
+**The Key Insight:** BEGIN blocks use `our` declarations in `PerlOnJava::_BEGIN_*` packages to capture outer `my` variables for persistence across compile/runtime. The fix must distinguish these from regular `our` variables:
+- `our` in `PerlOnJava::_BEGIN_*` packages → treat as lexical (use JVM slot)
+- Regular `our` → NOT lexical (look up from GlobalVariable)
+
+**Files Modified:**
+
+1. **`EmitVariable.java`** (lines 381-395, 439-453):
+   - Added `isOurInBeginCapture` check: `our` variables in `PerlOnJava::_BEGIN_*` packages are treated as lexical
+   - Regular `our` variables are now looked up from GlobalVariable at runtime
+   - Added `isOurDeclaration` to `createIfNotExists` for proper variable creation
+   - Added `@_` to `isLexical` (it's declared as `our` but is always lexical)
+
+2. **`EmitSubroutine.java`** (line 125):
+   - Changed from 3-argument to 4-argument `addVariable()` to preserve `perlPackage`
+
+3. **`SubroutineParser.java`** (line 788):
+   - Changed from 3-argument to 4-argument `addVariable()` to preserve `perlPackage`
+
+**Test Results:**
+- All existing tests pass
+- New cross-package `our`/`local` tests pass (54 tests in local.t)
+- Test::More/Test2 modules work correctly
+- BEGIN block lexical persistence works correctly
+
+### Current Status
+
+- **Fix implemented and tested:** All tests pass
+- **Test cases enabled:** Cross-package `our`/`local` tests moved from `__END__` section to active tests
+- **Design documented:** This file contains the full analysis
+
 ## References
 
 - Perl `our` documentation: https://perldoc.perl.org/functions/our

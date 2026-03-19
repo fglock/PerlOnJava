@@ -4,14 +4,14 @@
 
 This document tracks the work needed to make `./jcpan Log::Log4perl` fully pass its test suite on PerlOnJava.
 
-## Current Status (2026-03-18)
+## Current Status (2026-03-19)
 
 ### Test Results
 
 ```
-Files=73, Tests=695
-Failed 8/73 test programs (down from 9)
-Failed 23/695 subtests (down from 28)
+Files=73, Tests=700
+Failed 8/73 test programs
+Failed 26/700 subtests
 ```
 
 ### Failing Tests Summary
@@ -19,7 +19,7 @@ Failed 23/695 subtests (down from 28)
 | Test File | Failed/Total | Issue Category |
 |-----------|--------------|----------------|
 | t/016Export.t | 1/16 | DESTROY message |
-| t/020Easy.t | 5/21 | Carp.pm undef GLOB reference (4 are filename mismatches) |
+| t/020Easy.t | 3/21 | caller() / Carp line numbers |
 | t/022Wrap.t | 2/5 | caller() stack trace format |
 | t/024WarnDieCarp.t | 11/73 | caller() / Carp line numbers |
 | t/026FileApp.t | 3/27 | File permissions / substr issues |
@@ -66,6 +66,26 @@ my $m = Carp::longmess();  # Sometimes fails with undef GLOB
 2. Or investigate why `$_` becomes undefined during the foreach loop in certain contexts
 
 ## Completed Fixes
+
+### 8. exit() Inside BEGIN Blocks (PR #331, 2026-03-19)
+
+**Problem:** `exit()` inside a BEGIN block caused "BEGIN failed--compilation aborted" error instead of exiting the program cleanly.
+
+**Symptom:**
+```
+$ ./jperl -e 'BEGIN { exit 0; } print "should not print"'
+exit 0
+BEGIN failed--compilation aborted at -e line 1, near ""
+```
+
+**Root Cause:** `SpecialBlockParser.runSpecialBlock()` caught all `Throwable` exceptions (including `PerlExitException`) and converted them to `PerlCompilerException` with "BEGIN failed" message.
+
+**Fix:** Added specific catch for `PerlExitException` that re-throws it, allowing it to propagate to `Main.main()` which converts it to `System.exit()`.
+
+**Files Changed:**
+- `src/main/java/org/perlonjava/frontend/parser/SpecialBlockParser.java`
+
+**Tests Fixed:** Tests using `plan skip_all` in BEGIN blocks (e.g., t/056SyncApp2.t, t/066SQLite.t) now skip cleanly without compilation errors.
 
 ### 1. *{NAME} Glob Slot Accessor (Committed 2026-03-18)
 
@@ -169,36 +189,24 @@ my $m = Carp::longmess();  # Sometimes fails with undef GLOB
 
 ## Remaining Issues
 
-### Issue 1: `local` Package Variable Bug (ROOT CAUSE)
+### Issue 1: `local` Package Variable Bug - VERIFIED FIXED
 
-**Symptom:** `$Carp::CarpLevel` set via `local` from outside the Carp package is not visible when accessed inside Carp.pm using the short name `$CarpLevel`.
+**Status:** The basic reproduction case now works correctly. Need to verify if Log4perl tests improved.
 
-**Reproduction:**
+**Verification (2026-03-19):**
 ```perl
 package Foo;
 our $X = 0;
-sub check { print "X=$X\n"; }  # Uses short name
+sub check { print "X=$X\n"; }
 
 package main;
 local $Foo::X = 1;
-Foo::check();  # jperl prints "X=0", Perl prints "X=1"
+Foo::check();  # jperl now correctly prints "X=1"
 ```
 
-**Root Cause:** When compiling `$X` inside `package Foo`, jperl resolves it to a different storage location than `$Foo::X`. The `local` modifier only affects the fully-qualified name, not the short name used inside the package.
+The issue may have been fixed by earlier changes (possibly the `our` variable handling in SymbolTable). The design doc at `dev/design/local-package-variable-fix.md` was created but implementation may not have been needed.
 
-**Impact:** This breaks any module that uses `local $Module::Variable` to temporarily modify package state, including:
-- `$Carp::CarpLevel` - affects all Carp error reporting
-- Many other modules that use this pattern
-
-**Affected Tests:**
-- t/020Easy.t (tests 18-20) - line numbers off due to CarpLevel not working
-- t/022Wrap.t (2 failures) - same root cause
-- t/024WarnDieCarp.t (11 failures) - same root cause
-- t/051Extra.t (2 failures) - same root cause
-
-**Workaround:** Modules can use fully-qualified variable names (`$Carp::CarpLevel` instead of `$CarpLevel`) but this requires patching every affected module.
-
-**Fix Needed:** Investigate how package variables are resolved during compilation. The short name `$X` inside `package Foo` should resolve to the same glob as `$Foo::X`.
+**Note:** Some Log4perl tests still fail with caller() / Carp line number issues - these may be separate from the `local` issue.
 
 ### Issue 2: Carp.pm / warnings.pm Interaction
 

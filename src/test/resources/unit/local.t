@@ -176,11 +176,58 @@ ok(!defined($global_hash{key_new}), 'local hash element restored');
 }
 ok(scalar(@global_array) < 10, 'local array element restored, array size ' . scalar(@global_array));
 
+# Test for cross-package local with our variable (short name in sub)
+{
+    package CrossPkgTest;
+    our $X = 0;
+    sub check { return $X; }
+    
+    package main;
+    is(CrossPkgTest::check(), 0, 'cross-package our variable before local');
+    {
+        local $CrossPkgTest::X = 1;
+        is(CrossPkgTest::check(), 1, 'cross-package our variable inside local');
+    }
+    is(CrossPkgTest::check(), 0, 'cross-package our variable after local');
+}
+
+# Test for cross-package local with package switch inside sub definition
+{
+    our $x = 10;
+    sub check_main_x { return $x; }
+    
+    package ZZZ;
+    main::is(main::check_main_x(), 10, 'our alias persists across package change - before local');
+    {
+        local $main::x = 99;
+        main::is(main::check_main_x(), 99, 'our alias persists across package change - inside local');
+    }
+    main::is(main::check_main_x(), 10, 'our alias persists across package change - after local');
+    
+    package main;
+}
+
+# Test for local with nested subroutine calls
+{
+    package NestedTest;
+    our $level = 0;
+    sub outer { return inner(); }
+    sub inner { return $level; }
+    
+    package main;
+    is(NestedTest::outer(), 0, 'nested sub with our - before local');
+    {
+        local $NestedTest::level = 5;
+        is(NestedTest::outer(), 5, 'nested sub with our - inside local');
+    }
+    is(NestedTest::outer(), 0, 'nested sub with our - after local');
+}
+
 done_testing();
 
 __END__
 
-#----- TODO --------
+#----- TODO: localizing filehandles --------
 
 # Special case: localizing filehandles
 open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
