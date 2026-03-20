@@ -7,13 +7,13 @@ my $str = "Hello, world!";
 substr($str, 0, 5) = "Greetings";
 is($str, "Greetings, world!", "Basic substring assignment");
 
-# Test assignment beyond string length (warns, doesn't modify string)
+# Test assignment beyond string length (dies in Perl 5)
 $str = "Short";
 {
-    my $warned = 0;
-    local $SIG{__WARN__} = sub { $warned++ if $_[0] =~ /substr outside of string/ };
-    substr($str, 10, 5) = "long";
-    ok($warned, "Assignment beyond string length warns");
+    my $error = 0;
+    eval { substr($str, 10, 5) = "long"; };
+    $error = 1 if $@ =~ /substr outside of string/;
+    ok($error, "Assignment beyond string length dies");
 }
 
 # Test assignment with negative offset
