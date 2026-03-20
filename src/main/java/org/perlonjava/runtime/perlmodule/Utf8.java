@@ -327,6 +327,15 @@ public class Utf8 extends PerlModuleBase {
     /**
      * Tests whether the string is in a consistent state regarding UTF-8.
      *
+     * <p>In Perl, utf8::valid() checks whether a string's internal state is consistent:
+     * <ul>
+     *   <li>For character strings (UTF-8 flag on): Returns true if all characters are valid
+     *       Unicode code points (not surrogates, not > 0x10FFFF). Java strings inherently
+     *       contain valid Unicode code points (possibly with surrogate pairs for astral
+     *       characters), so this should generally return true.</li>
+     *   <li>For byte strings (UTF-8 flag off): Returns true if the bytes form valid UTF-8.</li>
+     * </ul>
+     *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList indicating if the string is valid UTF-8.
@@ -337,10 +346,49 @@ public class Utf8 extends PerlModuleBase {
         }
         RuntimeScalar scalar = args.get(0);
         String string = scalar.toString();
-        CharsetDetector detector = new CharsetDetector();
-        detector.setText(string.getBytes());
-        CharsetMatch match = detector.detect();
-        boolean isValid = match != null && "UTF-8".equalsIgnoreCase(match.getName());
-        return new RuntimeScalar(isValid).getList();
+
+        if (scalar.type == BYTE_STRING) {
+            // For byte strings, check if the bytes form valid UTF-8
+            // Extract raw byte values and try to decode as UTF-8
+            byte[] bytes = new byte[string.length()];
+            for (int i = 0; i < string.length(); i++) {
+                char c = string.charAt(i);
+                if (c > 0xFF) {
+                    // Byte string should not contain chars > 0xFF
+                    // This is an inconsistent state
+                    return RuntimeScalarCache.scalarFalse.getList();
+                }
+                bytes[i] = (byte) c;
+            }
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT);
+            try {
+                decoder.decode(ByteBuffer.wrap(bytes));
+                return RuntimeScalarCache.scalarTrue.getList();
+            } catch (CharacterCodingException e) {
+                return RuntimeScalarCache.scalarFalse.getList();
+            }
+        } else {
+            // For character strings (UTF-8 flag on), check if all characters are valid
+            // Unicode code points. Java strings contain UTF-16 code units, which
+            // represent valid Unicode code points (including surrogate pairs for astral
+            // characters). As long as surrogate pairs are properly formed, the string
+            // is valid.
+            for (int i = 0; i < string.length(); i++) {
+                char c = string.charAt(i);
+                if (Character.isHighSurrogate(c)) {
+                    // High surrogate must be followed by low surrogate
+                    if (i + 1 >= string.length() || !Character.isLowSurrogate(string.charAt(i + 1))) {
+                        return RuntimeScalarCache.scalarFalse.getList();
+                    }
+                    i++; // Skip the low surrogate
+                } else if (Character.isLowSurrogate(c)) {
+                    // Low surrogate without preceding high surrogate is invalid
+                    return RuntimeScalarCache.scalarFalse.getList();
+                }
+            }
+            return RuntimeScalarCache.scalarTrue.getList();
+        }
     }
 }
