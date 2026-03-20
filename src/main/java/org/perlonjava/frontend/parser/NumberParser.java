@@ -5,6 +5,7 @@ import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -576,8 +577,8 @@ public class NumberParser {
                 }
             }
 
-            // Generate warning if needed
-            if (shouldWarn) {
+            // Generate warning if needed and if 'numeric' warnings are enabled
+            if (shouldWarn && Warnings.warningManager.isWarningEnabled("numeric")) {
                 String warnStr = str.trim();
                 if (warnStr.startsWith("-") || warnStr.startsWith("+")) {
                     warnStr = warnStr.substring(1);

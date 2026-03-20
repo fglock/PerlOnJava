@@ -334,26 +334,28 @@ Modified `OverloadContext.tryOverload()` to:
 
 | Test | Failures | Reason |
 |------|----------|--------|
-| t/29overload.t | 2 | Warning message format mismatch |
+| t/11duration.t | 1 | TODO test for fractional units |
+| t/29overload.t | 2 | Missing "uninitialized value" warning support |
 | t/33seconds-offset.t | 3 | TODO tests for leap second edge cases |
 | t/46warnings.t | 0/0 | Error test (Test::Warnings dependency) |
-| t/48rt-115983.t | 0/1 | Test::Fatal dependency |
+| t/48rt-115983.t | 0/1 | Test::Fatal error message format mismatch |
 | t/49-without-sub-util.t | 0/0 | Skip test (Sub::Util test) |
 | t/zzz-check-breaks.t | 0/2 | Term::ANSIColor dependency |
 
 These failures are due to:
-- Missing optional test dependencies (Test::Warnings, Term::ANSIColor)
-- TODO tests for known edge cases
-- Warning message format differences (cosmetic)
+- **TODO tests** (t/11duration.t, t/33seconds-offset.t) - Expected failures for known edge cases
+- **Missing "uninitialized value" warnings** - PerlOnJava doesn't emit warnings when comparing with undef
+- **Missing optional test dependencies** (Test::Warnings, Term::ANSIColor)
+- **Error message format differences** (cosmetic)
 
 ---
 
-### ~~Known Issues~~ **ALL MAJOR ISSUES FIXED**
+### **ALL MAJOR ISSUES FIXED** (99.7% pass rate)
 
-All major DateTime issues have been fixed. The remaining 7 test failures are:
-- TODOs (known limitations even in native Perl)
-- Missing optional test dependencies (Test::Warnings)
-- Test implementation details (error message format)
+All major DateTime issues have been fixed. The 9 remaining test failures are:
+- **4 TODO tests** - Known limitations even in native Perl (fractional units, leap second edge cases)
+- **2 missing warning tests** - "Use of uninitialized value" warnings not yet implemented
+- **3 dependency tests** - Missing optional test dependencies (Test::Warnings, Term::ANSIColor)
 
 ---
 

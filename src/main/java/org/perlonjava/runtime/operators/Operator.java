@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
 import org.perlonjava.runtime.regex.RegexTimeoutException;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -266,8 +267,10 @@ public class Operator {
         }
 
         if (offset < 0 || offset > strLength) {
-            WarnDie.warn(new RuntimeScalar("substr outside of string"),
-                    RuntimeScalarCache.scalarEmptyString);
+            if (Warnings.warningManager.isWarningEnabled("substr")) {
+                WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
             if (replacement != null) {
                 return new RuntimeScalar();
             }
