@@ -272,9 +272,11 @@ mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 - [x] ExtUtils::MakeMaker MYMETA.yml meta-spec v2 format (2026-03-20)
 - [x] Added File::stat.pm via import system (2026-03-20) - but triggers JVM bug
 - [x] JVM VerifyError fix for eval block control flow (2026-03-20, commit 280d03af2)
+- [x] Add missing S_* mode constants to Fcntl.pm (2026-03-20, commit 94974ba79)
+  - File::stat.pm now loads successfully
 
 ### In Progress
-- [ ] File::stat bareword "S_IRUSR" error (strict subs issue)
+- [ ] Test DateTime installation with File::stat fix
 
 ### Pending
 - [ ] IPC::Open3 read-only fix
