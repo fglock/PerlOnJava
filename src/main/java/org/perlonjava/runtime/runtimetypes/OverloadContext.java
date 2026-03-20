@@ -214,6 +214,15 @@ public class OverloadContext {
      * Attempts to execute an overloaded method with given arguments.
      * Handles TAILCALL markers from `goto $coderef` with a trampoline loop.
      *
+     * <p>Perl's overload pragma allows specifying methods by name (string) instead of
+     * code reference. When this is done, the CODE slot of the glob contains {@code \&overload::nil}
+     * and the SCALAR slot contains the method name. This method handles both cases:
+     * <ol>
+     *   <li>Direct code reference: execute it immediately</li>
+     *   <li>Method name (via overload::nil): look up the SCALAR slot to get the method name,
+     *       then resolve and call the actual method</li>
+     * </ol>
+     *
      * @param methodName     The name of the method to execute
      * @param perlMethodArgs Array of arguments to pass to the method
      * @return RuntimeScalar result from method execution, or null if method not found
@@ -224,6 +233,21 @@ public class OverloadContext {
         if (perlMethod == null) {
             return null;
         }
+        
+        // Check if this is overload::nil (indicates method name is in SCALAR slot)
+        // Perl's overload.pm stores method names in the SCALAR slot when a string is passed:
+        //   use overload '""' => '_stringify';  # stores "_stringify" in SCALAR, \&nil in CODE
+        if (perlMethod.value instanceof RuntimeCode) {
+            RuntimeCode code = (RuntimeCode) perlMethod.value;
+            if ("nil".equals(code.subName) && "overload".equals(code.packageName)) {
+                // Found overload::nil - look up the actual method name from SCALAR slot
+                perlMethod = resolveOverloadMethodName(methodName, perlMethodArgs);
+                if (perlMethod == null) {
+                    return null;
+                }
+            }
+        }
+        
         // Execute found method with provided arguments
         RuntimeList result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
         
@@ -243,5 +267,63 @@ public class OverloadContext {
         }
         
         return result.getFirst();
+    }
+    
+    /**
+     * Resolves an overload method name stored in the SCALAR slot of the glob.
+     * When Perl's overload pragma is given a method name string (not a code ref),
+     * it stores the method name in the SCALAR slot and \&nil in the CODE slot.
+     *
+     * <p>The SCALAR slot can contain:
+     * <ul>
+     *   <li>A method name string (e.g., "_stringify")</li>
+     *   <li>A glob reference (e.g., "*Package::Method") pointing to another glob</li>
+     * </ul>
+     *
+     * @param methodName     The overload method name (e.g., "(\"\"")
+     * @param perlMethodArgs The arguments (first should be the object to call the method on)
+     * @return RuntimeScalar representing the resolved method, or null if not found
+     */
+    private RuntimeScalar resolveOverloadMethodName(String methodName, RuntimeArray perlMethodArgs) {
+        // Get the SCALAR slot value which contains the actual method name
+        // Walk the class hierarchy to find the glob with the method name
+        java.util.List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
+        
+        for (String className : linearizedClasses) {
+            String effectiveClassName = GlobalVariable.resolveStashAlias(className);
+            String normalizedGlobName = NameNormalizer.normalizeVariableName(methodName, effectiveClassName);
+            
+            // Check if this class has the overload glob
+            if (GlobalVariable.existsGlobalCodeRef(normalizedGlobName)) {
+                // Get the SCALAR slot of this glob
+                RuntimeScalar scalarSlot = GlobalVariable.getGlobalVariable(normalizedGlobName);
+                if (scalarSlot != null && scalarSlot.getDefinedBoolean()) {
+                    String actualMethodName = scalarSlot.toString();
+                    
+                    // If the scalar is a glob reference (starts with *), follow it
+                    // The glob reference points to another package's overload glob
+                    // e.g., "*Specio::Constraint::Role::Interface::(\"\"" 
+                    // which itself has "_stringify" in its SCALAR slot
+                    while (actualMethodName.startsWith("*")) {
+                        // Parse the full glob name: *Package::Name::(""
+                        // Remove the leading *
+                        String globFullName = actualMethodName.substring(1);
+                        
+                        // Get the SCALAR slot of the referenced glob
+                        scalarSlot = GlobalVariable.getGlobalVariable(globFullName);
+                        if (scalarSlot == null || !scalarSlot.getDefinedBoolean()) {
+                            return null;
+                        }
+                        actualMethodName = scalarSlot.toString();
+                    }
+                    
+                    // The actual method name - find it using can() semantics
+                    // (search in the object's class hierarchy)
+                    return InheritanceResolver.findMethodInHierarchy(actualMethodName, perlClassName, null, 0);
+                }
+            }
+        }
+        
+        return null;
     }
 }
