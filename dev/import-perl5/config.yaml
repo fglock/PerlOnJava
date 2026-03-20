@@ -172,6 +172,10 @@ imports:
   - source: perl5/lib/File/Compare.pm
     target: src/main/perl/lib/File/Compare.pm
 
+  # File::stat - by-name interface to stat() (required by IO::Dir)
+  - source: perl5/lib/File/stat.pm
+    target: src/main/perl/lib/File/stat.pm
+
   # From core library
   - source: perl5/lib/Tie/Array.pm
     target: src/main/perl/lib/Tie/Array.pm
@@ -619,6 +623,11 @@ imports:
   # Term::ANSIColor - ANSI terminal color support (used by various tests)
   - source: perl5/cpan/Term-ANSIColor/lib/Term/ANSIColor.pm
     target: src/main/perl/lib/Term/ANSIColor.pm
+
+  # Class::Struct - Declare struct-like datatypes as Perl classes
+  # Required by File::stat.pm
+  - source: perl5/lib/Class/Struct.pm
+    target: src/main/perl/lib/Class/Struct.pm
 
   # Add more imports below as needed
   # Example with minimal fields:
