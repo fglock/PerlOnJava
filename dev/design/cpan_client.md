@@ -385,9 +385,56 @@ These modules are not installed but can be added via `jcpan install`:
 
 **Affected Tests**: t/13strftime.t (partial), t/14locale.t (partial), t/41cldr-format.t (partial)
 
-**Root Cause**: jcpan does not install `share/` directories that File::ShareDir expects. DateTime::Locale stores locale data (de.pl, fr.pl, it.pl, etc.) in a share directory.
+**Root Cause**: jcpan does not install `share/` directories that File::ShareDir expects.
 
-**Action**: Enhancement to jcpan needed - install `share/` directories to `~/.perlonjava/auto/share/dist/Module-Name/`.
+**How File::ShareDir works**:
+1. CPAN distributions can have a `share/` directory with data files
+2. At install time, these are copied to `auto/share/dist/Dist-Name/`
+3. `File::ShareDir::dist_dir('DateTime-Locale')` searches @INC for `auto/share/dist/DateTime-Locale/`
+
+**Example - DateTime-Locale**:
+```
+DateTime-Locale-1.45/
+├── share/           # 1070 locale files (fr.pl, de.pl, etc.)
+│   ├── aa.pl
+│   ├── fr.pl
+│   └── ...
+└── lib/
+    └── DateTime/Locale.pm
+```
+
+Should install to:
+```
+~/.perlonjava/
+├── lib/
+│   └── DateTime/Locale.pm
+└── auto/share/dist/DateTime-Locale/
+    ├── aa.pl
+    ├── fr.pl
+    └── ...
+```
+
+**Implementation in jcpan**:
+
+Location: `src/main/perl/lib/CPAN.pm` or ExtUtils::MakeMaker stub
+
+```perl
+sub install_share_dir {
+    my ($dist_name, $share_src) = @_;
+    return unless -d $share_src;
+    
+    my $dest = File::Spec->catdir(
+        $ENV{PERLONJAVA_LIB} // "$ENV{HOME}/.perlonjava",
+        'auto', 'share', 'dist', $dist_name
+    );
+    
+    File::Path::make_path($dest);
+    
+    # Copy all files from share/ to auto/share/dist/Dist-Name/
+    File::Copy::Recursive::dircopy($share_src, $dest)
+        or warn "Failed to copy share dir: $!";
+}
+```
 
 ### Category 4: PerlOnJava Bugs
 
@@ -472,9 +519,29 @@ The cleanup happens at END of compilation. By that time, all code in the package
    - One-line fix, matches Perl 5.42's overload.pm
 
 3. **jcpan share/ directory support** (MEDIUM - affects locale tests)
-   - Detect `share/` directories in CPAN distributions
-   - Install to `~/.perlonjava/auto/share/dist/Module-Name/`
-   - Update File::ShareDir to find these directories
+   
+   **Changes needed**:
+   
+   a. **ExtUtils::MakeMaker stub** (`src/main/perl/lib/ExtUtils/MakeMaker.pm`):
+      - After extracting dist, check for `share/` directory
+      - Call `install_share_dir($dist_name, "$build_dir/share")`
+   
+   b. **Install function** (add to CPAN.pm or MakeMaker):
+      ```perl
+      sub install_share_dir {
+          my ($dist_name, $share_src) = @_;
+          return unless -d $share_src;
+          my $dest = "$ENV{HOME}/.perlonjava/auto/share/dist/$dist_name";
+          File::Path::make_path($dest);
+          # recursively copy $share_src/* to $dest/
+      }
+      ```
+   
+   c. **File::ShareDir** (`~/.perlonjava/lib/File/ShareDir.pm`):
+      - Should already work if `~/.perlonjava` is in @INC
+      - Verify `_search_inc_path` finds `auto/share/dist/` correctly
+   
+   **Test**: After implementation, `dist_dir('DateTime-Locale')` should return path to locale files
 
 ### Lower Priority
 
