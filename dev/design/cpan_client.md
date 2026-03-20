@@ -287,28 +287,63 @@ DateTime test suite: **3280/3302 subtests passed** (99.3%), **22 failures**
 
 ---
 
-### Known Issues To Be Fixed (Phase 15+)
+## Phase 15: Leap Second Table Fix (Completed 2026-03-20)
 
-The following issues remain from `./jcpan -t DateTime`:
+### Problem Statement
 
-#### 1. ~~Overload Stringification - StackOverflowError~~ **FIXED in Phase 13**
+DateTime leap second tests were failing because the LEAP_SECONDS table in DateTime.java had incorrect RD (Rata Die) day values.
+
+### Root Cause
+
+The LEAP_SECONDS table was using incorrect RD values. For example:
+- Table had `{728896, 11}` for 1972-07-01
+- Correct value is `{720075, 1}` for 1972-07-01
+
+The values were off by approximately 8800 days (~24 years).
+
+### Solution
+
+Updated the LEAP_SECONDS table with correct RD values from the official DateTime leap_seconds.h file from CPAN:
+
+```java
+private static final long[][] LEAP_SECONDS = {
+    {720075, 1},    // 1972-07-01 (leap second on 1972-06-30)
+    {720259, 2},    // 1973-01-01 (leap second on 1972-12-31)
+    // ... (27 entries total)
+    {736330, 27},   // 2017-01-01
+};
+```
+
+### Test Results After Fix
+
+DateTime test suite: **3481/3482 subtests passed** (99.97%)
+
+| Test | Before | After | Change |
+|------|--------|-------|--------|
+| t/19leap-second.t | 12 failures | 0 | Fixed |
+| t/32leap-second2.t | 7 failures | 0 | Fixed |
+| t/38local-subtract.t | 2 failures | 0 | Fixed |
+| **Total** | **22** | **1** | **21 fewer** |
+
+The only remaining failure is t/48rt-115983.t (namespace::autoclean) which is documented as by design.
+
+### Files Changed
+
+- `src/main/java/org/perlonjava/runtime/perlmodule/DateTime.java` - Fixed LEAP_SECONDS table RD values
+
+---
+
+### Known Issues (Documentation Only)
+
+The following issues are documented but not planned to be fixed:
+
+#### 1. ~~Overload Stringification~~ **FIXED in Phase 13**
 
 #### 2. ~~End-of-Month Arithmetic~~ **FIXED in Phase 14**
 
 #### 3. ~~Overloaded cmp / sort / delta_md~~ **FIXED in Phase 14**
 
-#### 4. Leap Second Handling (MEDIUM PRIORITY)
-
-**Symptom**: DateTime fails to properly handle leap seconds (second = 60).
-
-**Affected Tests**: t/19leap-second.t (12 failures), t/32leap-second2.t (7 failures), t/38local-subtract.t (2 failures)
-
-**Examples**:
-- `Invalid second value (60)` - DateTime doesn't accept second=60
-- `delta_seconds` calculations off by 1 for leap second boundaries
-- `utc_rd_secs` should be 86400 for leap seconds, returns 0
-
-**Root Cause**: Java XS `_seconds_as_components` and `_normalize_leap_seconds` may not fully match Perl's leap second semantics.
+#### 4. ~~Leap Second Handling~~ **FIXED in Phase 15**
 
 #### 5. Missing Test Dependencies
 
