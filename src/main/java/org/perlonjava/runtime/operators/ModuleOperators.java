@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
+import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
@@ -613,6 +614,11 @@ public class ModuleOperators {
         RuntimeList result;
         FeatureFlags outerFeature = featureManager;
         String savedPackage = InterpreterState.currentPackage.get().toString();
+        
+        // Notify B::Hooks::EndOfScope that we're starting to load a file
+        // This enables on_scope_end callbacks to know which file they belong to
+        BHooksEndOfScope.beginFileLoad(parsedArgs.fileName);
+        
         try {
             featureManager = new FeatureFlags();
 
@@ -631,6 +637,10 @@ public class ModuleOperators {
             GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
             return new RuntimeScalar(); // return undef
         } finally {
+            // Fire any on_scope_end callbacks registered during this file's loading
+            // This must happen BEFORE restoring outer context
+            BHooksEndOfScope.endFileLoad(parsedArgs.fileName);
+            
             featureManager = outerFeature;
             InterpreterState.currentPackage.get().set(savedPackage);
         }

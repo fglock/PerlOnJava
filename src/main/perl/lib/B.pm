@@ -18,6 +18,13 @@ use warnings;
 
 our $VERSION = '1.00_perlonjava';
 
+# Export functionality
+use Exporter 'import';
+our @EXPORT_OK = qw(svref_2object perlstring CVf_ANON SVf_IOK);
+our %EXPORT_TAGS = (
+    all => \@EXPORT_OK,
+);
+
 # Flag indicating this is a stub implementation with limited introspection
 our $INCOMPLETE = 1;
 
@@ -174,6 +181,27 @@ sub CVf_ANON() { return 0x0004; }
 
 # Export SVf_IOK as a function
 sub SVf_IOK() { return 0x0001; }
+
+# Convert a string to its Perl source representation
+# This is used by modules like Specio for code generation
+sub perlstring {
+    my ($str) = @_;
+    return 'undef' unless defined $str;
+    
+    # Escape special characters
+    $str =~ s/\\/\\\\/g;
+    $str =~ s/"/\\"/g;
+    $str =~ s/\n/\\n/g;
+    $str =~ s/\r/\\r/g;
+    $str =~ s/\t/\\t/g;
+    $str =~ s/\f/\\f/g;
+    $str =~ s/\a/\\a/g;
+    $str =~ s/\e/\\e/g;
+    # Escape non-printable characters
+    $str =~ s/([\x00-\x1f\x7f-\xff])/sprintf("\\x%02x", ord($1))/ge;
+    
+    return qq{"$str"};
+}
 
 # Special SV names
 our @specialsv_name = ('Nullsv', '&PL_sv_undef', '&PL_sv_yes', '&PL_sv_no');

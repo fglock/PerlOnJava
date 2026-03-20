@@ -479,7 +479,9 @@ public class EmitOperator {
     }
 
     // Handles the 'map' operator, which applies a function to each element of a list.
+    // Also handles grep, all, any, and sort operators.
     static void handleMapOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
         String operator = node.operator;
 
         // Accept the right operand in LIST context and the left operand in SCALAR context.
@@ -488,6 +490,9 @@ public class EmitOperator {
         if (operator.equals("sort")) {
             emitterVisitor.pushCurrentPackage();
         } else {
+            // For map, grep, all, any: push the outer @_ so blocks can access $_[0], $_[1] etc.
+            // @_ is at local variable slot 1 in subroutines
+            mv.visitVarInsn(Opcodes.ALOAD, 1);
             emitterVisitor.pushCallContext();
         }
         emitOperator(node, emitterVisitor);

@@ -12,13 +12,16 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 public class ListOperators {
     /**
      * Transforms the elements of this RuntimeArray using a Perl subroutine.
+     * This version passes the outer @_ to the map block for Perl compatibility.
      *
      * @param runtimeList
      * @param perlMapClosure A RuntimeScalar representing the Perl map subroutine.
+     * @param outerArgs The @_ from the surrounding subroutine (can be null for top-level code)
+     * @param ctx The calling context
      * @return A new RuntimeList with the transformed elements.
      * @throws RuntimeException If the Perl map subroutine throws an exception.
      */
-    public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure, int ctx) {
+    public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure, RuntimeArray outerArgs, int ctx) {
 
         // Create a new list to hold the transformed elements
         List<RuntimeBase> transformedElements = new ArrayList<>();
@@ -26,14 +29,16 @@ public class ListOperators {
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
         try {
-            RuntimeArray mapArgs = new RuntimeArray();
+            // Use the outer @_ instead of an empty array
+            // This allows $_[0], $_[1], etc. to work inside map blocks
+            RuntimeArray mapArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over each element in the current RuntimeArray
             for (RuntimeScalar element : runtimeList) {
                 // Create $_ argument for the map subroutine
                 GlobalVariable.aliasGlobalVariable("main::_", element);
 
-                // Apply the Perl map subroutine with the argument
+                // Apply the Perl map subroutine with the outer @_ as arguments
                 RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
 
                 // `result` list contains aliases to the original array;
@@ -60,6 +65,14 @@ public class ListOperators {
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
         }
+    }
+
+    /**
+     * Legacy map method for backward compatibility.
+     * Calls the new map with null outer args.
+     */
+    public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure, int ctx) {
+        return map(runtimeList, perlMapClosure, null, ctx);
     }
 
     /**
@@ -126,20 +139,24 @@ public class ListOperators {
 
     /**
      * Filters the elements of this RuntimeArray using a Perl subroutine.
+     * This version passes the outer @_ to the grep block for Perl compatibility.
      *
      * @param runtimeList
      * @param perlFilterClosure A RuntimeScalar representing the Perl filter subroutine.
+     * @param outerArgs The @_ from the surrounding subroutine (can be null for top-level code)
+     * @param ctx The calling context
      * @return A new RuntimeList with the elements that match the filter criteria.
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
-    public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+    public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, RuntimeArray outerArgs, int ctx) {
         // Create a new list to hold the filtered elements
         List<RuntimeBase> filteredElements = new ArrayList<>();
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
         try {
-            RuntimeArray filterArgs = new RuntimeArray();
+            // Use the outer @_ instead of an empty array
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over each element in the current RuntimeArray
             for (RuntimeScalar element : runtimeList) {
@@ -147,7 +164,7 @@ public class ListOperators {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasGlobalVariable("main::_", element);
 
-                    // Apply the Perl filter subroutine with the argument
+                    // Apply the Perl filter subroutine with the outer @_ as arguments
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
                     // Check the result of the filter subroutine
@@ -180,19 +197,29 @@ public class ListOperators {
     }
 
     /**
+     * Legacy grep method for backward compatibility.
+     */
+    public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+        return grep(runtimeList, perlFilterClosure, null, ctx);
+    }
+
+    /**
      * Check the elements of this RuntimeArray using a Perl subroutine.
+     * This version passes the outer @_ to the all block for Perl compatibility.
      *
      * @param runtimeList
      * @param perlFilterClosure A RuntimeScalar representing the Perl filter subroutine.
+     * @param outerArgs The @_ from the surrounding subroutine (can be null for top-level code)
+     * @param ctx The calling context
      * @return A new RuntimeScalar boolean true if all elements match the filter criteria.
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
-    public static RuntimeList all(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+    public static RuntimeList all(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, RuntimeArray outerArgs, int ctx) {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
         try {
-            RuntimeArray filterArgs = new RuntimeArray();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over each element in the current RuntimeArray
             for (RuntimeScalar element : runtimeList) {
@@ -220,19 +247,29 @@ public class ListOperators {
     }
 
     /**
+     * Legacy all method for backward compatibility.
+     */
+    public static RuntimeList all(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+        return all(runtimeList, perlFilterClosure, null, ctx);
+    }
+
+    /**
      * Check the elements of this RuntimeArray using a Perl subroutine.
+     * This version passes the outer @_ to the any block for Perl compatibility.
      *
      * @param runtimeList
      * @param perlFilterClosure A RuntimeScalar representing the Perl filter subroutine.
+     * @param outerArgs The @_ from the surrounding subroutine (can be null for top-level code)
+     * @param ctx The calling context
      * @return A new RuntimeScalar boolean true if any elements match the filter criteria.
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
-    public static RuntimeList any(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+    public static RuntimeList any(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, RuntimeArray outerArgs, int ctx) {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
         try {
-            RuntimeArray filterArgs = new RuntimeArray();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over each element in the current RuntimeArray
             for (RuntimeScalar element : runtimeList) {
@@ -257,5 +294,12 @@ public class ListOperators {
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
         }
+    }
+
+    /**
+     * Legacy any method for backward compatibility.
+     */
+    public static RuntimeList any(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+        return any(runtimeList, perlFilterClosure, null, ctx);
     }
 }
