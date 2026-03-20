@@ -260,6 +260,44 @@ public class SubroutineParser {
             }
         }
 
+        // Handle indirect object syntax with variable class: new $type $arg -> $type->new($arg)
+        // This is similar to the IDENTIFIER case above, but for variable class names
+        // Only applies when the subroutine doesn't exist (otherwise it's a function call)
+        if (!subExists && peek(parser).text.equals("$") && isValidIndirectMethod(subName) && !prototypeHasGlob) {
+            int currentIndex2 = parser.tokenIndex;
+            // Parse the variable that holds the class name
+            Node classVar = ParsePrimary.parsePrimary(parser);
+            if (classVar != null) {
+                LexerToken nextTok = peek(parser);
+                // Check this isn't actually a binary operator like $type + 1
+                if (!(nextTok.text.equals("->") || nextTok.text.equals("=>") || INFIX_OP.contains(nextTok.text))) {
+                    // Parse arguments for the method call
+                    ListNode arguments;
+                    if (nextTok.text.equals(",") || nextTok.text.equals(";") ||
+                            nextTok.text.equals(")") || nextTok.text.equals("}") ||
+                            nextTok.type == LexerTokenType.EOF) {
+                        // No arguments after class variable
+                        arguments = new ListNode(currentIndex);
+                    } else {
+                        // Parse remaining arguments
+                        arguments = consumeArgsWithPrototype(parser, "@");
+                    }
+                    // Create method call: $classVar->method(args)
+                    return new BinaryOperatorNode(
+                            "->",
+                            classVar,
+                            new BinaryOperatorNode("(",
+                                    new OperatorNode("&",
+                                            new IdentifierNode(subName, currentIndex2),
+                                            currentIndex),
+                                    arguments, currentIndex2),
+                            currentIndex2);
+                }
+                // Not indirect object syntax - backtrack
+                parser.tokenIndex = currentIndex2;
+            }
+        }
+
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
 
