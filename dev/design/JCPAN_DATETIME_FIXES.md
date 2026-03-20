@@ -150,7 +150,7 @@ Bareword "Exporter" not allowed while "strict subs" in use at jar:PERL5LIB/Carp.
 
 ---
 
-### 11. JVM VerifyError: Inconsistent Stackmap Frames
+### 11. JVM VerifyError: Inconsistent Stackmap Frames [FIXED]
 
 **Error**:
 ```
@@ -180,45 +180,47 @@ The issue requires BOTH of these:
 - `defined eval { Func() }` - OK (direct call, not symbolic)
 - With `use strict "refs"` - OK (throws error at compile time)
 
-**Root Cause**: The bytecode generator creates inconsistent stackmap frames in the block dispatcher. When a symbolic subroutine call (`&{"..."}`) is made inside an eval block:
+**Root Cause Analysis**: The bytecode generator in `EmitVariable.java` creates inconsistent stack states when handling control flow markers from subroutine calls inside eval blocks.
 
-1. The call triggers control flow handling that stores `getControlFlowType().ordinal()` in `controlFlowActionSlot` (slot 29)
-2. Multiple code paths merge at a common label
-3. Some paths have written to slot 29 (integer), others haven't (TOP/uninitialized)
-4. ASM's frame computation detects the mismatch: slot 29 is `I` on one path, `T` on another
+When `&{"symbolic_ref"}` is called:
+1. `RuntimeCode.apply()` may return a `RuntimeControlFlowList` marker (LAST/NEXT/REDO)
+2. The code checks `isNonLocalGoto()` and branches to handle the marker
+3. For unlabeled LAST/NEXT, the original code jumped directly to loop labels with an **empty stack**
+4. But the `applyNoControlFlow` merge point expects a **RuntimeList on the stack** (from DUP or cfSlot load)
+5. JVM frame computation fails because paths arriving at merge point have different stack states
 
-**Specific bytecode issue** (from disassembly):
+**Specific bytecode issue** (from disassembly before fix):
 ```
-ISTORE 29           // Store ordinal (path A)
-...
-L8:  ALOAD 27       // Path B arrives here with slot 29 = I
-L7:  FRAME [... slot 29 = T ...]  // But L7 expects T!
+L9   checkUnlabeled
+     ILOAD 29; ICONST_0; IF_ICMPEQ L11  // LAST?
+     ILOAD 29; ICONST_1; IF_ICMPEQ L12  // NEXT?
+     ILOAD 29; ICONST_2; IF_ICMPEQ L13  // REDO?
+     GOTO L8
+L11  GOTO L7     // LAST: empty stack, jumps to L7
+L12  GOTO L7     // NEXT: empty stack, jumps to L7  
+L13  GOTO L6     // REDO: OK, goes to redo label
+L8   ALOAD 27    // Load cfSlot, falls through to L7
+L7   FRAME [...] [RuntimeList]  // Expects value on stack!
      ASTORE 25
 ```
 
-**Fix approach**: Ensure `controlFlowActionSlot` (slot 29) has a consistent type across all paths that merge at L7. Either:
-1. Initialize it before the branch divergence (already done at method entry)
-2. Store a value in ALL paths, not just the control-flow path
-3. Restructure the control flow so paths don't merge with different types
+**Fix** (commit 280d03af2): Push the control flow marker (from cfSlot) onto the stack before jumping to the merge point:
+```java
+mv.visitLabel(isLast);
+mv.visitVarInsn(Opcodes.ALOAD, cfSlot);  // Push marker
+mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 
-**Impact**: Any module using these Perl patterns will fail to load
-
-**Solution**: Debug the bytecode emitter to find why stackmap frames become inconsistent at branch targets. Likely issues:
-1. Stack not properly balanced across all branches
-2. Missing or incorrect frame computation after conditional jumps
-3. Type inconsistency in local variable slots across branches
-
-**Files to investigate**:
-- `src/main/java/org/perlonjava/codegen/EmitterMethodCreator.java`
-- `src/main/java/org/perlonjava/astvisitor/EmitterVisitor.java`
-- Control flow emission in `EmitControlFlow.java`
-
-**Debug approach**:
-```bash
-./jperl --disassemble -e 'use File::stat' 2>&1 | head -200
+mv.visitLabel(isNext);
+mv.visitVarInsn(Opcodes.ALOAD, cfSlot);  // Push marker
+mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 ```
 
-**Priority**: HIGH (blocks File::stat and potentially other complex modules)
+**Files changed**:
+- `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` lines 710-721
+
+**Impact**: File::stat.pm and other modules using `eval { &{...} }` pattern now load correctly.
+
+**Priority**: HIGH (blocks File::stat and potentially other complex modules) - **FIXED**
 
 ---
 
@@ -269,12 +271,12 @@ L7:  FRAME [... slot 29 = T ...]  // But L7 expects T!
 - [x] Phase 16: utf8::valid() fix for CPAN::Meta parsing (2026-03-20)
 - [x] ExtUtils::MakeMaker MYMETA.yml meta-spec v2 format (2026-03-20)
 - [x] Added File::stat.pm via import system (2026-03-20) - but triggers JVM bug
+- [x] JVM VerifyError fix for eval block control flow (2026-03-20, commit 280d03af2)
 
 ### In Progress
-- [ ] Phase 17: JVM VerifyError investigation for File::stat.pm
+- [ ] File::stat bareword "S_IRUSR" error (strict subs issue)
 
 ### Pending
-- [ ] File::stat.pm stub (workaround if JVM fix is complex)
 - [ ] IPC::Open3 read-only fix
 - [ ] Encode::encodings() method
 - [ ] require_version implementation
