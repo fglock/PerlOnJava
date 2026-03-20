@@ -111,16 +111,19 @@ Undefined subroutine &*version::("" called at jar:PERL5LIB/Test/Builder.pm line 
 
 ---
 
-### 8. Exporter require_version Missing
+### 8. Exporter require_version Missing [FIXED]
 
 **Error**:
 ```
 Can't locate object method "require_version" via package "Testing"
 ```
 
-**Solution**: Implement `require_version` in Exporter or UNIVERSAL
+**Solution**: Added `require_version` method to Java `Exporter.java` which delegates to `UNIVERSAL::VERSION`
 
-**Priority**: MEDIUM
+**Files changed**:
+- `src/main/java/org/perlonjava/runtime/perlmodule/Exporter.java`
+
+**Priority**: MEDIUM - **FIXED** (commit 70ce06938)
 
 ---
 
@@ -137,16 +140,23 @@ Too many arguments for main::like at t/conflicts.t line 109
 
 ---
 
-### 10. Carp.pm Bareword Error
+### 10. Carp.pm Bareword Error with CORE::GLOBAL::require [FIXED]
 
 **Error**:
 ```
 Bareword "Exporter" not allowed while "strict subs" in use at jar:PERL5LIB/Carp.pm line 224
 ```
 
-**Root Cause**: Edge case in Carp.pm loading when strict subs is enabled
+**Root Cause**: When `CORE::GLOBAL::require` is overridden and a module uses `require Bareword;` under strict subs, the bareword was parsed as an expression instead of using require's special bareword-to-filename conversion.
 
-**Priority**: LOW
+**Solution**: Added special handling in `ParsePrimary.java` for `require` when `CORE::GLOBAL::require` is overridden:
+1. Parse the argument using standard require handling (converts bareword to filename string)
+2. Build a subroutine call node with `&CORE::GLOBAL::require(...)` form
+
+**Files changed**:
+- `src/main/java/org/perlonjava/frontend/parser/ParsePrimary.java`
+
+**Priority**: MEDIUM - **FIXED** (commit 70ce06938)
 
 ---
 
@@ -274,14 +284,15 @@ mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 - [x] JVM VerifyError fix for eval block control flow (2026-03-20, commit 280d03af2)
 - [x] Add missing S_* mode constants to Fcntl.pm (2026-03-20, commit 94974ba79)
   - File::stat.pm now loads successfully
+- [x] Exporter::require_version() implementation (2026-03-20, commit 70ce06938)
+- [x] CORE::GLOBAL::require bareword handling fix (2026-03-20, commit 70ce06938)
 
 ### In Progress
-- [ ] Test DateTime installation with File::stat fix
+- [ ] Test DateTime installation with all fixes
 
 ### Pending
 - [ ] IPC::Open3 read-only fix
 - [ ] Encode::encodings() method
-- [ ] require_version implementation
 
 ---
 
