@@ -1,10 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.runtime.runtimetypes.RuntimeArray;
-import org.perlonjava.runtime.runtimetypes.RuntimeCode;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -29,6 +26,10 @@ public class XSLoader extends PerlModuleBase {
         XSLoader xsLoader = new XSLoader();
         try {
             xsLoader.registerMethod("load", null);
+            xsLoader.registerMethod("bootstrap_inherit", null);
+            
+            // Set $XSLoader::VERSION to match the CPAN version we're compatible with
+            GlobalVariable.getGlobalVariable("XSLoader::VERSION").set("0.32");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing XSLoader method: " + e.getMessage());
         }
@@ -145,5 +146,18 @@ public class XSLoader extends PerlModuleBase {
         
         // Same major version is considered compatible
         return javaMajor.equals(requestedMajor);
+    }
+
+    /**
+     * Stub implementation of bootstrap_inherit for compatibility.
+     * In standard Perl, this is used for inheritance-aware XS loading.
+     * In PerlOnJava, we just delegate to load().
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing true on success, false on failure.
+     */
+    public static RuntimeList bootstrap_inherit(RuntimeArray args, int ctx) {
+        return load(args, ctx);
     }
 }
