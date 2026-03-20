@@ -593,6 +593,7 @@ imports:
   # JSON::PP - Pure Perl JSON (required by tests)
   - source: perl5/cpan/JSON-PP/lib/JSON/PP.pm
     target: src/main/perl/lib/JSON/PP.pm
+    patch: PP.pm.patch
 
   - source: perl5/cpan/JSON-PP/lib/JSON/PP
     target: src/main/perl/lib/JSON/PP

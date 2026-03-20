@@ -695,6 +695,9 @@ BEGIN {
             last;
         }
     }
+    # PerlOnJava: Default to 9 digits (safe for 32-bit) if no overflow detected
+    # This handles implementations that use arbitrary precision integers
+    $max_intsize //= 9;
 }
 
 { # PARSE 
