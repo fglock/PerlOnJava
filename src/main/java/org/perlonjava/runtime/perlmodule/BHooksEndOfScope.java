@@ -51,16 +51,24 @@ public class BHooksEndOfScope extends PerlModuleBase {
     /**
      * Called by ModuleOperators.doFile before executing a file.
      * Pushes the filename onto the loading stack.
+     * If fileName is null (e.g., when loading from a filehandle), this is a no-op.
      */
     public static void beginFileLoad(String fileName) {
-        loadingFileStack.get().push(fileName);
+        if (fileName != null) {
+            loadingFileStack.get().push(fileName);
+        }
     }
     
     /**
      * Called by ModuleOperators.doFile after executing a file.
      * Pops the filename from the loading stack and fires any registered callbacks.
+     * If fileName is null (e.g., when loading from a filehandle), this is a no-op.
      */
     public static void endFileLoad(String fileName) {
+        if (fileName == null) {
+            return;
+        }
+        
         Deque<String> stack = loadingFileStack.get();
         if (!stack.isEmpty() && stack.peek().equals(fileName)) {
             stack.pop();
