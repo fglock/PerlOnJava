@@ -217,6 +217,55 @@ public class Dereference {
                 return;
             }
 
+            if (sigil.equals("%") && sigilNode.operand instanceof IdentifierNode
+                    && (arrayOperation.equals("get") || arrayOperation.equals("delete"))) {
+                /*  %a[10, 20] - get/delete key-value slice of array
+                 *  BinaryOperatorNode: [
+                 *    OperatorNode: %
+                 *      IdentifierNode: a
+                 *    ArrayLiteralNode:
+                 *      NumberNode: 10
+                 *      NumberNode: 20
+                 */
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %array[] ");
+
+                // Rewrite variable from % to @ to get the array
+                OperatorNode varNode = new OperatorNode("@", sigilNode.operand, sigilNode.tokenIndex);
+                varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+
+                int arraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArray = arraySlot >= 0;
+                if (!pooledArray) {
+                    arraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+
+                // emit the [10, 20] as a RuntimeList
+                ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
+                nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+                // Call the appropriate method based on operation
+                String methodName = arrayOperation.equals("delete") ? "deleteKeyValueSlice" : "getKeyValueSlice";
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray",
+                        methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+
+                if (pooledArray) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+
+                // Handle context conversion for array kv-slices
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                            "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
+            }
+
             if (sigil.equals("%") && arrayOperation.equals("get")) {
                 /*  $aref->%[1, 7, 3]
                  *  BinaryOperatorNode: [
@@ -577,19 +626,19 @@ public class Dereference {
                 }
                 return;
             }
-            if (sigil.equals("%") && hashOperation.equals("get")) {
-                /*  %a{"a", "b"} - get key value slice
+            if (sigil.equals("%") && (hashOperation.equals("get") || hashOperation.equals("delete"))) {
+                /*  %a{"a", "b"} - get/delete key value slice
                  *  BinaryOperatorNode: {
-                 *    OperatorNode: @
+                 *    OperatorNode: %
                  *      IdentifierNode: a
                  *    ArrayLiteralNode:
                  *      StringNode: a
                  *      StringNode: b
                  */
-                // Rewrite the variable node from `@` to `%`
+                // Rewrite the variable node from `%` to `%`
                 OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
-                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %var{} " + varNode);
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
                 int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -601,7 +650,7 @@ public class Dereference {
 
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
-                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} as listNode: " + nodeRight);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %var{} as listNode: " + nodeRight);
 
                 if (!nodeRight.elements.isEmpty()) {
                     Node nodeZero = nodeRight.elements.getFirst();
@@ -611,7 +660,7 @@ public class Dereference {
                     }
                 }
 
-                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %var{}  autoquote " + node.right);
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
                 int keyListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -624,8 +673,10 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keyListSlot);
 
+                // Call the appropriate method based on operation
+                String methodName = hashOperation.equals("delete") ? "deleteKeyValueSlice" : "getKeyValueSlice";
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                        "getKeyValueSlice", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+                        methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
 
                 if (pooledKeyList) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
