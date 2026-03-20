@@ -111,19 +111,16 @@ Undefined subroutine &*version::("" called at jar:PERL5LIB/Test/Builder.pm line 
 
 ---
 
-### 8. Exporter require_version Missing [FIXED]
+### 8. Exporter require_version Missing
 
 **Error**:
 ```
 Can't locate object method "require_version" via package "Testing"
 ```
 
-**Solution**: Added `require_version` method to Java `Exporter.java` which delegates to `UNIVERSAL::VERSION`
+**Solution**: Implement `require_version` in Exporter or UNIVERSAL
 
-**Files changed**:
-- `src/main/java/org/perlonjava/runtime/perlmodule/Exporter.java`
-
-**Priority**: MEDIUM - **FIXED** (commit 70ce06938)
+**Priority**: MEDIUM
 
 ---
 
@@ -140,97 +137,16 @@ Too many arguments for main::like at t/conflicts.t line 109
 
 ---
 
-### 10. Carp.pm Bareword Error with CORE::GLOBAL::require [FIXED]
+### 10. Carp.pm Bareword Error
 
 **Error**:
 ```
 Bareword "Exporter" not allowed while "strict subs" in use at jar:PERL5LIB/Carp.pm line 224
 ```
 
-**Root Cause**: When `CORE::GLOBAL::require` is overridden and a module uses `require Bareword;` under strict subs, the bareword was parsed as an expression instead of using require's special bareword-to-filename conversion.
+**Root Cause**: Edge case in Carp.pm loading when strict subs is enabled
 
-**Solution**: Added special handling in `ParsePrimary.java` for `require` when `CORE::GLOBAL::require` is overridden:
-1. Parse the argument using standard require handling (converts bareword to filename string)
-2. Build a subroutine call node with `&CORE::GLOBAL::require(...)` form
-
-**Files changed**:
-- `src/main/java/org/perlonjava/frontend/parser/ParsePrimary.java`
-
-**Priority**: MEDIUM - **FIXED** (commit 70ce06938)
-
----
-
-### 11. JVM VerifyError: Inconsistent Stackmap Frames [FIXED]
-
-**Error**:
-```
-java.lang.VerifyError: Inconsistent stackmap frames at branch target 518
-Exception Details:
-  Location:
-    org/perlonjava/anon195.apply(...) @507: goto
-  Reason:
-    Current frame's stack size doesn't match stackmap.
-```
-
-**Triggered by**: perl5's `File/stat.pm` (imported via sync.pl)
-
-**Minimal Reproducer**:
-```perl
-no strict "refs";
-my $result = defined eval { &{"Fcntl::S_IFX"} };
-```
-
-The issue requires BOTH of these:
-1. `no strict "refs"` in scope (enables symbolic subroutine calls)
-2. `defined eval { &{"symbolic_ref"} }` (eval-wrapped symbolic sub call with defined check)
-
-**Works** (any element missing):
-- `eval { &{"..."} }` without `defined` - OK
-- `defined eval { die "x" }` - OK (no symbolic ref call)
-- `defined eval { Func() }` - OK (direct call, not symbolic)
-- With `use strict "refs"` - OK (throws error at compile time)
-
-**Root Cause Analysis**: The bytecode generator in `EmitVariable.java` creates inconsistent stack states when handling control flow markers from subroutine calls inside eval blocks.
-
-When `&{"symbolic_ref"}` is called:
-1. `RuntimeCode.apply()` may return a `RuntimeControlFlowList` marker (LAST/NEXT/REDO)
-2. The code checks `isNonLocalGoto()` and branches to handle the marker
-3. For unlabeled LAST/NEXT, the original code jumped directly to loop labels with an **empty stack**
-4. But the `applyNoControlFlow` merge point expects a **RuntimeList on the stack** (from DUP or cfSlot load)
-5. JVM frame computation fails because paths arriving at merge point have different stack states
-
-**Specific bytecode issue** (from disassembly before fix):
-```
-L9   checkUnlabeled
-     ILOAD 29; ICONST_0; IF_ICMPEQ L11  // LAST?
-     ILOAD 29; ICONST_1; IF_ICMPEQ L12  // NEXT?
-     ILOAD 29; ICONST_2; IF_ICMPEQ L13  // REDO?
-     GOTO L8
-L11  GOTO L7     // LAST: empty stack, jumps to L7
-L12  GOTO L7     // NEXT: empty stack, jumps to L7  
-L13  GOTO L6     // REDO: OK, goes to redo label
-L8   ALOAD 27    // Load cfSlot, falls through to L7
-L7   FRAME [...] [RuntimeList]  // Expects value on stack!
-     ASTORE 25
-```
-
-**Fix** (commit 280d03af2): Push the control flow marker (from cfSlot) onto the stack before jumping to the merge point:
-```java
-mv.visitLabel(isLast);
-mv.visitVarInsn(Opcodes.ALOAD, cfSlot);  // Push marker
-mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
-
-mv.visitLabel(isNext);
-mv.visitVarInsn(Opcodes.ALOAD, cfSlot);  // Push marker
-mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
-```
-
-**Files changed**:
-- `src/main/java/org/perlonjava/backend/jvm/EmitVariable.java` lines 710-721
-
-**Impact**: File::stat.pm and other modules using `eval { &{...} }` pattern now load correctly.
-
-**Priority**: HIGH (blocks File::stat and potentially other complex modules) - **FIXED**
+**Priority**: LOW
 
 ---
 
@@ -238,13 +154,7 @@ mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 
 ### Phase 1: Critical (enables DateTime to install)
 
-1. **Fix JVM VerifyError for complex control flow** (Issue #11)
-   - Debug why File::stat.pm causes stackmap frame inconsistency
-   - Create minimal reproduction case
-   - Fix bytecode emitter
-   - Files: `EmitterMethodCreator.java`, `EmitterVisitor.java`, `EmitControlFlow.java`
-
-2. **Implement File::stat.pm stub** (if JVM fix takes too long)
+1. **Implement File::stat.pm stub**
    - Create `src/main/perl/lib/File/stat.pm`
    - Implement basic stat() wrapper returning object with standard fields
    - File: `src/main/perl/lib/File/stat.pm`
@@ -280,28 +190,14 @@ mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 ### Completed
 - [x] Phase 16: utf8::valid() fix for CPAN::Meta parsing (2026-03-20)
 - [x] ExtUtils::MakeMaker MYMETA.yml meta-spec v2 format (2026-03-20)
-- [x] Added File::stat.pm via import system (2026-03-20) - but triggers JVM bug
-- [x] JVM VerifyError fix for eval block control flow (2026-03-20, commit 280d03af2)
-- [x] Add missing S_* mode constants to Fcntl.pm (2026-03-20, commit 94974ba79)
-  - File::stat.pm now loads successfully
-- [x] Exporter::require_version() implementation (2026-03-20, commit 70ce06938)
-- [x] CORE::GLOBAL::require bareword handling fix (2026-03-20, commit 70ce06938)
-- [x] Exporter version check in import (2026-03-21, commit a2e0aa131)
-  - First argument starting with digit is now treated as version check
-  - Fixes: "Symbol 0.03 not allowed for export in package File::ShareDir::Install"
-- [x] MakeMaker $(INST_LIB) variable expansion (2026-03-21, commit f42f9125c)
-  - Fixes modules with explicit PM hash using Make-style variables
 
 ### In Progress
-- None
+- [ ] Phase 17: File::stat.pm implementation
 
-### All fixes complete!
-- `jcpan install DateTime` works successfully
-- DateTime module loads and functions correctly:
-  ```
-  ./jperl -e 'use DateTime; print DateTime->now->strftime("%Y-%m-%d")'
-  2026-03-21
-  ```
+### Pending
+- [ ] IPC::Open3 read-only fix
+- [ ] Encode::encodings() method
+- [ ] require_version implementation
 
 ---
 
