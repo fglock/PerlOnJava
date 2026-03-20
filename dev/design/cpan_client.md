@@ -205,17 +205,103 @@ DateTime test suite: **3260/3302 subtests passed** (98.7%), **42 failures**
 
 ---
 
-### Known Issues To Be Fixed (Phase 14+)
+## Phase 14: End-of-Month and Overload goto Fix (Completed 2026-03-20)
+
+### Problem Statement
+
+DateTime tests were failing due to two separate issues:
+1. End-of-month arithmetic producing incorrect results
+2. `sort` and `delta_md` returning wrong results due to overloaded `cmp` returning 0
+
+### Root Cause 1: _ymd2rd Day Handling
+
+The Java XS `_ymd2rd` function was clamping day values to valid range instead of allowing overflow/underflow:
+
+```java
+// OLD (wrong): Clamp day to valid range
+if (day > maxDay) day = maxDay;
+if (day < 1) day = 1;
+```
+
+DateTime relies on special day handling:
+- `day=0` means "last day of previous month"
+- `day > last_day_of_month` should overflow to next month(s)
+- `day < 0` should go back into previous month(s)
+
+### Root Cause 2: goto $coderef in Overload Handlers
+
+DateTime's `_string_compare_overload` method uses `goto $meth` to delegate to `_compare_overload`:
+
+```perl
+sub _string_compare_overload {
+    my ( $dt1, $dt2, $flip ) = @_;
+    if ( !DateTime::Helpers::can( $dt2, 'utc_rd_values' ) ) {
+        return $sign * ( "$dt1" cmp "$dt2" );
+    }
+    else {
+        my $meth = $dt1->can('_compare_overload');
+        goto $meth;  # TAILCALL - was not handled in overload context!
+    }
+}
+```
+
+When `goto $coderef` is used in an overload handler, it creates a TAILCALL marker. However, `OverloadContext.tryOverload()` was calling `RuntimeCode.apply().getFirst()` without handling TAILCALL markers. Since `RuntimeControlFlowList` (the TAILCALL marker) extends `RuntimeList` but has no elements, `getFirst()` returned 0/undef.
+
+### Solution
+
+1. **_ymd2rd Fix**: Changed to use `LocalDate.of(year, month, 1).plusDays(day - 1)` which correctly handles day overflow/underflow.
+
+2. **Overload TAILCALL Fix**: Added trampoline loop in `OverloadContext.tryOverload()` to handle TAILCALL markers:
+
+```java
+while (result instanceof RuntimeControlFlowList) {
+    RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+        RuntimeScalar codeRef = flow.getTailCallCodeRef();
+        RuntimeArray args = flow.getTailCallArgs();
+        result = RuntimeCode.apply(codeRef, args, SCALAR);
+    } else {
+        break;
+    }
+}
+```
+
+### Test Results After Fix
+
+DateTime test suite: **3280/3302 subtests passed** (99.3%), **22 failures**
+
+| Test | Before | After | Change |
+|------|--------|-------|--------|
+| t/06add.t | 2 | 0 | Fixed |
+| t/07compare.t | 1 | 0 | Fixed |
+| t/10subtract.t | 4 | 0 | Fixed |
+| t/11duration.t | 4 | 0 | Fixed |
+| t/27delta.t | 4 | 0 | Fixed |
+| t/38local-subtract.t | 7 | 2 | 5 fewer |
+| **Total** | **32** | **22** | **10 fewer** |
+
+### Files Changed
+
+- `src/main/java/org/perlonjava/runtime/perlmodule/DateTime.java` - Fixed _ymd2rd day overflow handling
+- `src/main/java/org/perlonjava/runtime/runtimetypes/OverloadContext.java` - Added TAILCALL trampoline
+
+---
+
+### Known Issues To Be Fixed (Phase 15+)
 
 The following issues remain from `./jcpan -t DateTime`:
 
 #### 1. ~~Overload Stringification - StackOverflowError~~ **FIXED in Phase 13**
 
-#### 2. Leap Second Handling (MEDIUM PRIORITY)
+#### 2. ~~End-of-Month Arithmetic~~ **FIXED in Phase 14**
+
+#### 3. ~~Overloaded cmp / sort / delta_md~~ **FIXED in Phase 14**
+
+#### 4. Leap Second Handling (MEDIUM PRIORITY)
 
 **Symptom**: DateTime fails to properly handle leap seconds (second = 60).
 
-**Affected Tests**: t/19leap-second.t (12 failures), t/32leap-second2.t (7 failures)
+**Affected Tests**: t/19leap-second.t (12 failures), t/32leap-second2.t (7 failures), t/38local-subtract.t (2 failures)
 
 **Examples**:
 - `Invalid second value (60)` - DateTime doesn't accept second=60
@@ -223,25 +309,6 @@ The following issues remain from `./jcpan -t DateTime`:
 - `utc_rd_secs` should be 86400 for leap seconds, returns 0
 
 **Root Cause**: Java XS `_seconds_as_components` and `_normalize_leap_seconds` may not fully match Perl's leap second semantics.
-
-#### 3. End-of-Month Arithmetic (MEDIUM PRIORITY)
-
-**Symptom**: Date arithmetic involving month ends produces incorrect results.
-
-**Affected Tests**: t/06add.t (2), t/10subtract.t (4), t/11duration.t (4), t/27delta.t (4), t/38local-subtract.t (7)
-
-**Examples**:
-- `2000-02-29 + 1 year` should give `2001-03-01`, got `2001-02-28`
-- `2003-12-31 - 1 month` should give `2003-11-30`, got `2003-12-01`
-- `delta_months` returns negative values incorrectly
-
-**Root Cause**: The `end_of_month` handling mode ('preserve', 'limit') not fully implemented in Java XS or pure Perl fallback.
-
-#### 4. Floating Time Comparison (LOW PRIORITY)
-
-**Symptom**: Comparison with floating time zones returns 0 instead of -1.
-
-**Affected Test**: t/07compare.t line 168
 
 #### 5. Missing Test Dependencies
 
@@ -291,6 +358,14 @@ These cause test files to skip or fail to run:
 **Affected Test**: t/04epoch.t
 
 **Root Cause**: overload.pm line 111 cannot resolve overloaded numification operator.
+
+#### 11. namespace::autoclean catch method (t/48rt-115983.t)
+
+**Symptom**: Test expects `DateTime->can('catch')` to return false after namespace::autoclean, but it returns true.
+
+**Affected Test**: t/48rt-115983.t
+
+**Root Cause**: The namespace::autoclean stub does not actually remove imported functions. This is by design (see Phase 11) because removing them would break modules that use Try::Tiny's `try`/`catch`. The test is checking a feature that PerlOnJava intentionally does not implement.
 
 ### Files Changed
 

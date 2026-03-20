@@ -212,6 +212,7 @@ public class OverloadContext {
 
     /**
      * Attempts to execute an overloaded method with given arguments.
+     * Handles TAILCALL markers from `goto $coderef` with a trampoline loop.
      *
      * @param methodName     The name of the method to execute
      * @param perlMethodArgs Array of arguments to pass to the method
@@ -224,6 +225,23 @@ public class OverloadContext {
             return null;
         }
         // Execute found method with provided arguments
-        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
+        RuntimeList result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
+        
+        // Handle TAILCALL markers from `goto $coderef` with trampoline loop
+        while (result instanceof RuntimeControlFlowList) {
+            RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+            if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                // Execute the tail call
+                RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                RuntimeArray args = flow.getTailCallArgs();
+                result = RuntimeCode.apply(codeRef, args, SCALAR);
+            } else {
+                // Not a TAILCALL - other control flow types (LAST/NEXT/REDO/GOTO)
+                // should propagate up, but for overload context we just return the first element
+                break;
+            }
+        }
+        
+        return result.getFirst();
     }
 }

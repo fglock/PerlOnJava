@@ -140,6 +140,11 @@ public class DateTime extends PerlModuleBase {
     /**
      * _ymd2rd(self, year, month, day)
      * Convert year/month/day to Rata Die days using java.time.JulianFields.RATA_DIE.
+     * 
+     * DateTime relies on special handling:
+     * - day=0 means "last day of previous month"
+     * - day > last_day_of_month overflows to next month(s)
+     * - day < 0 goes back into previous month(s)
      */
     public static RuntimeList _ymd2rd(RuntimeArray args, int ctx) {
         int year = args.get(1).getInt();
@@ -156,13 +161,13 @@ public class DateTime extends PerlModuleBase {
             month += 12;
         }
         
-        // Clamp day to valid range for the month
-        LocalDate tempDate = LocalDate.of(year, month, 1);
-        int maxDay = tempDate.lengthOfMonth();
-        if (day > maxDay) day = maxDay;
-        if (day < 1) day = 1;
-        
-        LocalDate date = LocalDate.of(year, month, day);
+        // Start with the first day of the month, then add (day - 1) to get the target date
+        // This correctly handles:
+        // - day=0 → last day of previous month (1st + (-1) = last day of prev)
+        // - day=1 → first day of month (1st + 0 = 1st)
+        // - day > last_day → overflows to next month
+        // - day < 0 → goes back into previous months
+        LocalDate date = LocalDate.of(year, month, 1).plusDays(day - 1);
         long rd = date.getLong(JulianFields.RATA_DIE);
         
         return new RuntimeScalar(rd).getList();
