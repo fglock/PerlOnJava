@@ -76,14 +76,30 @@ public class ScalarUtil extends PerlModuleBase {
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
-     * @return A RuntimeList containing the memory address.
+     * @return A RuntimeList containing the memory address, or undef if not a reference.
      */
     public static RuntimeList refaddr(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for refaddr() method");
         }
         RuntimeScalar scalar = args.get(0);
-        return new RuntimeScalar(System.identityHashCode(scalar)).getList();
+        // refaddr returns undef for non-references
+        // For references, return the identity hash code of the underlying referenced object
+        switch (scalar.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+            case CODE:
+            case GLOB:
+            case GLOBREFERENCE:
+            case FORMAT:
+            case REGEX:
+                // Return identity of the underlying value object
+                return new RuntimeScalar(System.identityHashCode(scalar.value)).getList();
+            default:
+                // Return undef for non-references
+                return new RuntimeScalar().getList();
+        }
     }
 
     /**
