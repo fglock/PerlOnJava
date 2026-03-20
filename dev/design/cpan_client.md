@@ -355,6 +355,58 @@ All major DateTime issues have been fixed. The 7 remaining test failures are:
 
 ---
 
+## Phase 16: utf8::valid() Fix for CPAN::Meta Parsing (2026-03-20)
+
+### Problem Statement
+
+When installing DateTime with empty caches, CPAN::Meta::YAML parsing would fail with:
+```
+Read an invalid UTF-8 string (maybe mixed UTF-8 and 8-bit character set).
+Did you decode with lax ":utf8" instead of strict ":encoding(UTF-8)"?
+```
+
+This error prevented proper parsing of META.yml/MYMETA.yml files, which meant test dependencies like Test::Without::Module and CPAN::Meta::Check were not being properly detected.
+
+### Root Cause
+
+CPAN::Meta::YAML validates strings before parsing:
+```perl
+if ( utf8::is_utf8($string) && ! utf8::valid($string) ) {
+    die "Read an invalid UTF-8 string...";
+}
+```
+
+The `utf8::valid()` function in PerlOnJava was using `CharsetDetector` which was fundamentally wrong:
+- It converted the string to bytes using the default charset
+- Then tried to detect if those bytes were UTF-8
+- This always failed for properly decoded Unicode strings
+
+### Solution
+
+Rewrote `utf8::valid()` in `Utf8.java` to correctly check string validity:
+- **For character strings (UTF-8 flag on)**: Validates that surrogate pairs are properly formed
+- **For byte strings (UTF-8 flag off)**: Attempts to decode bytes as UTF-8
+
+### Files Changed
+
+- `src/main/java/org/perlonjava/runtime/perlmodule/Utf8.java` - Fixed `valid()` method
+
+### Test Results
+
+The fix allows CPAN::Meta::YAML to properly parse MYMETA.yml files, enabling CPAN.pm to detect and install test dependencies.
+
+---
+
+## Known Remaining CPAN Issues
+
+| Issue | Status | Impact |
+|-------|--------|--------|
+| File::stat.pm missing | Not implemented | DateTime::Locale installation fails |
+| IPC::Open3 read-only error | Bug in IPCOpen3.java | Some module tests fail |
+| Test::Harness UTF-8 error | Pre-existing | Some test output parsing fails |
+
+---
+
 ## Related Documents
 
 - `dev/design/xsloader.md` - XSLoader/Java integration
