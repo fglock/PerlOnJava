@@ -167,22 +167,39 @@ Exception Details:
 **Minimal Reproducer**:
 ```perl
 no strict "refs";
-for (qw(X Y Z)) {
-    my $result = defined eval { &{"Fcntl::S_IF$_"} };
-}
+my $result = defined eval { &{"Fcntl::S_IFX"} };
 ```
 
-The issue requires ALL of these:
-1. `no strict "refs"` in scope
-2. A `for` loop
-3. `defined` wrapping `eval { &{"symbolic_ref"} }` (symbolic subroutine call inside eval)
+The issue requires BOTH of these:
+1. `no strict "refs"` in scope (enables symbolic subroutine calls)
+2. `defined eval { &{"symbolic_ref"} }` (eval-wrapped symbolic sub call with defined check)
 
-**Works** (any ONE element missing):
+**Works** (any element missing):
 - `eval { &{"..."} }` without `defined` - OK
-- `defined eval { die "x" }` - OK (no symbolic ref)
+- `defined eval { die "x" }` - OK (no symbolic ref call)
 - `defined eval { Func() }` - OK (direct call, not symbolic)
+- With `use strict "refs"` - OK (throws error at compile time)
 
-**Root Cause**: The bytecode generator creates inconsistent stackmap frames when compiling `defined eval { &{...} }` inside a for loop with symbolic refs.
+**Root Cause**: The bytecode generator creates inconsistent stackmap frames in the block dispatcher. When a symbolic subroutine call (`&{"..."}`) is made inside an eval block:
+
+1. The call triggers control flow handling that stores `getControlFlowType().ordinal()` in `controlFlowActionSlot` (slot 29)
+2. Multiple code paths merge at a common label
+3. Some paths have written to slot 29 (integer), others haven't (TOP/uninitialized)
+4. ASM's frame computation detects the mismatch: slot 29 is `I` on one path, `T` on another
+
+**Specific bytecode issue** (from disassembly):
+```
+ISTORE 29           // Store ordinal (path A)
+...
+L8:  ALOAD 27       // Path B arrives here with slot 29 = I
+L7:  FRAME [... slot 29 = T ...]  // But L7 expects T!
+     ASTORE 25
+```
+
+**Fix approach**: Ensure `controlFlowActionSlot` (slot 29) has a consistent type across all paths that merge at L7. Either:
+1. Initialize it before the branch divergence (already done at method entry)
+2. Store a value in ALL paths, not just the control-flow path
+3. Restructure the control flow so paths don't merge with different types
 
 **Impact**: Any module using these Perl patterns will fail to load
 
