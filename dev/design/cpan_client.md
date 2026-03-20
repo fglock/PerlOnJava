@@ -784,6 +784,98 @@ use namespace::autoclean 0.19 -except => [qw(
 2. **Clone/arithmetic** - May fail due to missing methods from Try::Tiny cleanup
 3. **XS fallback** - Default mode tries XS first; forced PP mode required for now
 
+### Next Steps for DateTime
+
+#### Step 1: Investigate namespace::autoclean Behavior Difference
+
+**Question:** Why does the original DateTime code work with system Perl but not PerlOnJava?
+
+The glob assignment `*{ 'DateTime::' . $sub } = __PACKAGE__->can($sub)` in DateTime::PP
+installs methods that namespace::autoclean then cleans up. In system Perl, these methods
+are preserved. Investigation needed:
+
+1. **Compare B module behavior**
+   - In system Perl: `B::svref_2object(\&DateTime::_ymd2rd)->GV->STASH->NAME` returns what?
+   - In PerlOnJava: Returns the original package (DateTime::PP) via Sub::Util::subname
+   - Does system Perl's B module return the *installed* package instead?
+
+2. **Check namespace::autoclean _method_check logic**
+   ```perl
+   # From namespace/autoclean.pm _method_check():
+   my ($code_stash) = subname($coderef) =~ /\A(.*)::/s;
+   return 1 if $code_stash eq $package;  # Is a method if stash matches
+   ```
+   - Test: What does `Sub::Util::subname(\&DateTime::_ymd2rd)` return in system Perl?
+   - If system Perl returns `DateTime::_ymd2rd` (installed name), that explains the difference
+
+3. **Test commands for investigation**
+   ```bash
+   # System Perl
+   perl -MDateTime -MB -MSub::Util=subname -e '
+     print "subname: ", subname(\&DateTime::_ymd2rd), "\n";
+     my $cv = B::svref_2object(\&DateTime::_ymd2rd);
+     print "B stash: ", $cv->GV->STASH->NAME, "\n";
+   '
+   
+   # PerlOnJava
+   PERL_DATETIME_PP=1 ./jperl -I perl5_lib/lib -I perl5_lib/lib/perl5 \
+     -MDateTime -MB -MSub::Util=subname -e '
+     print "subname: ", subname(\&DateTime::_ymd2rd), "\n";
+     my $cv = B::svref_2object(\&DateTime::_ymd2rd);
+     print "B stash: ", $cv->GV->STASH->NAME, "\n";
+   '
+   ```
+
+4. **Possible fixes**
+   - If system Perl tracks the *installed* name: Update RuntimeCode to track installation location
+   - If system Perl uses different logic: Match that logic in our B module
+   - Alternative: Have XSLoader install DateTime methods with correct subname via set_subname()
+
+#### Step 2: Enable XS Fallback to DateTime.java
+
+**Goal:** When DateTime.pm tries `XSLoader::load('DateTime')`, load our Java implementation.
+
+**Current behavior:**
+- DateTime.pm line 31-47: Tries XSLoader, catches errors matching `/object version|loadable object/`
+- If XS fails with non-matching error, it dies
+- If XS succeeds, $loaded = 1 and uses DateTime::PPExtra
+- If XS fails with matching error, falls back to DateTime::PP
+
+**Proposed implementation:**
+
+1. **Create DateTime XS bridge** in `DateTime.java`:
+   ```java
+   // Methods that DateTime.pm expects from XS:
+   public static RuntimeList _ymd2rd(RuntimeArray args, int ctx) { ... }
+   public static RuntimeList _rd2ymd(RuntimeArray args, int ctx) { ... }
+   // etc.
+   ```
+
+2. **Register as XS module** in XSLoader:
+   - Add DateTime to the list of Java-implemented XS modules
+   - When `XSLoader::load('DateTime')` is called, register the Java methods
+
+3. **Handle version compatibility**:
+   - DateTime.pm passes version to XSLoader
+   - Our Java implementation should return compatible version or handle mismatch gracefully
+
+4. **Test plan**:
+   ```bash
+   # Should use Java XS, not PP
+   ./jperl -MDateTime -e 'print "IsPurePerl: $DateTime::IsPurePerl\n"'
+   # Expected: IsPurePerl: 0 (or undefined)
+   
+   # Basic functionality
+   ./jperl -MDateTime -e '
+     my $dt = DateTime->new(year => 2024, month => 3, day => 15);
+     print $dt->ymd, "\n";
+   '
+   ```
+
+5. **Files to modify**:
+   - `src/main/java/org/perlonjava/runtime/perlmodule/DateTime.java` - Add XS-compatible methods
+   - `src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java` - Register DateTime module
+
 ### Files Changed (Phase 11 map/grep fix)
 - `src/main/java/org/perlonjava/runtime/operators/ListOperators.java` - outerArgs parameter
 - `src/main/java/org/perlonjava/runtime/operators/OperatorHandler.java` - Updated signatures
