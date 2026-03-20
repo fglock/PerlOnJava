@@ -98,7 +98,7 @@ DateTime installation via jcpan completes but the module had issues loading due 
 
 **Timezone support has remaining issues:**
 ```bash
-# This still fails due to Try::Tiny dependency
+# Fails because namespace::autoclean cleans imported Try::Tiny functions
 ./jperl -MDateTime -e '
   my $dt = DateTime->new(year => 2024, time_zone => "America/New_York");
 '
@@ -113,31 +113,36 @@ DateTime installation via jcpan completes but the module had issues loading due 
 | GLOBREFERENCE scalar dereference | `$$globref` now returns the glob itself | |
 | map/grep @_ access | Blocks now access outer subroutine's @_ | 67da75215 |
 | B::Hooks::EndOfScope NPE | Null check for fileName in beginFileLoad/endFileLoad | 5dc05ca6d |
-| **Sub::Util::subname installed name** | When code is installed via `*pkg::name = \&code`, the RuntimeCode's packageName/subName are updated to reflect the installed location | 8bc1e451e |
+| **Sub::Util::subname for glob-installed code** | When code is installed via `*pkg::name = \&code`, the RuntimeCode's packageName/subName are updated | 8bc1e451e |
 
-### Root Cause of namespace::autoclean Issue (FIXED)
+### Root Cause of namespace::autoclean Issue (PARTIALLY FIXED)
 
-**Problem:** When DateTime::PP installed methods via glob assignment:
-```perl
-*{ 'DateTime::' . $sub } = __PACKAGE__->can($sub);
-```
-namespace::autoclean would clean them because `Sub::Util::subname` returned the *original* package name (`DateTime::PP::_ymd2rd`) instead of the *installed* name (`DateTime::_ymd2rd`).
+**Fixed:** Methods installed via direct glob assignment (`*pkg::name = \&code`) now have correct subname.
 
-**Solution:** Modified `RuntimeGlob.set()` and `RuntimeStashEntry.set()` to update the RuntimeCode's `packageName` and `subName` fields when code is installed into a glob slot. This ensures `Sub::Util::subname()` returns the installed name.
+**Still broken:** Imported functions via Exporter. When `use Try::Tiny` imports `catch` into DateTime::TimeZone:
+- `Sub::Util::subname(\&DateTime::TimeZone::catch)` returns `Try::Tiny::catch`
+- namespace::autoclean sees package mismatch and removes it
+- This matches Perl behavior for subname, but Perl's namespace::autoclean handles this case differently
+
+**Why we can't easily fix Exporter imports:**
+- Exporter creates aliases - `DateTime::TimeZone::catch` points to same RuntimeCode as `Try::Tiny::catch`
+- Modifying packageName/subName would affect ALL importers
+- Cloning RuntimeCode would break aliasing semantics
 
 ### Remaining Issues
 
-1. **Try::Tiny not installed** - DateTime::TimeZone uses `try`/`catch` from Try::Tiny
-   - **Fix:** `jcpan install Try::Tiny`
+1. **namespace::autoclean + Exporter imports** - Imported functions are cleaned
+   - Affects: DateTime::TimeZone (Try::Tiny), and likely other modules
+   - Workaround: Exclude imported functions in `-except` list (requires patching)
    
 2. **XS fallback** - DateTime uses pure Perl mode; XS bridge not yet implemented
    - Low priority since PP mode works
 
-### Next Steps for Full DateTime Support
+### Next Steps
 
-1. **Install Try::Tiny** - `jcpan install Try::Tiny`
-2. **Test timezone support** - Verify DateTime::TimeZone works after Try::Tiny
-3. **Document working patterns** - Update user docs with DateTime examples
+1. **Investigate how real Perl handles this** - Compare namespace::autoclean behavior
+2. **Consider namespace::autoclean stub** - Could skip cleanup entirely or use different logic
+3. **Document workarounds** - Manual patches to exclude imported functions
 
 ---
 
