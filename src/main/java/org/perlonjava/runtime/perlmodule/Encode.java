@@ -68,6 +68,10 @@ public class Encode extends PerlModuleBase {
         encode.initializeExporter();
         encode.defineExport("EXPORT", "encode", "decode", "encode_utf8", "decode_utf8",
                 "is_utf8", "find_encoding", "from_to");
+        encode.defineExport("EXPORT_OK", "FB_CROAK", "FB_QUIET", "FB_WARN", "FB_PERLQQ",
+                "FB_HTMLCREF", "FB_XMLCREF", "PERLQQ", "HTMLCREF", "XMLCREF",
+                "DIE_ON_ERR", "WARN_ON_ERR", "RETURN_ON_ERR", "LEAVE_SRC",
+                "ONLY_PRAGMA_WARNINGS", "STOP_AT_PARTIAL");
         try {
             encode.registerMethod("encode", null);
             encode.registerMethod("decode", null);
@@ -78,9 +82,93 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("from_to", null);
             encode.registerMethod("_utf8_on", null);
             encode.registerMethod("_utf8_off", null);
+            // Register constants
+            encode.registerMethod("FB_CROAK", null);
+            encode.registerMethod("FB_QUIET", null);
+            encode.registerMethod("FB_WARN", null);
+            encode.registerMethod("FB_PERLQQ", null);
+            encode.registerMethod("FB_HTMLCREF", null);
+            encode.registerMethod("FB_XMLCREF", null);
+            encode.registerMethod("PERLQQ", null);
+            encode.registerMethod("HTMLCREF", null);
+            encode.registerMethod("XMLCREF", null);
+            encode.registerMethod("DIE_ON_ERR", null);
+            encode.registerMethod("WARN_ON_ERR", null);
+            encode.registerMethod("RETURN_ON_ERR", null);
+            encode.registerMethod("LEAVE_SRC", null);
+            encode.registerMethod("ONLY_PRAGMA_WARNINGS", null);
+            encode.registerMethod("STOP_AT_PARTIAL", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
+    }
+
+    // Encode constants (check bits)
+    private static final int FB_QUIET = 1;
+    private static final int FB_WARN = 2;
+    private static final int FB_CROAK = 4;
+    private static final int FB_PERLQQ_VAL = 256;  // PERLQQ
+    private static final int FB_HTMLCREF_VAL = 512;
+    private static final int FB_XMLCREF_VAL = 1024;
+
+    public static RuntimeList FB_CROAK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_CROAK).getList();
+    }
+
+    public static RuntimeList FB_QUIET(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_QUIET).getList();
+    }
+
+    public static RuntimeList FB_WARN(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_WARN).getList();
+    }
+
+    public static RuntimeList FB_PERLQQ(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_PERLQQ_VAL | FB_WARN).getList();  // 264
+    }
+
+    public static RuntimeList FB_HTMLCREF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_HTMLCREF_VAL | FB_WARN).getList();  // 514
+    }
+
+    public static RuntimeList FB_XMLCREF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_XMLCREF_VAL | FB_WARN).getList();  // 1026
+    }
+
+    public static RuntimeList PERLQQ(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_PERLQQ_VAL).getList();  // 256
+    }
+
+    public static RuntimeList HTMLCREF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_HTMLCREF_VAL).getList();  // 512
+    }
+
+    public static RuntimeList XMLCREF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_XMLCREF_VAL).getList();  // 1024
+    }
+
+    public static RuntimeList DIE_ON_ERR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList WARN_ON_ERR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(2).getList();
+    }
+
+    public static RuntimeList RETURN_ON_ERR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(4).getList();
+    }
+
+    public static RuntimeList LEAVE_SRC(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(8).getList();
+    }
+
+    public static RuntimeList ONLY_PRAGMA_WARNINGS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(16).getList();
+    }
+
+    public static RuntimeList STOP_AT_PARTIAL(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(32).getList();
     }
 
     /**
