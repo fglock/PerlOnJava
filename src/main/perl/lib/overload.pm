@@ -1,8 +1,9 @@
 package overload;
 
 use strict;
+no strict 'refs';
 
-our $VERSION = '1.37';
+our $VERSION = '1.40';
 
 our %ops = (
     with_assign         => "+ - * / % ** << >> x .",
@@ -31,24 +32,23 @@ sub OVERLOAD {
     my $package = shift;
     my %arg = @_;
     my $sub;
-
-    my $sym_ref = Symbol::qualify_to_ref("((", $package);
-    *$sym_ref = \&nil;
-
+    *{$package . "::(("} = \&nil; # Make it findable via fetchmethod.
     for (keys %arg) {
         if ($_ eq 'fallback') {
-            my $sym_ref = Symbol::qualify_to_ref("()", $package);
-            my $value = $arg{$_};
-            *$sym_ref = sub () { $value };
+            for my $sym (*{$package . "::()"}) {
+              *$sym = \&nil; # Make it findable via fetchmethod.
+              $$sym = $arg{$_};
+            }
         } else {
             warnings::warnif("overload arg '$_' is invalid")
                 unless exists $ops_seen{$_};
             $sub = $arg{$_};
             if (not ref $sub) {
-                $sub = Symbol::qualify_to_ref($sub, $package);
+                $ {$package . "::(" . $_} = $sub;
+                $sub = \&nil;
             }
-            my $sym_ref = Symbol::qualify_to_ref("($_", $package);
-            *$sym_ref = $sub;
+            #print STDERR "Setting '$ {'package'}::\cO$_' to \\&'$sub'.\n";
+            *{$package . "::(" . $_} = \&{ $sub };
         }
     }
 }
@@ -63,15 +63,11 @@ sub import {
 sub unimport {
     my $package = caller();
     shift;
-    my $sym_ref = Symbol::qualify_to_ref("((", $package);
-    *$sym_ref = \&nil;
-
+    *{$package . "::(("} = \&nil;
     for (@_) {
         warnings::warnif("overload arg '$_' is invalid")
             unless exists $ops_seen{$_};
-        my $key = $_ eq 'fallback' ? '()' : "($_";
-        my $sym_ref = Symbol::qualify_to_ref($key, $package);
-        delete *{$sym_ref}{SCALAR};
+        delete $ {$package . "::"}{$_ eq 'fallback' ? '()' : "(" .$_};
     }
 }
 
@@ -136,49 +132,49 @@ sub mycan {                   # Real can would leave stubs.
     return undef;
 }
 
-# my %constants = (
-#     'integer'   =>  0x1000, # HINT_NEW_INTEGER
-#     'float'     =>  0x2000, # HINT_NEW_FLOAT
-#     'binary'    =>  0x4000, # HINT_NEW_BINARY
-#     'q'         =>  0x8000, # HINT_NEW_STRING
-#     'qr'        => 0x10000, # HINT_NEW_RE
-# );
-#
-# use warnings::register;
-# sub constant {
-#     # Arguments: what, sub
-#     while (@_) {
-#         if (@_ == 1) {
-#             warnings::warnif ("Odd number of arguments for overload::constant");
-#             last;
-#         }
-#         elsif (!exists $constants {$_ [0]}) {
-#             warnings::warnif ("'$_[0]' is not an overloadable type");
-#         }
-#         elsif (!ref $_ [1] || "$_[1]" !~ /(^|=)CODE\(0x[0-9a-f]+\)$/) {
-#             # Can't use C<ref $_[1] eq "CODE"> above as code references can be
-#             # blessed, and C<ref> would return the package the ref is blessed into.
-#             if (warnings::enabled) {
-#                 $_ [1] = "undef" unless defined $_ [1];
-#                 warnings::warn ("'$_[1]' is not a code reference");
-#             }
-#         }
-#         else {
-#             $^H{$_[0]} = $_[1];
-#             $^H |= $constants{$_[0]};
-#         }
-#         shift, shift;
-#     }
-# }
-#
-# sub remove_constant {
-#     # Arguments: what, sub
-#     while (@_) {
-#         delete $^H{$_[0]};
-#         $^H &= ~ $constants{$_[0]};
-#         shift, shift;
-#     }
-# }
+my %constants = (
+    'integer'   =>  0x1000, # HINT_NEW_INTEGER
+    'float'     =>  0x2000, # HINT_NEW_FLOAT
+    'binary'    =>  0x4000, # HINT_NEW_BINARY
+    'q'         =>  0x8000, # HINT_NEW_STRING
+    'qr'        => 0x10000, # HINT_NEW_RE
+);
+
+use warnings::register;
+sub constant {
+    # Arguments: what, sub
+    while (@_) {
+        if (@_ == 1) {
+            warnings::warnif ("Odd number of arguments for overload::constant");
+            last;
+        }
+        elsif (!exists $constants {$_ [0]}) {
+            warnings::warnif ("'$_[0]' is not an overloadable type");
+        }
+        elsif (!ref $_ [1] || "$_[1]" !~ /(^|=)CODE\(0x[0-9a-f]+\)$/) {
+            # Can't use C<ref $_[1] eq "CODE"> above as code references can be
+            # blessed, and C<ref> would return the package the ref is blessed into.
+            if (warnings::enabled) {
+                $_ [1] = "undef" unless defined $_ [1];
+                warnings::warn ("'$_[1]' is not a code reference");
+            }
+        }
+        else {
+            $^H{$_[0]} = $_[1];
+            $^H |= $constants{$_[0]};
+        }
+        shift, shift;
+    }
+}
+
+sub remove_constant {
+    # Arguments: what, sub
+    while (@_) {
+        delete $^H{$_[0]};
+        $^H &= ~ $constants{$_[0]};
+        shift, shift;
+    }
+}
 
 1;
 
