@@ -241,12 +241,31 @@ public class Operator {
     /**
      * Extracts a substring from a given RuntimeScalar based on the provided offset and length.
      * This method mimics Perl's substr function, handling negative offsets and lengths.
+     * Warns when offset is outside of string (when warnings enabled at compile time).
      *
      * @param ctx  The context of the operation.
      * @param args The original string, the offset and optionally the length.
      * @return A RuntimeSubstrLvalue representing the extracted substring, which can be used for further operations.
      */
     public static RuntimeScalar substr(int ctx, RuntimeBase... args) {
+        return substrImpl(ctx, true, args);
+    }
+
+    /**
+     * Extracts a substring without warnings (for when 'no warnings "substr"' is in effect).
+     *
+     * @param ctx  The context of the operation.
+     * @param args The original string, the offset and optionally the length.
+     * @return A RuntimeSubstrLvalue representing the extracted substring.
+     */
+    public static RuntimeScalar substrNoWarn(int ctx, RuntimeBase... args) {
+        return substrImpl(ctx, false, args);
+    }
+
+    /**
+     * Internal implementation of substr with configurable warning behavior.
+     */
+    private static RuntimeScalar substrImpl(int ctx, boolean warnEnabled, RuntimeBase... args) {
         String str = args[0].toString();
         int strLength = str.codePointCount(0, str.length());
 
@@ -266,8 +285,10 @@ public class Operator {
         }
 
         if (offset < 0 || offset > strLength) {
-            WarnDie.warn(new RuntimeScalar("substr outside of string"),
-                    RuntimeScalarCache.scalarEmptyString);
+            if (warnEnabled) {
+                WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
             if (replacement != null) {
                 return new RuntimeScalar();
             }

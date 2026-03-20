@@ -289,6 +289,89 @@ public class EmitOperator {
         }
     }
 
+    // Handles the 'substr' built-in function with compile-time warning check.
+    static void handleSubstrOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+        EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
+        if (node.operand instanceof ListNode operand) {
+            // Push context
+            emitterVisitor.pushCallContext();
+
+            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+
+            // Create array for varargs operators
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+
+            // Create array of RuntimeScalar with size equal to number of arguments
+            mv.visitIntInsn(Opcodes.SIPUSH, operand.elements.size());
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+
+            int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledArgsArray = argsArraySlot >= 0;
+            if (!pooledArgsArray) {
+                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
+
+            // Populate the array with arguments
+            int index = 0;
+            for (Node arg : operand.elements) {
+                // Generate code for argument
+                String argContext = (String) arg.getAnnotation("context");
+                if (argContext != null && argContext.equals("SCALAR")) {
+                    arg.accept(scalarVisitor);
+                } else {
+                    arg.accept(listVisitor);
+                }
+
+                int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg = argSlot >= 0;
+                if (!pooledArg) {
+                    argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitIntInsn(Opcodes.SIPUSH, index);
+                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                mv.visitInsn(Opcodes.AASTORE); // Store in array
+
+                if (pooledArg) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+                index++;
+            }
+
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+
+            // Check if warnings are enabled at compile time
+            ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+            boolean warnSubstr = symbolTable != null && symbolTable.isWarningCategoryEnabled("substr");
+
+            // Call the appropriate method based on warning state
+            String methodName = warnSubstr ? "substr" : "substrNoWarn";
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/Operator",
+                    methodName,
+                    "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+
+            // Handle context
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+
+            if (pooledArgsArray) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        }
+    }
+
     // Handle an operator that was parsed using a Perl prototype.
     static void handleOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
@@ -575,6 +658,7 @@ public class EmitOperator {
     }
 
     // Handles the 'substr' operator, which extracts a substring from a string.
+    // Also handles 'join' and 'sprintf' which share similar argument handling.
     static void handleSubstr(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
         // Spill the left operand before evaluating the right side so non-local control flow
@@ -613,6 +697,32 @@ public class EmitOperator {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
 
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+            return;
+        }
+
+        // For substr, check if warnings are enabled at compile time
+        if (node.operator.equals("substr")) {
+            ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+            boolean warnSubstr = symbolTable != null && symbolTable.isWarningCategoryEnabled("substr");
+            
+            // Push context argument
+            emitterVisitor.pushCallContext();
+            
+            // Call the appropriate method based on warning state
+            String methodName = warnSubstr ? "substr" : "substrNoWarn";
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/Operator",
+                    methodName,
+                    "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+
+            // Handle context
             if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 handleVoidContext(emitterVisitor);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {

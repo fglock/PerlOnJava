@@ -91,6 +91,7 @@ public class WarningFlags {
         // Enable other warnings
         enableWarning("glob");
         enableWarning("locale");
+        enableWarning("substr");
     }
 
     /**

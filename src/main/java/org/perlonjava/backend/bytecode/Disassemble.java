@@ -625,6 +625,12 @@ public class Disassemble {
                         int substrCtx = interpretedCode.bytecode[pc++];
                         sb.append("SUBSTR_VAR r").append(rd).append(" = substr(r").append(substrArgsReg).append(", ctx=").append(substrCtx).append(")\n");
                         break;
+                    case Opcodes.SUBSTR_VAR_NO_WARN:
+                        rd = interpretedCode.bytecode[pc++];
+                        int substrNoWarnArgsReg = interpretedCode.bytecode[pc++];
+                        int substrNoWarnCtx = interpretedCode.bytecode[pc++];
+                        sb.append("SUBSTR_VAR_NO_WARN r").append(rd).append(" = substrNoWarn(r").append(substrNoWarnArgsReg).append(", ctx=").append(substrNoWarnCtx).append(")\n");
+                        break;
                     case Opcodes.PUSH_LOCAL_VARIABLE:
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");

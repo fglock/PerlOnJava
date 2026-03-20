@@ -98,6 +98,28 @@ public class OpcodeHandlerExtended {
     }
 
     /**
+     * Execute substr with variable args, no warning.
+     * Format: SUBSTR_VAR_NO_WARN rd argsListReg ctx
+     * Used when 'no warnings "substr"' is in effect at compile time.
+     *
+     * @param bytecode  The bytecode array
+     * @param pc        Current program counter
+     * @param registers Register file
+     * @return Updated program counter
+     */
+    public static int executeSubstrVarNoWarn(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int argsListReg = bytecode[pc++];
+        int ctx = bytecode[pc++];
+
+        RuntimeList argsList = (RuntimeList) registers[argsListReg];
+        RuntimeBase[] substrArgs = argsList.elements.toArray(new RuntimeBase[0]);
+
+        registers[rd] = Operator.substrNoWarn(ctx, substrArgs);
+        return pc;
+    }
+
+    /**
      * Execute repeat assign operation.
      * Format: REPEAT_ASSIGN rd rs
      *

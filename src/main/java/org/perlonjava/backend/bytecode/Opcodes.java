@@ -1987,6 +1987,13 @@ public class Opcodes {
      */
     public static final short ARRAY_KV_SLICE_DELETE = 392;
 
+    /**
+     * substr with variable args, no warning: rd = Operator.substrNoWarn(ctx, args...)
+     * Format: SUBSTR_VAR_NO_WARN rd argsListReg ctx
+     * Used when 'no warnings "substr"' is in effect at compile time.
+     */
+    public static final short SUBSTR_VAR_NO_WARN = 393;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
