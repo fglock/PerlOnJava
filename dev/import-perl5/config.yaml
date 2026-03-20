@@ -615,6 +615,10 @@ imports:
   - source: perl5/lib/overloading.pm
     target: src/main/perl/lib/overloading.pm
 
+  # Term::ANSIColor - ANSI terminal color support (used by various tests)
+  - source: perl5/cpan/Term-ANSIColor/lib/Term/ANSIColor.pm
+    target: src/main/perl/lib/Term/ANSIColor.pm
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
