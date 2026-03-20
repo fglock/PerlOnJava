@@ -136,21 +136,25 @@ public class Exporter extends PerlModuleBase {
     }
 
     public static RuntimeList exportToLevel(RuntimeArray args, int ctx) {
-        // MyPackage->export_to_level($where_to_export, $package, @what_to_export)
+        // MyPackage->export_to_level($level, $redundant_pkg, @what_to_export)
+        // Note: Perl's export_to_level ignores the 3rd arg and uses caller($level) for target
         if (args.size() < 2) {
             throw new PerlCompilerException("Not enough arguments for export_to_level");
         }
-        RuntimeArray.shift(args);   // $self
+        
+        // The invocant ($self) is the SOURCE package to export FROM
+        RuntimeScalar selfScalar = RuntimeArray.shift(args);   // $self - source package
+        String packageName = selfScalar.scalar().toString();
 
-        RuntimeScalar exportLevel = RuntimeArray.shift(args); // $where_to_export
-        // add 1 to the current export level, to hide the export_to_level() call
-        // exportLevel = MathOperators.add(exportLevel, 1);
+        RuntimeScalar exportLevel = RuntimeArray.shift(args); // $level
+        
+        // Discard the redundant third argument (like Perl's Heavy.pm does)
+        // This matches: (undef) = shift; # XXX redundant arg
+        if (!args.isEmpty()) {
+            RuntimeArray.shift(args); // redundant arg - discard
+        }
 
-        // Extract the package name from the arguments
-        RuntimeScalar packageScalar = RuntimeArray.shift(args); // $package
-        String packageName = packageScalar.scalar().toString();
-
-        // Determine the caller's namespace
+        // Determine the caller's namespace using caller($level)
         RuntimeList callerList = RuntimeCode.caller(new RuntimeList(exportLevel), SCALAR);
         String caller = callerList.scalar().toString();
         if (caller == null || caller.isEmpty()) {
