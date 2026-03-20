@@ -77,6 +77,8 @@ This document tracks CPAN client support for PerlOnJava. The `jcpan` command pro
 | 8 | User Experience | `jcpan` wrapper script |
 | 9 | Polish | YAML version update, Module::Build partial support |
 | 11 | DateTime Support | namespace::autoclean stub, keyword autoquoting parser fix |
+| 12 | DateTime Java XS | refaddr fix, POSIX math functions |
+| 13 | Overload Stringification | Single-variable interpolation now forces stringify |
 
 ---
 
@@ -168,22 +170,46 @@ Test and verify DateTime uses the Java XS fallback mechanism instead of pure Per
 
 DateTime test suite: **3247/3292 subtests passed** (98.6%), **45 failures**
 
-### Known Issues To Be Fixed (Phase 13+)
+---
 
-The following issues were identified from `./jcpan -t DateTime`:
+## Phase 13: Overload Stringification Fix (Completed 2026-03-20)
 
-#### 1. Overload Stringification - StackOverflowError (HIGH PRIORITY)
+### Problem Statement
 
-**Symptom**: `java.lang.StackOverflowError` at DateTime.pm line 1960 when stringifying DateTime objects with formatters or infinite values.
+DateTime tests (t/20infinite.t, t/31formatter.t) were failing with `StackOverflowError` when comparing stringified DateTime objects using `eq`.
 
-**Affected Tests**: t/20infinite.t, t/31formatter.t, t/45core-time.t
+### Root Cause
 
-**Root Cause**: Recursive overload resolution when `eq` is called on DateTime objects. The `_stringify` method at line 1960 enters infinite recursion.
+When a double-quoted string contained only a single interpolated variable like `"$obj"`, the parser was optimizing it to just return the variable directly, without forcing stringification. This caused:
 
-**Error Message**:
-```
-Can't use string ("DateTime::(""") as a symbol ref while "strict refs" in use at jar:PERL5LIB/overload.pm line 111
-```
+1. The `eq` overload handler does: `return "$a" eq "$b"`
+2. PerlOnJava was treating `"$a"` as just `$a` (no stringification)
+3. This caused the `eq` overload to call itself infinitely → StackOverflowError
+
+### Solution
+
+Fixed `StringDoubleQuoted.createJoinNode()` to ensure that single non-string segments in string interpolation are wrapped in a `join()` operation, which forces proper stringification.
+
+The fix does NOT apply in regex context (`isRegex=true`) because regex patterns should use the `qr` overload, not stringify.
+
+### Test Results After Fix
+
+DateTime test suite: **3260/3302 subtests passed** (98.7%), **42 failures**
+
+- **t/20infinite.t**: All 104 tests now pass (was failing on infinite stringification)
+- **t/31formatter.t**: All 11 tests now pass (was failing on formatter stringification)
+
+### Files Changed
+
+- `src/main/java/org/perlonjava/frontend/parser/StringDoubleQuoted.java` - Fixed single-variable string interpolation
+
+---
+
+### Known Issues To Be Fixed (Phase 14+)
+
+The following issues remain from `./jcpan -t DateTime`:
+
+#### 1. ~~Overload Stringification - StackOverflowError~~ **FIXED in Phase 13**
 
 #### 2. Leap Second Handling (MEDIUM PRIORITY)
 
