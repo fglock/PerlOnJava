@@ -409,15 +409,29 @@ These modules are not installed but can be added via `jcpan install`:
 
 **Affected**: Dist::CheckConflicts tests only (not DateTime functionality)
 
-### Category 5: By Design
+### Category 5: namespace::autoclean (CAN BE IMPLEMENTED)
 
 #### namespace::autoclean catch method (t/48rt-115983.t)
 
 **Symptom**: Test expects `DateTime->can('catch')` to return false after namespace::autoclean, but it returns true.
 
-**Root Cause**: The namespace::autoclean stub intentionally does not remove imported functions. Removing them would break modules that use Try::Tiny's `try`/`catch`.
+**Root Cause**: The namespace::autoclean stub was implemented as a no-op. The original comment claimed removing imported functions would break modules using Try::Tiny, but this was incorrect.
 
-**Action**: None - documented as intentional behavior.
+**What namespace::autoclean actually does**:
+1. Records existing subs in the package at `use` time
+2. At end of scope (via B::Hooks::EndOfScope), checks each new sub
+3. Uses `Sub::Util::subname()` to detect if sub was imported (name differs from current package)
+4. Removes imported subs from symbol table
+
+**Why it CAN be implemented in PerlOnJava**:
+- `Sub::Util::subname()` works correctly - returns original package where sub was defined
+- `undef *{"Package::sub"}` works to remove subs from symbol table
+- B::Hooks::EndOfScope is implemented via defer mechanism
+
+**Why imported functions still work after cleanup**:
+The cleanup happens at END of compilation. By that time, all code in the package has been compiled and function references resolved. The functions are only removed from the symbol table (can't be called as methods), not from already-compiled code.
+
+**Action**: Implement properly in Phase 16 (see below).
 
 ---
 
@@ -425,7 +439,28 @@ These modules are not installed but can be added via `jcpan install`:
 
 ### Phase 16 Priorities
 
-1. **overload.pm symbol resolution** (affects t/04epoch.t)
+1. **namespace::autoclean implementation** (HIGH PRIORITY - affects t/48rt-115983.t)
+   - Already have all prerequisites working:
+     - `Sub::Util::subname()` correctly identifies imported subs
+     - `undef *{"Package::sub"}` removes subs from symbol table
+     - B::Hooks::EndOfScope works via defer
+   - Implementation:
+     ```perl
+     sub import {
+         my ($class, %args) = @_;
+         my $cleanee = $args{-cleanee} // caller;
+         
+         # Record existing subs
+         my %existing = map { $_ => 1 } _get_subs($cleanee);
+         
+         # Register cleanup at end of scope
+         B::Hooks::EndOfScope::on_scope_end {
+             _clean_namespace($cleanee, \%existing, \%args);
+         };
+     }
+     ```
+
+2. **overload.pm symbol resolution** (MEDIUM PRIORITY - affects t/04epoch.t)
    - Investigate line 111 in overload.pm
    - Fix handling of `Package::(operator` symbol references
    - This may affect other modules using overloading
@@ -437,8 +472,8 @@ These modules are not installed but can be added via `jcpan install`:
 
 ### Lower Priority
 
-3. **Dist::CheckConflicts / Sub::Exporter** - Complex metaprogramming, low impact
-4. **Install missing test deps** - Optional, mainly for test coverage
+4. **Dist::CheckConflicts / Sub::Exporter** - Complex metaprogramming, low impact
+5. **Install missing test deps** - Optional, mainly for test coverage
 
 ---
 
@@ -446,10 +481,15 @@ These modules are not installed but can be added via `jcpan install`:
 
 **DateTime Status**: 99.97% passing (3481/3482 subtests)
 
-The only real failure is t/48rt-115983.t which tests namespace::autoclean cleanup - intentionally not implemented. All other "failures" are either:
-- Parse errors (cosmetic, tests pass)
-- Missing optional test dependencies
-- Crashes after tests complete (overload.pm bug)
+| Issue | Type | Status |
+|-------|------|--------|
+| t/48rt-115983.t (namespace::autoclean) | PerlOnJava | Can be fixed in Phase 16 |
+| Parse errors (no done_testing) | Cosmetic | Not failures |
+| Missing test deps | External | Optional install |
+| overload.pm crash | PerlOnJava | Medium priority |
+| Locale data files | jcpan | Enhancement needed |
+
+All core DateTime functionality works correctly. The remaining issues are either cosmetic, optional dependencies, or have clear implementation paths.
 
 ---
 
