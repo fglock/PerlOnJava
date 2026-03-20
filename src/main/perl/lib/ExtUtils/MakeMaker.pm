@@ -347,6 +347,7 @@ sub _create_mymeta {
     
     # Create MYMETA.yml for CPAN.pm dependency resolution
     # This allows CPAN.pm to detect and install prerequisites
+    # Uses meta-spec v2 format with nested prereqs structure
     
     my $mymeta = 'MYMETA.yml';
     
@@ -355,55 +356,68 @@ sub _create_mymeta {
         return;
     };
     
-    # Build prerequisites section
-    my $prereqs = '';
+    # Build prerequisites in meta-spec v2 format (nested prereqs structure)
+    my $runtime_requires = '';
     if ($args->{PREREQ_PM} && %{$args->{PREREQ_PM}}) {
-        $prereqs .= "requires:\n";
         for my $mod (sort keys %{$args->{PREREQ_PM}}) {
             my $ver = $args->{PREREQ_PM}{$mod} || 0;
-            $prereqs .= "  $mod: '$ver'\n";
+            $runtime_requires .= "        $mod: '$ver'\n";
         }
     }
     
+    my $build_requires = '';
     if ($args->{BUILD_REQUIRES} && %{$args->{BUILD_REQUIRES}}) {
-        $prereqs .= "build_requires:\n";
         for my $mod (sort keys %{$args->{BUILD_REQUIRES}}) {
             my $ver = $args->{BUILD_REQUIRES}{$mod} || 0;
-            $prereqs .= "  $mod: '$ver'\n";
+            $build_requires .= "        $mod: '$ver'\n";
         }
     }
     
+    my $test_requires = '';
     if ($args->{TEST_REQUIRES} && %{$args->{TEST_REQUIRES}}) {
-        $prereqs .= "test_requires:\n";
         for my $mod (sort keys %{$args->{TEST_REQUIRES}}) {
             my $ver = $args->{TEST_REQUIRES}{$mod} || 0;
-            $prereqs .= "  $mod: '$ver'\n";
+            $test_requires .= "        $mod: '$ver'\n";
         }
     }
     
+    my $configure_requires = '';
     if ($args->{CONFIGURE_REQUIRES} && %{$args->{CONFIGURE_REQUIRES}}) {
-        $prereqs .= "configure_requires:\n";
         for my $mod (sort keys %{$args->{CONFIGURE_REQUIRES}}) {
             my $ver = $args->{CONFIGURE_REQUIRES}{$mod} || 0;
-            $prereqs .= "  $mod: '$ver'\n";
+            $configure_requires .= "        $mod: '$ver'\n";
         }
     }
     
     # Convert NAME to abstract (guess from module name)
     my $abstract = $args->{ABSTRACT} || "$name module";
     
+    # Build prereqs structure only including non-empty sections
+    my $prereqs = "prereqs:\n";
+    if ($configure_requires) {
+        $prereqs .= "  configure:\n    requires:\n$configure_requires";
+    }
+    if ($runtime_requires) {
+        $prereqs .= "  runtime:\n    requires:\n$runtime_requires";
+    }
+    if ($build_requires) {
+        $prereqs .= "  build:\n    requires:\n$build_requires";
+    }
+    if ($test_requires) {
+        $prereqs .= "  test:\n    requires:\n$test_requires";
+    }
+    
     print $fh <<"MYMETA";
 ---
 abstract: '$abstract'
 author:
   - 'Unknown'
-build_requires: {}
 dynamic_config: 0
 generated_by: 'ExtUtils::MakeMaker (PerlOnJava)'
 license: perl
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.4.html
-  version: '1.4'
+  url: https://metacpan.org/pod/CPAN::Meta::Spec
+  version: '2'
 name: $name
 no_index:
   directory:
