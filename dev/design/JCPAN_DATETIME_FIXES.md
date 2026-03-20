@@ -150,11 +150,72 @@ Bareword "Exporter" not allowed while "strict subs" in use at jar:PERL5LIB/Carp.
 
 ---
 
+### 11. JVM VerifyError: Inconsistent Stackmap Frames
+
+**Error**:
+```
+java.lang.VerifyError: Inconsistent stackmap frames at branch target 518
+Exception Details:
+  Location:
+    org/perlonjava/anon195.apply(...) @507: goto
+  Reason:
+    Current frame's stack size doesn't match stackmap.
+```
+
+**Triggered by**: perl5's `File/stat.pm` (imported via sync.pl)
+
+**Minimal Reproducer**:
+```perl
+no strict "refs";
+for (qw(X Y Z)) {
+    my $result = defined eval { &{"Fcntl::S_IF$_"} };
+}
+```
+
+The issue requires ALL of these:
+1. `no strict "refs"` in scope
+2. A `for` loop
+3. `defined` wrapping `eval { &{"symbolic_ref"} }` (symbolic subroutine call inside eval)
+
+**Works** (any ONE element missing):
+- `eval { &{"..."} }` without `defined` - OK
+- `defined eval { die "x" }` - OK (no symbolic ref)
+- `defined eval { Func() }` - OK (direct call, not symbolic)
+
+**Root Cause**: The bytecode generator creates inconsistent stackmap frames when compiling `defined eval { &{...} }` inside a for loop with symbolic refs.
+
+**Impact**: Any module using these Perl patterns will fail to load
+
+**Solution**: Debug the bytecode emitter to find why stackmap frames become inconsistent at branch targets. Likely issues:
+1. Stack not properly balanced across all branches
+2. Missing or incorrect frame computation after conditional jumps
+3. Type inconsistency in local variable slots across branches
+
+**Files to investigate**:
+- `src/main/java/org/perlonjava/codegen/EmitterMethodCreator.java`
+- `src/main/java/org/perlonjava/astvisitor/EmitterVisitor.java`
+- Control flow emission in `EmitControlFlow.java`
+
+**Debug approach**:
+```bash
+./jperl --disassemble -e 'use File::stat' 2>&1 | head -200
+```
+
+**Priority**: HIGH (blocks File::stat and potentially other complex modules)
+
+---
+
 ## Implementation Plan
 
 ### Phase 1: Critical (enables DateTime to install)
 
-1. **Implement File::stat.pm stub**
+1. **Fix JVM VerifyError for complex control flow** (Issue #11)
+   - Debug why File::stat.pm causes stackmap frame inconsistency
+   - Create minimal reproduction case
+   - Fix bytecode emitter
+   - Files: `EmitterMethodCreator.java`, `EmitterVisitor.java`, `EmitControlFlow.java`
+
+2. **Implement File::stat.pm stub** (if JVM fix takes too long)
    - Create `src/main/perl/lib/File/stat.pm`
    - Implement basic stat() wrapper returning object with standard fields
    - File: `src/main/perl/lib/File/stat.pm`
@@ -190,11 +251,13 @@ Bareword "Exporter" not allowed while "strict subs" in use at jar:PERL5LIB/Carp.
 ### Completed
 - [x] Phase 16: utf8::valid() fix for CPAN::Meta parsing (2026-03-20)
 - [x] ExtUtils::MakeMaker MYMETA.yml meta-spec v2 format (2026-03-20)
+- [x] Added File::stat.pm via import system (2026-03-20) - but triggers JVM bug
 
 ### In Progress
-- [ ] Phase 17: File::stat.pm implementation
+- [ ] Phase 17: JVM VerifyError investigation for File::stat.pm
 
 ### Pending
+- [ ] File::stat.pm stub (workaround if JVM fix is complex)
 - [ ] IPC::Open3 read-only fix
 - [ ] Encode::encodings() method
 - [ ] require_version implementation
