@@ -166,9 +166,105 @@ Test and verify DateTime uses the Java XS fallback mechanism instead of pure Per
 
 ### Test Results
 
-DateTime test suite: **2700/2740 subtests passed** (98.5%)
+DateTime test suite: **3247/3292 subtests passed** (98.6%), **45 failures**
 
-Remaining failures are edge cases (leap seconds, locale data files) not related to the Java XS implementation.
+### Known Issues To Be Fixed (Phase 13+)
+
+The following issues were identified from `./jcpan -t DateTime`:
+
+#### 1. Overload Stringification - StackOverflowError (HIGH PRIORITY)
+
+**Symptom**: `java.lang.StackOverflowError` at DateTime.pm line 1960 when stringifying DateTime objects with formatters or infinite values.
+
+**Affected Tests**: t/20infinite.t, t/31formatter.t, t/45core-time.t
+
+**Root Cause**: Recursive overload resolution when `eq` is called on DateTime objects. The `_stringify` method at line 1960 enters infinite recursion.
+
+**Error Message**:
+```
+Can't use string ("DateTime::(""") as a symbol ref while "strict refs" in use at jar:PERL5LIB/overload.pm line 111
+```
+
+#### 2. Leap Second Handling (MEDIUM PRIORITY)
+
+**Symptom**: DateTime fails to properly handle leap seconds (second = 60).
+
+**Affected Tests**: t/19leap-second.t (12 failures), t/32leap-second2.t (7 failures)
+
+**Examples**:
+- `Invalid second value (60)` - DateTime doesn't accept second=60
+- `delta_seconds` calculations off by 1 for leap second boundaries
+- `utc_rd_secs` should be 86400 for leap seconds, returns 0
+
+**Root Cause**: Java XS `_seconds_as_components` and `_normalize_leap_seconds` may not fully match Perl's leap second semantics.
+
+#### 3. End-of-Month Arithmetic (MEDIUM PRIORITY)
+
+**Symptom**: Date arithmetic involving month ends produces incorrect results.
+
+**Affected Tests**: t/06add.t (2), t/10subtract.t (4), t/11duration.t (4), t/27delta.t (4), t/38local-subtract.t (7)
+
+**Examples**:
+- `2000-02-29 + 1 year` should give `2001-03-01`, got `2001-02-28`
+- `2003-12-31 - 1 month` should give `2003-11-30`, got `2003-12-01`
+- `delta_months` returns negative values incorrectly
+
+**Root Cause**: The `end_of_month` handling mode ('preserve', 'limit') not fully implemented in Java XS or pure Perl fallback.
+
+#### 4. Floating Time Comparison (LOW PRIORITY)
+
+**Symptom**: Comparison with floating time zones returns 0 instead of -1.
+
+**Affected Test**: t/07compare.t line 168
+
+#### 5. Missing Test Dependencies
+
+These cause test files to skip or fail to run:
+
+| Module | Tests Affected |
+|--------|----------------|
+| `Test::Warnings` | t/29overload.t, t/46warnings.t |
+| `Test::Without::Module` | t/49-without-sub-util.t |
+| `Term::ANSIColor` | t/zzz-check-breaks.t |
+| `Storable` (locale data) | t/23storable.t |
+
+#### 6. DateTime::Locale Data Files
+
+**Symptom**: `Failed to find shared file 'de.pl' for dist 'DateTime-Locale'`
+
+**Affected Tests**: t/13strftime.t, t/14locale.t, t/23storable.t, t/41cldr-format.t
+
+**Root Cause**: DateTime::Locale locale data files (*.pl) not installed by jcpan. These are runtime data files, not Perl modules.
+
+#### 7. IPC::Open3 Read-Only Modification
+
+**Symptom**: `open3: Modification of a read-only value attempted`
+
+**Affected Test**: Dist::CheckConflicts t/00-compile.t
+
+**Root Cause**: Bug in IPCOpen3.java line 162 when handling read-only arguments.
+
+#### 8. Dist::CheckConflicts Method Resolution
+
+**Symptom**: `Can't locate object method "conflicts" via package`
+
+**Affected Tests**: Multiple Dist::CheckConflicts tests
+
+**Root Cause**: Dist::CheckConflicts uses complex method injection via `Sub::Exporter` that may not work correctly in PerlOnJava.
+
+#### 9. Encode::PERLQQ Undefined
+
+**Symptom**: `Undefined subroutine &Encode::PERLQQ called`
+
+**Affected**: CPAN::Meta loading in t/00-report-prereqs.t
+
+#### 10. Number::Overloaded Integration
+
+**Symptom**: `Can't use string ("Number::Overloaded::(0+") as a symbol ref`
+
+**Affected Test**: t/04epoch.t
+
+**Root Cause**: overload.pm line 111 cannot resolve overloaded numification operator.
 
 ### Files Changed
 
