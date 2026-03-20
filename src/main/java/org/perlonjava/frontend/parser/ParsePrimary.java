@@ -173,6 +173,25 @@ public class ParsePrimary {
                 String coreGlobalName = "CORE::GLOBAL::" + operator;
                 if (RuntimeGlob.isGlobAssigned(coreGlobalName) && existsGlobalCodeRef(coreGlobalName)) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
+                    
+                    // Special handling for 'require' - need to convert bareword module name to string
+                    // before passing to the override subroutine, to avoid strict subs violation
+                    if (operator.equals("require")) {
+                        // Parse the require argument using standard require handling
+                        Node requireNode = CoreOperatorResolver.parseCoreOperator(parser, token, startIndex);
+                        if (requireNode instanceof OperatorNode requireOp && requireOp.operator.equals("require")) {
+                            // Convert to CORE::GLOBAL::require subroutine call with the parsed argument
+                            // Use &CORE::GLOBAL::require(...) form to properly call as code ref
+                            OperatorNode codeRef = new OperatorNode("&",
+                                    new IdentifierNode(coreGlobalName, startIndex),
+                                    startIndex);
+                            return new BinaryOperatorNode("(",
+                                    codeRef,
+                                    (ListNode) requireOp.operand,
+                                    startIndex);
+                        }
+                    }
+                    
                     parser.tokenIndex = startIndex;   // backtrack
                     // Rewrite the tokens to call CORE::GLOBAL::operator
                     parser.tokens.add(startIndex, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));

@@ -30,6 +30,7 @@ public class Exporter extends PerlModuleBase {
             exporter.registerMethod("export_to_level", "exportToLevel", null);
             exporter.registerMethod("export_tags", "exportTags", null);
             exporter.registerMethod("export_ok_tags", "exportOkTags", null);
+            exporter.registerMethod("require_version", "requireVersion", null);
 
             // Set up @EXPORTER::EXPORT_OK = ("import");
             RuntimeArray.push(GlobalVariable.getGlobalArray("Exporter::EXPORT_OK"), new RuntimeScalar("import"));
@@ -280,6 +281,23 @@ public class Exporter extends PerlModuleBase {
             }
         }
         return new RuntimeList();
+    }
+
+    /**
+     * require_version - delegates to the package's VERSION method.
+     * This exists for historical compatibility with older Exporter usage.
+     *
+     * @param args The arguments: $package, $version
+     * @param ctx  The calling context
+     * @return Result of VERSION method call
+     */
+    public static RuntimeList requireVersion(RuntimeArray args, int ctx) {
+        // $pkg->require_version($version) delegates to $pkg->VERSION($version)
+        if (args.size() < 1) {
+            throw new PerlCompilerException("Not enough arguments for require_version");
+        }
+        // Call UNIVERSAL::VERSION($package, $version)
+        return Universal.VERSION(args, ctx);
     }
 
     private static void importFunction(String packageName, String caller, String functionName) {
