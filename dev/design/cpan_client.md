@@ -391,15 +391,22 @@ These modules are not installed but can be added via `jcpan install`:
 
 ### Category 4: PerlOnJava Bugs
 
-#### 4a. overload.pm Symbol Resolution (MEDIUM PRIORITY)
+#### 4a. overload.pm Missing `no strict 'refs'` (EASY FIX)
 
 **Symptom**: `Can't use string ("Number::Overloaded::(0+") as a symbol ref`
 
 **Affected Test**: t/04epoch.t (crashes after 44 passing tests)
 
-**Root Cause**: overload.pm line 111 tries to resolve `Number::Overloaded::(0+` as a symbol reference. This metaprogramming pattern isn't handled correctly.
+**Root Cause**: PerlOnJava's `overload.pm` is missing `no strict 'refs';` at package level.
 
-**Location**: `jar:PERL5LIB/overload.pm` line 111
+| File | Lines 3-4 |
+|------|-----------|
+| **Perl 5.42 overload.pm** | `use strict;`<br>`no strict 'refs';` |
+| **PerlOnJava overload.pm** | `use strict;` ← missing line |
+
+The `mycan` function uses `\*{$fqmeth}` to create glob references from strings, which requires `no strict 'refs'` at package scope.
+
+**Fix**: Add `no strict 'refs';` after `use strict;` in `src/main/perl/lib/overload.pm`
 
 #### 4b. Dist::CheckConflicts Method Resolution (LOW PRIORITY)
 
@@ -460,12 +467,11 @@ The cleanup happens at END of compilation. By that time, all code in the package
      }
      ```
 
-2. **overload.pm symbol resolution** (MEDIUM PRIORITY - affects t/04epoch.t)
-   - Investigate line 111 in overload.pm
-   - Fix handling of `Package::(operator` symbol references
-   - This may affect other modules using overloading
+2. **overload.pm fix** (EASY - affects t/04epoch.t)
+   - Add `no strict 'refs';` after `use strict;` in `src/main/perl/lib/overload.pm`
+   - One-line fix, matches Perl 5.42's overload.pm
 
-2. **jcpan share/ directory support** (affects locale tests)
+3. **jcpan share/ directory support** (MEDIUM - affects locale tests)
    - Detect `share/` directories in CPAN distributions
    - Install to `~/.perlonjava/auto/share/dist/Module-Name/`
    - Update File::ShareDir to find these directories
