@@ -259,6 +259,32 @@ sub log { CORE::log($_[0]) }
 sub sin { CORE::sin($_[0]) }
 sub cos { CORE::cos($_[0]) }
 sub atan2 { CORE::atan2($_[0], $_[1]) }
+sub floor { CORE::int($_[0] >= 0 ? $_[0] : ($_[0] == CORE::int($_[0]) ? $_[0] : CORE::int($_[0]) - 1)) }
+sub ceil { -floor(-$_[0]) }
+sub fmod { $_[0] - CORE::int($_[0] / $_[1]) * $_[1] }
+sub fabs { CORE::abs($_[0]) }
+sub pow { $_[0] ** $_[1] }
+sub asin { CORE::atan2($_[0], CORE::sqrt(1 - $_[0] * $_[0])) }
+sub acos { CORE::atan2(CORE::sqrt(1 - $_[0] * $_[0]), $_[0]) }
+sub atan { CORE::atan2($_[0], 1) }
+sub tan { CORE::sin($_[0]) / CORE::cos($_[0]) }
+sub sinh { (CORE::exp($_[0]) - CORE::exp(-$_[0])) / 2 }
+sub cosh { (CORE::exp($_[0]) + CORE::exp(-$_[0])) / 2 }
+sub tanh { sinh($_[0]) / cosh($_[0]) }
+sub log10 { CORE::log($_[0]) / CORE::log(10) }
+sub ldexp { $_[0] * (2 ** $_[1]) }
+sub frexp {
+    my $x = CORE::abs($_[0]);
+    return (0, 0) if $x == 0;
+    my $exp = 0;
+    while ($x >= 1) { $x /= 2; $exp++ }
+    while ($x < 0.5) { $x *= 2; $exp-- }
+    return ($_[0] < 0 ? -$x : $x, $exp);
+}
+sub modf {
+    my $int = CORE::int($_[0]);
+    return ($_[0] - $int, $int);
+}
 
 # String error function
 sub strerror { POSIX::_strerror(@_) }

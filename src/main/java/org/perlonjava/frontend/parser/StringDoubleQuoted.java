@@ -326,7 +326,21 @@ public class StringDoubleQuoted extends StringSegmentParser {
     private Node createJoinNode(List<Node> nodes) {
         return switch (nodes.size()) {
             case 0 -> new StringNode("", parser.tokenIndex);
-            case 1 -> nodes.getFirst();
+            case 1 -> {
+                var result = nodes.getFirst();
+                if (result instanceof StringNode) {
+                    yield result;
+                }
+                // In regex context, return the variable directly so qr overload can work
+                if (isRegex) {
+                    yield result;
+                }
+                // Single non-string segment needs to be converted to string
+                // This ensures overloaded objects are properly stringified in string context
+                var listNode = new ListNode(parser.tokenIndex);
+                listNode.elements.add(result);
+                yield new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
+            }
             default -> {
                 var listNode = new ListNode(parser.tokenIndex);
                 listNode.elements.addAll(nodes);

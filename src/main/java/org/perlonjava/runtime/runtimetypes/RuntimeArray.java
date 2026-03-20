@@ -395,6 +395,41 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return result;
     }
 
+    /**
+     * Deletes multiple array elements and returns key-value pairs: delete %array[indices]
+     *
+     * @param indices The list of indices to delete.
+     * @return A RuntimeList containing alternating indices and values.
+     */
+    public RuntimeList deleteKeyValueSlice(RuntimeList indices) {
+        // Collect all indices and their values first (to preserve order)
+        List<Integer> indexList = new ArrayList<>();
+        for (RuntimeScalar indexScalar : indices) {
+            indexList.add(indexScalar.getInt());
+        }
+
+        // Create result list to store index/value pairs in original order
+        RuntimeList result = new RuntimeList();
+
+        // First pass: collect index/value pairs in original order
+        for (Integer index : indexList) {
+            RuntimeScalar value = this.get(index);
+            result.elements.add(new RuntimeScalar(index));  // Add the index
+            result.elements.add(value.getDefinedBoolean() ? new RuntimeScalar(value) : scalarUndef);  // Add the value
+        }
+
+        // Sort indices in descending order for deletion
+        List<Integer> sortedIndices = new ArrayList<>(indexList);
+        sortedIndices.sort((a, b) -> b.compareTo(a)); // Sort descending
+
+        // Second pass: delete elements starting from highest index
+        for (Integer index : sortedIndices) {
+            this.delete(index);
+        }
+
+        return result;
+    }
+
     public RuntimeScalar delete(RuntimeScalar index) {
         return this.delete(index.getInt());
     }
@@ -704,6 +739,27 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar runtimeScalar : value) {
             outElements.add(this.get(runtimeScalar));
+        }
+        return result;
+    }
+
+    /**
+     * Gets a key-value slice of the array: %array[indices]
+     *
+     * @param value The list of indices to slice.
+     * @return A RuntimeList containing alternating indices and values.
+     */
+    public RuntimeList getKeyValueSlice(RuntimeList value) {
+
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
+
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBase> outElements = result.elements;
+        for (RuntimeScalar indexScalar : value) {
+            outElements.add(indexScalar);                    // Add the index
+            outElements.add(this.get(indexScalar));          // Add the value
         }
         return result;
     }

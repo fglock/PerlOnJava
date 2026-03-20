@@ -526,6 +526,22 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Deletes a key-value slice of the hash: delete %hash{keys}
+     *
+     * @param value The RuntimeList containing the keys to delete.
+     * @return A RuntimeList containing alternating keys and values of deleted elements.
+     */
+    public RuntimeList deleteKeyValueSlice(RuntimeList value) {
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBase> outElements = result.elements;
+        for (RuntimeScalar keyScalar : value) {
+            outElements.add(keyScalar);                    // Add the key
+            outElements.add(this.delete(keyScalar));       // Add the deleted value
+        }
+        return result;
+    }
+
+    /**
      * Set multiple hash elements from key and value lists (slice assignment).
      *
      * @param keys   The RuntimeList containing the keys.

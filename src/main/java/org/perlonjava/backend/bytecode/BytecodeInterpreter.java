@@ -1755,6 +1755,22 @@ public class BytecodeInterpreter {
                                 registers[rd] = array.get(index);
                             }
 
+                            // =================================================================
+                            // KV-SLICE DELETE OPERATIONS (390-392)
+                            // =================================================================
+
+                            case Opcodes.ARRAY_SLICE_DELETE -> {
+                                pc = SlowOpcodeHandler.executeArraySliceDelete(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.HASH_KV_SLICE_DELETE -> {
+                                pc = SlowOpcodeHandler.executeHashKVSliceDelete(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.ARRAY_KV_SLICE_DELETE -> {
+                                pc = SlowOpcodeHandler.executeArrayKVSliceDelete(bytecode, pc, registers);
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(
