@@ -113,36 +113,42 @@ DateTime installation via jcpan completes but the module had issues loading due 
 | GLOBREFERENCE scalar dereference | `$$globref` now returns the glob itself | |
 | map/grep @_ access | Blocks now access outer subroutine's @_ | 67da75215 |
 | B::Hooks::EndOfScope NPE | Null check for fileName in beginFileLoad/endFileLoad | 5dc05ca6d |
-| **Sub::Util::subname for glob-installed code** | When code is installed via `*pkg::name = \&code`, the RuntimeCode's packageName/subName are updated | 8bc1e451e |
 
-### Root Cause of namespace::autoclean Issue (PARTIALLY FIXED)
+### namespace::autoclean Issue (NOT YET FIXED)
 
-**Fixed:** Methods installed via direct glob assignment (`*pkg::name = \&code`) now have correct subname.
+**Problem:** When DateTime::PP installs methods via glob assignment:
+```perl
+*{ 'DateTime::' . $sub } = __PACKAGE__->can($sub);
+```
+namespace::autoclean cleans them because `Sub::Util::subname` returns the *original* package name (`DateTime::PP::_ymd2rd`) instead of the *installed* name (`DateTime::_ymd2rd`).
 
-**Still broken:** Imported functions via Exporter. When `use Try::Tiny` imports `catch` into DateTime::TimeZone:
-- `Sub::Util::subname(\&DateTime::TimeZone::catch)` returns `Try::Tiny::catch`
-- namespace::autoclean sees package mismatch and removes it
-- This matches Perl behavior for subname, but Perl's namespace::autoclean handles this case differently
+**Why we can't just update packageName/subName on glob assignment:**
+- This breaks `next::method` which relies on subname to find the next method in MRO
+- Perl's behavior: glob assignment does NOT change subname (verified with system Perl)
+- The mro/next_edgecases.t tests specifically verify this behavior
 
-**Why we can't easily fix Exporter imports:**
-- Exporter creates aliases - `DateTime::TimeZone::catch` points to same RuntimeCode as `Try::Tiny::catch`
-- Modifying packageName/subName would affect ALL importers
-- Cloning RuntimeCode would break aliasing semantics
+**Possible solutions:**
+1. DateTime::PP should use `Sub::Name::subname()` to explicitly name the subs before installing
+2. Provide a namespace::autoclean stub that doesn't clean up methods
+3. Track installation location separately from intrinsic subname (complex)
 
 ### Remaining Issues
 
-1. **namespace::autoclean + Exporter imports** - Imported functions are cleaned
-   - Affects: DateTime::TimeZone (Try::Tiny), and likely other modules
-   - Workaround: Exclude imported functions in `-except` list (requires patching)
+1. **namespace::autoclean cleans DateTime::PP methods** - Methods installed via glob assignment are cleaned
+   - Root cause: subname returns original package, not installed location
+   - This is correct Perl behavior; DateTime::PP should use Sub::Name
    
-2. **XS fallback** - DateTime uses pure Perl mode; XS bridge not yet implemented
+2. **namespace::autoclean + Exporter imports** - Imported functions are also cleaned
+   - Affects: DateTime::TimeZone (Try::Tiny), and likely other modules
+   
+3. **XS fallback** - DateTime uses pure Perl mode; XS bridge not yet implemented
    - Low priority since PP mode works
 
 ### Next Steps
 
-1. **Investigate how real Perl handles this** - Compare namespace::autoclean behavior
-2. **Consider namespace::autoclean stub** - Could skip cleanup entirely or use different logic
-3. **Document workarounds** - Manual patches to exclude imported functions
+1. **Check if DateTime::PP uses Sub::Name** - May already be fixed in CPAN version
+2. **Consider namespace::autoclean stub** - Could skip cleanup entirely
+3. **Document workarounds** - Manual patches to use Sub::Name or exclude methods
 
 ---
 
