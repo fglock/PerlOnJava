@@ -1575,6 +1575,12 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executeSubstrVar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.SUBSTR_VAR_NO_WARN -> {
+                                // substr with variable args, no warning: rd = Operator.substrNoWarn(ctx, args...)
+                                // Format: SUBSTR_VAR_NO_WARN rd argsListReg ctx
+                                pc = OpcodeHandlerExtended.executeSubstrVarNoWarn(bytecode, pc, registers);
+                            }
+
                             case Opcodes.TIE -> {
                                 pc = InlineOpcodeHandler.executeTie(bytecode, pc, registers);
                             }

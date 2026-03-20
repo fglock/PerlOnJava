@@ -145,17 +145,75 @@ The fix must pass:
 
 ## Progress Tracking
 
-### Current Status: Analysis complete
+### Current Status: Phase 2 COMPLETE
 
 ### Completed
 - [x] Identified root cause (2024-03-20)
 - [x] Documented solution options
+- [x] Implemented Phase 2 fix (Option A - compile-time warning checking)
+- [x] All unit tests pass
+- [x] Both JVM and interpreter backends work correctly
 
-### Next Steps
-1. Implement Phase 1 fix
-2. Verify lvalue_substr.t passes
-3. Run full test suite
-4. Plan Phase 2 implementation if needed
+### Implementation Summary (Phase 2)
+
+**Files Modified:**
+
+1. **EmitOperatorNode.java** - Added explicit case for "substr" to route to new handler:
+   ```java
+   case "substr" -> EmitOperator.handleSubstrOperator(emitterVisitor, node);
+   ```
+
+2. **EmitOperator.java** - Added `handleSubstrOperator()` method that:
+   - Checks `symbolTable.isWarningCategoryEnabled("substr")` at compile time
+   - Calls `Operator.substr()` if warnings enabled, `Operator.substrNoWarn()` if disabled
+
+3. **WarningFlags.java** - Added "substr" to default enabled warnings:
+   ```java
+   // In initializeEnabledWarnings()
+   enableWarning("substr");  // Added to existing list
+   ```
+   Note: Did NOT use `enableWarning("all")` because that enables warnings like
+   "uninitialized" which cause extra fetches from tied variables, breaking
+   tests like gmagic.t that count fetch operations.
+
+**Key Insight:** The original code was checking warnings at RUNTIME via `Warnings.warningManager.isWarningEnabled()`, but `use warnings` only sets the warning state in the compile-time symbol table. The fix is to check `symbolTable.isWarningCategoryEnabled()` at COMPILE time and emit the appropriate method call.
+
+**Interpreter Backend:** Already had proper opcodes (SUBSTR_VAR vs SUBSTR_VAR_NO_WARN) that check compile-time warning state in `CompileOperator.java`.
+
+### Test Results
+
+```bash
+# With use warnings - warning emitted
+./jperl -e 'use warnings; substr("a", 3);'
+# Output: substr outside of string
+
+# With no warnings - no warning
+./jperl -e 'no warnings "substr"; substr("a", 3);'
+# Output: (none)
+
+# Interpreter backend - same behavior
+./jperl --interpreter -e 'use warnings; substr("a", 3);'
+# Output: substr outside of string
+```
+
+### Why the Fix Works
+
+The problem was that `use warnings` calls `initializeEnabledWarnings()` at parse time, which:
+1. Previously only enabled: deprecated, experimental, io, glob, locale warnings
+2. Now also enables "substr" warning category
+
+Then at compile time:
+1. `handleSubstrOperator()` checks `symbolTable.isWarningCategoryEnabled("substr")`
+2. This returns TRUE because the compile-time symbol table has "substr" enabled
+3. The compiler emits a call to `Operator.substr()` which includes the warning
+
+Without the fix, `isWarningCategoryEnabled("substr")` returned FALSE because "substr" was never in the list of warnings enabled by `initializeEnabledWarnings()`.
+
+### Avoided Regression
+
+Initially tried `enableWarning("all")` but that caused regressions in gmagic.t (-2 tests)
+because enabling all warnings (including "uninitialized") causes extra fetches from tied
+variables when the warning system checks if values are defined.
 
 ## References
 
