@@ -10,6 +10,7 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
 
@@ -214,21 +215,27 @@ public class ListParser {
         return token;
     }
 
+    // Keywords that can be autoquoted as hash keys when followed by =>
+    private static final Set<String> AUTOQUOTABLE_KEYWORDS = Set.of(
+            "and", "or", "xor", "when", "if", "unless", "while", "until", "for", "foreach"
+    );
+
     /**
      * Checks if a token is a list terminator, with special handling for autoquoting.
-     * Keywords like "and", "or", "xor" should not terminate a list if followed by "=>",
-     * as they should be treated as hash keys in that context.
+     * Keywords like "and", "or", "xor", "if", "unless", "while", "until", "for", "foreach", "when"
+     * should not terminate a list if followed by "=>", as they should be treated as hash keys
+     * in that context.
      */
     static boolean isListTerminator(Parser parser, LexerToken token) {
         if (!ParserTables.LIST_TERMINATORS.contains(token.text)) {
             return false;
         }
 
-        // Special case: and/or/xor/when before => should be treated as barewords, not terminators
-        if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor") || token.text.equals("when")) {
+        // Special case: keywords before => should be treated as barewords, not terminators
+        if (AUTOQUOTABLE_KEYWORDS.contains(token.text)) {
             // Look ahead to see if => follows
             int saveIndex = parser.tokenIndex;
-            TokenUtils.consume(parser); // consume and/or/xor/when
+            TokenUtils.consume(parser); // consume keyword
             LexerToken nextToken = TokenUtils.peek(parser);
             parser.tokenIndex = saveIndex; // restore
             return !nextToken.text.equals("=>"); // Not a terminator, it's a hash key
@@ -309,8 +316,8 @@ public class ListParser {
         // Check if this is a list terminator, but we need to restore position for the check
         boolean isTerminator = false;
         if (ParserTables.LIST_TERMINATORS.contains(token.text)) {
-            // Special case: check if and/or/xor/when followed by =>
-            if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor") || token.text.equals("when")) {
+            // Special case: check if autoquotable keyword followed by =>
+            if (AUTOQUOTABLE_KEYWORDS.contains(token.text)) {
                 isTerminator = !nextToken.text.equals("=>"); // Not a terminator, it's a hash key
             } else {
                 isTerminator = true;

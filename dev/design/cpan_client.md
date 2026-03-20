@@ -11,7 +11,7 @@ This document tracks CPAN client support for PerlOnJava. The `jcpan` command pro
 - `jcpan -f install Module::Name` - Force install (skip tests)
 - `jcpan -t Module::Name` - Test a module
 - Interactive CPAN shell via `jcpan`
-- **DateTime** - Core functionality working (new, datetime, add, subtract, formatting)
+- **DateTime** - Full functionality including timezone support
 
 **Known Limitations:**
 - XS modules require manual porting (see `.cognition/skills/port-cpan-module/`)
@@ -44,6 +44,7 @@ This document tracks CPAN client support for PerlOnJava. The `jcpan` command pro
 | Safe | Stub using `eval` | CPAN metadata is trusted |
 | ExtUtils::MakeMaker | Custom | Installs directly, no `make` needed |
 | Module::Build::Base | Stub | Disables fork pipes |
+| namespace::autoclean | Stub (no-op) | Skips cleanup to allow imported functions |
 
 ### Not Implemented
 
@@ -75,80 +76,52 @@ This document tracks CPAN client support for PerlOnJava. The `jcpan` command pro
 | 7 | Errno & Regex | `$!` dualvar, literal `{}` braces in regex |
 | 8 | User Experience | `jcpan` wrapper script |
 | 9 | Polish | YAML version update, Module::Build partial support |
+| 11 | DateTime Support | namespace::autoclean stub, keyword autoquoting parser fix |
 
 ---
 
-## Phase 11: DateTime Support (Active)
+## Phase 11: DateTime Support (Completed 2026-03-20)
 
 ### Problem Statement
 
-DateTime installation via jcpan completes but the module had issues loading due to its complex dependency chain involving namespace::autoclean.
+DateTime installation via jcpan completed but the module had issues loading due to its complex dependency chain involving namespace::autoclean.
 
-### Current Status (2026-03-20)
+### Solution
 
-**DateTime core functionality is working:**
+Two fixes were required:
+
+1. **namespace::autoclean stub** - Created `src/main/perl/lib/namespace/autoclean.pm` that provides the interface but skips cleanup. This allows imported functions (like Try::Tiny's `try`/`catch`) to remain available.
+
+2. **Parser fix for keyword autoquoting** - Extended `ListParser.java` to handle keywords like `until`, `while`, `for`, `if`, `unless`, `foreach` as bareword hash keys when followed by `=>`. Previously these keywords would incorrectly terminate list parsing.
+
+### DateTime Now Working
+
 ```bash
 ./jperl -MDateTime -e '
-  my $dt = DateTime->new(year => 2024, month => 3, day => 15, hour => 10);
-  print $dt->datetime, "\n";  # 2024-03-15T10:00:00
-  $dt->add(days => 5);
-  print $dt->datetime, "\n";  # 2024-03-20T10:00:00
+  my $dt = DateTime->new(
+      year => 2024,
+      month => 3,
+      day => 15,
+      hour => 14,
+      minute => 30,
+      time_zone => "America/New_York"
+  );
+  print $dt->datetime, "\n";   # 2024-03-15T14:30:00
+  $dt->add(days => 5, hours => 2);
+  print $dt->datetime, "\n";   # 2024-03-20T16:30:00
 '
-```
-
-**Timezone support has remaining issues:**
-```bash
-# Fails because namespace::autoclean cleans imported Try::Tiny functions
-./jperl -MDateTime -e '
-  my $dt = DateTime->new(year => 2024, time_zone => "America/New_York");
-'
-# Error: Undefined subroutine &DateTime::TimeZone::catch
 ```
 
 ### Issues Fixed in Phase 11
 
-| Issue | Fix | Commit |
-|-------|-----|--------|
+| Issue | Fix | File |
+|-------|-----|------|
 | `${ $stash{NAME} }` dereference | Fixed symbol table access | |
 | GLOBREFERENCE scalar dereference | `$$globref` now returns the glob itself | |
-| map/grep @_ access | Blocks now access outer subroutine's @_ | 67da75215 |
-| B::Hooks::EndOfScope NPE | Null check for fileName in beginFileLoad/endFileLoad | 5dc05ca6d |
-
-### namespace::autoclean Issue (NOT YET FIXED)
-
-**Problem:** When DateTime::PP installs methods via glob assignment:
-```perl
-*{ 'DateTime::' . $sub } = __PACKAGE__->can($sub);
-```
-namespace::autoclean cleans them because `Sub::Util::subname` returns the *original* package name (`DateTime::PP::_ymd2rd`) instead of the *installed* name (`DateTime::_ymd2rd`).
-
-**Why we can't just update packageName/subName on glob assignment:**
-- This breaks `next::method` which relies on subname to find the next method in MRO
-- Perl's behavior: glob assignment does NOT change subname (verified with system Perl)
-- The mro/next_edgecases.t tests specifically verify this behavior
-
-**Possible solutions:**
-1. DateTime::PP should use `Sub::Name::subname()` to explicitly name the subs before installing
-2. Provide a namespace::autoclean stub that doesn't clean up methods
-3. Track installation location separately from intrinsic subname (complex)
-
-### Remaining Issues
-
-1. **namespace::autoclean cleans DateTime::PP methods** - Methods installed via glob assignment are cleaned
-   - Root cause: subname returns original package, not installed location
-   - This is correct Perl behavior; DateTime::PP should use Sub::Name
-   
-2. **namespace::autoclean + Exporter imports** - Imported functions are also cleaned
-   - Affects: DateTime::TimeZone (Try::Tiny), and likely other modules
-   
-3. **XS fallback** - DateTime uses pure Perl mode; XS bridge not yet implemented
-   - Low priority since PP mode works
-
-### Next Steps
-
-1. **Check if DateTime::PP uses Sub::Name** - May already be fixed in CPAN version
-2. **Consider namespace::autoclean stub** - Could skip cleanup entirely
-3. **Document workarounds** - Manual patches to use Sub::Name or exclude methods
+| map/grep @_ access | Blocks now access outer subroutine's @_ | |
+| B::Hooks::EndOfScope NPE | Null check for fileName | |
+| namespace::autoclean cleanup | Stub that skips cleanup | `src/main/perl/lib/namespace/autoclean.pm` |
+| Keywords as hash keys | Extended autoquoting to more keywords | `ListParser.java` |
 
 ---
 
