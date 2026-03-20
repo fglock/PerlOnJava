@@ -4,13 +4,14 @@
 
 This document tracks CPAN client support for PerlOnJava. The `jcpan` command provides full CPAN functionality for pure Perl modules.
 
-## Current Status (2026-03-19)
+## Current Status (2026-03-20)
 
 **Working:**
 - `jcpan install Module::Name` - Install pure Perl modules from CPAN
 - `jcpan -f install Module::Name` - Force install (skip tests)
 - `jcpan -t Module::Name` - Test a module
 - Interactive CPAN shell via `jcpan`
+- **DateTime** - Core functionality working (new, datetime, add, subtract, formatting)
 
 **Known Limitations:**
 - XS modules require manual porting (see `.cognition/skills/port-cpan-module/`)
@@ -81,86 +82,62 @@ This document tracks CPAN client support for PerlOnJava. The `jcpan` command pro
 
 ### Problem Statement
 
-DateTime installation via jcpan completes but the module has issues loading due to its complex dependency chain involving namespace::autoclean.
+DateTime installation via jcpan completes but the module had issues loading due to its complex dependency chain involving namespace::autoclean.
 
-### Current Status
+### Current Status (2026-03-20)
 
-**Working in pure Perl mode:**
+**DateTime core functionality is working:**
 ```bash
-PERL_DATETIME_PP=1 ./jperl -MDateTime -e '
-  my $dt = DateTime->new(year => 2024, month => 3, day => 15);
-  print $dt->ymd;  # 2024-03-15
+./jperl -MDateTime -e '
+  my $dt = DateTime->new(year => 2024, month => 3, day => 15, hour => 10);
+  print $dt->datetime, "\n";  # 2024-03-15T10:00:00
+  $dt->add(days => 5);
+  print $dt->datetime, "\n";  # 2024-03-20T10:00:00
 '
 ```
 
-**Requires manual patch:** DateTime.pm must exclude PP methods from namespace::autoclean cleanup.
+**Timezone support has remaining issues:**
+```bash
+# This still fails due to Try::Tiny dependency
+./jperl -MDateTime -e '
+  my $dt = DateTime->new(year => 2024, time_zone => "America/New_York");
+'
+# Error: Undefined subroutine &DateTime::TimeZone::catch
+```
 
 ### Issues Fixed in Phase 11
 
-| Issue | Fix |
-|-------|-----|
-| `${ $stash{NAME} }` dereference | Fixed symbol table access |
-| GLOBREFERENCE scalar dereference | `$$globref` now returns the glob itself |
-| map/grep @_ access | Blocks now access outer subroutine's @_ |
-| B::CV::GV introspection | Uses Sub::Util::subname for actual names |
-| Scalar::Util::blessed | Returns undef for unblessed refs |
-| B::Hooks::EndOfScope | Rewritten for file-level callbacks |
+| Issue | Fix | Commit |
+|-------|-----|--------|
+| `${ $stash{NAME} }` dereference | Fixed symbol table access | |
+| GLOBREFERENCE scalar dereference | `$$globref` now returns the glob itself | |
+| map/grep @_ access | Blocks now access outer subroutine's @_ | 67da75215 |
+| B::Hooks::EndOfScope NPE | Null check for fileName in beginFileLoad/endFileLoad | 5dc05ca6d |
+| **Sub::Util::subname installed name** | When code is installed via `*pkg::name = \&code`, the RuntimeCode's packageName/subName are updated to reflect the installed location | 8bc1e451e |
+
+### Root Cause of namespace::autoclean Issue (FIXED)
+
+**Problem:** When DateTime::PP installed methods via glob assignment:
+```perl
+*{ 'DateTime::' . $sub } = __PACKAGE__->can($sub);
+```
+namespace::autoclean would clean them because `Sub::Util::subname` returned the *original* package name (`DateTime::PP::_ymd2rd`) instead of the *installed* name (`DateTime::_ymd2rd`).
+
+**Solution:** Modified `RuntimeGlob.set()` and `RuntimeStashEntry.set()` to update the RuntimeCode's `packageName` and `subName` fields when code is installed into a glob slot. This ensures `Sub::Util::subname()` returns the installed name.
 
 ### Remaining Issues
 
-1. **namespace::autoclean cleans installed methods** - Methods installed via glob assignment from DateTime::PP are cleaned because B module reports original package
-2. **DateTime::Locale methods** - Auto-generated locale methods are cleaned
-3. **XS fallback** - Forced PP mode required; XS bridge not yet implemented
+1. **Try::Tiny not installed** - DateTime::TimeZone uses `try`/`catch` from Try::Tiny
+   - **Fix:** `jcpan install Try::Tiny`
+   
+2. **XS fallback** - DateTime uses pure Perl mode; XS bridge not yet implemented
+   - Low priority since PP mode works
 
-### Next Steps for DateTime
+### Next Steps for Full DateTime Support
 
-#### Step 1: Investigate namespace::autoclean Behavior Difference
-
-**Question:** Why does the original DateTime code work with system Perl but not PerlOnJava?
-
-The glob assignment `*{ 'DateTime::' . $sub } = __PACKAGE__->can($sub)` in DateTime::PP installs methods that namespace::autoclean then cleans up. In system Perl, these methods are preserved.
-
-**Investigation needed:**
-1. Compare B module behavior between system Perl and PerlOnJava
-2. Check what `Sub::Util::subname(\&DateTime::_ymd2rd)` returns in system Perl
-3. If system Perl returns the *installed* name, update RuntimeCode to track installation location
-
-**Test commands:**
-```bash
-# System Perl
-perl -MDateTime -MB -MSub::Util=subname -e '
-  print "subname: ", subname(\&DateTime::_ymd2rd), "\n";
-  my $cv = B::svref_2object(\&DateTime::_ymd2rd);
-  print "B stash: ", $cv->GV->STASH->NAME, "\n";
-'
-
-# PerlOnJava
-PERL_DATETIME_PP=1 ./jperl -MDateTime -MB -MSub::Util=subname -e '
-  print "subname: ", subname(\&DateTime::_ymd2rd), "\n";
-  my $cv = B::svref_2object(\&DateTime::_ymd2rd);
-  print "B stash: ", $cv->GV->STASH->NAME, "\n";
-'
-```
-
-#### Step 2: Enable XS Fallback to DateTime.java
-
-**Goal:** When DateTime.pm tries `XSLoader::load('DateTime')`, load our Java implementation.
-
-**Implementation:**
-1. Create DateTime XS bridge methods in `DateTime.java` (_ymd2rd, _rd2ymd, etc.)
-2. Register as XS module in XSLoader
-3. Handle version compatibility
-
-**Test plan:**
-```bash
-# Should use Java XS, not PP
-./jperl -MDateTime -e 'print "IsPurePerl: $DateTime::IsPurePerl\n"'
-# Expected: IsPurePerl: 0 (or undefined)
-```
-
-**Files to modify:**
-- `src/main/java/org/perlonjava/runtime/perlmodule/DateTime.java`
-- `src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java`
+1. **Install Try::Tiny** - `jcpan install Try::Tiny`
+2. **Test timezone support** - Verify DateTime::TimeZone works after Try::Tiny
+3. **Document working patterns** - Update user docs with DateTime examples
 
 ---
 
