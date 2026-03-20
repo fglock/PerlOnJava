@@ -127,6 +127,18 @@ public class RuntimeStashEntry extends RuntimeGlob {
 
         switch (value.type) {
             case CODE:
+                // Update the RuntimeCode's packageName and subName based on the target glob name
+                // This ensures Sub::Util::subname returns the installed name, not the original
+                if (value.value instanceof RuntimeCode code) {
+                    int lastColonIndex = this.globName.lastIndexOf("::");
+                    if (lastColonIndex > 0) {
+                        code.packageName = this.globName.substring(0, lastColonIndex);
+                        code.subName = this.globName.substring(lastColonIndex + 2);
+                    } else {
+                        code.packageName = "main";
+                        code.subName = this.globName;
+                    }
+                }
                 GlobalVariable.getGlobalCodeRef(this.globName).set(value);
 
                 // Invalidate the method resolution cache
