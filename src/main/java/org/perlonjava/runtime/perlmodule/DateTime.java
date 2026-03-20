@@ -34,36 +34,37 @@ public class DateTime extends PerlModuleBase {
     
     // Leap seconds table (from DateTime's leap_seconds.h)
     // Each entry: [rd_day, accumulated_leap_seconds]
-    // The day BEFORE each entry has 86401 seconds (leap second day)
+    // The RD day is the FIRST day of the new period (e.g., July 1, 1972)
+    // The leap second is added at the END of the PREVIOUS day (e.g., June 30, 1972 23:59:60)
+    // So day BEFORE each entry (entry[0] - 1) has 86401 seconds (leap second day)
     private static final long[][] LEAP_SECONDS = {
-        {728714, 10},   // 1972-01-01
-        {728896, 11},   // 1972-07-01
-        {729261, 12},   // 1973-01-01
-        {729627, 13},   // 1974-01-01
-        {729992, 14},   // 1975-01-01
-        {730357, 15},   // 1976-01-01
-        {730723, 16},   // 1977-01-01
-        {731088, 17},   // 1978-01-01
-        {731453, 18},   // 1979-01-01
-        {731819, 19},   // 1980-01-01
-        {732184, 20},   // 1981-07-01
-        {732549, 21},   // 1982-07-01
-        {732915, 22},   // 1983-07-01
-        {733645, 23},   // 1985-07-01
-        {734011, 24},   // 1988-01-01
-        {734741, 25},   // 1990-01-01
-        {735107, 26},   // 1991-01-01
-        {735473, 27},   // 1992-07-01
-        {735838, 28},   // 1993-07-01
-        {736204, 29},   // 1994-07-01
-        {736935, 30},   // 1996-01-01
-        {737301, 31},   // 1997-07-01
-        {737666, 32},   // 1999-01-01
-        {739396, 33},   // 2006-01-01
-        {740214, 34},   // 2009-01-01
-        {741124, 35},   // 2012-07-01
-        {741849, 36},   // 2015-07-01
-        {742582, 37},   // 2017-01-01
+        {720075, 1},    // 1972-07-01 (leap second on 1972-06-30)
+        {720259, 2},    // 1973-01-01 (leap second on 1972-12-31)
+        {720624, 3},    // 1974-01-01
+        {720989, 4},    // 1975-01-01
+        {721354, 5},    // 1976-01-01
+        {721720, 6},    // 1977-01-01
+        {722085, 7},    // 1978-01-01
+        {722450, 8},    // 1979-01-01
+        {722815, 9},    // 1980-01-01
+        {723362, 10},   // 1981-07-01
+        {723727, 11},   // 1982-07-01
+        {724092, 12},   // 1983-07-01
+        {724823, 13},   // 1985-07-01
+        {725737, 14},   // 1988-01-01
+        {726468, 15},   // 1990-01-01
+        {726833, 16},   // 1991-01-01
+        {727380, 17},   // 1992-07-01
+        {727745, 18},   // 1993-07-01
+        {728110, 19},   // 1994-07-01
+        {728659, 20},   // 1996-01-01
+        {729206, 21},   // 1997-07-01
+        {729755, 22},   // 1999-01-01
+        {732312, 23},   // 2006-01-01
+        {733408, 24},   // 2009-01-01
+        {734685, 25},   // 2012-07-01
+        {735780, 26},   // 2015-07-01
+        {736330, 27},   // 2017-01-01
     };
 
     public DateTime() {
@@ -140,6 +141,13 @@ public class DateTime extends PerlModuleBase {
     /**
      * _ymd2rd(self, year, month, day)
      * Convert year/month/day to Rata Die days using java.time.JulianFields.RATA_DIE.
+     * 
+     * DateTime relies on special day handling:
+     * - day=0 means last day of previous month
+     * - day > last_day_of_month overflows to next month(s)
+     * - day < 0 goes back into previous month(s)
+     * 
+     * This is critical for end-of-month arithmetic with 'wrap' mode.
      */
     public static RuntimeList _ymd2rd(RuntimeArray args, int ctx) {
         int year = args.get(1).getInt();
@@ -156,13 +164,13 @@ public class DateTime extends PerlModuleBase {
             month += 12;
         }
         
-        // Clamp day to valid range for the month
-        LocalDate tempDate = LocalDate.of(year, month, 1);
-        int maxDay = tempDate.lengthOfMonth();
-        if (day > maxDay) day = maxDay;
-        if (day < 1) day = 1;
-        
-        LocalDate date = LocalDate.of(year, month, day);
+        // Start at the first of the month, then add (day-1) days
+        // This correctly handles day overflow/underflow:
+        // - day=0 -> adds -1 days -> last day of previous month
+        // - day=32 in January -> adds 31 days -> Feb 1
+        // - day=29 in Feb non-leap year -> adds 28 days -> March 1
+        LocalDate firstOfMonth = LocalDate.of(year, month, 1);
+        LocalDate date = firstOfMonth.plusDays(day - 1);
         long rd = date.getLong(JulianFields.RATA_DIE);
         
         return new RuntimeScalar(rd).getList();

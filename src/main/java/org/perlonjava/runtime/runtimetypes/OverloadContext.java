@@ -4,6 +4,7 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.function.Function;
 
+import static org.perlonjava.runtime.runtimetypes.ControlFlowType.TAILCALL;
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
@@ -212,6 +213,7 @@ public class OverloadContext {
 
     /**
      * Attempts to execute an overloaded method with given arguments.
+     * Handles TAILCALL markers from `goto $coderef` with a trampoline loop.
      *
      * @param methodName     The name of the method to execute
      * @param perlMethodArgs Array of arguments to pass to the method
@@ -224,6 +226,25 @@ public class OverloadContext {
             return null;
         }
         // Execute found method with provided arguments
-        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
+        RuntimeList result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
+        
+        // Handle TAILCALL markers from `goto $coderef` with trampoline loop
+        // This is needed because DateTime's _string_compare_overload uses `goto $meth`
+        // to delegate to _compare_overload
+        while (result instanceof RuntimeControlFlowList) {
+            RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+            if (flow.getControlFlowType() == TAILCALL) {
+                // Execute the tail call
+                RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                RuntimeArray args = flow.getTailCallArgs();
+                result = RuntimeCode.apply(codeRef, args, SCALAR);
+            } else {
+                // Not a TAILCALL - other control flow types should propagate up
+                // For overload context we just return the first element
+                break;
+            }
+        }
+        
+        return result.getFirst();
     }
 }
