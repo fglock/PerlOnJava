@@ -44,7 +44,7 @@ public class ScalarUtil extends PerlModuleBase {
             scalarUtil.registerMethod("looks_like_number", "$");
             scalarUtil.registerMethod("openhandle", "$");
             scalarUtil.registerMethod("readonly", "$");
-            scalarUtil.registerMethod("set_prototype", "$");
+            scalarUtil.registerMethod("set_prototype", "$$");
             scalarUtil.registerMethod("tainted", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Scalar::Util method: " + e.getMessage());
@@ -284,9 +284,11 @@ public class ScalarUtil extends PerlModuleBase {
 
         RuntimeCode runtimeCode = (RuntimeCode) scalar.value;
 
-        runtimeCode.prototype = prototypeScalar.toString();
+        // Set prototype to null if prototypeScalar is undef, otherwise use the string value
+        runtimeCode.prototype = prototypeScalar.getDefinedBoolean() ? prototypeScalar.toString() : null;
 
-        return new RuntimeScalar().getList();
+        // Return the code reference (not undef)
+        return scalar.getList();
     }
 
 

@@ -593,6 +593,7 @@ imports:
   # JSON::PP - Pure Perl JSON (required by tests)
   - source: perl5/cpan/JSON-PP/lib/JSON/PP.pm
     target: src/main/perl/lib/JSON/PP.pm
+    patch: PP.pm.patch
 
   - source: perl5/cpan/JSON-PP/lib/JSON/PP
     target: src/main/perl/lib/JSON/PP
@@ -605,6 +606,19 @@ imports:
   # vars pragma
   - source: perl5/lib/vars.pm
     target: src/main/perl/lib/vars.pm
+
+  # overload pragma - Required for operator overloading
+  # Must have 'no strict refs' at package level for mycan() to work
+  - source: perl5/lib/overload.pm
+    target: src/main/perl/lib/overload.pm
+
+  # overloading pragma - Lexically disable overloading
+  - source: perl5/lib/overloading.pm
+    target: src/main/perl/lib/overloading.pm
+
+  # Term::ANSIColor - ANSI terminal color support (used by various tests)
+  - source: perl5/cpan/Term-ANSIColor/lib/Term/ANSIColor.pm
+    target: src/main/perl/lib/Term/ANSIColor.pm
 
   # Add more imports below as needed
   # Example with minimal fields:

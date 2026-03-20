@@ -109,6 +109,7 @@ public class EmitOperatorNode {
             case "readdir" -> EmitOperator.handleReaddirOperator(emitterVisitor, node);
             case "glob" -> EmitOperator.handleGlobBuiltin(emitterVisitor, node);
             case "rindex", "index" -> EmitOperator.handleIndexBuiltin(emitterVisitor, node);
+            case "substr" -> EmitOperator.handleSubstrOperator(emitterVisitor, node);
             case "atan2" -> EmitOperator.handleAtan2(emitterVisitor, node);
             case "scalar" -> EmitOperator.handleScalar(emitterVisitor, node);
             case "delete", "exists" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);

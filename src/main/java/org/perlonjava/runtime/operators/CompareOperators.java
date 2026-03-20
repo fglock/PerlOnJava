@@ -1,8 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.runtime.runtimetypes.OverloadContext;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
@@ -12,6 +10,34 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  * It includes both numeric and string comparison methods.
  */
 public class CompareOperators {
+
+    /**
+     * Gets the location string for warning messages using caller().
+     */
+    private static RuntimeScalar callerWhere() {
+        RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
+        if (caller.size() < 3) {
+            return new RuntimeScalar("\n");
+        }
+        String fileName = caller.elements.get(1).toString();
+        int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
+        return new RuntimeScalar(" at " + fileName + " line " + line);
+    }
+
+    /**
+     * Checks for uninitialized values and emits warnings.
+     */
+    private static void checkUninitialized(RuntimeScalar arg1, RuntimeScalar arg2, String op) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!arg1.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
+                    callerWhere());
+        }
+        if (!arg2.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
+                    callerWhere());
+        }
+    }
 
     /**
      * Checks if the first RuntimeScalar is less than the second.
@@ -101,6 +127,9 @@ public class CompareOperators {
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
             return getScalarBoolean((int) arg1.value > (int) arg2.value);
         }
+
+        // Check for uninitialized values
+        checkUninitialized(arg1, arg2, "gt (>)");
 
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);

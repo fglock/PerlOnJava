@@ -340,7 +340,11 @@ public class CompileOperator {
         bc.emit(argRegs.size());
         for (int argReg : argRegs) bc.emitReg(argReg);
         int rd = bc.allocateOutputRegister();
-        bc.emit(Opcodes.SUBSTR_VAR);
+        
+        // Check if substr warnings are enabled at compile time
+        boolean warnSubstr = bc.symbolTable != null && bc.symbolTable.isWarningCategoryEnabled("substr");
+        bc.emit(warnSubstr ? Opcodes.SUBSTR_VAR : Opcodes.SUBSTR_VAR_NO_WARN);
+        
         bc.emitReg(rd);
         bc.emitReg(argsListReg);
         bc.emit(bc.currentCallContext);

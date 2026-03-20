@@ -66,7 +66,8 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
             actualOffset = 0;
         }
         if (actualOffset > strLength) {
-            WarnDie.warn(new RuntimeScalar("substr outside of string"),
+            // Perl 5 dies (not just warns) for lvalue substr beyond string length
+            WarnDie.die(new RuntimeScalar("substr outside of string"),
                     RuntimeScalarCache.scalarEmptyString);
             return this;
         }
