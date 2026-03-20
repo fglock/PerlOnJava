@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.util.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.RuntimeCode.getCallerArgs;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
@@ -112,13 +113,17 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar saveB = varB.clone();
 
         try {
+            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
+            RuntimeArray outerArgs = getCallerArgs();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+            
             RuntimeScalar accumulator = values.elements.get(0).scalar().clone();
 
             for (int i = 1; i < values.size(); i++) {
                 varA.set(accumulator);
                 varB.set(values.elements.get(i).scalar());
 
-                RuntimeList result = RuntimeCode.apply(codeRef, new RuntimeArray(), RuntimeContextType.SCALAR);
+                RuntimeList result = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
                 accumulator = result.getFirst();
             }
 
@@ -151,6 +156,10 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar saveB = varB.clone();
 
         try {
+            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
+            RuntimeArray outerArgs = getCallerArgs();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+            
             RuntimeScalar accumulator = values.elements.get(0).scalar().clone();
             results.push(accumulator.clone());
 
@@ -158,7 +167,7 @@ public class ListUtil extends PerlModuleBase {
                 varA.set(accumulator);
                 varB.set(values.elements.get(i).scalar());
 
-                RuntimeList result = RuntimeCode.apply(codeRef, new RuntimeArray(), RuntimeContextType.SCALAR);
+                RuntimeList result = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
                 accumulator = result.getFirst();
                 results.push(accumulator.clone());
             }
@@ -181,7 +190,8 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar codeRef = args.get(0);
         RuntimeList values = createSubList(args, 1);
 
-        return ListOperators.any(values, codeRef, ctx);
+        // Pass the caller's @_ so $-[0], $_[1] etc. are accessible in the block
+        return ListOperators.any(values, codeRef, getCallerArgs(), ctx);
     }
 
     /**
@@ -195,7 +205,8 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar codeRef = args.get(0);
         RuntimeList values = createSubList(args, 1);
 
-        return ListOperators.all(values, codeRef, ctx);
+        // Pass the caller's @_ so $_[0], $_[1] etc. are accessible in the block
+        return ListOperators.all(values, codeRef, getCallerArgs(), ctx);
     }
 
     /**
@@ -227,11 +238,15 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
         try {
+            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
+            RuntimeArray outerArgs = getCallerArgs();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+            
             for (RuntimeBase element : values.elements) {
                 RuntimeScalar scalar = element.scalar();
                 GlobalVariable.aliasGlobalVariable("main::_", scalar);
 
-                RuntimeList result = RuntimeCode.apply(codeRef, new RuntimeArray(), RuntimeContextType.SCALAR);
+                RuntimeList result = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
                 if (result.getFirst().getBoolean()) {
                     return scalar.getList();
                 }
@@ -589,11 +604,15 @@ public class ListUtil extends PerlModuleBase {
         RuntimeArray result = new RuntimeArray();
 
         try {
+            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
+            RuntimeArray outerArgs = getCallerArgs();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+            
             for (int i = 0; i < kvlist.size(); i += 2) {
                 varA.set(kvlist.elements.get(i).scalar());
                 varB.set(i + 1 < kvlist.size() ? kvlist.elements.get(i + 1).scalar() : scalarUndef);
 
-                RuntimeList blockResult = RuntimeCode.apply(codeRef, new RuntimeArray(), RuntimeContextType.LIST);
+                RuntimeList blockResult = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.LIST);
                 blockResult.addToArray(result);
             }
         } finally {
@@ -625,11 +644,15 @@ public class ListUtil extends PerlModuleBase {
         int pairs = 0;
 
         try {
+            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
+            RuntimeArray outerArgs = getCallerArgs();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+            
             for (int i = 0; i < kvlist.size(); i += 2) {
                 varA.set(kvlist.elements.get(i).scalar());
                 varB.set(i + 1 < kvlist.size() ? kvlist.elements.get(i + 1).scalar() : scalarUndef);
 
-                RuntimeList blockResult = RuntimeCode.apply(codeRef, new RuntimeArray(), RuntimeContextType.SCALAR);
+                RuntimeList blockResult = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
                 if (blockResult.getFirst().getBoolean()) {
                     result.push(kvlist.elements.get(i).scalar());
                     if (i + 1 < kvlist.size()) {
@@ -666,11 +689,15 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar saveB = varB.clone();
 
         try {
+            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
+            RuntimeArray outerArgs = getCallerArgs();
+            RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+            
             for (int i = 0; i < kvlist.size(); i += 2) {
                 varA.set(kvlist.elements.get(i).scalar());
                 varB.set(i + 1 < kvlist.size() ? kvlist.elements.get(i + 1).scalar() : scalarUndef);
 
-                RuntimeList blockResult = RuntimeCode.apply(codeRef, new RuntimeArray(), RuntimeContextType.SCALAR);
+                RuntimeList blockResult = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
                 if (blockResult.getFirst().getBoolean()) {
                     if (ctx == RuntimeContextType.SCALAR) {
                         return scalarTrue.getList();

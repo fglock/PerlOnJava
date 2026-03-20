@@ -127,7 +127,68 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final boolean FORCE_INTERPRETER =
             System.getenv("JPERL_INTERPRETER") != null;
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
-    
+
+    /**
+     * Thread-local stack of @_ arrays for each active subroutine call.
+     * This allows nested code blocks (like those passed to List::Util::any/all/grep/map)
+     * to access the outer subroutine's @_ via $_[0], $_[1], etc.
+     * 
+     * Push/pop is handled by RuntimeCode.apply() methods.
+     * Access via getCurrentArgs() for Java-implemented functions that need caller's @_.
+     */
+    private static final ThreadLocal<Deque<RuntimeArray>> argsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Get the current subroutine's @_ array.
+     * Used by Java-implemented functions (like List::Util::any) that need to pass
+     * the caller's @_ to code blocks.
+     *
+     * @return The current @_ array, or null if not in a subroutine
+     */
+    public static RuntimeArray getCurrentArgs() {
+        Deque<RuntimeArray> stack = argsStack.get();
+        return stack.isEmpty() ? null : stack.peek();
+    }
+
+    /**
+     * Get the caller's @_ array (one level up from current).
+     * Used by Java-implemented functions (like List::Util::any) that need to pass
+     * the outer Perl subroutine's @_ to code blocks.
+     * 
+     * When a Java method is called via RuntimeCode.apply(), its @_ is pushed onto the stack.
+     * To get the @_ from the Perl subroutine that called this Java method, we need to look
+     * one level deeper in the stack.
+     *
+     * @return The caller's @_ array, or null if not available
+     */
+    public static RuntimeArray getCallerArgs() {
+        Deque<RuntimeArray> stack = argsStack.get();
+        if (stack.size() < 2) {
+            return null;
+        }
+        // Convert to array to access by index (skip top element)
+        RuntimeArray[] arr = stack.toArray(new RuntimeArray[0]);
+        return arr[1];
+    }
+
+    /**
+     * Push @_ onto the args stack when entering a subroutine.
+     */
+    private static void pushArgs(RuntimeArray args) {
+        argsStack.get().push(args);
+    }
+
+    /**
+     * Pop @_ from the args stack when exiting a subroutine.
+     */
+    private static void popArgs() {
+        Deque<RuntimeArray> stack = argsStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+
     /**
      * Inline method cache for fast method dispatch at monomorphic call sites.
      * 
@@ -2167,6 +2228,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugState.pushArgs(a);
                 DebugHooks.enterSubroutine(debugSubName);
             }
+            // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
+            pushArgs(a);
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -2179,6 +2242,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
+                popArgs();
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
@@ -2254,6 +2318,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugState.pushArgs(a);
                 DebugHooks.enterSubroutine(debugSubName);
             }
+            // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
+            pushArgs(a);
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -2266,6 +2332,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
+                popArgs();
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
