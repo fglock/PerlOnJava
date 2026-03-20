@@ -1959,6 +1959,34 @@ public class Opcodes {
      */
     public static final short SCALAR_IF_WANTARRAY = 388;
 
+    // =================================================================
+    // SLICE DELETE OPERATIONS (390-392)
+    // =================================================================
+
+    /**
+     * Array slice delete: rd = array.deleteSlice(indices_list)
+     * Format: ARRAY_SLICE_DELETE rd array_reg indices_reg
+     * Effect: rd = array_reg.deleteSlice(indices_reg)
+     * Returns a RuntimeList with deleted values.
+     */
+    public static final short ARRAY_SLICE_DELETE = 390;
+
+    /**
+     * Hash key-value slice delete: rd = hash.deleteKeyValueSlice(keys_list)
+     * Format: HASH_KV_SLICE_DELETE rd hash_reg keys_reg
+     * Effect: rd = hash_reg.deleteKeyValueSlice(keys_reg)
+     * Returns a RuntimeList with alternating keys and values.
+     */
+    public static final short HASH_KV_SLICE_DELETE = 391;
+
+    /**
+     * Array key-value slice delete: rd = array.deleteKeyValueSlice(indices_list)
+     * Format: ARRAY_KV_SLICE_DELETE rd array_reg indices_reg
+     * Effect: rd = array_reg.deleteKeyValueSlice(indices_reg)
+     * Returns a RuntimeList with alternating indices and values.
+     */
+    public static final short ARRAY_KV_SLICE_DELETE = 392;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

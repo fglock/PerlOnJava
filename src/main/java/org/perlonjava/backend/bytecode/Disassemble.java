@@ -1683,6 +1683,33 @@ public class Disassemble {
                                 .append("{r").append(hsdKeysReg).append("}\n");
                         break;
                     }
+                    case Opcodes.ARRAY_SLICE_DELETE: {
+                        // Format: ARRAY_SLICE_DELETE rd arrayReg indicesListReg
+                        rd = interpretedCode.bytecode[pc++];
+                        int asdArrayReg = interpretedCode.bytecode[pc++];
+                        int asdIndicesReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_SLICE_DELETE r").append(rd).append(" = delete r").append(asdArrayReg)
+                                .append("[r").append(asdIndicesReg).append("]\n");
+                        break;
+                    }
+                    case Opcodes.HASH_KV_SLICE_DELETE: {
+                        // Format: HASH_KV_SLICE_DELETE rd hashReg keysListReg
+                        rd = interpretedCode.bytecode[pc++];
+                        int hkvHashReg = interpretedCode.bytecode[pc++];
+                        int hkvKeysReg = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_KV_SLICE_DELETE r").append(rd).append(" = delete %r").append(hkvHashReg)
+                                .append("{r").append(hkvKeysReg).append("}\n");
+                        break;
+                    }
+                    case Opcodes.ARRAY_KV_SLICE_DELETE: {
+                        // Format: ARRAY_KV_SLICE_DELETE rd arrayReg indicesListReg
+                        rd = interpretedCode.bytecode[pc++];
+                        int akvArrayReg = interpretedCode.bytecode[pc++];
+                        int akvIndicesReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_KV_SLICE_DELETE r").append(rd).append(" = delete %r").append(akvArrayReg)
+                                .append("[r").append(akvIndicesReg).append("]\n");
+                        break;
+                    }
                     case Opcodes.LIST_SLICE_FROM: {
                         // Format: LIST_SLICE_FROM rd listReg startIndex
                         rd = interpretedCode.bytecode[pc++];

@@ -116,6 +116,10 @@ public class CompileExistsDelete {
             visitDeleteHashSlice(bc, node, hashAccess, leftOp);
             return;
         }
+        if (hashAccess.left instanceof OperatorNode leftOp && leftOp.operator.equals("%")) {
+            visitDeleteHashKVSlice(bc, node, hashAccess, leftOp);
+            return;
+        }
         int hashReg = resolveHashFromBinaryOp(bc, hashAccess, node.getIndex());
         int keyReg = compileHashKey(bc, hashAccess.right);
         int rd = bc.allocateOutputRegister();
@@ -178,7 +182,67 @@ public class CompileExistsDelete {
         bc.lastResultReg = rd;
     }
 
+    private static void visitDeleteHashKVSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode hashAccess, OperatorNode leftOp) {
+        int hashReg;
+        if (leftOp.operand instanceof IdentifierNode id) {
+            String hashVarName = "%" + id.name;
+            if (bc.hasVariable(hashVarName)) {
+                hashReg = bc.getVariableRegister(hashVarName);
+            } else {
+                hashReg = bc.allocateRegister();
+                String globalHashName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalHashName);
+                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                bc.emitReg(hashReg);
+                bc.emit(nameIdx);
+            }
+        } else {
+            bc.throwCompilerException("Hash kv-slice delete requires identifier");
+            return;
+        }
+        if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
+            bc.throwCompilerException("Hash kv-slice delete requires HashLiteralNode");
+            return;
+        }
+        List<Integer> keyRegs = new ArrayList<>();
+        for (Node keyElement : keysNode.elements) {
+            if (keyElement instanceof IdentifierNode keyId) {
+                int keyReg = bc.allocateRegister();
+                int keyIdx = bc.addToStringPool(keyId.name);
+                bc.emit(Opcodes.LOAD_STRING);
+                bc.emitReg(keyReg);
+                bc.emit(keyIdx);
+                keyRegs.add(keyReg);
+            } else {
+                // Compile key in SCALAR context
+                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                keyRegs.add(bc.lastResultReg);
+            }
+        }
+        int keysListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(keysListReg);
+        bc.emit(keyRegs.size());
+        for (int keyReg : keyRegs) {
+            bc.emitReg(keyReg);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.HASH_KV_SLICE_DELETE);
+        bc.emitReg(rd);
+        bc.emitReg(hashReg);
+        bc.emitReg(keysListReg);
+        bc.lastResultReg = rd;
+    }
+
     private static void visitDeleteArray(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess) {
+        if (arrayAccess.left instanceof OperatorNode leftOp && leftOp.operator.equals("@")) {
+            visitDeleteArraySlice(bc, node, arrayAccess, leftOp);
+            return;
+        }
+        if (arrayAccess.left instanceof OperatorNode leftOp && leftOp.operator.equals("%")) {
+            visitDeleteArrayKVSlice(bc, node, arrayAccess, leftOp);
+            return;
+        }
         int arrayReg = compileArrayForExistsDelete(bc, arrayAccess, node.getIndex());
         int indexReg = compileArrayIndex(bc, arrayAccess);
         int rd = bc.allocateOutputRegister();
@@ -186,6 +250,92 @@ public class CompileExistsDelete {
         bc.emitReg(rd);
         bc.emitReg(arrayReg);
         bc.emitReg(indexReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDeleteArraySlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess, OperatorNode leftOp) {
+        int arrayReg;
+        if (leftOp.operand instanceof IdentifierNode id) {
+            String arrayVarName = "@" + id.name;
+            if (bc.hasVariable(arrayVarName)) {
+                arrayReg = bc.getVariableRegister(arrayVarName);
+            } else {
+                arrayReg = bc.allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalArrayName);
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(arrayReg);
+                bc.emit(nameIdx);
+            }
+        } else {
+            bc.throwCompilerException("Array slice delete requires identifier");
+            return;
+        }
+        if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
+            bc.throwCompilerException("Array slice delete requires ArrayLiteralNode");
+            return;
+        }
+        List<Integer> indexRegs = new ArrayList<>();
+        for (Node indexElement : indicesNode.elements) {
+            // Compile index in SCALAR context
+            bc.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
+            indexRegs.add(bc.lastResultReg);
+        }
+        int indicesListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(indicesListReg);
+        bc.emit(indexRegs.size());
+        for (int indexReg : indexRegs) {
+            bc.emitReg(indexReg);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.ARRAY_SLICE_DELETE);
+        bc.emitReg(rd);
+        bc.emitReg(arrayReg);
+        bc.emitReg(indicesListReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDeleteArrayKVSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess, OperatorNode leftOp) {
+        int arrayReg;
+        if (leftOp.operand instanceof IdentifierNode id) {
+            String arrayVarName = "@" + id.name;
+            if (bc.hasVariable(arrayVarName)) {
+                arrayReg = bc.getVariableRegister(arrayVarName);
+            } else {
+                arrayReg = bc.allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalArrayName);
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(arrayReg);
+                bc.emit(nameIdx);
+            }
+        } else {
+            bc.throwCompilerException("Array kv-slice delete requires identifier");
+            return;
+        }
+        if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
+            bc.throwCompilerException("Array kv-slice delete requires ArrayLiteralNode");
+            return;
+        }
+        List<Integer> indexRegs = new ArrayList<>();
+        for (Node indexElement : indicesNode.elements) {
+            // Compile index in SCALAR context
+            bc.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
+            indexRegs.add(bc.lastResultReg);
+        }
+        int indicesListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(indicesListReg);
+        bc.emit(indexRegs.size());
+        for (int indexReg : indexRegs) {
+            bc.emitReg(indexReg);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.ARRAY_KV_SLICE_DELETE);
+        bc.emitReg(rd);
+        bc.emitReg(arrayReg);
+        bc.emitReg(indicesListReg);
         bc.lastResultReg = rd;
     }
 

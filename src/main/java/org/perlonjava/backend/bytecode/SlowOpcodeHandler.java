@@ -974,6 +974,96 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * ARRAY_SLICE_DELETE: rd = array.deleteSlice(indices_list)
+     * Format: [ARRAY_SLICE_DELETE] [rd] [arrayReg] [indicesListReg]
+     * Effect: rd = RuntimeList of deleted values
+     */
+    public static int executeArraySliceDelete(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indicesListReg = bytecode[pc++];
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indicesList = (RuntimeList) registers[indicesListReg];
+
+        // Delete values for all indices and return them
+        RuntimeList deletedValuesList = array.deleteSlice(indicesList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedValuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * HASH_KV_SLICE_DELETE: rd = hash.deleteKeyValueSlice(keys_list)
+     * Format: [HASH_KV_SLICE_DELETE] [rd] [hashReg] [keysListReg]
+     * Effect: rd = RuntimeList of alternating keys and deleted values
+     */
+    public static int executeHashKVSliceDelete(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        // Delete key-value pairs and return them
+        RuntimeList deletedPairsList = hash.deleteKeyValueSlice(keysList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedPairsList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * ARRAY_KV_SLICE_DELETE: rd = array.deleteKeyValueSlice(indices_list)
+     * Format: [ARRAY_KV_SLICE_DELETE] [rd] [arrayReg] [indicesListReg]
+     * Effect: rd = RuntimeList of alternating indices and deleted values
+     */
+    public static int executeArrayKVSliceDelete(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indicesListReg = bytecode[pc++];
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indicesList = (RuntimeList) registers[indicesListReg];
+
+        // Delete key-value pairs and return them
+        RuntimeList deletedPairsList = array.deleteKeyValueSlice(indicesList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedPairsList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
      * SLOW_HASH_SLICE_SET: hash.setSlice(keys_list, values_list)
      * Format: [SLOW_HASH_SLICE_SET] [hashReg] [keysListReg] [valuesListReg]
      * Effect: Assign values to multiple hash keys (slice assignment)
