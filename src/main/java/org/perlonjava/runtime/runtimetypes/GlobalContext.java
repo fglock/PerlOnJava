@@ -195,7 +195,6 @@ public class GlobalContext {
         Vars.initialize();
         Subs.initialize();
         Builtin.initialize();
-        Exporter.initialize();
         Base.initialize();
         Symbol.initialize();
         ScalarUtil.initialize();
