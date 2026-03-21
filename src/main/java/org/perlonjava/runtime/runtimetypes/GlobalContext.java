@@ -111,6 +111,11 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("A")).set("");    // initialize $^A to "" - format accumulator variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("P")).set(0);    // initialize $^P to 0 - debugger flags
+        // Initialize $^I (in-place editing extension) from -i switch
+        if (compilerOptions.inPlaceEdit) {
+            GlobalVariable.getGlobalVariable(encodeSpecialVar("I")).set(
+                compilerOptions.inPlaceExtension != null ? compilerOptions.inPlaceExtension : "");
+        }
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UNICODE")).set(0);    // initialize $^UNICODE to 0 - `-C` unicode flags
