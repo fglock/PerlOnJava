@@ -45,6 +45,11 @@ sub open3 {
     # Handle the case where a single command string needs shell interpretation
     # vs multiple args which are passed directly
 
+    # Check for redirection directives (read-only strings like ">&STDERR")
+    my $wtr_is_redirect = defined($wtr) && !ref($wtr) && $wtr =~ /^[<>]&/;
+    my $rdr_is_redirect = defined($rdr) && !ref($rdr) && $rdr =~ /^[<>]&/;
+    my $err_is_redirect = defined($err) && !ref($err) && $err =~ /^[<>]&/;
+
     # Set up handles - create globs if needed
     my $wtr_ref = \$_[0];
     my $rdr_ref = \$_[1];
@@ -53,13 +58,13 @@ sub open3 {
     # Call the XS implementation
     my $pid = _open3($wtr_ref, $rdr_ref, $err_ref, @cmd);
 
-    # Update the caller's variables
-    $_[0] = $$wtr_ref;
-    $_[1] = $$rdr_ref;
-    $_[2] = $$err_ref if defined $err;
+    # Update the caller's variables (but not if they were redirection directives)
+    $_[0] = $$wtr_ref unless $wtr_is_redirect;
+    $_[1] = $$rdr_ref unless $rdr_is_redirect;
+    $_[2] = $$err_ref if defined $err && !$err_is_redirect;
 
     # Turn on autoflush for the write handle
-    if (defined $_[0]) {
+    if (defined $_[0] && !$wtr_is_redirect) {
         my $old = select($_[0]);
         $| = 1;
         select($old);

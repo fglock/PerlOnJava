@@ -30,6 +30,7 @@ public class Exporter extends PerlModuleBase {
             exporter.registerMethod("export_to_level", "exportToLevel", null);
             exporter.registerMethod("export_tags", "exportTags", null);
             exporter.registerMethod("export_ok_tags", "exportOkTags", null);
+            exporter.registerMethod("require_version", "requireVersion", null);
 
             // Set up @EXPORTER::EXPORT_OK = ("import");
             RuntimeArray.push(GlobalVariable.getGlobalArray("Exporter::EXPORT_OK"), new RuntimeScalar("import"));
@@ -179,8 +180,33 @@ public class Exporter extends PerlModuleBase {
 
         // Process the requested symbols and tags
         RuntimeArray tagArray = new RuntimeArray();
+        boolean hadVersionCheck = false;
         for (RuntimeScalar symbolObj : args.elements) {
             String symbolString = symbolObj.toString();
+
+            // Check if this looks like a version number (starts with digit)
+            // Perl's Exporter treats these as version checks, not symbols to export
+            if (!symbolString.isEmpty() && Character.isDigit(symbolString.charAt(0))) {
+                // Call VERSION check: $pkg->VERSION($version)
+                RuntimeArray versionArgs = new RuntimeArray();
+                versionArgs.push(new RuntimeScalar(packageName));
+                versionArgs.push(symbolObj);
+                Universal.VERSION(versionArgs, RuntimeContextType.SCALAR);
+                hadVersionCheck = true;
+                
+                // If the version number was the only thing specified,
+                // act as if nothing was specified (import @EXPORT)
+                if (args.size() == 1) {
+                    tagArray.elements.addAll(export.elements);
+                }
+                // Handle "use Foo 1.23, ''" pattern - import nothing
+                else if (args.size() == 2 && args.get(1).toString().isEmpty()) {
+                    // Don't import anything
+                    return new RuntimeList();
+                }
+                // Otherwise, skip the version and continue with other imports
+                continue;
+            }
 
             if (symbolString.startsWith(":")) {
                 String tagName = symbolString.substring(1);
@@ -280,6 +306,23 @@ public class Exporter extends PerlModuleBase {
             }
         }
         return new RuntimeList();
+    }
+
+    /**
+     * require_version - delegates to the package's VERSION method.
+     * This exists for historical compatibility with older Exporter usage.
+     *
+     * @param args The arguments: $package, $version
+     * @param ctx  The calling context
+     * @return Result of VERSION method call
+     */
+    public static RuntimeList requireVersion(RuntimeArray args, int ctx) {
+        // $pkg->require_version($version) delegates to $pkg->VERSION($version)
+        if (args.size() < 1) {
+            throw new PerlCompilerException("Not enough arguments for require_version");
+        }
+        // Call UNIVERSAL::VERSION($package, $version)
+        return Universal.VERSION(args, ctx);
     }
 
     private static void importFunction(String packageName, String caller, String functionName) {

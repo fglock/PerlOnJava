@@ -54,6 +54,58 @@ use constant O_WRONLY_CREAT_EXCL => O_WRONLY | O_CREAT | O_EXCL;
 use constant O_WRONLY_CREAT_TRUNC => O_WRONLY | O_CREAT | O_TRUNC;
 use constant O_RDWR_CREAT => O_RDWR | O_CREAT;
 
+# File type masks (S_IF*)
+use constant S_IFMT   => 0170000;  # Type of file mask
+use constant S_IFSOCK => 0140000;  # Socket
+use constant S_IFLNK  => 0120000;  # Symbolic link
+use constant S_IFREG  => 0100000;  # Regular file
+use constant S_IFBLK  => 0060000;  # Block device
+use constant S_IFDIR  => 0040000;  # Directory
+use constant S_IFCHR  => 0020000;  # Character device
+use constant S_IFIFO  => 0010000;  # FIFO (named pipe)
+use constant S_IFWHT  => 0160000;  # Whiteout (BSD)
+use constant _S_IFMT  => S_IFMT;   # Alias
+
+# Special mode bits
+use constant S_ISUID  => 04000;    # Set user ID on execution
+use constant S_ISGID  => 02000;    # Set group ID on execution
+use constant S_ISVTX  => 01000;    # Sticky bit
+use constant S_ISTXT  => S_ISVTX;  # Alias for sticky bit
+use constant S_ENFMT  => S_ISGID;  # Alias for ISGID
+
+# User permissions
+use constant S_IRUSR  => 0400;     # Owner read
+use constant S_IWUSR  => 0200;     # Owner write
+use constant S_IXUSR  => 0100;     # Owner execute
+use constant S_IRWXU  => 0700;     # Owner read/write/execute
+use constant S_IREAD  => S_IRUSR;  # Alias
+use constant S_IWRITE => S_IWUSR;  # Alias
+use constant S_IEXEC  => S_IXUSR;  # Alias
+
+# Group permissions
+use constant S_IRGRP  => 040;      # Group read
+use constant S_IWGRP  => 020;      # Group write
+use constant S_IXGRP  => 010;      # Group execute
+use constant S_IRWXG  => 070;      # Group read/write/execute
+
+# Other permissions
+use constant S_IROTH  => 04;       # Other read
+use constant S_IWOTH  => 02;       # Other write
+use constant S_IXOTH  => 01;       # Other execute
+use constant S_IRWXO  => 07;       # Other read/write/execute
+
+# File type test macros (as subs that return 0/1)
+sub S_ISREG  { (($_[0] // 0) & S_IFMT) == S_IFREG  }
+sub S_ISDIR  { (($_[0] // 0) & S_IFMT) == S_IFDIR  }
+sub S_ISLNK  { (($_[0] // 0) & S_IFMT) == S_IFLNK  }
+sub S_ISSOCK { (($_[0] // 0) & S_IFMT) == S_IFSOCK }
+sub S_ISBLK  { (($_[0] // 0) & S_IFMT) == S_IFBLK  }
+sub S_ISCHR  { (($_[0] // 0) & S_IFMT) == S_IFCHR  }
+sub S_ISFIFO { (($_[0] // 0) & S_IFMT) == S_IFIFO  }
+sub S_ISWHT  { (($_[0] // 0) & S_IFMT) == S_IFWHT  }
+sub S_ISENFMT { (($_[0] // 0) & S_ENFMT) ? 1 : 0 }
+sub S_IMODE  { ($_[0] // 0) & 07777 }  # Permission bits only
+
 
 # Named groups of exports
 our %EXPORT_TAGS = (

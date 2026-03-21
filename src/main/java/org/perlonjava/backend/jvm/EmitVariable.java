@@ -707,11 +707,15 @@ public class EmitVariable {
                     mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isRedo);
                     mv.visitJumpInsn(Opcodes.GOTO, applyNotNextLastRedo);
 
+                    // Push a value before GOTO to match expected stack state at merge point.
+                    // The applyNoControlFlow merge point expects a value on the stack.
                     mv.visitLabel(isLast);
-                    mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.lastLabel);
+                    mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 
                     mv.visitLabel(isNext);
-                    mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.nextLabel);
+                    mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 
                     mv.visitLabel(isRedo);
                     mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);

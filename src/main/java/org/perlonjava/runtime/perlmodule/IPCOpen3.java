@@ -128,7 +128,9 @@ public class IPCOpen3 extends PerlModuleBase {
             copyPerlEnvToProcessBuilder(processBuilder);
 
             // Check if stderr should be merged with stdout
-            boolean mergeStderr = !errRef.getDefinedBoolean() ||
+            // errRef is "usable" if it's defined AND (if it's a reference) the inner value is also defined
+            boolean errIsUsable = isUsableHandle(errRef);
+            boolean mergeStderr = !errIsUsable ||
                     (rdrRef.type == RuntimeScalarType.REFERENCE &&
                             errRef.type == RuntimeScalarType.REFERENCE &&
                             rdrRef.value == errRef.value);
@@ -145,14 +147,31 @@ public class IPCOpen3 extends PerlModuleBase {
             registerChildProcess(process);
 
             // Set up the write handle (to child's stdin)
-            setupWriteHandle(wtrRef, process.getOutputStream());
+            // Check for redirection directive like "<&STDIN"
+            if (isInputRedirection(wtrRef)) {
+                // Input redirection - just close the process stdin
+                process.getOutputStream().close();
+            } else {
+                setupWriteHandle(wtrRef, process.getOutputStream());
+            }
 
             // Set up the read handle (from child's stdout)
-            setupReadHandle(rdrRef, process.getInputStream());
+            // Check for redirection directive like ">&STDERR"
+            boolean rdrIsRedirection = isOutputRedirection(rdrRef);
+            if (rdrIsRedirection) {
+                // Output redirection - pipe stdout to the named handle
+                handleOutputRedirection(rdrRef, process.getInputStream());
+            } else {
+                setupReadHandle(rdrRef, process.getInputStream());
+            }
 
             // Set up the error handle (from child's stderr) if not merged
-            if (!mergeStderr && errRef.getDefinedBoolean()) {
-                setupReadHandle(errRef, process.getErrorStream());
+            if (!mergeStderr && errIsUsable) {
+                if (isOutputRedirection(errRef)) {
+                    handleOutputRedirection(errRef, process.getErrorStream());
+                } else {
+                    setupReadHandle(errRef, process.getErrorStream());
+                }
             }
 
             return new RuntimeScalar(pid).getList();
@@ -160,6 +179,122 @@ public class IPCOpen3 extends PerlModuleBase {
         } catch (Exception e) {
             getGlobalVariable("main::!").set(e.getMessage());
             throw new RuntimeException("open3: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Check if the handle is an output redirection directive like ">&STDERR"
+     */
+    private static boolean isOutputRedirection(RuntimeScalar handleRef) {
+        // Get the actual string value (may need to dereference)
+        String str = getStringValue(handleRef);
+        return str != null && str.startsWith(">&");
+    }
+
+    /**
+     * Check if the handle is an input redirection directive like "<&STDIN"
+     */
+    private static boolean isInputRedirection(RuntimeScalar handleRef) {
+        // Get the actual string value (may need to dereference)
+        String str = getStringValue(handleRef);
+        return str != null && str.startsWith("<&");
+    }
+
+    /**
+     * Check if a handle parameter is usable (not undef or a reference to undef)
+     */
+    private static boolean isUsableHandle(RuntimeScalar handleRef) {
+        if (!handleRef.getDefinedBoolean()) {
+            return false;
+        }
+        // If it's a reference, check if the inner value is defined
+        if (handleRef.type == RuntimeScalarType.REFERENCE && handleRef.value instanceof RuntimeScalar) {
+            RuntimeScalar inner = (RuntimeScalar) handleRef.value;
+            return inner.getDefinedBoolean();
+        }
+        return true;
+    }
+
+    /**
+     * Get the string value from a scalar, dereferencing if needed
+     */
+    private static String getStringValue(RuntimeScalar scalar) {
+        if (scalar == null) return null;
+        
+        // If it's a reference, dereference it
+        if (scalar.type == RuntimeScalarType.REFERENCE) {
+            if (scalar.value instanceof RuntimeScalar) {
+                RuntimeScalar inner = (RuntimeScalar) scalar.value;
+                // Check if the inner value is a string
+                if (inner.type == RuntimeScalarType.STRING) {
+                    return inner.toString();
+                }
+                // Also try getting the string directly
+                return inner.toString();
+            }
+        }
+        
+        // Direct string type
+        if (scalar.type == RuntimeScalarType.STRING) {
+            return scalar.toString();
+        }
+        
+        // Try toString and check if it looks like a redirect
+        String str = scalar.toString();
+        if (str.startsWith(">&") || str.startsWith("<&")) {
+            return str;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Handle output redirection like ">&STDERR" - pipe input stream to the named handle
+     */
+    private static void handleOutputRedirection(RuntimeScalar handleRef, InputStream in) {
+        String directive = handleRef.toString();
+        String handleName = directive.substring(2);  // Remove ">&"
+
+        // Get the named handle
+        RuntimeIO targetIO = null;
+        if (handleName.equals("STDERR")) {
+            targetIO = getGlobalVariable("main::STDERR").getRuntimeIO();
+        } else if (handleName.equals("STDOUT")) {
+            targetIO = getGlobalVariable("main::STDOUT").getRuntimeIO();
+        }
+
+        if (targetIO != null && targetIO.ioHandle != null) {
+            final RuntimeIO finalTargetIO = targetIO;
+            // Start a thread to copy data from process to target handle
+            Thread copier = new Thread(() -> {
+                try {
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = in.read(buffer)) != -1) {
+                        String str = new String(buffer, 0, bytesRead);
+                        finalTargetIO.ioHandle.write(str);
+                        finalTargetIO.ioHandle.flush();
+                    }
+                } catch (Exception e) {
+                    // Ignore - process may have terminated
+                }
+            });
+            copier.setDaemon(true);
+            copier.start();
+        } else {
+            // Fallback: just discard the stream
+            Thread discarder = new Thread(() -> {
+                try {
+                    byte[] buffer = new byte[4096];
+                    while (in.read(buffer) != -1) {
+                        // discard
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                }
+            });
+            discarder.setDaemon(true);
+            discarder.start();
         }
     }
 
