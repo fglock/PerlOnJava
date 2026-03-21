@@ -142,4 +142,15 @@ public class WarningFlags {
     public boolean isWarningEnabled(String category) {
         return getCurrentScope().isWarningCategoryEnabled(category);
     }
+
+    /**
+     * Checks if a warning category was explicitly disabled via 'no warnings'.
+     * This is used to determine if $^W should be overridden.
+     *
+     * @param category The name of the warning category to check.
+     * @return True if the category was explicitly disabled, false otherwise.
+     */
+    public boolean isWarningDisabled(String category) {
+        return getCurrentScope().isWarningCategoryDisabled(category);
+    }
 }
