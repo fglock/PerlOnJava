@@ -59,10 +59,10 @@ public class FileTestOperator {
         lastStatErrno = errno;
         lastStatWasLstat = wasLstat;
         Stat.lastNativeStatFields = null;
-        if (!ok) {
-            lastBasicAttr = null;
-            lastPosixAttr = null;
-        }
+        // Always reset BasicFileAttributes - they should only be set by statForFileTest
+        // for real filesystem paths. JAR resources don't have BasicFileAttributes.
+        lastBasicAttr = null;
+        lastPosixAttr = null;
     }
 
     static void updateLastStat(RuntimeScalar arg, boolean ok, int errno) {
@@ -128,10 +128,11 @@ public class FileTestOperator {
             } catch (UnsupportedOperationException | IOException ignored) {
             }
 
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, lstat);
+            // Set attributes after updateLastStat (which resets them to null)
+            lastBasicAttr = basicAttr;
+            lastPosixAttr = posixAttr;
             Stat.lastNativeStatFields = Stat.nativeStat(path.toString(), !lstat);
             return true;
         } catch (NoSuchFileException e) {
@@ -322,6 +323,17 @@ public class FileTestOperator {
             }
             // JAR resource path (e.g., "jar:PERL5LIB/DBI.pm")
             if (Jar.exists(filename)) {
+                // Check if it's a directory entry (not a file)
+                if (Jar.isResourceDirectory(filename)) {
+                    updateLastStat(fileHandle, true, 0);
+                    return switch (operator) {
+                        case "-d", "-e", "-r", "-x" -> scalarTrue;  // It's a readable, executable directory
+                        case "-f", "-l", "-w", "-z" -> scalarFalse;  // Not a file, link, writable, or empty
+                        case "-s" -> RuntimeScalarCache.scalarZero;  // Size 0
+                        default -> scalarUndef;
+                    };
+                }
+                // It's a regular file
                 updateLastStat(fileHandle, true, 0);
                 return switch (operator) {
                     case "-e", "-f", "-r" -> scalarTrue;  // Exists, is a file, is readable

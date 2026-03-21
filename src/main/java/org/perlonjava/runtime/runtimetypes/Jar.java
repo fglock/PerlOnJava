@@ -100,6 +100,55 @@ public class Jar {
     }
 
     /**
+     * Checks if a JAR resource exists as a regular file (not a directory).
+     * JAR directory entries have contentLength of 0 and return -1 on read.
+     * 
+     * @param filename The JAR path
+     * @return true if the resource exists and is a regular file
+     */
+    public static boolean isFile(String filename) {
+        if (isJarDirectory(filename)) {
+            return false;  // Virtual directories are not files
+        }
+        URL resource = getResource(filename);
+        if (resource == null) {
+            return false;
+        }
+        // Check if it's a real file by checking content length
+        // JAR directory entries have contentLength of 0
+        try {
+            var conn = resource.openConnection();
+            return conn.getContentLength() > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Checks if a JAR resource is a directory.
+     * 
+     * @param filename The JAR path
+     * @return true if the resource is a directory
+     */
+    public static boolean isResourceDirectory(String filename) {
+        if (isJarDirectory(filename)) {
+            return true;  // Virtual directories
+        }
+        URL resource = getResource(filename);
+        if (resource == null) {
+            return false;
+        }
+        // Check if it's a directory by checking content length
+        // JAR directory entries have contentLength of 0
+        try {
+            var conn = resource.openConnection();
+            return conn.getContentLength() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Opens a JAR resource for reading.
      * 
      * @param filename The JAR path
