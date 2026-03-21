@@ -128,9 +128,6 @@ public class CompareOperators {
             return getScalarBoolean((int) arg1.value > (int) arg2.value);
         }
 
-        // Check for uninitialized values
-        checkUninitialized(arg1, arg2, "gt (>)");
-
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -144,6 +141,9 @@ public class CompareOperators {
                 return getScalarBoolean(result.getInt() > 0);
             }
         }
+
+        // Check for uninitialized values (only when using numeric comparison fallback)
+        checkUninitialized(arg1, arg2, "gt (>)");
 
         // Convert strings to numbers if necessary
         arg1 = arg1.getNumber();

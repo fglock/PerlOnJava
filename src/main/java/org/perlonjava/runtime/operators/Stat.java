@@ -180,9 +180,6 @@ public class Stat {
                 // Not available on Windows
             }
 
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
-
             if (nf != null) {
                 statInternalNative(res, nf);
             } else if (posixAttr != null) {
@@ -193,6 +190,9 @@ public class Stat {
 
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, false);
+            // Set attributes after updateLastStat (which resets them to null)
+            lastBasicAttr = basicAttr;
+            lastPosixAttr = posixAttr;
             lastNativeStatFields = nf;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set(2);
@@ -242,9 +242,6 @@ public class Stat {
                 // Not available on Windows
             }
 
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
-
             if (nf != null) {
                 statInternalNative(res, nf);
             } else if (posixAttr != null) {
@@ -255,6 +252,9 @@ public class Stat {
 
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, true);
+            // Set attributes after updateLastStat (which resets them to null)
+            lastBasicAttr = basicAttr;
+            lastPosixAttr = posixAttr;
             lastNativeStatFields = nf;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set(2);

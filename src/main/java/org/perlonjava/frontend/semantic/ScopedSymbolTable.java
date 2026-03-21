@@ -36,6 +36,8 @@ public class ScopedSymbolTable {
 
     // Stack to manage warning categories for each scope
     public final Stack<BitSet> warningFlagsStack = new Stack<>();
+    // Stack to track explicitly disabled warning categories (for proper $^W interaction)
+    public final Stack<BitSet> warningDisabledStack = new Stack<>();
     // Stack to manage feature categories for each scope
     public final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
@@ -65,6 +67,8 @@ public class ScopedSymbolTable {
             }
         }
         warningFlagsStack.push((BitSet) defaultWarnings.clone());
+        // Initialize the disabled warnings stack (empty by default)
+        warningDisabledStack.push(new BitSet());
         // Initialize the feature categories stack with an empty map for the global scope
         featureFlagsStack.push(0);
         // Initialize the strict options stack with 0 for the global scope
@@ -135,6 +139,8 @@ public class ScopedSymbolTable {
         inSubroutineBodyStack.push(inSubroutineBodyStack.peek());
         // Push a copy of the current warning categories map onto the stack
         warningFlagsStack.push((BitSet) warningFlagsStack.peek().clone());
+        // Push a copy of the current disabled warnings map onto the stack
+        warningDisabledStack.push((BitSet) warningDisabledStack.peek().clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         // Push a copy of the current strict options onto the stack
@@ -159,6 +165,7 @@ public class ScopedSymbolTable {
             subroutineStack.pop();
             inSubroutineBodyStack.pop();
             warningFlagsStack.pop();
+            warningDisabledStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
         }
@@ -528,6 +535,10 @@ public class ScopedSymbolTable {
         st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
         st.warningFlagsStack.push((BitSet) this.warningFlagsStack.peek().clone());
 
+        // Clone disabled warnings flags
+        st.warningDisabledStack.pop(); // Remove the initial value pushed by enterScope
+        st.warningDisabledStack.push((BitSet) this.warningDisabledStack.peek().clone());
+
         // Clone feature flags
         st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
@@ -631,6 +642,8 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions.get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().set(bitPosition);
+            // Clear the disabled bit when enabling
+            warningDisabledStack.peek().clear(bitPosition);
         }
     }
 
@@ -638,12 +651,23 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions.get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().clear(bitPosition);
+            // Mark as explicitly disabled (for proper $^W interaction)
+            warningDisabledStack.peek().set(bitPosition);
         }
     }
 
     public boolean isWarningCategoryEnabled(String category) {
         Integer bitPosition = warningBitPositions.get(category);
         return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
+    }
+
+    /**
+     * Checks if a warning category was explicitly disabled via 'no warnings'.
+     * This is used to determine if $^W should be overridden.
+     */
+    public boolean isWarningCategoryDisabled(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
     }
 
     // Methods for managing features using bit positions
@@ -704,6 +728,10 @@ public class ScopedSymbolTable {
         // Copy warning flags
         this.warningFlagsStack.pop();
         this.warningFlagsStack.push((BitSet) source.warningFlagsStack.peek().clone());
+
+        // Copy disabled warnings flags
+        this.warningDisabledStack.pop();
+        this.warningDisabledStack.push((BitSet) source.warningDisabledStack.peek().clone());
 
         // Copy feature flags
         this.featureFlagsStack.pop();

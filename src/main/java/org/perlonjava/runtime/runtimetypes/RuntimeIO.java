@@ -103,8 +103,15 @@ public class RuntimeIO extends RuntimeScalar {
     public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
     /**
      * Standard error stream handle (STDERR)
+     * Note: autoFlush is set to true to match Perl's unbuffered stderr behavior
      */
     public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
+    
+    static {
+        // STDERR should be unbuffered (autoFlush) by default, like in Perl
+        stderr.autoFlush = true;
+    }
+    
     /**
      * Standard input stream handle (STDIN)
      */
