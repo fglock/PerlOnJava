@@ -165,9 +165,21 @@ public class PrototypeArgs {
 
             // Check for too many arguments without parentheses only if prototype expects 2+ args
             if (!hasParentheses && countPrototypeArgs(prototype) >= 2) {
-                // If we see a comma after parsing all required args, there are too many
+                // If we see a comma after parsing all required args, check if it's a trailing comma
                 if (isComma(TokenUtils.peek(parser))) {
-                    throwTooManyArgumentsError(parser);
+                    // Consume the comma and check what follows
+                    int saveIndex = parser.tokenIndex;
+                    consumeCommas(parser);
+                    LexerToken nextToken = TokenUtils.peek(parser);
+                    // If followed by a statement terminator, it's a trailing comma (allowed)
+                    // Otherwise, it's too many arguments
+                    if (!Parser.isExpressionTerminator(nextToken) && 
+                        nextToken.type != LexerTokenType.EOF &&
+                        !nextToken.text.equals(")")) {
+                        throwTooManyArgumentsError(parser);
+                    }
+                    // Restore position - the comma will be handled by the caller
+                    parser.tokenIndex = saveIndex;
                 }
             }
         }
