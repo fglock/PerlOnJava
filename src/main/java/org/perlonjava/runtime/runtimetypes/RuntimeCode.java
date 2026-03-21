@@ -2080,12 +2080,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Mark this as a symbolic reference created by \&{string} pattern
             // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
             runtimeCode.isSymbolicReference = true;
-
-            // For constant subroutines, return a reference to the constant value
-            if (runtimeCode.constantValue != null && !runtimeCode.constantValue.isEmpty()) {
-                RuntimeScalar constValue = runtimeCode.constantValue.getFirst();
-                return constValue.createReference();
-            }
+            
+            // Note: We used to return a reference to the constant value here, but that
+            // breaks Exporter which does `*{$pkg::$sym} = \&{$src::$sym}`. The glob
+            // assignment expects a CODE reference, not a scalar reference.
+            // The constant value optimization is handled separately when calling the sub.
         }
 
         // Return a snapshot of the current code reference, not the global entry itself.
