@@ -1041,6 +1041,40 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    /**
+     * Handle the caller() operator with __SUB__ support for set_subname.
+     * Pushes: args, context, __SUB__
+     */
+    static void handleCallerOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        if (node.operand != null) {
+            node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
+        emitterVisitor.pushCallContext();
+        
+        // Push __SUB__ for set_subname support
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        String className = emitterVisitor.ctx.javaClassInfo.javaClassName;
+        
+        // Load 'this' (the current RuntimeCode instance)
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        
+        // Retrieve this.__SUB__
+        mv.visitFieldInsn(Opcodes.GETFIELD,
+                className,
+                "__SUB__",
+                "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        
+        // Create Perl undef if null (for code not inside a subroutine)
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "selfReferenceMaybeNull",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        
+        emitOperator(node, emitterVisitor);
+    }
+
     static void handlePrototypeOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCurrentPackage();

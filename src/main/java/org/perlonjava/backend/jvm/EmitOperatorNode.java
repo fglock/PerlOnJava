@@ -97,8 +97,9 @@ public class EmitOperatorNode {
             case "time", "wait" -> EmitOperator.handleTimeOperator(emitterVisitor, node);
             case "wantarray" -> EmitOperator.handleWantArrayOperator(emitterVisitor, node);
             case "undef" -> EmitOperator.handleUndefOperator(emitterVisitor, node);
-            case "gmtime", "localtime", "caller", "reset", "select", "times" ->
+            case "gmtime", "localtime", "reset", "select", "times" ->
                     EmitOperator.handleTimeRelatedOperator(emitterVisitor, node);
+            case "caller" -> EmitOperator.handleCallerOperator(emitterVisitor, node);
             case "prototype" -> EmitOperator.handlePrototypeOperator(emitterVisitor, node);
             case "require" -> EmitOperator.handleRequireOperator(emitterVisitor, node);
             case "doFile" -> EmitOperator.handleDoFileOperator(emitterVisitor, node);
