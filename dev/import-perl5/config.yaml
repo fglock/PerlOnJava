@@ -19,6 +19,14 @@
 imports:
   # Perl modules imported to src/main/perl/lib/
 
+  # Exporter - Symbol export mechanism (pure Perl implementation)
+  # Core module used by almost all other modules
+  - source: perl5/dist/Exporter/lib/Exporter.pm
+    target: src/main/perl/lib/Exporter.pm
+
+  - source: perl5/dist/Exporter/lib/Exporter/Heavy.pm
+    target: src/main/perl/lib/Exporter/Heavy.pm
+
   # Carp - Error reporting module (replacing minimal Java implementation)
   # Required by many CPAN modules including Moo
   - source: perl5/dist/Carp/lib/Carp.pm

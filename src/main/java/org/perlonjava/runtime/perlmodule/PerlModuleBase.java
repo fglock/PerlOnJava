@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.invoke.MethodHandle;
@@ -113,24 +114,32 @@ public abstract class PerlModuleBase {
     }
 
     /**
-     * Initializes the exporter by importing the import() method
-     * from the Exporter class.
+     * Requires a Perl module and adds it to this module's @ISA.
+     * This allows the current module to inherit methods from the parent module.
+     * The parent module is loaded via require if not already loaded.
+     *
+     * @param parentModule The name of the parent module (e.g., "Exporter", "DynaLoader")
+     */
+    protected void inheritFrom(String parentModule) {
+        // Convert module name to file path (e.g., "Exporter" -> "Exporter.pm", "Foo::Bar" -> "Foo/Bar.pm")
+        String modulePath = parentModule.replace("::", "/") + ".pm";
+        
+        // Require the module if not already loaded
+        RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
+        if (!inc.exists(new RuntimeScalar(modulePath)).getBoolean()) {
+            ModuleOperators.require(new RuntimeScalar(modulePath));
+        }
+        
+        // Add to @ISA
+        RuntimeArray isa = GlobalVariable.getGlobalArray(moduleName + "::ISA");
+        RuntimeArray.push(isa, new RuntimeScalar(parentModule));
+    }
+
+    /**
+     * Initializes the exporter by inheriting from the Exporter module.
+     * This makes the module inherit Exporter's import() method from pure Perl.
      */
     protected void initializeExporter() {
-        try {
-            // Imports the import() method from Exporter class
-            Exporter instance = new Exporter();
-
-            // Retrieve the 'importSymbols' method from the Exporter class
-            MethodHandle methodHandle = RuntimeCode.lookup.findStatic(Exporter.class, "importSymbols", RuntimeCode.methodType);
-
-            RuntimeCode code = new RuntimeCode(methodHandle, instance, null);
-            code.isStatic = true;
-
-            // Set the import method as a global code reference in the Perl namespace
-            GlobalVariable.getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(code));
-        } catch (NoSuchMethodException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
+        inheritFrom("Exporter");
     }
 }
