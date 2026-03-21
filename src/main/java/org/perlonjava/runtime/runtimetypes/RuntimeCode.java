@@ -1600,7 +1600,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /**
+     * Implementation of Perl's caller() builtin.
+     * This version doesn't have access to __SUB__, so it can't honor set_subname for JVM code.
+     */
     public static RuntimeList caller(RuntimeList args, int ctx) {
+        return callerWithSub(args, ctx, null);
+    }
+
+    /**
+     * Implementation of Perl's caller() builtin with __SUB__ support.
+     * When currentSub is provided, its subName is used for caller(0) to honor set_subname.
+     *
+     * @param args       The arguments (frame number)
+     * @param ctx        The calling context
+     * @param currentSub The __SUB__ reference from the calling subroutine (may be null)
+     */
+    public static RuntimeList callerWithSub(RuntimeList args, int ctx, RuntimeScalar currentSub) {
         RuntimeList res = new RuntimeList();
         int frame = 0;
         if (!args.isEmpty()) {
@@ -1636,7 +1652,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
                 String subName = null;
-                if (frame > 0 && frame - 1 < stackTraceSize) {
+                
+                // For the innermost frame (frame == 1 after skip), check currentSub first
+                // to honor set_subname() which modifies RuntimeCode.subName at runtime
+                if (frame == 1 && currentSub != null && currentSub.type == RuntimeScalarType.CODE) {
+                    RuntimeCode code = (RuntimeCode) currentSub.value;
+                    if (code.subName != null && !code.subName.isEmpty()) {
+                        String pkg = code.packageName != null ? code.packageName : "main";
+                        subName = pkg + "::" + code.subName;
+                    }
+                }
+                
+                // Fall back to stack trace info
+                if (subName == null && frame > 0 && frame - 1 < stackTraceSize) {
                     ArrayList<String> prevFrame = stackTrace.get(frame - 1);
                     if (prevFrame.size() > 3) {
                         subName = prevFrame.get(3);

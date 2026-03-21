@@ -1217,7 +1217,12 @@ public class CompileOperator {
     }
 
     private static void visitDiamond(BytecodeCompiler bc, OperatorNode node) {
-        String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
+        // Defensive: ensure operand is a ListNode with a StringNode element
+        String argument = "";
+        if (node.operand instanceof ListNode listNode && !listNode.elements.isEmpty() 
+                && listNode.elements.getFirst() instanceof StringNode stringNode) {
+            argument = stringNode.value;
+        }
         if (argument.isEmpty() || argument.equals("<>")) {
             bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int fhReg = bc.lastResultReg;

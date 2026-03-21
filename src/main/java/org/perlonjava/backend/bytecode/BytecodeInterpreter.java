@@ -68,7 +68,9 @@ public class BytecodeInterpreter {
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext, String subroutineName) {
         // Track interpreter state for stack traces
         String framePackageName = code.packageName != null ? code.packageName : "main";
-        String frameSubName = subroutineName != null ? subroutineName : (code.subName != null ? code.subName : "(eval)");
+        // Prefer code.subName (set by set_subname) over passed subroutineName
+        // This ensures caller() returns the name set by set_subname()
+        String frameSubName = code.subName != null ? code.subName : (subroutineName != null ? subroutineName : "(eval)");
         // Get PC holder for direct updates (avoids ThreadLocal lookups in hot loop)
         int[] pcHolder = InterpreterState.push(code, framePackageName, frameSubName);
 

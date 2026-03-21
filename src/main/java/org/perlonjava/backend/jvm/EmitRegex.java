@@ -155,7 +155,10 @@ public class EmitRegex {
      * Example: $string =~ tr/abc/def/
      */
     static void handleTransliterate(EmitterVisitor emitterVisitor, OperatorNode node) {
-        ListNode operand = (ListNode) node.operand;
+        // Defensive: ensure operand is a ListNode
+        ListNode operand = (node.operand instanceof ListNode) 
+            ? (ListNode) node.operand 
+            : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         // Process the three required components: source, target, and flags
@@ -186,7 +189,10 @@ public class EmitRegex {
      * Example: $string =~ s/pattern/replacement/
      */
     static void handleReplaceRegex(EmitterVisitor emitterVisitor, OperatorNode node) {
-        ListNode operand = (ListNode) node.operand;
+        // Defensive: ensure operand is a ListNode
+        ListNode operand = (node.operand instanceof ListNode) 
+            ? (ListNode) node.operand 
+            : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         // Process pattern, replacement, and flags
@@ -224,7 +230,10 @@ public class EmitRegex {
      * Example: qr/pattern/
      */
     static void handleQuoteRegex(EmitterVisitor emitterVisitor, OperatorNode node) {
-        ListNode operand = (ListNode) node.operand;
+        // Defensive: ensure operand is a ListNode
+        ListNode operand = (node.operand instanceof ListNode) 
+            ? (ListNode) node.operand 
+            : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         // Process pattern and flags
@@ -246,7 +255,10 @@ public class EmitRegex {
      * Example: $string =~ m/pattern/
      */
     static void handleMatchRegex(EmitterVisitor emitterVisitor, OperatorNode node) {
-        ListNode operand = (ListNode) node.operand;
+        // Defensive: ensure operand is a ListNode
+        ListNode operand = (node.operand instanceof ListNode) 
+            ? (ListNode) node.operand 
+            : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         // Check if /o modifier is present
