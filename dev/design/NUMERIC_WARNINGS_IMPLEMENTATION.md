@@ -19,118 +19,100 @@ my $x = 0 + "abc";  # Should warn, but doesn't (or warns incorrectly)
 my $z = 0 + "ghi";  # Should warn
 ```
 
-## Proposed Solution: Thread-Local Flag with Cache Optimization
+## Proposed Solution: Thread-Local Flag Checked on Cache Miss
 
 Key insight: `NumberParser` has a numification cache. Most strings are only parsed once.
-Thread-local overhead only occurs on **cache misses**, which is rare after warmup.
+We only need to check the warning flag on **cache misses**.
 
 ### Design
-1. `parseNumber()` sets a thread-local flag when a non-numeric string is parsed (cache miss only)
-2. Compiler emits a warning check **after** numeric operations when `use warnings "numeric"` is active
-3. The warning check reads and clears the thread-local flag
+1. `use warnings "numeric"` sets a thread-local flag (using `local` mechanism for scoping)
+2. `no warnings "numeric"` clears the flag (with `local` for proper block scoping)
+3. `parseNumber()` on cache miss: if flag is set AND string is non-numeric, warn immediately
+4. Cache hits: no checking at all
 
 ### Flow
 ```
 Cache hit path (fast, common):
   getDouble() → parseNumber() → cache hit → return
-  [no thread-local access]
+  [no thread-local access, no warning check]
 
 Cache miss path (rare):
-  getDouble() → parseNumber() → parse string → set flag if non-numeric → cache result → return
-  [one thread-local write]
-
-Compiled code (when warnings enabled):
-  result = a + b;
-  NumberParser.emitPendingNumericWarning();  // one thread-local read + clear
+  getDouble() → parseNumber() → parse string → 
+    if (non-numeric && warningsEnabled) warn → cache result → return
+  [one thread-local read only on cache miss]
 ```
 
 ### Advantages
 - **Zero overhead for cache hits** (most common case)
-- **No API changes** to operators, RuntimeScalar, etc.
-- **No bytecode changes** needed
-- **Simple implementation** - only NumberParser and compiler emit code change
-- **Correct scoping** - compiler decides at compile-time whether to emit the check
+- **No operator duplication** - no addWithWarn, subtractWithWarn, etc.
+- **No caller changes** - warning happens inside parseNumber()
+- **Proper scoping** - uses existing `local` mechanism for thread-local flag
+- **Simple implementation** - only NumberParser and Warnings module change
 
 ## Implementation
 
-### Phase 1: NumberParser Changes
+### Phase 1: Thread-Local Warning Flag
 
-#### 1.1 Add thread-local flag
+#### 1.1 Add flag to Warnings.java
 ```java
-// In NumberParser.java
-private static final ThreadLocal<String> pendingNumericWarning = new ThreadLocal<>();
+// Thread-local flag for numeric warnings, works with `local` mechanism
+private static final String VAR_NUMERIC_WARNINGS = "warnings::_numeric_enabled";
 
-public static void clearPendingWarning() {
-    pendingNumericWarning.remove();
-}
-
-public static void emitPendingNumericWarning() {
-    String str = pendingNumericWarning.get();
-    if (str != null) {
-        pendingNumericWarning.remove();
-        WarnDie.warn(new RuntimeScalar("Argument \"" + str + "\" isn't numeric"),
-                RuntimeScalarCache.scalarEmptyString);
-    }
+public static boolean isNumericWarningsEnabled() {
+    return getGlobalVariable(VAR_NUMERIC_WARNINGS).getBoolean();
 }
 ```
 
-#### 1.2 Set flag on cache miss when non-numeric
+#### 1.2 Update useWarnings/noWarnings
 ```java
-// In parseNumber(), when shouldWarn is true:
-if (shouldWarn) {
-    pendingNumericWarning.set(warnStr);
+// In useWarnings():
+getGlobalVariable(VAR_NUMERIC_WARNINGS).set(1);
+
+// In noWarnings() - use local for proper scoping:
+// The compiler should emit: local $warnings::_numeric_enabled = 0;
+// For now, direct set (scoping handled by caller):
+getGlobalVariable(VAR_NUMERIC_WARNINGS).set(0);
+```
+
+### Phase 2: NumberParser Changes
+
+#### 2.1 Check flag on cache miss
+```java
+// In parseNumber(), after parsing determines the string is non-numeric:
+// (isNonNumeric is already computed during parsing - no extra work)
+if (isNonNumeric && Warnings.isNumericWarningsEnabled()) {
+    WarnDie.warn(new RuntimeScalar("Argument \"" + str + "\" isn't numeric"),
+            RuntimeScalarCache.scalarEmptyString);
 }
 ```
 
-### Phase 2: JVM Backend Changes
+Note: `isNonNumeric` is already determined during parsing (e.g., "abc" → 0 with isNonNumeric=true).
+The only new check is `isNumericWarningsEnabled()` - one thread-local read on cache miss.
 
-#### 2.1 EmitBinaryOperator.java
-After emitting numeric operations, check if warnings enabled and emit the check:
-```java
-// After emitting: MathOperators.add(a, b)
-if (symbolTable.isWarningCategoryEnabled("numeric")) {
-    mv.visitMethodInsn(INVOKESTATIC, 
-        "org/perlonjava/frontend/parser/NumberParser",
-        "emitPendingNumericWarning", "()V", false);
-}
+### Phase 3: Proper Scoping for `no warnings`
+
+For `no warnings "numeric"` to work with proper block scoping, the compiler should emit:
+```perl
+# What `no warnings "numeric"` should compile to:
+local $warnings::_numeric_enabled = 0;
 ```
 
-#### 2.2 Operators that need the check
-- Binary: `+`, `-`, `*`, `/`, `%`, `**`
-- Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`
-- Comparison: `<`, `<=`, `>`, `>=`, `==`, `!=`, `<=>`
-- Unary: unary `-`, `abs`, `int`
-- Increment/decrement: `++`, `--`
+This uses Perl's existing `local` mechanism (DynamicVariableManager) to automatically restore the previous value when the block exits.
 
-### Phase 3: Bytecode Interpreter Changes
-
-#### 3.1 BytecodeCompiler.java
-Similar to JVM - after numeric opcodes, emit warning check if enabled:
+#### 3.1 Update StatementParser or Warnings module
+When `no warnings "numeric"` is parsed, emit code equivalent to:
 ```java
-if (symbolTable.isWarningCategoryEnabled("numeric")) {
-    emit(Opcodes.EMIT_NUMERIC_WARNING);
-}
+DynamicVariableManager.pushLocalVariable(getGlobalVariable(VAR_NUMERIC_WARNINGS));
+getGlobalVariable(VAR_NUMERIC_WARNINGS).set(0);
 ```
 
-#### 3.2 Add new opcode
-```java
-// In Opcodes.java
-public static final int EMIT_NUMERIC_WARNING = ...;
-
-// In OpcodeHandler
-case EMIT_NUMERIC_WARNING:
-    NumberParser.emitPendingNumericWarning();
-    break;
-```
+The block exit will automatically call `popToLocalLevel()` which restores the value.
 
 ## Files to Modify
 
-1. `NumberParser.java` - add thread-local flag and methods
-2. `EmitBinaryOperator.java` - emit warning check after numeric ops
-3. `EmitOperator.java` - emit warning check after unary numeric ops
-4. `BytecodeCompiler.java` - emit warning opcode
-5. `Opcodes.java` - add EMIT_NUMERIC_WARNING opcode
-6. `OpcodeHandler.java` - handle the new opcode
+1. `Warnings.java` - add thread-local flag and `isNumericWarningsEnabled()` method
+2. `NumberParser.java` - check flag on cache miss, emit warning
+3. `StatementParser.java` (optional) - emit `local` for `no warnings`
 
 ## Testing
 
@@ -152,11 +134,28 @@ $warned = 0;
     my $z = 0 + "def";
 }
 ok($warned == 0, "no warning in no-warnings block");
+
+# After block, warnings should be restored
+$warned = 0;
+my $w = 0 + "ghi";
+ok($warned == 1, "warning restored after block");
 ```
+
+## Performance Analysis
+
+| Scenario | Overhead |
+|----------|----------|
+| Cache hit, no warnings | Zero |
+| Cache hit, warnings enabled | Zero |
+| Cache miss, no warnings | One thread-local read |
+| Cache miss, warnings enabled, numeric string | One thread-local read |
+| Cache miss, warnings enabled, non-numeric | One thread-local read + warning emission |
+
+Since cache misses are rare after warmup, the thread-local read overhead is negligible.
 
 ## Current Status
 
-- [ ] Phase 1: NumberParser thread-local flag
-- [ ] Phase 2: JVM backend warning emission
-- [ ] Phase 3: Bytecode interpreter warning emission
+- [ ] Phase 1: Add thread-local flag to Warnings.java
+- [ ] Phase 2: Check flag in NumberParser on cache miss
+- [ ] Phase 3: Proper `local` scoping for `no warnings`
 - [ ] Testing with op/numify.t
