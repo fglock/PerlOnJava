@@ -163,8 +163,9 @@ public class ParsePrimary {
 
                 // Check for local package override
                 String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
-                if (GlobalVariable.isSubs.getOrDefault(fullName, false)) {
+                if (GlobalVariable.isSubs.getOrDefault(fullName, false) || existsGlobalCodeRef(fullName)) {
                     // Example: 'use subs "hex"; sub hex { 456 } print hex("123"), "\n"'
+                    // Or: 'use Time::HiRes "time"; print time, "\n"' (sub imported at BEGIN time)
                     parser.tokenIndex = startIndex;   // backtrack to reparse as subroutine
                     return SubroutineParser.parseSubroutineCall(parser, false);
                 }

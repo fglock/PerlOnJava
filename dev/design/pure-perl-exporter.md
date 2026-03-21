@@ -4,7 +4,7 @@
 
 Replace the Java implementation of Exporter with the pure Perl version from Perl 5 core.
 
-## Status: Phase 1 Complete (2024-03-21)
+## Status: Complete (2024-03-21)
 
 ### Completed
 
@@ -20,6 +20,8 @@ Replace the Java implementation of Exporter with the pure Perl version from Perl
    - `initializeExporter()` now calls `inheritFrom("Exporter")`
 
 4. **Removed GlobalContext preload** - Exporter is loaded on-demand by `inheritFrom()`
+
+5. **Fixed builtin override detection** - Updated `ParsePrimary.java` to check if subroutine exists (not just `isSubs` flag)
 
 ### How It Works
 
@@ -43,32 +45,27 @@ require XSLoader;
 XSLoader::load('Time::HiRes');
 ```
 
-## Known Issue: Lexical Override of Builtins
+## Builtin Override Detection
 
-### Problem
+### Problem Solved
 
 When importing a function that shadows a builtin (e.g., `use Time::HiRes 'time'`), the parser needs to know at compile time to treat `time` as a subroutine call, not the builtin operator.
 
-The old Java Exporter had:
-```java
-if (ParserTables.OVERRIDABLE_OP.contains(functionName)) {
-    GlobalVariable.isSubs.put(fullName, true);
-}
-```
+### Solution
 
-This marked the function globally, but Perl's behavior is lexical - the override should only affect the current compilation unit.
+The parser now checks both:
+1. `GlobalVariable.isSubs` - for explicit `use subs` declarations
+2. `existsGlobalCodeRef(fullName)` - for subroutines that exist at parse time
 
-### Current Behavior
+Since `use` statements run at BEGIN time (before subsequent code is parsed), imported subs exist when the parser encounters calls to them.
 
-```perl
-use Time::HiRes 'time';
-my $t = time;      # Returns integer (builtin) - WRONG
-my $t = time();    # Returns integer (builtin) - WRONG  
-my $t = &time;     # Returns fractional seconds - correct
-my $t = &time();   # Returns fractional seconds - correct
-```
+### How It Works in Perl
 
-### Affected Builtins
+Key insight from testing with system Perl: the glob assignment must happen from code compiled in a **different package**. This is why Exporter works naturally - it runs in package `Exporter` and assigns to the caller's namespace (e.g., `main::time`).
+
+The parser checks if the sub exists at parse time. Since imports happen at BEGIN time before subsequent code is parsed, the imported sub is visible to the parser.
+
+### Overridable Builtins
 
 From `ParserTables.OVERRIDABLE_OP`:
 - `caller`, `chdir`, `close`, `connect`
@@ -79,49 +76,12 @@ From `ParserTables.OVERRIDABLE_OP`:
 - `readline`, `readpipe`, `rename`, `require`
 - `stat`, `time`, `uc`, `warn`
 
-## Phase 2: Fix Lexical Override (TODO)
-
-### Requirements
-
-1. Parser must track which builtins are overridden in current lexical scope
-2. Override should happen when `use Module 'func'` is executed (BEGIN time)
-3. Override should only affect subsequent code in same compilation unit
-4. Different files should have independent override states
-
-### Possible Approaches
-
-#### Approach A: Lexical Hints Hash
-
-Similar to how `strict` and `warnings` work:
-- Store override info in `%^H` (hints hash)
-- Parser checks hints during compilation
-- Hints are lexically scoped
-
-#### Approach B: Per-Compilation-Unit Tracking
-
-- Track overrides per compilation unit ID
-- Parser checks compilation unit's override set
-- Clean up when compilation unit finishes
-
-#### Approach C: Hook in Exporter
-
-- Add a Java hook `Internals::mark_lexical_override($func, $pkg)`
-- Exporter.pm calls it when importing overridable functions
-- Parser uses current compilation context to check
-
-### Implementation Notes
-
-- The fix requires changes to both:
-  - Runtime (to record override at import time)
-  - Parser (to check override at parse time)
-- Need to understand how PerlOnJava tracks compilation units/lexical scopes
-- May need to extend `%^H` support if not already complete
-
 ## Files Changed
 
 - `src/main/java/org/perlonjava/runtime/perlmodule/Exporter.java` - DELETED
 - `src/main/java/org/perlonjava/runtime/perlmodule/PerlModuleBase.java` - Added `inheritFrom()`
 - `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` - Removed Exporter.initialize()
+- `src/main/java/org/perlonjava/frontend/parser/ParsePrimary.java` - Check existsGlobalCodeRef for overrides
 - `dev/import-perl5/config.yaml` - Added Exporter.pm and Heavy.pm
 - `src/main/perl/lib/Exporter.pm` - NEW (from perl5)
 - `src/main/perl/lib/Exporter/Heavy.pm` - NEW (from perl5)
@@ -130,8 +90,9 @@ Similar to how `strict` and `warnings` work:
 
 - Basic exports work: `use File::Basename qw(dirname)` ✓
 - Tag exports work: `use Carp qw(:DEFAULT)` ✓
-- XSLoader modules work: `use Time::HiRes` (without importing `time`) ✓
-- **FAILING**: `use Time::HiRes 'time'` - lexical override not working
+- XSLoader modules work: `use Time::HiRes` ✓
+- Builtin override works: `use Time::HiRes 'time'; print time` ✓
+- All unit tests pass ✓
 
 ## Related
 
