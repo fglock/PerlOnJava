@@ -319,18 +319,26 @@ public class Version extends PerlModuleBase {
         // Check if arguments were swapped (third argument from overload)
         boolean swapped = args.size() > 2 && args.get(2).getBoolean();
 
-        // Handle non-version objects
+        // Handle non-version objects - treat undef/empty as version 0
         if (!v1.isBlessed() || !NameNormalizer.getBlessStr(v1.blessId).equals("version")) {
+            String v1Str = v1.toString().trim();
+            if (v1Str.isEmpty()) {
+                v1Str = "0";
+            }
             RuntimeArray parseArgs = new RuntimeArray();
             parseArgs.push(new RuntimeScalar("version"));
-            parseArgs.push(v1);
+            parseArgs.push(new RuntimeScalar(v1Str));
             v1 = parse(parseArgs, RuntimeContextType.SCALAR).scalar();
         }
 
         if (!v2.isBlessed() || !NameNormalizer.getBlessStr(v2.blessId).equals("version")) {
+            String v2Str = v2.toString().trim();
+            if (v2Str.isEmpty()) {
+                v2Str = "0";
+            }
             RuntimeArray parseArgs = new RuntimeArray();
             parseArgs.push(new RuntimeScalar("version"));
-            parseArgs.push(v2);
+            parseArgs.push(new RuntimeScalar(v2Str));
             v2 = parse(parseArgs, RuntimeContextType.SCALAR).scalar();
         }
 
