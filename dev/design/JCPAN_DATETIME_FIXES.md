@@ -286,13 +286,22 @@ mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
   - File::stat.pm now loads successfully
 - [x] Exporter::require_version() implementation (2026-03-20, commit 70ce06938)
 - [x] CORE::GLOBAL::require bareword handling fix (2026-03-20, commit 70ce06938)
+- [x] Exporter version check in import (2026-03-21, commit a2e0aa131)
+  - First argument starting with digit is now treated as version check
+  - Fixes: "Symbol 0.03 not allowed for export in package File::ShareDir::Install"
+- [x] MakeMaker $(INST_LIB) variable expansion (2026-03-21, commit f42f9125c)
+  - Fixes modules with explicit PM hash using Make-style variables
 
 ### In Progress
-- [ ] Test DateTime installation with all fixes
+- None
 
-### Pending
-- [ ] IPC::Open3 read-only fix
-- [ ] Encode::encodings() method
+### All fixes complete!
+- `jcpan install DateTime` works successfully
+- DateTime module loads and functions correctly:
+  ```
+  ./jperl -e 'use DateTime; print DateTime->now->strftime("%Y-%m-%d")'
+  2026-03-21
+  ```
 
 ---
 
