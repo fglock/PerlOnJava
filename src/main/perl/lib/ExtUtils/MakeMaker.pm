@@ -184,6 +184,15 @@ sub _install_pure_perl {
     # Use explicit PM hash if provided
     if ($args->{PM}) {
         %pm = %{$args->{PM}};
+        # Expand Make-style variables like $(INST_LIB) to actual paths
+        for my $key (keys %pm) {
+            my $val = $pm{$key};
+            $val =~ s/\$\(INST_LIB\)/$INSTALL_BASE/g;
+            $val =~ s/\$\(INST_ARCHLIB\)/$INSTALL_BASE/g;  # treat ARCHLIB same as LIB
+            $val =~ s/\$\(INST_LIBDIR\)/$INSTALL_BASE/g;
+            $val =~ s/\$\{INST_LIB\}/$INSTALL_BASE/g;      # also handle ${VAR} form
+            $pm{$key} = $val;
+        }
     } else {
         # Default: scan lib/ directory
         if (-d 'lib') {
