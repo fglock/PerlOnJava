@@ -54,7 +54,14 @@ public class EmitControlFlow {
 
         // Initialize label string for labeled loops
         String labelStr = null;
-        ListNode labelNode = (ListNode) node.operand;
+        // Defensive: ensure operand is a ListNode (parser should always create ListNode here)
+        ListNode labelNode;
+        if (node.operand instanceof ListNode) {
+            labelNode = (ListNode) node.operand;
+        } else {
+            // Wrap non-ListNode in a ListNode to handle edge cases
+            labelNode = ListNode.makeList(node.operand);
+        }
         if (!labelNode.elements.isEmpty()) {
             // Handle 'next' with a label.
             Node arg = labelNode.elements.getFirst();

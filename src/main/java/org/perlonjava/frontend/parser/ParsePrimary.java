@@ -186,9 +186,13 @@ public class ParsePrimary {
                             OperatorNode codeRef = new OperatorNode("&",
                                     new IdentifierNode(coreGlobalName, startIndex),
                                     startIndex);
+                            // Defensive: ensure operand is a ListNode
+                            ListNode operandList = (requireOp.operand instanceof ListNode)
+                                    ? (ListNode) requireOp.operand
+                                    : ListNode.makeList(requireOp.operand);
                             return new BinaryOperatorNode("(",
                                     codeRef,
-                                    (ListNode) requireOp.operand,
+                                    operandList,
                                     startIndex);
                         }
                     }

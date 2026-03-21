@@ -465,7 +465,13 @@ public class EmitOperator {
         //   static RuntimeBase reverse(RuntimeBase value, int ctx)
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleSystemBuiltin " + node);
 
-        ListNode operand = (ListNode) node.operand;
+        // Defensive: ensure operand is a ListNode
+        ListNode operand;
+        if (node.operand instanceof ListNode) {
+            operand = (ListNode) node.operand;
+        } else {
+            operand = ListNode.makeList(node.operand);
+        }
         boolean hasHandle = false;
         if (operand.handle != null) {
             //  `system {handle} LIST`
@@ -584,7 +590,12 @@ public class EmitOperator {
     // Handles the 'diamond' operator, which reads input from a file or standard input.
     static void handleDiamondBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
+        // Defensive: ensure operand is a ListNode with a StringNode element
+        String argument = "";
+        if (node.operand instanceof ListNode listNode && !listNode.elements.isEmpty() 
+                && listNode.elements.getFirst() instanceof StringNode stringNode) {
+            argument = stringNode.value;
+        }
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit diamond " + argument);
         if (argument.isEmpty() || argument.equals("<>")) {
             // Handle null filehandle:  <>  <<>>
