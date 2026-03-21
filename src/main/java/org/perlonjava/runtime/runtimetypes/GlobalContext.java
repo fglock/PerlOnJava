@@ -71,10 +71,17 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::!", new ErrnoVariable());    // initialize $! with dualvar support
         GlobalVariable.getGlobalVariable("main::,").set("");    // initialize $, to ""
         GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
-        GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
+        // Only set $\ if it hasn't been set yet - prevents overwriting during re-entrant calls
+        if (!GlobalVariable.globalVariables.containsKey("main::\\")) {
+            GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
+        }
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         GlobalVariable.getGlobalVariable("main::?");
-        GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
+        // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
+        // (e.g., when require() is called during module initialization)
+        if (!GlobalVariable.globalVariables.containsKey("main::0")) {
+            GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
+        }
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
         GlobalVariable.globalVariables.put(encodeSpecialVar("TAINT"), RuntimeScalarCache.scalarZero); // ${^TAINT} - read-only, always 0 (taint mode not implemented)
         GlobalVariable.getGlobalVariable("main::>");  // TODO
@@ -86,7 +93,10 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::^");  // TODO
         GlobalVariable.getGlobalVariable("main:::");  // TODO
 
-        GlobalVariable.globalVariables.put("main::/", new InputRecordSeparator(compilerOptions.inputRecordSeparator)); // initialize $/
+        // Only set $/ if it hasn't been set yet - prevents overwriting during re-entrant calls
+        if (!GlobalVariable.globalVariables.containsKey("main::/")) {
+            GlobalVariable.globalVariables.put("main::/", new InputRecordSeparator(compilerOptions.inputRecordSeparator)); // initialize $/
+        }
 
         GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
