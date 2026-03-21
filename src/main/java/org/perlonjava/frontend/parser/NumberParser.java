@@ -5,12 +5,9 @@ import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
-import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
-
-import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -37,30 +34,6 @@ public class NumberParser {
     private static final Pattern WINDOWS_INF_PATTERN = Pattern.compile("1\\.?#INF.*");
     private static final Pattern WINDOWS_NAN_PATTERN = Pattern.compile("\\+?1\\.?#(QNAN|NANQ|NAN|IND|SNAN).*"
     );
-
-    /**
-     * Check if numeric warnings are enabled.
-     * Returns true if numeric warnings should be shown based on:
-     * 1. Runtime disabled state (from 'no warnings "numeric"' blocks) - takes precedence
-     * 2. Lexical enabled state (from 'use warnings') 
-     * 3. $^W global flag (fallback)
-     */
-    private static boolean numericWarningsEnabled() {
-        // First check runtime disabled state - this handles 'no warnings "numeric"' at runtime
-        if (Warnings.isNumericWarningDisabled()) {
-            return false;
-        }
-        
-        // Check if lexically enabled
-        if (Warnings.warningManager.isWarningEnabled("numeric")
-                || Warnings.warningManager.isWarningEnabled("all")) {
-            return true;
-        }
-        
-        // Fall back to $^W (stored as main:: + character for 'W' - 'A' + 1)
-        return getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean();
-    }
-
     private static final NumberFormat BINARY_FORMAT = new NumberFormat(
             2,
             str -> str.matches("[01_]*"),
@@ -582,18 +555,7 @@ public class NumberParser {
                     numberEnd = exponentPos;
                 }
 
-                if (numberEnd == start) {
-                    // String doesn't start with a digit - warn about non-numeric
-                    if (numericWarningsEnabled()) {
-                        String warnStr = str.trim();
-                        if (warnStr.startsWith("-") || warnStr.startsWith("+")) {
-                            warnStr = warnStr.substring(1);
-                        }
-                        WarnDie.warn(new RuntimeScalar("Argument \"" + warnStr + "\" isn't numeric"),
-                                RuntimeScalarCache.scalarEmptyString);
-                    }
-                    return getScalarInt(0);
-                }
+                if (numberEnd == start) return getScalarInt(0);
 
                 try {
                     String numberStr = str.substring(start, numberEnd);
@@ -603,10 +565,6 @@ public class NumberParser {
                     } else {
                         long value = Long.parseLong(numberStr);
                         result = getScalarInt(isNegative ? -value : value);
-                    }
-                    // Check for trailing non-numeric characters
-                    if (numberEnd < end) {
-                        shouldWarn = true;
                     }
                 } catch (NumberFormatException e) {
                     try {
@@ -618,8 +576,8 @@ public class NumberParser {
                 }
             }
 
-            // Generate warning if needed and numeric warnings are enabled
-            if (shouldWarn && numericWarningsEnabled()) {
+            // Generate warning if needed
+            if (shouldWarn) {
                 String warnStr = str.trim();
                 if (warnStr.startsWith("-") || warnStr.startsWith("+")) {
                     warnStr = warnStr.substring(1);
