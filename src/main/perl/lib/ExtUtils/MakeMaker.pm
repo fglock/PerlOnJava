@@ -260,6 +260,9 @@ sub _install_pure_perl {
         }
     }
     
+    # Install share directories (File::ShareDir::Install support)
+    $installed += _install_share_dirs($name, $args);
+    
     print "\n";
     print "=" x 60, "\n";
     print "Installation complete! ($installed files installed)\n";
@@ -272,6 +275,71 @@ sub _install_pure_perl {
     _create_mymeta($name, $version, $args);
     
     return PerlOnJava::MM::Installed->new($args);
+}
+
+sub _install_share_dirs {
+    my ($name, $args) = @_;
+    my $installed = 0;
+    
+    # Check if File::ShareDir::Install was used
+    return 0 unless @File::ShareDir::Install::DIRS;
+    
+    # Convert module name to dist name (My::Module -> My-Module)
+    (my $dist_name = $name) =~ s/::/-/g;
+    
+    print "\nInstalling share directories:\n";
+    
+    for my $def (@File::ShareDir::Install::DIRS) {
+        my $type = $def->{type} || 'dist';
+        next if $type =~ /^delete/;  # Skip delete directives
+        
+        # Get source directory - can be scalar or arrayref
+        my @src_dirs;
+        if (ref $def->{dir} eq 'ARRAY') {
+            @src_dirs = @{$def->{dir}};
+        } elsif ($def->{dir}) {
+            @src_dirs = ($def->{dir});
+        }
+        
+        # Handle directory specification (scan and copy all files)
+        for my $src_dir (@src_dirs) {
+            next unless -d $src_dir;
+            
+            my $dest_base;
+            if ($type eq 'dist') {
+                $dest_base = File::Spec->catdir($INSTALL_BASE, 'auto', 'share', 'dist', $dist_name);
+            } elsif ($type eq 'module' && $def->{module}) {
+                (my $mod_path = $def->{module}) =~ s/::/\//g;
+                $dest_base = File::Spec->catdir($INSTALL_BASE, 'auto', 'share', 'module', $mod_path);
+            } else {
+                next;
+            }
+            
+            find({
+                wanted => sub {
+                    return unless -f;
+                    # Skip dotfiles unless requested
+                    return if !$def->{dotfiles} && basename($_) =~ /^\./;
+                    
+                    my $src = $File::Find::name;
+                    (my $rel = $src) =~ s{^\Q$src_dir\E/?}{};
+                    my $dest = File::Spec->catfile($dest_base, $rel);
+                    my $dest_dir = dirname($dest);
+                    make_path($dest_dir) unless -d $dest_dir;
+                    
+                    if (copy($src, $dest)) {
+                        $installed++;
+                    } else {
+                        warn "  Failed to copy $src: $!\n";
+                    }
+                },
+                no_chdir => 1,
+            }, $src_dir);
+        }
+    }
+    
+    print "  Installed $installed share files\n" if $installed;
+    return $installed;
 }
 
 sub _extract_version {
