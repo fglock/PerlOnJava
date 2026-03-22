@@ -62,11 +62,12 @@ public class FileTemp extends PerlModuleBase {
      * Create a temporary file from template
      */
     public static RuntimeList _mkstemp(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for _mkstemp");
         }
 
-        String template = args.get(1).toString();
+        // Get template - it's the last argument (supports both function call and method call)
+        String template = args.get(args.size() - 1).toString();
         return createTempFile(template, "", false);
     }
 
@@ -74,12 +75,13 @@ public class FileTemp extends PerlModuleBase {
      * Create a temporary file with suffix
      */
     public static RuntimeList _mkstemps(RuntimeArray args, int ctx) {
-        if (args.size() != 3) {
+        if (args.size() < 2) {
             throw new IllegalStateException("Bad number of arguments for _mkstemps");
         }
 
-        String template = args.get(1).toString();
-        String suffix = args.get(2).toString();
+        // Get template and suffix - they're the last two arguments
+        String template = args.get(args.size() - 2).toString();
+        String suffix = args.get(args.size() - 1).toString();
         return createTempFile(template, suffix, false);
     }
 
@@ -87,11 +89,12 @@ public class FileTemp extends PerlModuleBase {
      * Create a temporary directory
      */
     public static RuntimeList _mkdtemp(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for _mkdtemp");
         }
 
-        String template = args.get(1).toString();
+        // Get template - it's the last argument
+        String template = args.get(args.size() - 1).toString();
         Path dir = createTempDir(template);
         return new RuntimeList(new RuntimeScalar(dir.toString()));
     }
@@ -195,13 +198,31 @@ public class FileTemp extends PerlModuleBase {
             }
 
             String prefix = template.substring(0, xStart);
-            Path templatePath = Paths.get(prefix);
-            Path dir = templatePath.getParent();
-            String namePrefix = templatePath.getFileName() != null ?
-                    templatePath.getFileName().toString() : "";
-
-            if (dir == null) {
+            
+            // Handle the case where prefix ends with a path separator (directory only, no name prefix)
+            // e.g., "/tmp/XXXXXX" -> prefix is "/tmp/", we want dir="/tmp" and namePrefix=""
+            Path dir;
+            String namePrefix;
+            
+            if (prefix.isEmpty()) {
+                // No directory specified, use temp dir
                 dir = Paths.get(getTempDir());
+                namePrefix = "";
+            } else if (prefix.endsWith("/") || prefix.endsWith("\\")) {
+                // Prefix is a directory path with trailing separator
+                // Remove trailing separator and use as directory
+                dir = Paths.get(prefix.substring(0, prefix.length() - 1));
+                namePrefix = "";
+            } else {
+                // Prefix may contain both directory and name prefix
+                Path templatePath = Paths.get(prefix);
+                dir = templatePath.getParent();
+                namePrefix = templatePath.getFileName() != null ?
+                        templatePath.getFileName().toString() : "";
+                
+                if (dir == null) {
+                    dir = Paths.get(getTempDir());
+                }
             }
 
             // Try to create temp file
@@ -274,13 +295,29 @@ public class FileTemp extends PerlModuleBase {
             }
 
             String prefix = template.substring(0, xStart);
-            Path templatePath = Paths.get(prefix);
-            Path parentDir = templatePath.getParent();
-            String namePrefix = templatePath.getFileName() != null ?
-                    templatePath.getFileName().toString() : "";
-
-            if (parentDir == null) {
+            
+            // Handle the case where prefix ends with a path separator (directory only, no name prefix)
+            Path parentDir;
+            String namePrefix;
+            
+            if (prefix.isEmpty()) {
+                // No directory specified, use temp dir
                 parentDir = Paths.get(getTempDir());
+                namePrefix = "";
+            } else if (prefix.endsWith("/") || prefix.endsWith("\\")) {
+                // Prefix is a directory path with trailing separator
+                parentDir = Paths.get(prefix.substring(0, prefix.length() - 1));
+                namePrefix = "";
+            } else {
+                // Prefix may contain both directory and name prefix
+                Path templatePath = Paths.get(prefix);
+                parentDir = templatePath.getParent();
+                namePrefix = templatePath.getFileName() != null ?
+                        templatePath.getFileName().toString() : "";
+                
+                if (parentDir == null) {
+                    parentDir = Paths.get(getTempDir());
+                }
             }
 
             // Try to create temp directory

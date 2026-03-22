@@ -140,6 +140,20 @@ sub unlink_on_destroy {
     return $self->{_unlink};
 }
 
+sub autoflush {
+    my $self = shift;
+    my $fh = $self->{_fh};
+    return unless defined $fh;
+    
+    my $old = select($fh);
+    if (@_) {
+        $| = shift;
+    }
+    my $value = $|;
+    select($old);
+    return $value;
+}
+
 sub DESTROY {
     my $self = shift;
 
@@ -511,8 +525,19 @@ sub _replace_XX {
     my $template = shift;
     my $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_';
 
-    $template =~ s/X/substr($chars, int(rand(length($chars))), 1)/ge;
+    # Only replace trailing X's - match X+ at end of string
+    $template =~ s/(X+)$/_rand_chars($chars, length($1))/e;
     return $template;
+}
+
+# Generate random characters of specified length
+sub _rand_chars {
+    my ($chars, $len) = @_;
+    my $result = '';
+    for (1..$len) {
+        $result .= substr($chars, int(rand(length($chars))), 1);
+    }
+    return $result;
 }
 
 # Pure Perl fallback implementations

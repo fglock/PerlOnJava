@@ -720,7 +720,8 @@ subtest 'Special template patterns' => sub {
 
     # Very short template
     my ($fh6, $file6) = tempfile('XXXXXX');
-    like($file6, qr/^\w{6}/, 'Can use template with only Xs');
+    my $basename6 = (split m{/}, $file6)[-1];
+    like($basename6, qr/^\w{6}$/, 'Can use template with only Xs');
     close($fh6);
 };
 
