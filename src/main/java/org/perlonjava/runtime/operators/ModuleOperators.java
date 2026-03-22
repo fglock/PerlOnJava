@@ -746,8 +746,8 @@ public class ModuleOperators {
             RuntimeScalar incEntry = incHash.elements.get(fileName);
             if (!incEntry.defined().getBoolean()) {
                 // This was a compilation failure, throw the cached error
-                // Perl says "Attempt to reload <file> aborted." for cached failures
-                throw new PerlCompilerException("Attempt to reload " + fileName + " aborted.");
+                // Perl outputs: "Attempt to reload <file> aborted.\nCompilation failed in require at ..."
+                throw new PerlCompilerException("Attempt to reload " + fileName + " aborted.\nCompilation failed in require at " + fileName);
             }
             // module was already loaded successfully - always return exactly 1
             return getScalarInt(1);
