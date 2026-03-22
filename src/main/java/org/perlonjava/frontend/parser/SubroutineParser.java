@@ -361,10 +361,32 @@ public class SubroutineParser {
                             currentIndex);
                 }
 
-                // If the next token is "{", treat it as a block argument (like grep/map).
-                // This matches Perl5's behavior: func { ... } @args treats { } as a block.
-                String proto = nextTok.text.equals("{") ? "&@" : "@";
-                ListNode arguments = consumeArgsWithPrototype(parser, proto);
+                // If the next token is "{", this is indirect object syntax when sub doesn't exist.
+                // Perl parses "unknownmethod { expr } args" as "(expr)->unknownmethod(args)"
+                // The block is evaluated and its result becomes the method invocant.
+                // Any following expressions become arguments to the method call.
+                if (nextTok.text.equals("{")) {
+                    // Consume the opening brace
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                    // Parse the block as an expression - it will be evaluated at runtime
+                    // to determine the invocant (class/object) for the method call
+                    Node blockExpr = ParseBlock.parseBlock(parser);
+                    // Consume the closing brace
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                    
+                    // Parse any additional arguments after the block
+                    // These become arguments to the method call
+                    ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                    
+                    // Create method call: (block_result)->method(args)
+                    Node methodCall = new BinaryOperatorNode("(",
+                            new OperatorNode("&", nameNode, currentIndex),
+                            arguments,
+                            currentIndex);
+                    return new BinaryOperatorNode("->", blockExpr, methodCall, currentIndex);
+                }
+
+                ListNode arguments = consumeArgsWithPrototype(parser, "@");
 
                 return new BinaryOperatorNode("(",
                         new OperatorNode("&", nameNode, currentIndex),
