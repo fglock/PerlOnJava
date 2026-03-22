@@ -3,12 +3,19 @@ package org.perlonjava.runtime.runtimetypes;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
  * Warning state is managed at compile time through the symbol table (like strict).
+ * 
+ * For runtime checking (e.g., warnif), we use a scope ID mechanism:
+ * - Each block with "no warnings" gets a unique scope ID at compile time
+ * - The disabled categories for each scope ID are stored in a static map
+ * - At runtime, "local $^WARNING_SCOPE" tracks the current scope ID
+ * - warnif() looks up the current scope's disabled categories
  */
 public class WarningFlags {
     // A hierarchy of warning categories
@@ -19,6 +26,16 @@ public class WarningFlags {
     
     // Global flag to track if "use warnings" has been called (for runtime checks)
     private static boolean globalWarningsEnabled = false;
+    
+    // Scope ID counter for generating unique scope IDs
+    private static final AtomicInteger scopeIdCounter = new AtomicInteger(0);
+    
+    // Map from scope ID to set of disabled warning categories
+    // This is populated at compile time and read at runtime
+    private static final Map<Integer, Set<String>> scopeDisabledWarnings = new HashMap<>();
+    
+    // The scope ID from the last noWarnings() call (read by StatementParser)
+    private static int lastScopeId = 0;
 
     static {
         // Initialize the hierarchy of warning categories
@@ -108,6 +125,96 @@ public class WarningFlags {
      */
     public static boolean isGlobalWarningsEnabled() {
         return globalWarningsEnabled;
+    }
+    
+    // ==================== Scope-based Warning Suppression ====================
+    // These methods support lexical "no warnings" that propagates through calls.
+    // At compile time, registerScopeWarnings() is called to get a scope ID.
+    // At runtime, the scope ID is set via "local $^WARNING_SCOPE".
+    // warnif() checks isWarningDisabledInScope() using the current scope ID.
+    
+    /**
+     * Registers disabled warning categories for a new scope.
+     * Called at compile time when "no warnings 'category'" is encountered.
+     * Also sets lastScopeId so StatementParser can emit the local assignment.
+     *
+     * @param categories The set of warning categories to disable in this scope.
+     * @return The unique scope ID for this block.
+     */
+    public static int registerScopeWarnings(Set<String> categories) {
+        int scopeId = scopeIdCounter.incrementAndGet();
+        
+        // Expand categories to include subcategories
+        Set<String> expanded = new HashSet<>(categories);
+        for (String category : categories) {
+            expandCategory(category, expanded);
+        }
+        
+        scopeDisabledWarnings.put(scopeId, expanded);
+        
+        // Set lastScopeId for StatementParser to read
+        lastScopeId = scopeId;
+        
+        return scopeId;
+    }
+    
+    /**
+     * Registers disabled warning categories for a single category.
+     *
+     * @param category The warning category to disable.
+     * @return The unique scope ID for this block.
+     */
+    public static int registerScopeWarnings(String category) {
+        Set<String> categories = new HashSet<>();
+        categories.add(category);
+        return registerScopeWarnings(categories);
+    }
+    
+    /**
+     * Checks if a warning category is disabled in the given scope.
+     *
+     * @param scopeId The scope ID to check (from $^WARNING_SCOPE).
+     * @param category The warning category to check.
+     * @return True if the category is disabled in this scope.
+     */
+    public static boolean isWarningDisabledInScope(int scopeId, String category) {
+        Set<String> disabled = scopeDisabledWarnings.get(scopeId);
+        if (disabled != null) {
+            return disabled.contains(category) || disabled.contains("all");
+        }
+        return false;
+    }
+    
+    /**
+     * Expands a warning category to include all its subcategories.
+     *
+     * @param category The category to expand.
+     * @param result   The set to add expanded categories to.
+     */
+    private static void expandCategory(String category, Set<String> result) {
+        if (warningHierarchy.containsKey(category)) {
+            for (String sub : warningHierarchy.get(category)) {
+                result.add(sub);
+                expandCategory(sub, result);
+            }
+        }
+    }
+    
+    /**
+     * Gets the scope ID from the last noWarnings() call.
+     * Called by StatementParser after processing "no warnings".
+     *
+     * @return The last scope ID, or 0 if no scope was registered.
+     */
+    public static int getLastScopeId() {
+        return lastScopeId;
+    }
+    
+    /**
+     * Clears the last scope ID (called after StatementParser reads it).
+     */
+    public static void clearLastScopeId() {
+        lastScopeId = 0;
     }
 
     public void initializeEnabledWarnings() {
