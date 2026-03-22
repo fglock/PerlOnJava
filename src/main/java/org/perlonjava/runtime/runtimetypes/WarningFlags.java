@@ -8,6 +8,7 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
+ * Warning state is managed at compile time through the symbol table (like strict).
  */
 public class WarningFlags {
     // A hierarchy of warning categories

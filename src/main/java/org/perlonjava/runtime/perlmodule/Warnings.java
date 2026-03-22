@@ -84,19 +84,29 @@ public class Warnings extends PerlModuleBase {
 
     /**
      * Disables a warning category.
+     * This is called for "no warnings 'category'".
+     * Warning state is handled at compile time via the symbol table (like strict).
+     * Note: Per-scope warning state is tracked via the symbol table's warning flags,
+     * which are properly scoped during compilation.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList.
      */
     public static RuntimeList noWarnings(RuntimeArray args, int ctx) {
-        for (int i = 1; i < args.size(); i++) {
-            String category = args.get(i).toString();
-            if (!warningExists(category)) {
-                throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+        if (args.size() <= 1) {
+            // no warnings; - suppress all warnings
+            warningManager.disableWarning("all");
+        } else {
+            for (int i = 1; i < args.size(); i++) {
+                String category = args.get(i).toString();
+                if (!warningExists(category)) {
+                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+                }
+                warningManager.disableWarning(category);
             }
-            warningManager.disableWarning(category);
         }
+        
         return new RuntimeScalar().getList();
     }
 
