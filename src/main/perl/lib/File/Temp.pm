@@ -14,6 +14,7 @@ package File::Temp;
 use strict;
 use warnings;
 use Carp;
+use Cwd qw(abs_path);  # Load early to avoid CORE::GLOBAL::stat conflicts
 use File::Spec;
 use File::Path qw(rmtree);
 use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END O_RDWR O_CREAT O_EXCL);
@@ -501,6 +502,11 @@ sub _generate_template {
     return $base . "XXXXXX";
 }
 
+# Wrapper for File::Spec->tmpdir for compatibility
+sub _wrap_file_spec_tmpdir {
+    return File::Spec->tmpdir;
+}
+
 sub _replace_XX {
     my $template = shift;
     my $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_';
@@ -547,15 +553,19 @@ sub _register_cleanup {
     my ($path, $type) = @_;
     my $pid = $$;
 
+    # Convert to absolute path - important for cleanup after chdir
+    my $abs_path = abs_path($path);
+    $abs_path = $path unless defined $abs_path;  # fallback if abs_path fails
+
     if ($type eq 'file') {
-        $CLEANUP_FILES{$pid}{$path} = 1;
+        $CLEANUP_FILES{$pid}{$abs_path} = 1;
         eval {
-            _register_temp_file($path);
+            _register_temp_file($abs_path);
         };
     } else {
-        $CLEANUP_DIRS{$pid}{$path} = 1;
+        $CLEANUP_DIRS{$pid}{$abs_path} = 1;
         eval {
-            _register_temp_dir($path);
+            _register_temp_dir($abs_path);
         };
     }
 }
@@ -563,7 +573,7 @@ sub _register_cleanup {
 sub _cleanup_registered {
     my $pid = $$;
 
-    # Clean up files
+    # Clean up files first
     if (exists $CLEANUP_FILES{$pid}) {
         for my $file (keys %{$CLEANUP_FILES{$pid}}) {
             unlink($file) if -e $file;
@@ -571,11 +581,36 @@ sub _cleanup_registered {
         delete $CLEANUP_FILES{$pid};
     }
 
-    # Clean up directories
+    # Clean up directories - need to handle case where we're IN a dir to be deleted
     if (exists $CLEANUP_DIRS{$pid}) {
+        my $cwd = abs_path(File::Spec->curdir);
+        my $cwd_to_remove;
+        
         for my $dir (keys %{$CLEANUP_DIRS{$pid}}) {
-            rmtree($dir) if -d $dir;
+            if (-d $dir) {
+                # Check if we're currently in this directory
+                my $abs_dir = abs_path($dir);
+                if (defined $abs_dir && defined $cwd && $abs_dir eq $cwd) {
+                    # We're in this directory - save it for last
+                    $cwd_to_remove = $dir;
+                    next;
+                }
+                # Safe to remove - we're not in it
+                rmtree($dir);
+            }
         }
+        
+        # Now handle the directory we're sitting in (if any)
+        if (defined $cwd_to_remove && -d $cwd_to_remove) {
+            # chdir out of the directory first
+            my $updir = File::Spec->updir;
+            if (chdir($updir)) {
+                rmtree($cwd_to_remove);
+            } else {
+                warn "Could not chdir to $updir to remove $cwd_to_remove: $!";
+            }
+        }
+        
         delete $CLEANUP_DIRS{$pid};
     }
 }
