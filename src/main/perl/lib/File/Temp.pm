@@ -174,11 +174,17 @@ sub AUTOLOAD {
 sub tempfile {
     my ($template, %args) = _parse_args(@_);
 
+    # Handle TEMPLATE option (alternative to positional template)
+    if (!defined $template && exists $args{TEMPLATE}) {
+        $template = delete $args{TEMPLATE};
+    }
+
     # Set defaults
     my $dir = $args{DIR};
     my $suffix = $args{SUFFIX} || '';
     my $unlink = exists $args{UNLINK} ? $args{UNLINK} : (defined wantarray ? 1 : 0);
     my $open   = exists $args{OPEN} ? $args{OPEN} : 1;
+    my $perms  = $args{PERMS};  # Custom permissions
 
     # If no directory specified, use temp directory by default
     # unless TMPDIR was explicitly set to false
@@ -203,25 +209,35 @@ sub tempfile {
     }
 
     # Create temp file
-    my ($fd, $path);
+    my ($fh, $path);
+    my $from_java = 0;
     eval {
         if ($suffix) {
-            ($fd, $path) = _mkstemps($template, $suffix);
+            (my $fd, $path) = _mkstemps($template, $suffix);
+            $from_java = 1;
         } else {
-            ($fd, $path) = _mkstemp($template);
+            (my $fd, $path) = _mkstemp($template);
+            $from_java = 1;
         }
     };
-    if ($@) {
-        # Fallback to pure Perl implementation
-        ($fd, $path) = _mkstemp_perl($template, $suffix);
+    if ($@ || !$from_java) {
+        # Fallback to pure Perl implementation - returns open filehandle
+        ($fh, $path) = _mkstemp_perl($template, $suffix);
     }
 
     return $path unless $open;
 
-    # Ignore the file descriptor and just open the file by path
-    # The Java side should have already closed its file descriptor
-    open(my $fh, '+<', $path) or croak "Could not open temp file: $!";
+    # For Java path, we need to reopen (Java closed the fd)
+    # For Perl path, we already have the filehandle
+    if ($from_java || !defined $fh) {
+        open($fh, '+<', $path) or croak "Could not open temp file: $!";
+    }
     binmode($fh);
+
+    # Apply custom permissions AFTER we have the filehandle open
+    if (defined $perms && -e $path) {
+        chmod($perms, $path);
+    }
 
     # Set up cleanup if needed
     if ($unlink) {
@@ -234,6 +250,11 @@ sub tempfile {
 
 sub tempdir {
     my ($template, %args) = _parse_args(@_);
+
+    # Handle TEMPLATE option (alternative to positional template)
+    if (!defined $template && exists $args{TEMPLATE}) {
+        $template = delete $args{TEMPLATE};
+    }
 
     # Set defaults
     my $dir     = $args{DIR};
@@ -497,7 +518,8 @@ sub _mkstemp_perl {
     for (my $i = 0; $i < 256; $i++) {
         my $path = _replace_XX($template) . $suffix;
         if (sysopen(my $fh, $path, O_RDWR | O_CREAT | O_EXCL, 0600)) {
-            return (fileno($fh), $path);
+            # Return the open filehandle and path
+            return ($fh, $path);
         }
     }
 
