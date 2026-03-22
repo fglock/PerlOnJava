@@ -67,7 +67,7 @@ public class PerlCompilerException extends RuntimeException {
             }
             String fileName = caller.elements.get(1).toString();
             int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
-            return message + " at " + fileName + " line " + line + "\n";
+            return message + " at " + fileName + " line " + line + ".\n";
         } catch (Throwable t) {
             // caller() failed (e.g. mid-exception in interpreter) — use bare message
             return message + "\n";

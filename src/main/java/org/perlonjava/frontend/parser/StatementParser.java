@@ -526,6 +526,9 @@ public class StatementParser {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("use: " + token.text);
         boolean isNoDeclaration = token.text.equals("no");
 
+        // Capture token index for caller() before consuming any tokens
+        int useTokenIndex = parser.tokenIndex;
+        
         TokenUtils.consume(parser);   // "use"
         token = TokenUtils.peek(parser);
 
@@ -627,11 +630,12 @@ public class StatementParser {
             // execute the statement immediately, using:
             // `require "fullName.pm"`
 
-            // Setup the caller stack
+            // Setup the caller stack - use getSourceLocationAccurate to honor #line directives
+            ErrorMessageUtil.SourceLocation loc = ctx.errorUtil.getSourceLocationAccurate(useTokenIndex);
             CallerStack.push(
                     ctx.symbolTable.getCurrentPackage(),
-                    ctx.compilerOptions.fileName,
-                    ctx.errorUtil.getLineNumber(parser.tokenIndex));
+                    loc.fileName(),
+                    loc.lineNumber());
             try {
 
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));

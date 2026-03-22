@@ -232,9 +232,11 @@ public class Universal extends PerlModuleBase {
         // Get the linearized inheritance hierarchy using C3
         List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
 
-        // Normalize the argument: main::Foo -> Foo, ::Foo -> Foo
+        // Normalize the argument: main::Foo -> Foo, ::Foo -> Foo, Foo'Bar -> Foo::Bar
         // This is needed because isa("main::Foo") should match a class blessed as "Foo"
         String normalizedArg = argString;
+        // First normalize old-style ' separator to ::
+        normalizedArg = NameNormalizer.normalizePackageName(normalizedArg);
         if (normalizedArg.startsWith("main::")) {
             normalizedArg = normalizedArg.substring(6);
         } else if (normalizedArg.startsWith("::")) {

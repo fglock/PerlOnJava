@@ -615,12 +615,22 @@ public class ModuleOperators {
         FeatureFlags outerFeature = featureManager;
         String savedPackage = InterpreterState.currentPackage.get().toString();
         
+        // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
+        // In Perl >= 5.11 (which we emulate), hints don't leak into require'd files.
+        // The hints hash affects compile-time behavior (strict, warnings, features),
+        // and a required module should start with clean compile-time state.
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        java.util.Map<String, RuntimeScalar> savedHintHash = new java.util.HashMap<>(hintHash.elements);
+        
         // Notify B::Hooks::EndOfScope that we're starting to load a file
         // This enables on_scope_end callbacks to know which file they belong to
         BHooksEndOfScope.beginFileLoad(parsedArgs.fileName);
         
         try {
             featureManager = new FeatureFlags();
+            
+            // Clear the hints hash for a fresh compilation context
+            hintHash.elements.clear();
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
 
@@ -643,6 +653,10 @@ public class ModuleOperators {
             
             featureManager = outerFeature;
             InterpreterState.currentPackage.get().set(savedPackage);
+            
+            // Restore the caller's hints hash
+            hintHash.elements.clear();
+            hintHash.elements.putAll(savedHintHash);
         }
 
         // Return result based on context
@@ -732,7 +746,8 @@ public class ModuleOperators {
             RuntimeScalar incEntry = incHash.elements.get(fileName);
             if (!incEntry.defined().getBoolean()) {
                 // This was a compilation failure, throw the cached error
-                throw new PerlCompilerException("Compilation failed in require at " + fileName);
+                // Perl outputs: "Attempt to reload <file> aborted.\nCompilation failed in require at ..."
+                throw new PerlCompilerException("Attempt to reload " + fileName + " aborted.\nCompilation failed in require at " + fileName);
             }
             // module was already loaded successfully - always return exactly 1
             return getScalarInt(1);
@@ -763,7 +778,22 @@ public class ModuleOperators {
                 message = fileName + " did not return a true value";
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
-                message = "Can't locate " + fileName + " in @INC";
+                // Derive module name from filename for helpful error message
+                String moduleName = fileName;
+                if (moduleName.endsWith(".pm")) {
+                    moduleName = moduleName.substring(0, moduleName.length() - 3);
+                }
+                moduleName = moduleName.replace("/", "::");
+                
+                // Build @INC list for error message
+                RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
+                StringBuilder incList = new StringBuilder();
+                for (int i = 0; i < incArray.size(); i++) {
+                    if (i > 0) incList.append(" ");
+                    incList.append(incArray.get(i).toString());
+                }
+                
+                message = "Can't locate " + fileName + " in @INC (you may need to install the " + moduleName + " module) (@INC entries checked: " + incList + ")";
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {

@@ -184,6 +184,24 @@ public class NameNormalizer {
     }
 
     /**
+     * Normalizes a package name by converting old-style single-quote separator to '::'.
+     * In Perl, "Foo'Bar" is equivalent to "Foo::Bar".
+     *
+     * @param packageName The package name to normalize.
+     * @return The normalized package name with '::' separators.
+     */
+    public static String normalizePackageName(String packageName) {
+        if (packageName == null || packageName.isEmpty()) {
+            return packageName;
+        }
+        // Replace old-style ' separator with ::
+        if (packageName.indexOf('\'') >= 0) {
+            return packageName.replace("'", "::");
+        }
+        return packageName;
+    }
+
+    /**
      * Composite key for name cache to avoid string concatenation overhead.
      * Using a record provides efficient hashCode/equals with no allocation.
      */

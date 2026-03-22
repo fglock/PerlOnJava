@@ -18,11 +18,12 @@ import static java.util.regex.Pattern.*;
  * @param isDotAll             s flag - dot matches all characters including newline
  * @param isExtended           x flag - ignore whitespace and # comments in pattern
  * @param preservesMatch       p flag - preserve match after failed matches
+ * @param isUnicode            u flag - Unicode semantics (\w, \d, \s match Unicode)
  */
 public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
-                         boolean isDotAll, boolean isExtended, boolean preservesMatch) {
+                         boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         return new RegexFlags(
@@ -38,7 +39,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("m"),
                 modifiers.contains("s"),
                 modifiers.contains("x"),
-                modifiers.contains("p")
+                modifiers.contains("p"),
+                modifiers.contains("u")
         );
     }
 
@@ -63,6 +65,12 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
     public int toPatternFlags() {
         int flags = 0;
+        
+        // /u flag enables Unicode semantics for \w, \d, \s
+        if (isUnicode) {
+            flags |= UNICODE_CHARACTER_CLASS;
+        }
+        
         if (isCaseInsensitive) {
             // For proper Unicode case-insensitive matching, we need both flags:
             // - CASE_INSENSITIVE: enables case-insensitive matching
@@ -89,6 +97,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         boolean newIsDotAll = this.isDotAll;
         boolean newIsExtended = this.isExtended;
         boolean newPreservesMatch = this.preservesMatch;
+        boolean newIsUnicode = this.isUnicode;
 
         // Handle positive flags
         if (positiveFlags.indexOf('n') >= 0) newFlagN = true;
@@ -97,6 +106,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (positiveFlags.indexOf('s') >= 0) newIsDotAll = true;
         if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
         if (positiveFlags.indexOf('p') >= 0) newPreservesMatch = true;
+        if (positiveFlags.indexOf('u') >= 0) newIsUnicode = true;
 
         // Handle negative flags
         if (negativeFlags.indexOf('n') >= 0) newFlagN = false;
@@ -104,6 +114,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (negativeFlags.indexOf('m') >= 0) newIsMultiLine = false;
         if (negativeFlags.indexOf('s') >= 0) newIsDotAll = false;
         if (negativeFlags.indexOf('x') >= 0) newIsExtended = false;
+        if (negativeFlags.indexOf('u') >= 0) newIsUnicode = false;
 
         return new RegexFlags(
                 this.isGlobalMatch,
@@ -118,7 +129,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 newIsMultiLine,
                 newIsDotAll,
                 newIsExtended,
-                newPreservesMatch
+                newPreservesMatch,
+                newIsUnicode
         );
     }
 
@@ -133,6 +145,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isNonCapturing) flagString.append('n');
         if (isExtended) flagString.append('x');
         if (isNonDestructive) flagString.append('r');
+        if (isUnicode) flagString.append('u');
 
         return flagString.toString();
     }

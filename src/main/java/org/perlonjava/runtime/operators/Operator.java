@@ -276,17 +276,18 @@ public class Operator {
         int length = hasExplicitLength ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
         String replacement = (size > 3) ? args[3].toString() : null;
 
-        // Store original offset and length for LValue creation
-        int originalOffset = offset;
-        int originalLength = length;
-
         // Handle negative offsets (count from the end of the string)
         if (offset < 0) {
             offset = strLength + offset;
-            // When no explicit length is provided, Perl clips negative offsets to 0 (no warning)
-            // When explicit length IS provided, Perl warns and returns undef for too-negative offsets
+            // When computed offset goes negative (before string start):
+            // - Clip offset to 0
+            // - Reduce length by the overshoot amount
+            // Example: substr("a", -2, 2) -> offset=-1, clip to 0, length=2+(-1)=1, returns "a"
+            // But: substr("hello", -10, 1) -> offset=-5, length=1+(-5)=-4 → warn and return undef
             if (offset < 0) {
-                if (hasExplicitLength) {
+                // Check if adjusted length would be non-positive (Perl warns in this case)
+                int adjustedLength = length + offset;
+                if (adjustedLength <= 0) {
                     // Warn and return undef (same as positive offset out of bounds)
                     if (warnEnabled) {
                         WarnDie.warn(new RuntimeScalar("substr outside of string"),
@@ -295,14 +296,14 @@ public class Operator {
                     if (replacement != null) {
                         return new RuntimeScalar();
                     }
-                    var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", originalOffset, originalLength);
+                    var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
                     lvalue.type = RuntimeScalarType.UNDEF;
                     lvalue.value = null;
                     return lvalue;
-                } else {
-                    // Clip to 0 without warning
-                    offset = 0;
                 }
+                // Reduce length by the overshoot (negative offset value)
+                length = adjustedLength;
+                offset = 0;
             }
         }
 
@@ -315,7 +316,7 @@ public class Operator {
             if (replacement != null) {
                 return new RuntimeScalar();
             }
-            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", originalOffset, originalLength);
+            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, length);
             lvalue.type = RuntimeScalarType.UNDEF;
             lvalue.value = null;
             return lvalue;
@@ -332,6 +333,17 @@ public class Operator {
         // Ensure length is non-negative and within bounds
         length = Math.max(0, Math.min(length, strLength - offset));
 
+        // If length is zero or negative after all adjustments, return empty string
+        if (length <= 0) {
+            if (replacement != null) {
+                // With replacement, still need to handle the replacement at position 0
+                var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
+                lvalue.set(replacement);
+                return new RuntimeScalar("");
+            }
+            return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
+        }
+
         // Extract the substring (offset/length are in Unicode code points)
         int startIndex = str.offsetByCodePoints(0, offset);
         int endIndex = str.offsetByCodePoints(startIndex, length);
@@ -339,7 +351,8 @@ public class Operator {
 
         // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
         // This allows for in-place modification of the original string if needed
-        var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], result, originalOffset, originalLength);
+        // Pass the adjusted offset and length, not the originals
+        var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], result, offset, length);
 
         if (replacement != null) {
             // When replacement is provided, save the extracted substring before modifying

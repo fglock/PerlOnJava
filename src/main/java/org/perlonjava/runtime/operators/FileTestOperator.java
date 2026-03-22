@@ -81,7 +81,7 @@ public class FileTestOperator {
         }
         String fileName = caller.elements.get(1).toString();
         int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
-        return new RuntimeScalar(" at " + fileName + " line " + line + "\n");
+        return new RuntimeScalar(" at " + fileName + " line " + line + ".\n");
     }
 
     private static String filehandleShortName(RuntimeScalar fileHandle) {

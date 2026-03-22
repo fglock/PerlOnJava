@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.mro;
 
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -91,6 +92,8 @@ public class DFS {
             String parentName = entity.toString();
             // FIXED: Skip empty or null parent names
             if (parentName != null && !parentName.isEmpty()) {
+                // Normalize old-style ' separator to :: (e.g., Foo'Bar -> Foo::Bar)
+                parentName = NameNormalizer.normalizePackageName(parentName);
                 parents.add(parentName);
             }
         }

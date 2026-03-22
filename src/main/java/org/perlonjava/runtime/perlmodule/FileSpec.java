@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.SystemUtils;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -425,7 +426,22 @@ public class FileSpec extends PerlModuleBase {
         }
         String path = args.get(1).toString();
         String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
-        String relPath = Paths.get(base).relativize(Paths.get(path)).toString();
+        
+        // Ensure both paths are absolute before relativizing (like Perl does)
+        // Note: We use user.dir explicitly because Java's Path.toAbsolutePath() 
+        // doesn't respect System.setProperty("user.dir", ...) set by chdir()
+        Path pathObj = Paths.get(path);
+        Path baseObj = Paths.get(base);
+        String userDir = System.getProperty("user.dir");
+        
+        if (!pathObj.isAbsolute()) {
+            pathObj = Paths.get(userDir).resolve(pathObj).normalize();
+        }
+        if (!baseObj.isAbsolute()) {
+            baseObj = Paths.get(userDir).resolve(baseObj).normalize();
+        }
+        
+        String relPath = baseObj.relativize(pathObj).toString();
         return new RuntimeScalar(relPath).getList();
     }
 
@@ -454,8 +470,14 @@ public class FileSpec extends PerlModuleBase {
             return new RuntimeScalar(absPath).getList();
         }
 
+        // If base is relative, resolve it against current working directory first
+        Path basePath = Paths.get(base);
+        if (!basePath.isAbsolute()) {
+            basePath = Paths.get(System.getProperty("user.dir")).resolve(basePath);
+        }
+
         // For relative paths, resolve against the base directory
-        String absPath = Paths.get(base, path).toAbsolutePath().normalize().toString();
+        String absPath = basePath.resolve(path).normalize().toString();
         return new RuntimeScalar(absPath).getList();
     }
 }
