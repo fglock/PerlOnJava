@@ -53,12 +53,44 @@ public class Base extends PerlModuleBase {
         RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
         String inheritor = callerList.scalar().toString();
 
+        // Keep track of bases we're adding in this import call
+        java.util.List<String> basesToAdd = new java.util.ArrayList<>();
+
         // Process each base class specified in the arguments
         for (RuntimeScalar baseClass : args.elements) {
             String baseClassName = baseClass.toString();
 
             if (baseClassName.equals(inheritor)) {
                 System.err.println("Warning: Class '" + inheritor + "' tried to inherit from itself");
+                continue;
+            }
+
+            // Check if inheritor or any base we're adding already isa this base class
+            // This matches Perl's base.pm line 92: next if grep $_->isa($base), ($inheritor, @bases);
+            boolean shouldSkip = false;
+            
+            // Check if inheritor already isa baseClassName
+            RuntimeArray isaArgs = new RuntimeArray();
+            RuntimeArray.push(isaArgs, new RuntimeScalar(inheritor));
+            RuntimeArray.push(isaArgs, new RuntimeScalar(baseClassName));
+            if (Universal.isa(isaArgs, RuntimeContextType.SCALAR).getBoolean()) {
+                shouldSkip = true;
+            }
+            
+            // Check if any of the bases we're adding already isa baseClassName
+            if (!shouldSkip) {
+                for (String addedBase : basesToAdd) {
+                    RuntimeArray isaArgs2 = new RuntimeArray();
+                    RuntimeArray.push(isaArgs2, new RuntimeScalar(addedBase));
+                    RuntimeArray.push(isaArgs2, new RuntimeScalar(baseClassName));
+                    if (Universal.isa(isaArgs2, RuntimeContextType.SCALAR).getBoolean()) {
+                        shouldSkip = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (shouldSkip) {
                 continue;
             }
 
@@ -77,8 +109,13 @@ public class Base extends PerlModuleBase {
                 }
             }
 
-            // Add the base class to the @ISA array of the inheritor
-            RuntimeArray isa = getGlobalArray(inheritor + "::ISA");
+            // Add to our list of bases to add
+            basesToAdd.add(baseClassName);
+        }
+
+        // Add all the bases to @ISA at the end (like Perl's base.pm line 138)
+        RuntimeArray isa = getGlobalArray(inheritor + "::ISA");
+        for (String baseClassName : basesToAdd) {
             RuntimeArray.push(isa, new RuntimeScalar(baseClassName));
         }
 
