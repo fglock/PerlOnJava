@@ -343,11 +343,10 @@ public class CustomFileChannel implements IOHandle {
      * Gets the file descriptor number for this channel.
      *
      * <p>Java's FileChannel does not expose the underlying OS file descriptor.
-     * We return a synthetic file descriptor based on the object's identity hash,
-     * starting from 3 (to avoid collision with stdin=0, stdout=1, stderr=2).
-     * This allows Perl code that checks {@code defined fileno($fh)} to work correctly.
+     * We return undef to match Perl's behavior for handles without a real fd.
+     * Note: Validity checks should be done in the Java backend, not via fileno().
      *
-     * @return RuntimeScalar with a synthetic file descriptor number
+     * @return RuntimeScalar with undef (Java doesn't expose real fds)
      */
     @Override
     public RuntimeScalar fileno() {

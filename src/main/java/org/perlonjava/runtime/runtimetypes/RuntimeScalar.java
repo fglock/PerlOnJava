@@ -987,7 +987,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not an ARRAY reference");
                 }
                 RuntimeGlob glob = (RuntimeGlob) value;
-                yield GlobalVariable.getGlobalArray(glob.globName);
+                // For anonymous globs, use the getGlobArray method which handles local slots
+                yield glob.getGlobArray();
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not an ARRAY reference");
@@ -1069,7 +1070,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not a HASH reference");
                 }
                 RuntimeGlob glob = (RuntimeGlob) value;
-                yield GlobalVariable.getGlobalHash(glob.globName);
+                // For anonymous globs, use the getGlobHash method which handles local slots
+                yield glob.getGlobHash();
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not a HASH reference");
@@ -1113,7 +1115,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Dereferencing a glob as scalar returns the scalar slot
                 // e.g., ${*Foo::VERSION} or ${$glob} where $glob is a glob
                 if (value instanceof RuntimeGlob glob) {
-                    yield GlobalVariable.getGlobalVariable(glob.globName);
+                    // Use the glob's hashDerefGet method which handles anonymous globs
+                    yield glob.hashDerefGet(new RuntimeScalar("SCALAR"));
                 }
                 throw new PerlCompilerException("Not a SCALAR reference");
             }
@@ -1158,7 +1161,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 if (value instanceof RuntimeGlob glob) {
-                    yield GlobalVariable.getGlobalVariable(glob.globName);
+                    // Use the glob's hashDerefGet method which handles anonymous globs
+                    yield glob.hashDerefGet(new RuntimeScalar("SCALAR"));
                 }
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);
@@ -1235,7 +1239,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> { // 7
                 // When dereferencing a typeglob as a hash, return the hash slot
                 RuntimeGlob glob = (RuntimeGlob) value;
-                yield GlobalVariable.getGlobalHash(glob.globName);
+                // For anonymous globs, use the getGlobHash method which handles local slots
+                yield glob.getGlobHash();
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not a HASH reference");
@@ -1304,7 +1309,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> { // 7
                 // When dereferencing a typeglob as an array, return the array slot
                 RuntimeGlob glob = (RuntimeGlob) value;
-                yield GlobalVariable.getGlobalArray(glob.globName);
+                // For anonymous globs, use the getGlobArray method which handles local slots
+                yield glob.getGlobArray();
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not an ARRAY reference");

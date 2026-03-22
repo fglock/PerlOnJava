@@ -74,16 +74,37 @@ public class Version extends PerlModuleBase {
         if (version.isEmpty()) {
             throw new PerlCompilerException("Invalid version format (version required)");
         }
+        
+        // Preserve the original version string before any modifications
+        RuntimeScalar originalVersionStr = versionStr;
+        
+        // Track whether the original input was a v-string (starts with 'v')
+        boolean originalIsVString = version.startsWith("v");
+        
         if (versionStr.type == DOUBLE) {
+            // Format with enough precision but strip trailing zeros
             version = String.format("%.6f", versionStr.getDouble());
+            // Remove trailing zeros after decimal point, but keep at least one decimal place
+            version = version.replaceAll("0+$", "").replaceAll("\\.$", ".0");
+            // Actually, Perl keeps the exact representation, so just strip trailing zeros
+            if (version.contains(".")) {
+                version = version.replaceAll("0+$", "");
+                // Remove trailing dot if all decimals were zeros (e.g., "1." -> "1")
+                if (version.endsWith(".")) {
+                    version = version.substring(0, version.length() - 1);
+                }
+            }
+            originalVersionStr = new RuntimeScalar(version);
         } else if (!version.startsWith("v")) {
             // Count the number of dots
             long dotCount = version.chars().filter(ch -> ch == '.').count();
 
-            // If exactly one dot, prepend "v"
+            // If exactly one dot, prepend "v" for internal processing
+            // but keep the original for stringify() and qv flag
             if (dotCount == 1 && version.length() < 4) {
                 version = "v" + version;
-                versionStr = new RuntimeScalar(version);
+                // Note: originalVersionStr stays as the user's input (e.g., "1.0")
+                // Note: originalIsVString remains false - this is a decimal version
             }
         }
 
@@ -91,10 +112,12 @@ public class Version extends PerlModuleBase {
         RuntimeHash versionObj = new RuntimeHash();
 
         // Parse the version string
+        // Use originalIsVString to determine qv, not the modified version string
         if (version.startsWith("v")) {
-            // v-string format
+            // v-string format (either originally or for internal processing)
             versionObj.put("alpha", scalarFalse);
-            versionObj.put("qv", scalarTrue);
+            // qv is true only if the ORIGINAL input was a v-string
+            versionObj.put("qv", getScalarBoolean(originalIsVString));
 
             // Parse components
             String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(version));
@@ -112,7 +135,7 @@ public class Version extends PerlModuleBase {
             versionObj.put("version", new RuntimeScalar(normalized));
         }
 
-        versionObj.put("original", versionStr);
+        versionObj.put("original", originalVersionStr);
 
         // Bless the object
         RuntimeScalar blessed = versionObj.createReference();
