@@ -219,7 +219,9 @@ warning_like { DateTime->_warn('test') } qr/test/;
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete
+### Current Status: COMPLETE (2024-03-22)
+
+All phases implemented and tested. DateTime t/46warnings.t passes 6/6.
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2024-03-22)
@@ -228,14 +230,27 @@ warning_like { DateTime->_warn('test') } qr/test/;
   - Added `getLastScopeId()`, `clearLastScopeId()`
   - Files: `WarningFlags.java`
 
-### Next Steps
-1. Phase 2: Modify `noWarnings()` to call `registerScopeWarnings()`
-2. Phase 3: Initialize `$^WARNING_SCOPE` in GlobalContext
-3. Phase 4: Emit `local $^WARNING_SCOPE` in StatementParser
-4. Phase 5: Check scope in `warnIf()`
-5. Run DateTime t/46warnings.t to verify
+- [x] Phase 2: noWarnings() Registration (2024-03-22)
+  - Modified `noWarnings()` to collect categories and call `registerScopeWarnings()`
+  - Files: `Warnings.java`
 
-### Open Questions
-- Should we use `$^WARNING_SCOPE` (special var) or `${^WARNING_SCOPE}` (caret var)?
-- Should scope IDs be cleared when compilation unit ends, or kept for entire runtime?
-- Memory management: should we clean up old scope entries?
+- [x] Phase 3: Global Variable (2024-03-22)
+  - Added `${^WARNING_SCOPE}` initialization to GlobalContext
+  - Added `WARNING_SCOPE` constant
+  - Files: `GlobalContext.java`
+
+- [x] Phase 4: Code Generation (2024-03-22)
+  - Added `warningScopeId` field to `CompilerFlagNode`
+  - Modified StatementParser to pass scope ID from `noWarnings()` to `CompilerFlagNode`
+  - Modified `EmitCompilerFlag` to emit `local ${^WARNING_SCOPE} = scopeId`
+  - Modified `FindDeclarationVisitor` to detect `CompilerFlagNode` with scope ID for cleanup
+  - Files: `CompilerFlagNode.java`, `StatementParser.java`, `EmitCompilerFlag.java`, `FindDeclarationVisitor.java`
+
+- [x] Phase 5: warnIf() Check (2024-03-22)
+  - Modified `warnIf()` to check `${^WARNING_SCOPE}` before emitting warnings
+  - Files: `Warnings.java`
+
+### Resolved Questions
+- Using `${^WARNING_SCOPE}` (caret variable syntax via `encodeSpecialVar`)
+- Scope IDs are kept for entire runtime (no cleanup needed - they're small integers)
+- Memory is bounded by number of unique `no warnings` statements in codebase

@@ -21,6 +21,7 @@ public class GlobalContext {
     // Special variables internal names
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
     public static final String OPEN = encodeSpecialVar("OPEN"); // $^OPEN
+    public static final String WARNING_SCOPE = encodeSpecialVar("WARNING_SCOPE"); // ${^WARNING_SCOPE}
 
     // Virtual directory names for JAR-embedded Perl resources
     // E.g., @INC contains "jar:PERL5LIB", %INC contains "jar:PERL5LIB/DBI.pm"
@@ -111,6 +112,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("A")).set("");    // initialize $^A to "" - format accumulator variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("P")).set(0);    // initialize $^P to 0 - debugger flags
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("WARNING_SCOPE")).set(0);    // initialize ${^WARNING_SCOPE} to 0 - runtime warning scope ID
         // Initialize $^I (in-place editing extension) from -i switch
         if (compilerOptions.inPlaceEdit) {
             GlobalVariable.getGlobalVariable(encodeSpecialVar("I")).set(

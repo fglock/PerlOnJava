@@ -3,6 +3,9 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
  */
@@ -86,16 +89,19 @@ public class Warnings extends PerlModuleBase {
      * Disables a warning category.
      * This is called for "no warnings 'category'".
      * Warning state is handled at compile time via the symbol table (like strict).
-     * Note: Per-scope warning state is tracked via the symbol table's warning flags,
-     * which are properly scoped during compilation.
+     * Additionally, registers the disabled categories for runtime scope checking
+     * via $^WARNING_SCOPE mechanism (see dev/design/warnings-scope.md).
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList.
      */
     public static RuntimeList noWarnings(RuntimeArray args, int ctx) {
+        Set<String> categories = new HashSet<>();
+        
         if (args.size() <= 1) {
             // no warnings; - suppress all warnings
+            categories.add("all");
             warningManager.disableWarning("all");
         } else {
             for (int i = 1; i < args.size(); i++) {
@@ -103,9 +109,13 @@ public class Warnings extends PerlModuleBase {
                 if (!warningExists(category)) {
                     throw new PerlCompilerException("Unknown warnings category '" + category + "'");
                 }
+                categories.add(category);
                 warningManager.disableWarning(category);
             }
         }
+        
+        // Register scope for runtime checking (sets lastScopeId for StatementParser)
+        WarningFlags.registerScopeWarnings(categories);
         
         return new RuntimeScalar().getList();
     }
@@ -155,6 +165,7 @@ public class Warnings extends PerlModuleBase {
     /**
      * Issues a warning if the category is enabled.
      * When called with just a message, checks if the calling package's warning category is enabled.
+     * Also checks ${^WARNING_SCOPE} for runtime warning suppression via "no warnings 'category'".
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -182,6 +193,15 @@ public class Warnings extends PerlModuleBase {
             } else {
                 category = "main";
             }
+        }
+        
+        // Check runtime scope suppression via ${^WARNING_SCOPE}
+        // This allows "no warnings 'Category'" in user code to propagate to warnif() calls
+        RuntimeScalar scopeVar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        int scopeId = scopeVar.getInt();
+        if (scopeId > 0 && WarningFlags.isWarningDisabledInScope(scopeId, category)) {
+            // Warning is suppressed by caller's "no warnings"
+            return new RuntimeScalar().getList();
         }
         
         if (warningManager.isWarningEnabled(category)) {

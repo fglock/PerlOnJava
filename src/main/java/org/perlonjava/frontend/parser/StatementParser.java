@@ -28,6 +28,8 @@ import static org.perlonjava.frontend.parser.StringParser.parseVstring;
 import static org.perlonjava.runtime.operators.VersionHelper.normalizeVersion;
 import static org.perlonjava.runtime.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
+import static org.perlonjava.runtime.runtimetypes.WarningFlags.getLastScopeId;
+import static org.perlonjava.runtime.runtimetypes.WarningFlags.clearLastScopeId;
 import static org.perlonjava.runtime.perlmodule.Warnings.useWarnings;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.packageExistsCache;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -709,13 +711,22 @@ public class StatementParser {
             }
         }
 
-        // return the current compiler flags (marked as compile-time only to skip DEBUG opcodes)
+        // Get warning scope ID if "no warnings" was called (for runtime propagation)
+        int warningScopeId = getLastScopeId();
+        clearLastScopeId();
+
+        // return the current compiler flags
+        // If warningScopeId > 0, this node needs to emit runtime code for local ${^WARNING_SCOPE}
         CompilerFlagNode result = new CompilerFlagNode(
                 (java.util.BitSet) ctx.symbolTable.warningFlagsStack.getLast().clone(),
                 ctx.symbolTable.featureFlagsStack.getLast(),
                 ctx.symbolTable.strictOptionsStack.getLast(),
+                warningScopeId,
                 parser.tokenIndex);
-        result.setAnnotation("compileTimeOnly", true);
+        // Only mark as compileTimeOnly if no runtime code is needed
+        if (warningScopeId == 0) {
+            result.setAnnotation("compileTimeOnly", true);
+        }
         return result;
     }
 

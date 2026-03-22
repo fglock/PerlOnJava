@@ -213,5 +213,10 @@ public class FindDeclarationVisitor implements Visitor {
 
     @Override
     public void visit(CompilerFlagNode node) {
+        // CompilerFlagNode with warningScopeId > 0 emits a local assignment
+        // for ${^WARNING_SCOPE}, which needs scope cleanup
+        if (node.getWarningScopeId() > 0) {
+            containsLocalOperator = true;
+        }
     }
 }
