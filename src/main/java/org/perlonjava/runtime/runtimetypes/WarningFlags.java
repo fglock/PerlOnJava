@@ -186,6 +186,20 @@ public class WarningFlags {
     }
     
     /**
+     * Checks if a warning category is suppressed at runtime via ${^WARNING_SCOPE}.
+     * This is a convenience method for checking runtime suppression without
+     * needing to access GlobalVariable directly.
+     *
+     * @param category The warning category to check.
+     * @return True if the category is suppressed in the current runtime scope.
+     */
+    public static boolean isWarningSuppressedAtRuntime(String category) {
+        RuntimeScalar scopeVar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        int scopeId = scopeVar.getInt();
+        return scopeId > 0 && isWarningDisabledInScope(scopeId, category);
+    }
+    
+    /**
      * Expands a warning category to include all its subcategories.
      *
      * @param category The category to expand.
