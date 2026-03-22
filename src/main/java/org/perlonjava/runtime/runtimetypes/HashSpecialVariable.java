@@ -96,11 +96,14 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
             // Process each key to extract the namespace part
             Set<String> uniqueKeys = new HashSet<>(); // Set to track unique keys
+            boolean isMainStash = "main::".equals(namespace);
             for (String key : allKeys) {
+                String entryKey = null;
+                String globName = null;
+
                 if (key.startsWith(namespace)) {
                     String remainingKey = key.substring(namespace.length());
                     int nextSeparatorIndex = remainingKey.indexOf("::");
-                    String entryKey;
                     if (nextSeparatorIndex == -1) {
                         entryKey = remainingKey;
                     } else {
@@ -108,23 +111,38 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                         // (e.g. "Foo::" not "Foo") - this is how Perl indicates sub-packages
                         entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
                     }
-
-                    // Special sort variables should not show up in stash enumeration
-                    if (entryKey.equals("a") || entryKey.equals("b")) {
-                        continue;
-                    }
-
-                    if (entryKey.isEmpty()) {
-                        continue;
-                    }
-
                     // entryKey already includes "::" for nested packages
-                    String globName = namespace + entryKey;
-
-                    // Add the entry only if it's not already in the set of unique keys
-                    if (uniqueKeys.add(entryKey)) {
-                        entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(globName, true)));
+                    globName = namespace + entryKey;
+                } else if (isMainStash) {
+                    // For %main::, also include top-level packages that aren't explicitly
+                    // prefixed with "main::". In Perl, $Foo::x and $main::Foo::x are the same.
+                    // Variables in top-level packages are stored as "Foo::x", not "main::Foo::x".
+                    int separatorIndex = key.indexOf("::");
+                    if (separatorIndex > 0) {
+                        // This is a top-level package (like "Foo::test")
+                        // Extract "Foo::" as the entry key
+                        entryKey = key.substring(0, separatorIndex + 2);
+                        // The glob name is the original key prefix
+                        globName = entryKey;
                     }
+                }
+
+                if (entryKey == null) {
+                    continue;
+                }
+
+                // Special sort variables should not show up in stash enumeration
+                if (entryKey.equals("a") || entryKey.equals("b")) {
+                    continue;
+                }
+
+                if (entryKey.isEmpty()) {
+                    continue;
+                }
+
+                // Add the entry only if it's not already in the set of unique keys
+                if (uniqueKeys.add(entryKey)) {
+                    entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(globName, true)));
                 }
             }
         }
