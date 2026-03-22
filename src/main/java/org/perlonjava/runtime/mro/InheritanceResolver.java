@@ -226,6 +226,8 @@ public class InheritanceResolver {
                 }
             }
             if (!parentName.isEmpty()) {
+                // Normalize old-style ' separator to :: (e.g., Foo'Bar -> Foo::Bar)
+                parentName = NameNormalizer.normalizePackageName(parentName);
                 parents.add(parentName);
             }
         }

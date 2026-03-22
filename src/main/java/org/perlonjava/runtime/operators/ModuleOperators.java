@@ -778,7 +778,22 @@ public class ModuleOperators {
                 message = fileName + " did not return a true value";
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
-                message = "Can't locate " + fileName + " in @INC";
+                // Derive module name from filename for helpful error message
+                String moduleName = fileName;
+                if (moduleName.endsWith(".pm")) {
+                    moduleName = moduleName.substring(0, moduleName.length() - 3);
+                }
+                moduleName = moduleName.replace("/", "::");
+                
+                // Build @INC list for error message
+                RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
+                StringBuilder incList = new StringBuilder();
+                for (int i = 0; i < incArray.size(); i++) {
+                    if (i > 0) incList.append(" ");
+                    incList.append(incArray.get(i).toString());
+                }
+                
+                message = "Can't locate " + fileName + " in @INC (you may need to install the " + moduleName + " module) (@INC entries checked: " + incList + ")";
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {
