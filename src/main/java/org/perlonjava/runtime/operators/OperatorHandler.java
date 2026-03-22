@@ -224,7 +224,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("bless", "bless", "org/perlonjava/runtime/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("ref", "ref", "org/perlonjava/runtime/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
-        put("caller", "caller", "org/perlonjava/runtime/runtimetypes/RuntimeCode", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
+        put("caller", "callerWithSub", "org/perlonjava/runtime/runtimetypes/RuntimeCode", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
         put("reset", "reset", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
         put("warn", "warn", "org/perlonjava/runtime/operators/WarnDie", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;");
         put("die", "die", "org/perlonjava/runtime/operators/WarnDie", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;");

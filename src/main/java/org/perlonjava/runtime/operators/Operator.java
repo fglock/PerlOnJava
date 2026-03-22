@@ -272,7 +272,8 @@ public class Operator {
         int size = args.length;
         int offset = ((RuntimeScalar) args[1]).getInt();
         // If length is not provided, use the rest of the string
-        int length = (size > 2) ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
+        boolean hasExplicitLength = size > 2;
+        int length = hasExplicitLength ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
         String replacement = (size > 3) ? args[3].toString() : null;
 
         // Store original offset and length for LValue creation
@@ -282,9 +283,31 @@ public class Operator {
         // Handle negative offsets (count from the end of the string)
         if (offset < 0) {
             offset = strLength + offset;
+            // When no explicit length is provided, Perl clips negative offsets to 0 (no warning)
+            // When explicit length IS provided, Perl warns and returns undef for too-negative offsets
+            if (offset < 0) {
+                if (hasExplicitLength) {
+                    // Warn and return undef (same as positive offset out of bounds)
+                    if (warnEnabled) {
+                        WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                                RuntimeScalarCache.scalarEmptyString);
+                    }
+                    if (replacement != null) {
+                        return new RuntimeScalar();
+                    }
+                    var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", originalOffset, originalLength);
+                    lvalue.type = RuntimeScalarType.UNDEF;
+                    lvalue.value = null;
+                    return lvalue;
+                } else {
+                    // Clip to 0 without warning
+                    offset = 0;
+                }
+            }
         }
 
-        if (offset < 0 || offset > strLength) {
+        // Only warn/error for positive offsets that exceed string length
+        if (offset > strLength) {
             if (warnEnabled) {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);

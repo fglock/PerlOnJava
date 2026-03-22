@@ -187,13 +187,17 @@ public class SystemOperator {
 
             if (captureOutput) {
                 // For backticks: capture stdout only, stderr already goes to terminal
+                // Read raw bytes to preserve exact output (including or excluding trailing newlines)
                 Thread stdoutThread = new Thread(() -> {
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(finalProcess.getInputStream()))) {
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            synchronized (finalOutput) {
-                                finalOutput.append(line).append("\n");
-                            }
+                    try (java.io.InputStream is = finalProcess.getInputStream()) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                        while ((bytesRead = is.read(buffer)) != -1) {
+                            baos.write(buffer, 0, bytesRead);
+                        }
+                        synchronized (finalOutput) {
+                            finalOutput.append(baos.toString());
                         }
                     } catch (IOException e) {
                         // Stream closed - this is normal when process terminates
@@ -438,24 +442,22 @@ public class SystemOperator {
             
             Process process = processBuilder.start();
             
-            // Read all output
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
+            // Read all output as raw bytes to preserve exact output
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            try (java.io.InputStream is = process.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    baos.write(buffer, 0, bytesRead);
                 }
             }
+            String capturedOutput = baos.toString();
             
             // Wait for process to complete
             int exitCode = process.waitFor();
             
             // Set $? to the exit status
             setGlobalVariable("main::?", String.valueOf(exitCode << 8));
-            
-            // Remove trailing newline if present (to match Perl behavior for single-line output)
-            String capturedOutput = output.toString();
             
             // Throw exception to return control to caller with captured output
             throw new ForkOpenCompleteException(
