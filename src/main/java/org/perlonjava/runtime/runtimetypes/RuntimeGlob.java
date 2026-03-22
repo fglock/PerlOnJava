@@ -18,6 +18,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
+    // Local scalar slot for anonymous globs (when globName is null)
+    private RuntimeScalar scalarSlot;
+    // Local array slot for anonymous globs (when globName is null)
+    private RuntimeArray arraySlot;
+    // Local hash slot for anonymous globs (when globName is null)
+    private RuntimeHash hashSlot;
 
     /**
      * Constructor for RuntimeGlob.
@@ -330,7 +336,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * This is the common implementation for both strict and non-strict contexts.
      */
     private RuntimeScalar getGlobSlot(RuntimeScalar index) {
-        // System.out.println("glob getGlobSlot " + index.toString());
         return switch (index.toString()) {
             case "CODE" -> {
                 // Only return CODE ref if the subroutine is actually defined
@@ -367,8 +372,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 yield IO;
             }
-            case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
+            case "SCALAR" -> {
+                // For anonymous globs (null globName), use local scalarSlot
+                if (this.globName == null) {
+                    if (this.scalarSlot == null) {
+                        this.scalarSlot = new RuntimeScalar();
+                    }
+                    yield this.scalarSlot;
+                }
+                yield GlobalVariable.getGlobalVariable(this.globName);
+            }
             case "ARRAY" -> {
+                // For anonymous globs (null globName), use local arraySlot
+                if (this.globName == null) {
+                    if (this.arraySlot == null) {
+                        this.arraySlot = new RuntimeArray();
+                    }
+                    yield this.arraySlot.createReference();
+                }
                 // Only return reference if array exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalArray(this.globName)) {
                     yield GlobalVariable.getGlobalArray(this.globName).createReference();
@@ -376,6 +397,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(); // Return undef if array doesn't exist
             }
             case "HASH" -> {
+                // For anonymous globs (null globName), use local hashSlot
+                if (this.globName == null) {
+                    if (this.hashSlot == null) {
+                        this.hashSlot = new RuntimeHash();
+                    }
+                    yield this.hashSlot.createReference();
+                }
                 // Only return reference if hash exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalHash(this.globName)) {
                     yield GlobalVariable.getGlobalHash(this.globName).createReference();
@@ -389,6 +417,36 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     public RuntimeScalar getIO() {
         return this.IO;
+    }
+
+    /**
+     * Get the hash slot for this glob.
+     * For anonymous globs (null globName), uses the local hashSlot field.
+     * For named globs, retrieves from GlobalVariable.
+     */
+    public RuntimeHash getGlobHash() {
+        if (this.globName == null) {
+            if (this.hashSlot == null) {
+                this.hashSlot = new RuntimeHash();
+            }
+            return this.hashSlot;
+        }
+        return GlobalVariable.getGlobalHash(this.globName);
+    }
+
+    /**
+     * Get the array slot for this glob.
+     * For anonymous globs (null globName), uses the local arraySlot field.
+     * For named globs, retrieves from GlobalVariable.
+     */
+    public RuntimeArray getGlobArray() {
+        if (this.globName == null) {
+            if (this.arraySlot == null) {
+                this.arraySlot = new RuntimeArray();
+            }
+            return this.arraySlot;
+        }
+        return GlobalVariable.getGlobalArray(this.globName);
     }
 
     public RuntimeGlob setIO(RuntimeScalar io) {
