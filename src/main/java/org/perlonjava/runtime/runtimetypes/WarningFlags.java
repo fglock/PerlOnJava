@@ -12,6 +12,12 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 public class WarningFlags {
     // A hierarchy of warning categories
     private static final Map<String, String[]> warningHierarchy = new HashMap<>();
+    
+    // Custom warning categories registered via warnings::register
+    private static final Set<String> customCategories = new HashSet<>();
+    
+    // Global flag to track if "use warnings" has been called (for runtime checks)
+    private static boolean globalWarningsEnabled = false;
 
     static {
         // Initialize the hierarchy of warning categories
@@ -56,10 +62,60 @@ public class WarningFlags {
             warningSet.add(entry.getKey());
             warningSet.addAll(Arrays.asList(entry.getValue()));
         }
+        // Include custom categories registered via warnings::register
+        warningSet.addAll(customCategories);
         return new ArrayList<>(warningSet);
     }
 
+    /**
+     * Registers a custom warning category (used by warnings::register).
+     * If "all" warnings are already enabled in the current scope, also enables this category.
+     *
+     * @param category The name of the custom warning category to register.
+     */
+    public static void registerCategory(String category) {
+        customCategories.add(category);
+        // Add it to the hierarchy with no subcategories
+        if (!warningHierarchy.containsKey(category)) {
+            warningHierarchy.put(category, new String[]{});
+        }
+        // Register in the symbol table so it gets a bit position
+        ScopedSymbolTable.registerCustomWarningCategory(category);
+        
+        // If "all" warnings are already enabled, enable this new category too
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        if (symbolTable != null && symbolTable.isWarningCategoryEnabled("all")) {
+            symbolTable.enableWarningCategory(category);
+        }
+    }
+
+    /**
+     * Checks if a category is a registered custom warning category.
+     *
+     * @param category The name of the category to check.
+     * @return True if it's a registered custom category.
+     */
+    public static boolean isCustomCategory(String category) {
+        return customCategories.contains(category);
+    }
+    
+    /**
+     * Checks if warnings have been globally enabled via "use warnings".
+     * This is used for runtime warning checks where lexical scope isn't available.
+     *
+     * @return True if "use warnings" has been called.
+     */
+    public static boolean isGlobalWarningsEnabled() {
+        return globalWarningsEnabled;
+    }
+
     public void initializeEnabledWarnings() {
+        // Set global flag for runtime checks
+        globalWarningsEnabled = true;
+        
+        // Enable all warnings by enabling the "all" category
+        enableWarning("all");
+        
         // Enable deprecated warnings
         enableWarning("deprecated");
         enableWarning("deprecated::apostrophe_as_package_separator");
@@ -92,6 +148,11 @@ public class WarningFlags {
         enableWarning("glob");
         enableWarning("locale");
         enableWarning("substr");
+        
+        // Enable all custom categories that have been registered
+        for (String customCategory : customCategories) {
+            enableWarning(customCategory);
+        }
     }
 
     /**
@@ -135,12 +196,27 @@ public class WarningFlags {
 
     /**
      * Checks if a warning category is enabled.
+     * First checks the lexical scope, then falls back to global warnings flag.
      *
      * @param category The name of the warning category to check.
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(String category) {
-        return getCurrentScope().isWarningCategoryEnabled(category);
+        ScopedSymbolTable scope = getCurrentScope();
+        if (scope != null && scope.isWarningCategoryEnabled(category)) {
+            return true;
+        }
+        // Fall back to global flag for runtime checks
+        // If warnings are globally enabled and this isn't a disabled category, return true
+        if (globalWarningsEnabled) {
+            // Check if this specific category was explicitly disabled
+            if (scope != null && scope.isWarningCategoryDisabled(category)) {
+                return false;
+            }
+            // Built-in categories or custom categories are enabled when global warnings are on
+            return true;
+        }
+        return false;
     }
 
     /**

@@ -13,15 +13,31 @@ public class CompareOperators {
 
     /**
      * Gets the location string for warning messages using caller().
+     * Uses caller(1) to skip past internal frames and find user code location.
      */
     private static RuntimeScalar callerWhere() {
-        RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
-        if (caller.size() < 3) {
-            return new RuntimeScalar("\n");
+        // Try different caller levels to find a non-internal frame
+        for (int level = 0; level <= 2; level++) {
+            RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(level)), RuntimeContextType.LIST);
+            if (caller.size() >= 3) {
+                String fileName = caller.elements.get(1).toString();
+                // Skip internal Perl modules (Test::*, runtime modules)
+                if (fileName != null && !fileName.isEmpty() 
+                    && !fileName.contains("/Test/") 
+                    && !fileName.contains("\\Test\\")) {
+                    int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
+                    return new RuntimeScalar(" at " + fileName + " line " + line);
+                }
+            }
         }
-        String fileName = caller.elements.get(1).toString();
-        int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
-        return new RuntimeScalar(" at " + fileName + " line " + line);
+        // Fallback: use caller(0) result if no better frame found
+        RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
+        if (caller.size() >= 3) {
+            String fileName = caller.elements.get(1).toString();
+            int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
+            return new RuntimeScalar(" at " + fileName + " line " + line);
+        }
+        return new RuntimeScalar("\n");
     }
 
     /**
@@ -34,6 +50,18 @@ public class CompareOperators {
                     callerWhere());
         }
         if (!arg2.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
+                    callerWhere());
+        }
+    }
+
+    /**
+     * Checks if the spaceship result is undefined and emits a warning.
+     * In Perl, when <=> returns undef and it's used by a derived operator (>, <, etc.),
+     * a warning should be emitted because undef is being used in a numeric context.
+     */
+    private static void checkSpaceshipResult(RuntimeScalar result, String op) {
+        if (!result.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
                     callerWhere());
         }
@@ -62,6 +90,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "lt (<)");
                 return getScalarBoolean(result.getInt() < 0);
             }
         }
@@ -100,6 +129,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "le (<=)");
                 return getScalarBoolean(result.getInt() <= 0);
             }
         }
@@ -138,6 +168,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "gt (>)");
                 return getScalarBoolean(result.getInt() > 0);
             }
         }
@@ -179,6 +210,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "ge (>=)");
                 return getScalarBoolean(result.getInt() >= 0);
             }
         }
@@ -211,6 +243,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "eq (==)");
                 return getScalarBoolean(result.getInt() == 0);
             }
         }
@@ -248,6 +281,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "eq (==)");
                 return getScalarBoolean(result.getInt() == 0);
             }
         }
@@ -286,6 +320,7 @@ public class CompareOperators {
             // Try fallback to spaceship operator
             result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
+                checkSpaceshipResult(result, "ne (!=)");
                 return getScalarBoolean(result.getInt() != 0);
             }
         }

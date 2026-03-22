@@ -33,6 +33,25 @@ public class ScopedSymbolTable {
             featureBitPositions.put(feature, bitPosition++);
         }
     }
+    
+    // Track the next available bit position for dynamic categories
+    private static int nextWarningBitPosition = -1;
+    
+    /**
+     * Registers a custom warning category (used by warnings::register).
+     * This adds the category to the bit position map so it can be enabled/disabled.
+     *
+     * @param category The name of the custom warning category.
+     */
+    public static void registerCustomWarningCategory(String category) {
+        if (!warningBitPositions.containsKey(category)) {
+            if (nextWarningBitPosition < 0) {
+                // Initialize to one past the last position
+                nextWarningBitPosition = warningBitPositions.size();
+            }
+            warningBitPositions.put(category, nextWarningBitPosition++);
+        }
+    }
 
     // Stack to manage warning categories for each scope
     public final Stack<BitSet> warningFlagsStack = new Stack<>();

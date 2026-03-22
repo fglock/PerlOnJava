@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 /**
@@ -28,9 +29,25 @@ public class Warnings extends PerlModuleBase {
             warnings.registerMethod("unimport", "noWarnings", ";$");
             warnings.registerMethod("warn", "warn", "$;$");
             warnings.registerMethod("warnif", "warnIf", "$;$");
+            warnings.registerMethod("register_categories", "registerCategories", ";@");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Warnings method: " + e.getMessage());
         }
+    }
+
+    /**
+     * Registers custom warning categories (used by warnings::register).
+     *
+     * @param args The arguments - category names to register.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList registerCategories(RuntimeArray args, int ctx) {
+        for (int i = 0; i < args.size(); i++) {
+            String category = args.get(i).toString();
+            WarningFlags.registerCategory(category);
+        }
+        return new RuntimeScalar().getList();
     }
 
     /**
@@ -127,6 +144,7 @@ public class Warnings extends PerlModuleBase {
 
     /**
      * Issues a warning if the category is enabled.
+     * When called with just a message, checks if the calling package's warning category is enabled.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -136,10 +154,29 @@ public class Warnings extends PerlModuleBase {
         if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for warnIf()");
         }
-        String category = args.size() > 1 ? args.get(0).toString() : "all";
-        String message = args.get(args.size() - 1).toString();
+        
+        String category;
+        RuntimeScalar message;
+        
+        if (args.size() > 1) {
+            // warnif(category, message)
+            category = args.get(0).toString();
+            message = args.get(1);
+        } else {
+            // warnif(message) - check calling package's category
+            message = args.get(0);
+            // Get the calling package to use as category
+            RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
+            if (caller.size() > 0) {
+                category = caller.elements.get(0).toString();
+            } else {
+                category = "main";
+            }
+        }
+        
         if (warningManager.isWarningEnabled(category)) {
-            System.err.println("Warning: " + message);
+            // Use WarnDie.warn to go through $SIG{__WARN__}
+            WarnDie.warn(message, new RuntimeScalar(""));
         }
         return new RuntimeScalar().getList();
     }
