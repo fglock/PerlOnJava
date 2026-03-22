@@ -63,6 +63,11 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
     public int toPatternFlags() {
         int flags = 0;
+        
+        // Always enable UNICODE_CHARACTER_CLASS so \w, \d, \s match Unicode chars
+        // This matches Perl's default behavior where \w includes Unicode letters
+        flags |= UNICODE_CHARACTER_CLASS;
+        
         if (isCaseInsensitive) {
             // For proper Unicode case-insensitive matching, we need both flags:
             // - CASE_INSENSITIVE: enables case-insensitive matching
