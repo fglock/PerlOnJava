@@ -30,6 +30,16 @@ use overload (
     '""'  => \&stringify,
     '<=>' => \&vcmp,
     'cmp' => \&vcmp,
+    # Math operations are not supported - throw error
+    '+'   => \&_noop,
+    '-'   => \&_noop,
+    '*'   => \&_noop,
+    '/'   => \&_noop,
+    'abs' => \&_noop,
+    '+='  => \&_noop,
+    '-='  => \&_noop,
+    '*='  => \&_noop,
+    '/='  => \&_noop,
 );
 
 # avoid using Exporter
@@ -98,6 +108,11 @@ sub import {
 }
 
 # Additional methods that might be needed for version objects
+
+sub _noop {
+    require Carp;
+    Carp::croak("operation not supported with version object");
+}
 
 sub is_alpha {
     my ($self) = @_;

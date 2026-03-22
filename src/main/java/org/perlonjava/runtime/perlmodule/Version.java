@@ -82,7 +82,18 @@ public class Version extends PerlModuleBase {
         boolean originalIsVString = version.startsWith("v");
         
         if (versionStr.type == DOUBLE) {
+            // Format with enough precision but strip trailing zeros
             version = String.format("%.6f", versionStr.getDouble());
+            // Remove trailing zeros after decimal point, but keep at least one decimal place
+            version = version.replaceAll("0+$", "").replaceAll("\\.$", ".0");
+            // Actually, Perl keeps the exact representation, so just strip trailing zeros
+            if (version.contains(".")) {
+                version = version.replaceAll("0+$", "");
+                // Remove trailing dot if all decimals were zeros (e.g., "1." -> "1")
+                if (version.endsWith(".")) {
+                    version = version.substring(0, version.length() - 1);
+                }
+            }
             originalVersionStr = new RuntimeScalar(version);
         } else if (!version.startsWith("v")) {
             // Count the number of dots
