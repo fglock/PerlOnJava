@@ -43,31 +43,37 @@ public class ArgumentParser {
 
         // If no code was provided and no filename, try reading from stdin
         if (parsedArgs.code == null) {
-            try {
-                // Try to read from stdin - this will work for pipes, redirections, and interactive input
-                StringBuilder stdinContent = new StringBuilder();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+            // Check if we're reading from a pipe/redirection vs interactive terminal
+            boolean isInteractive = System.console() != null;
+            
+            // If interactive and we have -M modules, just run them without waiting for stdin
+            // This matches Perl behavior: perl -MModule=args runs the module and exits
+            if (isInteractive && !parsedArgs.moduleUseStatements.isEmpty()) {
+                parsedArgs.code = "";  // Empty code, just run the use statements
+            } else {
+                try {
+                    // Try to read from stdin - this will work for pipes, redirections, and interactive input
+                    StringBuilder stdinContent = new StringBuilder();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
-                // Check if we're reading from a pipe/redirection vs interactive terminal
-                boolean isInteractive = System.console() != null;
+                    if (isInteractive) {
+                        // Interactive mode - prompt the user and read until EOF (Ctrl+D)
+                        System.err.println("Enter Perl code (press Ctrl+D when done):");
+                    }
 
-                if (isInteractive) {
-                    // Interactive mode - prompt the user and read until EOF (Ctrl+D)
-                    System.err.println("Enter Perl code (press Ctrl+D when done):");
+                    // Read from stdin regardless of whether it's interactive or not
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stdinContent.append(line).append("\n");
+                    }
+
+                    if (stdinContent.length() > 0) {
+                        parsedArgs.code = stdinContent.toString();
+                        parsedArgs.fileName = "-"; // Indicate that code came from stdin
+                    }
+                } catch (IOException e) {
+                    // If we can't read from stdin, continue with normal error handling
                 }
-
-                // Read from stdin regardless of whether it's interactive or not
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    stdinContent.append(line).append("\n");
-                }
-
-                if (stdinContent.length() > 0) {
-                    parsedArgs.code = stdinContent.toString();
-                    parsedArgs.fileName = "-"; // Indicate that code came from stdin
-                }
-            } catch (IOException e) {
-                // If we can't read from stdin, continue with normal error handling
             }
         }
 

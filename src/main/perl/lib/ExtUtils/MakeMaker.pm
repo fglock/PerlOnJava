@@ -378,10 +378,11 @@ sub _create_stub_makefile {
     my $perl = $^X;
     
     # Build test command - run all t/*.t files using Perl for cross-platform compatibility
+    # Set PERL5LIB to include blib/lib and blib/arch so test subprocesses can find the module
     my $test_cmd;
     if (-d 't') {
         # Use Perl one-liner with Test::Harness for cross-platform test running
-        $test_cmd = qq{$perl -MTest::Harness -e "runtests(glob(q{t/*.t}))"};
+        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl -MTest::Harness -e "runtests(glob(q{t/*.t}))"};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
