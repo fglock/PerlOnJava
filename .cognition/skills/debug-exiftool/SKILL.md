@@ -23,7 +23,7 @@ You are debugging failures in the Image::ExifTool test suite running under PerlO
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
-**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+**IMPORTANT: Always commit or save changes BEFORE switching branches.** Use `git diff > backup.patch` to save uncommitted work, or commit to a WIP branch.
 
 ```bash
 git checkout -b fix/exiftool-issue-name
@@ -42,7 +42,7 @@ gh pr create --title "Fix: description" --body "Details"
 - **ExifTool reference output**: `Image-ExifTool-13.44/t/<TestName>_N.out` (expected tag output per sub-test)
 - **PerlOnJava unit tests**: `src/test/resources/unit/*.t` (make suite, 154 tests)
 - **Perl5 core tests**: `perl5_t/t/` (Perl 5 compatibility suite, run via `make test-gradle`)
-- **Fat JAR**: `target/perlonjava-3.0.0.jar`
+- **Fat JAR**: `build/libs/perlonjava-*.jar` (version varies)
 - **Launcher script**: `./jperl` (resolves JAR path, sets `$^X`)
 
 ## Building PerlOnJava
@@ -64,16 +64,13 @@ make dev   # Quick build - compiles only, NO tests
 ### Single test
 ```bash
 cd Image-ExifTool-13.44
-java -jar ../target/perlonjava-3.0.0.jar -Ilib t/Writer.t
-# Or using the launcher:
-cd Image-ExifTool-13.44
 ../jperl -Ilib t/Writer.t
 ```
 
 ### Single test with timeout (prevents infinite loops)
 ```bash
 cd Image-ExifTool-13.44
-timeout 120 java -jar ../target/perlonjava-3.0.0.jar -Ilib t/XMP.t
+timeout 120 ../jperl -Ilib t/XMP.t
 ```
 
 ### All ExifTool tests in parallel with summary
@@ -82,7 +79,7 @@ cd Image-ExifTool-13.44
 mkdir -p /tmp/exiftool_results
 for t in t/*.t; do
     name=$(basename "$t" .t)
-    ( output=$(timeout 120 java -jar ../target/perlonjava-3.0.0.jar -Ilib "$t" 2>&1)
+    ( output=$(timeout 120 ../jperl -Ilib "$t" 2>&1)
       ec=$?
       if [ $ec -eq 124 ]; then echo "$name TIMEOUT"
       else
@@ -133,7 +130,7 @@ cd Image-ExifTool-13.44
 perl -Ilib t/Writer.t 2>&1 | grep -E '^(not )?ok ' > /tmp/perl_results.txt
 
 # Run with PerlOnJava
-java -jar ../target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1 | grep -E '^(not )?ok ' > /tmp/jperl_results.txt
+../jperl -Ilib t/Writer.t 2>&1 | grep -E '^(not )?ok ' > /tmp/jperl_results.txt
 
 # Diff
 diff /tmp/perl_results.txt /tmp/jperl_results.txt
@@ -145,7 +142,7 @@ For individual Perl constructs:
 perl -e 'my @a = (1,2,3); $_ *= 2 foreach @a; print "@a\n"'
 
 # PerlOnJava
-java -jar target/perlonjava-3.0.0.jar -e 'my @a = (1,2,3); $_ *= 2 foreach @a; print "@a\n"'
+./jperl -e 'my @a = (1,2,3); $_ *= 2 foreach @a; print "@a\n"'
 ```
 
 For comparing `.failed` output files against `.out` reference files:
@@ -188,8 +185,8 @@ diff t/Writer_11.out t/Writer_11.failed
 # Pass JVM options via JPERL_OPTS
 JPERL_OPTS="-Xmx512m" ./jperl script.pl
 
-# Combine env vars
-JPERL_SHOW_FALLBACK=1 JPERL_EVAL_TRACE=1 java -jar target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1
+# Combine env vars (inside ExifTool dir)
+JPERL_SHOW_FALLBACK=1 JPERL_EVAL_TRACE=1 ../jperl -Ilib t/Writer.t 2>&1
 ```
 
 ## Test File Anatomy
@@ -235,7 +232,7 @@ The `check()` function compares extracted tags against reference files `t/<TestN
 
 5. **Isolate the Perl construct** causing the failure. Write a minimal reproducer:
    ```bash
-   java -jar target/perlonjava-3.0.0.jar -e 'print pos("abc" =~ /b/g), "\n"'
+   ./jperl -e 'print pos("abc" =~ /b/g), "\n"'
    perl -e 'print pos("abc" =~ /b/g), "\n"'
    ```
 
@@ -348,7 +345,7 @@ All geotag tests except module loading and 2 others fail. All use `Time::Local` 
 Writing non-default language entries to XMP lang-alt lists fails silently. Only `x-default` works. The write path in `WriteXMP.pl` uses `pos()` after `m//g` for path tracking. Test with:
 ```bash
 perl -e '"a/b/c" =~ m|/|g; print pos(), "\n"'  # should print 2
-java -jar target/perlonjava-3.0.0.jar -e '"a/b/c" =~ m|/|g; print pos(), "\n"'
+./jperl -e '"a/b/c" =~ m|/|g; print pos(), "\n"'
 ```
 
 #### P4: XMP lang-alt Bag index tracking (3 tests: XMP 36,38,50)
@@ -471,7 +468,7 @@ In PerlOnJava Java code (temporary, never commit):
 System.err.println("DEBUG: value=" + value);
 ```
 
-To trace which subs hit interpreter fallback:
+To trace which subs hit interpreter fallback (inside ExifTool dir):
 ```bash
-JPERL_SHOW_FALLBACK=1 java -jar target/perlonjava-3.0.0.jar -Ilib t/Writer.t 2>&1 | grep FALLBACK
+JPERL_SHOW_FALLBACK=1 ../jperl -Ilib t/Writer.t 2>&1 | grep FALLBACK
 ```

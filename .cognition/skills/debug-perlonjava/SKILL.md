@@ -35,7 +35,7 @@ gh pr create --title "Fix: description" --body "Details"
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
 - **Unit tests**: `src/test/resources/unit/*.t` (run via `make`)
 - **Perl5 core tests**: `perl5_t/t/` (Perl 5 compatibility suite)
-- **Fat JAR**: `target/perlonjava-3.0.0.jar`
+- **Fat JAR**: `build/libs/perlonjava-*.jar` (version varies)
 - **Launcher script**: `./jperl`
 
 ## Building
@@ -191,9 +191,10 @@ This helps identify operator precedence issues and incorrect parsing.
 
 ### 6. Profile with JFR (for performance issues)
 ```bash
-# Record profile
+# Record profile using wrapper script
+JAR=$(ls build/libs/perlonjava-*.jar | head -1)
 $JAVA_HOME/bin/java -XX:StartFlightRecording=duration=10s,filename=profile.jfr \
-  -jar target/perlonjava-3.0.0.jar script.pl
+  -jar $JAR script.pl
 
 # Analyze hotspots
 $JAVA_HOME/bin/jfr print --events jdk.ExecutionSample profile.jfr 2>&1 | \

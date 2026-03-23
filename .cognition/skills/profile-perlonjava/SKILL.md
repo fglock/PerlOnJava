@@ -1,6 +1,6 @@
 # Profile PerlOnJava
 
-## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
+## CRITICAL: NEVER USE `git stash`
 
 **DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
 
@@ -34,12 +34,23 @@ gh pr create --title "Perf: description" --body "Details"
 ### 1. Run with JFR Profiling
 
 ```bash
-cd /Users/fglock/projects/PerlOnJava2
+cd /Users/fglock/projects/PerlOnJava
+
+# Find the jar file (version changes with releases)
+JAR=$(ls build/libs/perlonjava-*.jar | head -1)
 
 # Profile a long-running script (adjust duration as needed)
 java -XX:+FlightRecorder \
   -XX:StartFlightRecording=duration=60s,filename=profile.jfr \
-  -jar target/perlonjava-3.0.0.jar <script.pl> [args...]
+  -jar $JAR <script.pl> [args...]
+
+# Or use the wrapper script with JFR options via JAVA_OPTS
+JAVA_OPTS="-XX:+FlightRecorder -XX:StartFlightRecording=duration=60s,filename=profile.jfr" \
+  ./jperl <script.pl> [args...]
+
+# For interpreter mode profiling
+JAVA_OPTS="-XX:+FlightRecorder -XX:StartFlightRecording=duration=60s,filename=profile.jfr" \
+  ./jperl --interpreter <script.pl> [args...]
 ```
 
 ### 2. Analyze with JFR Tools
@@ -65,12 +76,13 @@ $JFR print --events jdk.ExecutionSample profile.jfr 2>&1 | \
 
 | Category | Methods to Watch | Optimization Approach |
 |----------|------------------|----------------------|
-| **Number parsing** | `Long.parseLong`, `Double.parseDouble`, `NumberParser.parseNumber` | Cache numeric values, avoid string→number conversions |
+| **Number parsing** | `Long.parseLong`, `Double.parseDouble`, `NumberParser.parseNumber` | Cache numeric values, avoid string->number conversions |
 | **Type checking** | `ScalarUtils.looksLikeNumber`, `RuntimeScalar.getDefinedBoolean` | Fast-path for common types (INTEGER, DOUBLE) |
 | **Bitwise ops** | `BitwiseOperators.*` | Ensure values stay as INTEGER type |
 | **Regex** | `Pattern.match`, `Matcher.matches` | Reduce unnecessary regex checks |
 | **Loop control** | `RuntimeControlFlowRegistry.checkLoopAndGetAction` | ThreadLocal overhead |
 | **Array ops** | `ArrayList.grow`, `Arrays.copyOf` | Pre-size arrays, reduce allocations |
+| **Interpreter** | `BytecodeInterpreter.execute`, opcode handlers | Reduce dispatch overhead, inline hot paths |
 
 ### 4. Common Runtime Files
 
@@ -78,9 +90,10 @@ $JFR print --events jdk.ExecutionSample profile.jfr 2>&1 | \
 |------|---------|
 | `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` | Scalar value representation, getLong/getDouble/getInt |
 | `src/main/java/org/perlonjava/runtime/runtimetypes/ScalarUtils.java` | Utility functions like looksLikeNumber |
-| `src/main/java/org/perlonjava/runtime/operators/BitwiseOperators.java` | Bitwise operations (&, |, ^, ~, <<, >>) |
+| `src/main/java/org/perlonjava/runtime/operators/BitwiseOperators.java` | Bitwise operations (&, \|, ^, ~, <<, >>) |
 | `src/main/java/org/perlonjava/runtime/operators/Operator.java` | General operators |
 | `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeArray.java` | Array operations |
+| `src/main/java/org/perlonjava/backend/bytecode/BytecodeInterpreter.java` | Interpreter main loop |
 
 ### 5. Optimization Patterns
 
@@ -110,14 +123,20 @@ if (runtimeScalar.type == INTEGER) {
 ### 6. Benchmark Commands
 
 ```bash
+cd /Users/fglock/projects/PerlOnJava
+
+# Quick benchmark with closure test
+./jperl dev/bench/benchmark_closure.pl
+
+# Interpreter mode benchmark (slower, good for profiling interpreter)
+./jperl --interpreter dev/bench/benchmark_closure.pl
+
 # Quick benchmark with life_bitpacked.pl
-java -jar target/perlonjava-3.0.0.jar examples/life_bitpacked.pl \
-  -w 200 -h 200 -g 10000 -r none
+./jperl examples/life_bitpacked.pl -w 200 -h 200 -g 10000 -r none
 
 # Multiple runs for consistency
 for i in 1 2 3; do
-  java -jar target/perlonjava-3.0.0.jar examples/life_bitpacked.pl \
-    -w 200 -h 200 -g 10000 -r none 2>&1 | grep "per second"
+  ./jperl examples/life_bitpacked.pl -w 200 -h 200 -g 10000 -r none 2>&1 | grep "per second"
 done
 ```
 
@@ -147,3 +166,15 @@ make dev   # Quick build - compiles only, NO tests
 7. Profile again to verify improvement
 8. Run tests to ensure correctness
 ```
+
+## JVM vs Interpreter Performance
+
+The interpreter mode (`--interpreter`) is typically 20-40x slower than JVM-compiled mode.
+This is expected and useful for:
+- Testing interpreter-specific code paths
+- Debugging interpreter behavior
+- Profiling interpreter bottlenecks
+
+Example typical performance:
+- JVM mode: ~4 seconds for benchmark_closure.pl
+- Interpreter mode: ~120-130 seconds for the same benchmark

@@ -36,7 +36,7 @@ gh pr create --title "Fix interpreter: description" --body "Details"
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
 - **Unit tests**: `src/test/resources/unit/*.t` (155 tests, run via `make`)
-- **Fat JAR**: `target/perlonjava-3.0.0.jar`
+- **Fat JAR**: `build/libs/perlonjava-*.jar` (version varies)
 - **Launcher script**: `./jperl`
 
 ## Building
