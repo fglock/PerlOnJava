@@ -74,8 +74,8 @@ public class BytecodeInterpreter {
         // Get PC holder for direct updates (avoids ThreadLocal lookups in hot loop)
         int[] pcHolder = InterpreterState.push(code, framePackageName, frameSubName);
 
-        // Pure register file (NOT stack-based - matches compiler for control flow correctness)
-        RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
+        // Get register array from cache (avoids allocation for non-recursive calls)
+        RuntimeBase[] registers = code.getRegisters();
 
         // Initialize special registers (same as compiler)
         registers[0] = code;           // $this (for closures - register 0)
@@ -1899,6 +1899,8 @@ public class BytecodeInterpreter {
             }
             currentPackageScalar.set(savedPackage);
             InterpreterState.pop();
+            // Release cached registers for reuse
+            code.releaseRegisters();
         }
     }
 
