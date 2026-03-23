@@ -26,6 +26,16 @@ BEGIN {
 # Blessed wrapper for catch blocks
 sub catch (&;@) {
     my ($block, @rest) = @_;
+    
+    # Detect incorrect method call (e.g., $obj->catch(...) when namespace::autoclean
+    # didn't clean up Try::Tiny imports). This happens with indirect object syntax:
+    # "catch { $dt->truncate(...) }" is parsed as "$dt->truncate(...)->catch()"
+    # when 'catch' is in the invocant's package namespace.
+    if (ref($block) && ref($block) ne 'CODE') {
+        my $pkg = ref($block);
+        croak qq{Can't locate object method "catch" via package "$pkg" (perhaps you forgot to load "$pkg"?)};
+    }
+    
     # Detect bare catch() in void context
     croak 'Useless bare catch()' unless wantarray;
     # Name the block if we can
