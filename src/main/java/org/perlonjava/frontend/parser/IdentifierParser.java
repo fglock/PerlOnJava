@@ -201,6 +201,11 @@ public class IdentifierParser {
             if (insideBraces && firstChar == '*' && nextToken.text.equals("{")) {
                 return null; // Force fallback to expression parsing for glob dereference
             }
+            // Special case: & followed by { is subroutine call when inside braces
+            // %{&{$code}} should be parsed as %{ &{$code} }, not %&{$code} (hash subscript on %&)
+            if (insideBraces && firstChar == '&' && nextToken.text.equals("{")) {
+                return null; // Force fallback to expression parsing for subroutine call
+            }
             // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
             if (firstChar == '\'' && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
                 // This is $'foo which means $main::foo
