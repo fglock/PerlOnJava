@@ -412,8 +412,9 @@ public class StringOperators {
         // Note: In slurp mode ($/ = undef) or fixed-length record mode, we don't remove anything
 
         // Always update the original scalar if we modified the string
+        // Use setVoid since we don't need the assignment result (we return charsRemoved)
         if (!str.equals(originalStr)) {
-            runtimeScalar.set(str);
+            runtimeScalar.setVoid(str);
         }
 
         return getScalarInt(charsRemoved);
@@ -432,7 +433,8 @@ public class StringOperators {
         String lastChar = str.substring(str.length() - lastCharSize);
         String remainingStr = str.substring(0, str.length() - lastCharSize);
 
-        runtimeScalar.set(remainingStr);
+        // Use setVoid since we don't need the assignment result (we return lastChar)
+        runtimeScalar.setVoid(remainingStr);
         return new RuntimeScalar(lastChar);
     }
 

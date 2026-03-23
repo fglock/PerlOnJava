@@ -649,6 +649,55 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return scalar.set(this);
     }
 
+    /**
+     * Set this scalar to a value without returning the stored result.
+     * Use this for operations like chop/chomp where the assignment result isn't used.
+     * For tied scalars, this only does STORE without a following FETCH.
+     *
+     * @param value The value to set
+     */
+    public void setVoid(RuntimeScalar value) {
+        if (value == null) {
+            this.type = RuntimeScalarType.UNDEF;
+            this.value = null;
+            return;
+        }
+        if (value.type == TIED_SCALAR) {
+            setVoid(value.tiedFetch());
+            return;
+        }
+        if (this.type == TIED_SCALAR) {
+            this.tiedStore(value);
+            return;
+        }
+        if (value instanceof ScalarSpecialVariable) {
+            RuntimeScalar resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
+            this.type = resolved.type;
+            this.value = resolved.value;
+            return;
+        }
+        this.type = value.type;
+        this.value = value.value;
+    }
+
+    /**
+     * Set this scalar to a string value without returning the stored result.
+     *
+     * @param value The string value to set
+     */
+    public void setVoid(String value) {
+        if (this.type == TIED_SCALAR) {
+            this.tiedStore(new RuntimeScalar(value));
+            return;
+        }
+        if (value == null) {
+            this.type = UNDEF;
+        } else {
+            this.type = RuntimeScalarType.STRING;
+        }
+        this.value = value;
+    }
+
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
         if (value == null) {
@@ -660,7 +709,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return set(value.tiedFetch());
         }
         if (this.type == TIED_SCALAR) {
-            return this.tiedStore(value);
+            // For tied scalars, delegate to the tied object's set() method.
+            // TiedVariableBase.set() does STORE without FETCH-after-STORE,
+            // which is correct for tied hash/array elements.
+            // For actual tied scalars (TieScalar), we need FETCH-after-STORE
+            // for chained assignments, but that's handled by returning the
+            // result of tiedStore() which is the STORE return value.
+            TiedVariableBase tied = (TiedVariableBase) this.value;
+            return tied.set(value);
         }
         if (value instanceof ScalarSpecialVariable) {
             RuntimeScalar resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
@@ -675,7 +731,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(int value) {
         if (this.type == TIED_SCALAR) {
-            return this.tiedStore(new RuntimeScalar(value));
+            this.tiedStore(new RuntimeScalar(value));
+            return this.tiedFetch();
         }
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
@@ -684,7 +741,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(long value) {
         if (this.type == TIED_SCALAR) {
-            return this.tiedStore(new RuntimeScalar(value));
+            this.tiedStore(new RuntimeScalar(value));
+            return this.tiedFetch();
         }
         this.initializeWithLong(value);
         return this;
@@ -699,7 +757,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public RuntimeScalar set(BigInteger value) {
         if (this.type == TIED_SCALAR) {
-            return this.tiedStore(new RuntimeScalar(value.toString()));
+            this.tiedStore(new RuntimeScalar(value.toString()));
+            return this.tiedFetch();
         }
 
         // Check if the value fits in an int
@@ -725,7 +784,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(boolean value) {
         if (this.type == TIED_SCALAR) {
-            return this.tiedStore(new RuntimeScalar(value));
+            this.tiedStore(new RuntimeScalar(value));
+            return this.tiedFetch();
         }
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
@@ -734,7 +794,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(String value) {
         if (this.type == TIED_SCALAR) {
-            return this.tiedStore(new RuntimeScalar(value));
+            this.tiedStore(new RuntimeScalar(value));
+            return this.tiedFetch();
         }
         if (value == null) {
             this.type = UNDEF;
@@ -1549,7 +1610,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeScalar variable = this.tiedFetch();
                 variable.preAutoIncrement();
                 this.tiedStore(variable);
-                return variable;
+                return this.tiedFetch();  // FETCH after STORE for pre-increment
             }
             case DUALVAR -> { // 9
                 this.type = RuntimeScalarType.INTEGER;
@@ -1727,7 +1788,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeScalar variable = this.tiedFetch();
                 variable.preAutoDecrement();
                 this.tiedStore(variable);
-                return variable;
+                return this.tiedFetch();  // FETCH after STORE for pre-decrement
             }
             case DUALVAR -> { // 9
                 this.type = RuntimeScalarType.INTEGER;
