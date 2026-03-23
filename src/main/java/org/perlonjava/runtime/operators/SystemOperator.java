@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalContext.encodeSpecialVar;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.setGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.flushAllHandles;
@@ -43,9 +44,13 @@ public class SystemOperator {
         if (result.exitCode == -1) {
             // Command failed to execute
             getGlobalVariable("main::?").set(-1);
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(-1);
         } else {
-            // Normal exit - put exit code in upper byte
-            getGlobalVariable("main::?").set(result.exitCode << 8);
+            // Normal exit - put exit code in upper byte (Perl wait status convention)
+            int waitStatus = result.exitCode << 8;
+            getGlobalVariable("main::?").set(waitStatus);
+            // ${^CHILD_ERROR_NATIVE} also stores the wait status format
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(waitStatus);
         }
 
         return processOutput(result.output, ctx);
@@ -90,12 +95,17 @@ public class SystemOperator {
         if (result.exitCode == -1) {
             // Command failed to execute
             getGlobalVariable("main::?").set(-1);
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(-1);
+            return new RuntimeScalar(-1);
         } else {
-            // Normal exit - put exit code in upper byte
-            getGlobalVariable("main::?").set(result.exitCode << 8);
+            // Normal exit - put exit code in upper byte (Perl wait status convention)
+            // system() returns the same value as $?
+            int waitStatus = result.exitCode << 8;
+            getGlobalVariable("main::?").set(waitStatus);
+            // ${^CHILD_ERROR_NATIVE} also stores the wait status format
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(waitStatus);
+            return new RuntimeScalar(waitStatus);
         }
-
-        return new RuntimeScalar(result.exitCode);
     }
     
     /**
