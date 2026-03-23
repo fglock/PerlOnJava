@@ -1,4 +1,5 @@
 package warnings;
+our $VERSION = '1.74';
 
 #
 # Original warnings pragma is part of the Perl core, maintained by the Perl 5 Porters.
@@ -7,7 +8,8 @@ package warnings;
 # The XS implementation is in: src/main/java/org/perlonjava/perlmodule/Warnings.java
 #
 
-XSLoader::load( 'Warnings' );
+use XSLoader;
+XSLoader::load( 'Warnings', $VERSION );
 
 # Warning category offsets - used by experimental.pm to check if a warning exists
 # These map warning category names to their bit positions

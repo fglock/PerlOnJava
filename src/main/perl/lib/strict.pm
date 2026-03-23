@@ -1,4 +1,5 @@
 package strict;
+our $VERSION = '1.14';
 
 #
 # Original strict pragma is part of the Perl core, maintained by the Perl 5 Porters.
@@ -7,6 +8,7 @@ package strict;
 # The XS implementation is in: src/main/java/org/perlonjava/perlmodule/Strict.java
 #
 
-XSLoader::load( 'Strict' );
+use XSLoader;
+XSLoader::load( 'Strict', $VERSION );
 
 1;

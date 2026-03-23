@@ -47,6 +47,8 @@ public class Utf8 extends PerlModuleBase {
             utf8.registerMethod("unicode_to_native", "unicodeToNative", "$");
             utf8.registerMethod("is_utf8", "isUtf8", "$");
             utf8.registerMethod("valid", "$");
+            // Set $VERSION so CPAN.pm can detect our bundled version
+            GlobalVariable.getGlobalVariable("utf8::VERSION").set(new RuntimeScalar("1.29"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Utf8 method: " + e.getMessage());
         }
