@@ -205,6 +205,7 @@ public class PerlLanguageProvider {
 
     /**
      * Executes the given Perl code using a syntax tree and returns the result.
+     * Uses VOID context by default.
      *
      * @param ast             The abstract syntax tree representing the Perl code.
      * @param tokens          The list of tokens representing the Perl code.
@@ -214,6 +215,22 @@ public class PerlLanguageProvider {
     public static RuntimeList executePerlAST(Node ast,
                                              List<LexerToken> tokens,
                                              CompilerOptions compilerOptions) throws Exception {
+        return executePerlAST(ast, tokens, compilerOptions, RuntimeContextType.VOID);
+    }
+
+    /**
+     * Executes the given Perl code using a syntax tree with specified context.
+     *
+     * @param ast             The abstract syntax tree representing the Perl code.
+     * @param tokens          The list of tokens representing the Perl code.
+     * @param compilerOptions Compiler flags, file name and source code.
+     * @param contextType     The context to use for execution (VOID, SCALAR, LIST).
+     * @return The result of the Perl code execution.
+     */
+    public static RuntimeList executePerlAST(Node ast,
+                                             List<LexerToken> tokens,
+                                             CompilerOptions compilerOptions,
+                                             int contextType) throws Exception {
 
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
@@ -229,7 +246,7 @@ public class PerlLanguageProvider {
                 globalSymbolTable.snapShot(),
                 null,
                 null,
-                RuntimeContextType.VOID,
+                contextType,
                 true,
                 null,
                 compilerOptions,
@@ -255,8 +272,7 @@ public class PerlLanguageProvider {
             // Compile to executable (compiler or interpreter based on flag)
             RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
-            // executePerlAST is always called from special blocks which use VOID context
-            return executeCode(runtimeCode, ctx, false, RuntimeContextType.VOID);
+            return executeCode(runtimeCode, ctx, false, contextType);
         } finally {
             // Restore the caller's scope
             if (savedCurrentScope != null) {

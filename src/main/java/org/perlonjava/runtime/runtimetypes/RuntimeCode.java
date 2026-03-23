@@ -2099,6 +2099,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
+        // Handle GLOB type: \&{*glob} - get the code slot directly from the glob
+        // Globs stringify with a "*" prefix (e.g., "*main::test_sub") which would
+        // cause normalizeVariableName to look up the wrong name
+        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(glob.globName);
+            
+            // Return a snapshot of the current code reference
+            RuntimeScalar snapshot = new RuntimeScalar();
+            snapshot.type = codeRef.type;
+            snapshot.value = codeRef.value;
+            return snapshot;
+        }
+
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);

@@ -658,8 +658,10 @@ public class StatementParser {
                 // call Module->import( LIST )
                 // or Module->unimport( LIST )
 
-                // Execute the argument list immediately
-                RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
+                // Execute the argument list immediately in LIST context
+                // This is necessary for expressions like: use lib ($path =~ /^(.*)$/);
+                // where the regex match must return captured groups, not just success/failure
+                RuntimeList args = runSpecialBlock(parser, "BEGIN", list, RuntimeContextType.LIST);
 
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list: " + args);
                 if (hasParentheses && args.isEmpty()) {
