@@ -40,6 +40,37 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Created lazily on first use (after packageName/subName are set)
     public volatile InterpreterState.InterpreterFrame cachedFrame;
 
+    // Cached register array for non-recursive calls (avoids allocation)
+    // Thread-safe via ThreadLocal for multi-threaded execution
+    private final ThreadLocal<RuntimeBase[]> cachedRegisters = new ThreadLocal<>();
+    // Flag to track if cached registers are currently in use (for recursion detection)
+    private final ThreadLocal<Boolean> registersInUse = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Get a register array for execution. Returns cached array if not in use (common case),
+     * otherwise allocates a new one (recursive call).
+     */
+    public RuntimeBase[] getRegisters() {
+        if (registersInUse.get()) {
+            // Recursive call - need fresh array
+            return new RuntimeBase[maxRegisters];
+        }
+        RuntimeBase[] regs = cachedRegisters.get();
+        if (regs == null || regs.length != maxRegisters) {
+            regs = new RuntimeBase[maxRegisters];
+            cachedRegisters.set(regs);
+        }
+        registersInUse.set(true);
+        return regs;
+    }
+
+    /**
+     * Release the register array after execution completes.
+     */
+    public void releaseRegisters() {
+        registersInUse.set(false);
+    }
+
     // Lexical pragma state (for eval STRING to inherit)
     public final int strictOptions;        // Strict flags at compile time
     public final int featureFlags;         // Feature flags at compile time
