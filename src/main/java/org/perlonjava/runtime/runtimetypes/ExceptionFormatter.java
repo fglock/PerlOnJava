@@ -70,9 +70,18 @@ public class ExceptionFormatter {
             }
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
-                // Artificial caller stack entry created at `use` statement
-                var callerInfo = CallerStack.peek(callerStackIndex);
+                // Artificial caller stack entry created at `use` statement.
+                // This entry represents where the `use Module` was called from (e.g., main script).
+                // The CallerStack entry for parseUseDeclaration was pushed BEFORE any CALL_SUB entries
+                // from the module's import method, so it's at index (interpreterFrameIndex - 1)
+                // after accounting for all interpreter frames processed so far.
+                int useStatementIndex = Math.max(interpreterFrameIndex - 1, callerStackIndex);
+                var callerInfo = CallerStack.peek(useStatementIndex);
                 if (callerInfo != null) {
+                    if (System.getenv("DEBUG_CALLER") != null) {
+                        System.err.println("DEBUG ExceptionFormatter: parseUseDeclaration using CallerStack[" + useStatementIndex + 
+                            "] pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line());
+                    }
                     var entry = new ArrayList<String>();
                     entry.add(callerInfo.packageName());
                     entry.add(callerInfo.filename());
@@ -80,7 +89,7 @@ public class ExceptionFormatter {
                     entry.add(null);  // No subroutine name available for use statements
                     stackTrace.add(entry);
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
-                    callerStackIndex++;
+                    callerStackIndex = useStatementIndex + 1;
                 }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.InterpretedCode") &&
                     element.getMethodName().equals("apply")) {
