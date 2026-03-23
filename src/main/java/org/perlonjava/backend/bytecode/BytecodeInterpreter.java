@@ -111,8 +111,10 @@ public class BytecodeInterpreter {
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = usesLocalization ? DynamicVariableManager.getLocalLevel() : 0;
-        String savedPackage = InterpreterState.currentPackage.get().toString();
-        InterpreterState.currentPackage.get().set(framePackageName);
+        // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
+        RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
+        String savedPackage = currentPackageScalar.toString();
+        currentPackageScalar.set(framePackageName);
         if (usesLocalization) {
             RegexState.save();
         }
@@ -813,9 +815,9 @@ public class BytecodeInterpreter {
                                 // This matches the JVM backend's call to codeDerefNonStrict()
                                 // Only call for STRING/BYTE_STRING types (symbolic references)
                                 // For CODE, REFERENCE, etc. let RuntimeCode.apply() handle errors
-                                String currentPkg = InterpreterState.currentPackage.get().toString();
+                                // Use cached RuntimeScalar to avoid ThreadLocal lookup
                                 if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
-                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                    codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
                                 RuntimeBase argsBase = registers[argsReg];
@@ -831,6 +833,8 @@ public class BytecodeInterpreter {
                                 }
 
                                 // Push call site info to CallerStack for caller() to see the correct location
+                                // Get package name only when actually needed (lazy)
+                                String currentPkg = currentPackageScalar.toString();
                                 CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
                                 CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
                                 RuntimeList result;
@@ -915,7 +919,8 @@ public class BytecodeInterpreter {
                                 }
 
                                 // Push call site info to CallerStack for caller() to see the correct location
-                                String currentPkg = InterpreterState.currentPackage.get().toString();
+                                // Use cached RuntimeScalar to avoid ThreadLocal lookup
+                                String currentPkg = currentPackageScalar.toString();
                                 CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
                                 CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
                                 RuntimeList result;
@@ -1005,9 +1010,9 @@ public class BytecodeInterpreter {
                                         : codeRefBase.scalar();
 
                                 // Dereference symbolic code references
+                                // Use cached RuntimeScalar to avoid ThreadLocal lookup
                                 if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
-                                    String currentPkg = InterpreterState.currentPackage.get().toString();
-                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                    codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
                                 // Get args
@@ -1611,8 +1616,9 @@ public class BytecodeInterpreter {
                             case Opcodes.SET_PACKAGE -> {
                                 // Non-scoped package declaration: package Foo;
                                 // Update the runtime current-package tracker so caller() returns the right package.
+                                // Uses cached RuntimeScalar reference to avoid ThreadLocal lookup
                                 int nameIdx = bytecode[pc++];
-                                InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                                currentPackageScalar.set(code.stringPool[nameIdx]);
                             }
 
                             case Opcodes.PUSH_PACKAGE -> {
@@ -1876,7 +1882,7 @@ public class BytecodeInterpreter {
             if (usesLocalization) {
                 DynamicVariableManager.popToLocalLevel(savedLocalLevel);
             }
-            InterpreterState.currentPackage.get().set(savedPackage);
+            currentPackageScalar.set(savedPackage);
             InterpreterState.pop();
         }
     }

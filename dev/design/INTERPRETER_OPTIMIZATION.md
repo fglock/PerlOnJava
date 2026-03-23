@@ -82,14 +82,21 @@ Each call goes through multiple layers before reaching the actual interpreter ex
 
 ### Completed
 - [x] Profile analysis (2026-03-23)
+- [x] Phase 1: ThreadLocal Caching (2026-03-23) - Cache RuntimeScalar reference, no measurable speedup but cleaner code
 
 ### In Progress
-- [ ] Phase 1: ThreadLocal Caching
+- [ ] Phase 2: Lazy CallerStack - ~10% of time spent on caller() support
 
 ### Pending
-- [ ] Phase 2: Lazy CallerStack
 - [ ] Phase 3: Inline Apply Path
 - [ ] Phase 4: Cache pcToTokenIndex Lookup
+
+## Profile Results After Phase 1
+
+Second profile showed `getCallSiteInfo` (16 samples) + `getSourceLocationAccurate` (15 samples) = ~10% overhead.
+This is spent computing call site info for `caller()` support on every subroutine call.
+
+Phase 2 (Lazy CallerStack) is the next high-impact optimization.
 
 ## Verification
 
