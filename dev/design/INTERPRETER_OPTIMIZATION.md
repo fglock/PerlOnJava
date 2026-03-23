@@ -83,9 +83,7 @@ Each call goes through multiple layers before reaching the actual interpreter ex
 ### Completed
 - [x] Profile analysis (2026-03-23)
 - [x] Phase 1: ThreadLocal Caching (2026-03-23) - Cache RuntimeScalar reference, no measurable speedup but cleaner code
-
-### In Progress
-- [ ] Phase 2: Lazy CallerStack - ~10% of time spent on caller() support
+- [x] Phase 2: Lazy CallerStack (2026-03-23) - **~19% speedup** (127s → 103s)
 
 ### Pending
 - [ ] Phase 3: Inline Apply Path
@@ -96,7 +94,14 @@ Each call goes through multiple layers before reaching the actual interpreter ex
 Second profile showed `getCallSiteInfo` (16 samples) + `getSourceLocationAccurate` (15 samples) = ~10% overhead.
 This is spent computing call site info for `caller()` support on every subroutine call.
 
-Phase 2 (Lazy CallerStack) is the next high-impact optimization.
+## Phase 2 Results
+
+Implemented lazy CallerStack:
+- `CallerStack.pushLazy()` stores a lambda that computes CallerInfo on demand
+- Line number computation deferred until `caller()` is actually called
+- `pop()` doesn't resolve lazy entries (no computation needed)
+
+**Benchmark improvement:** 127s → 103s = **~19% speedup**
 
 ## Verification
 
