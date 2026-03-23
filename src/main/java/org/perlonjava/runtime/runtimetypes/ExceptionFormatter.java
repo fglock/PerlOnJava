@@ -105,17 +105,8 @@ public class ExceptionFormatter {
                 if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
-                        // For JVM-style stack traces:
-                        // - Frame 0 (innermost): needs current execution position (use PC)
-                        // - Frame N > 0: needs execution position = call site of frame N-1
-                        //   which is CallerStack[N-1] since CallerStack[M] stores
-                        //   the call site for the Mth call (most recent = 0)
-                        
-                        // For frames > 0, use CallerStack[frameIndex-1] which gives the
-                        // call site of the previous frame (= execution position of this frame)
-                        var callerInfo = (interpreterFrameIndex > 0) 
-                            ? CallerStack.peek(interpreterFrameIndex - 1)
-                            : null;
+                        // Use CallerStack for the call site info
+                        var callerInfo = CallerStack.peek(interpreterFrameIndex);
                         
                         String pkg = null;
                         String filename = frame.code().sourceName;
@@ -127,8 +118,8 @@ public class ExceptionFormatter {
                             filename = callerInfo.filename();
                             line = String.valueOf(callerInfo.line());
                             if (System.getenv("DEBUG_CALLER") != null) {
-                                System.err.println("DEBUG ExceptionFormatter: using CallerStack[" + (interpreterFrameIndex - 1) + 
-                                    "] for frame " + interpreterFrameIndex + " pkg=" + pkg + " file=" + filename + " line=" + line);
+                                System.err.println("DEBUG ExceptionFormatter: using CallerStack[" + interpreterFrameIndex + 
+                                    "] pkg=" + pkg + " file=" + filename + " line=" + line);
                             }
                         } else {
                             // Fallback: get tokenIndex from PC mapping
