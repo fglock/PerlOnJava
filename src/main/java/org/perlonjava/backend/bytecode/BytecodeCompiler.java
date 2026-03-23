@@ -3942,11 +3942,11 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("\\")) {
             // Reference operator: \$x, \@x, \%x, \*x, etc.
             if (node.operand != null) {
-                // Special case: \&name — CODE is already a reference type.
-                // Emit LOAD_GLOBAL_CODE directly without CREATE_REF, matching JVM compiler.
+                // Special case: \&name or \&{expr} — CODE is already a reference type.
+                // Emit LOAD_GLOBAL_CODE or CODE_DEREF_NONSTRICT without CREATE_REF, matching JVM compiler.
+                // The JVM uses RuntimeCode.createCodeReference() which returns type=CODE directly.
                 if (node.operand instanceof OperatorNode operandOp
-                        && operandOp.operator.equals("&")
-                        && operandOp.operand instanceof IdentifierNode) {
+                        && operandOp.operator.equals("&")) {
                     node.operand.accept(this);
                     // lastResultReg already holds the CODE scalar — no wrapping needed
                     return;
