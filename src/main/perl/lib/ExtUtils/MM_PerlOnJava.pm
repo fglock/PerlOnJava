@@ -20,6 +20,19 @@ our @ISA = qw(ExtUtils::MM_Unix);
 our $VERSION = '7.78';
 $VERSION =~ tr/_//d;
 
+# Override init_main to set PerlOnJava-specific defaults
+sub init_main {
+    my $self = shift;
+    $self->SUPER::init_main(@_);
+    
+    # Don't try to write perllocal.pod or .packlist to jar:PERL5LIB
+    # (which is not a real filesystem path)
+    $self->{NO_PERLLOCAL} = 1;
+    $self->{NO_PACKLIST} = 1;
+    
+    return;
+}
+
 # Installation base directory
 sub _perlonjava_lib {
     return $ENV{PERLONJAVA_LIB} 
