@@ -851,7 +851,8 @@ END_PERL
     }
 }
 
-delete $CPAN::Meta::YAML::{refaddr};
+# PerlOnJava: Don't delete refaddr - PerlOnJava resolves symbols at runtime
+# delete $CPAN::Meta::YAML::{refaddr};
 
 1;
 
