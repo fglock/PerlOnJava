@@ -319,24 +319,35 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
-        if (!runtimeScalar.getDefinedBoolean() || !b.getDefinedBoolean()) {
+        // For tied variables, we must only FETCH once, then use the result for both
+        // the definedness check and the actual concatenation.
+        // First, resolve tied variables to get their actual values (triggers FETCH once per tied var)
+        RuntimeScalar aResolved = (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) 
+                ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar bResolved = (b.type == RuntimeScalarType.TIED_SCALAR) 
+                ? b.tiedFetch() : b;
+        
+        // Now check definedness on the resolved values (no additional FETCH)
+        if (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        String aStr = runtimeScalar.toString();
-        String bStr = b.toString();
+        
+        // Get string values from resolved scalars
+        String aStr = aResolved.toString();
+        String bStr = bResolved.toString();
 
-        if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(runtimeScalar + bStr);
+        if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
+            return new RuntimeScalar(aStr + bStr);
         }
 
-        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
-            boolean aIsByte = runtimeScalar.type == BYTE_STRING
-                    || runtimeScalar.type == RuntimeScalarType.UNDEF
-                    || (aStr.isEmpty() && runtimeScalar.type != RuntimeScalarType.STRING);
-            boolean bIsByte = b.type == BYTE_STRING
-                    || b.type == RuntimeScalarType.UNDEF
-                    || (bStr.isEmpty() && b.type != RuntimeScalarType.STRING);
+        if (aResolved.type == BYTE_STRING || bResolved.type == BYTE_STRING) {
+            boolean aIsByte = aResolved.type == BYTE_STRING
+                    || aResolved.type == RuntimeScalarType.UNDEF
+                    || (aStr.isEmpty() && aResolved.type != RuntimeScalarType.STRING);
+            boolean bIsByte = bResolved.type == BYTE_STRING
+                    || bResolved.type == RuntimeScalarType.UNDEF
+                    || (bStr.isEmpty() && bResolved.type != RuntimeScalarType.STRING);
             if (aIsByte && bIsByte) {
                 boolean safe = true;
                 for (int i = 0; safe && i < aStr.length(); i++) {
@@ -362,7 +373,7 @@ public class StringOperators {
             }
         }
 
-        return new RuntimeScalar(runtimeScalar + bStr);
+        return new RuntimeScalar(aStr + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
