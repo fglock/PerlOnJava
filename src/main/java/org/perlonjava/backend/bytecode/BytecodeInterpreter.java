@@ -832,11 +832,12 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                // Push call site info to CallerStack for caller() to see the correct location
-                                // Get package name only when actually needed (lazy)
-                                String currentPkg = currentPackageScalar.toString();
-                                CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
-                                CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
+                                // Push lazy call site info to CallerStack for caller() to see the correct location
+                                // The actual line number computation is deferred until caller() is called
+                                // Capture variables needed for lazy resolution
+                                final String lazyPkg = currentPackageScalar.toString();
+                                final int lazyPc = callSitePc;
+                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
                                     result = RuntimeCode.apply(codeRef, "", callArgs, context);
@@ -918,11 +919,11 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                // Push call site info to CallerStack for caller() to see the correct location
-                                // Use cached RuntimeScalar to avoid ThreadLocal lookup
-                                String currentPkg = currentPackageScalar.toString();
-                                CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
-                                CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
+                                // Push lazy call site info to CallerStack for caller() to see the correct location
+                                // Capture variables needed for lazy resolution
+                                final String lazyPkg = currentPackageScalar.toString();
+                                final int lazyPc = callSitePc;
+                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
                                     result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
