@@ -54,6 +54,7 @@ public class WarningFlags {
         warningHierarchy.put("illegalproto", new String[]{});
         warningHierarchy.put("digit", new String[]{});
         warningHierarchy.put("closed", new String[]{"io::closed"});
+        warningHierarchy.put("exec", new String[]{"io::exec"});
         warningHierarchy.put("reserved", new String[]{});
         warningHierarchy.put("prototype", new String[]{});
         warningHierarchy.put("newline", new String[]{"io::newline"});
