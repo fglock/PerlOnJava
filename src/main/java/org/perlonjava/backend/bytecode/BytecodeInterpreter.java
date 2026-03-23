@@ -840,7 +840,16 @@ public class BytecodeInterpreter {
                                 CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
-                                    result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                    // Fast path for InterpretedCode: call execute() directly,
+                                    // bypassing RuntimeCode.apply() indirection chain
+                                    if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                        // Direct call to interpreter - skip RuntimeCode.apply overhead
+                                        // Pass null for subroutineName to enable frame caching
+                                        result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                    } else {
+                                        // Slow path for JVM-compiled code, symbolic references, etc.
+                                        result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                    }
 
                                     // Handle TAILCALL with trampoline loop (same as JVM backend)
                                     while (result.isNonLocalGoto()) {
@@ -849,7 +858,12 @@ public class BytecodeInterpreter {
                                             // Extract codeRef and args, call target
                                             codeRef = flow.getTailCallCodeRef();
                                             callArgs = flow.getTailCallArgs();
-                                            result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            // Use fast path for InterpretedCode
+                                            if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                                result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                            } else {
+                                                result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            }
                                             // Loop to handle chained tail calls
                                         } else {
                                             // Not TAILCALL - check labeled blocks or propagate
