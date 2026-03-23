@@ -1,7 +1,10 @@
 package org.perlonjava.backend.jvm;
 
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.astnode.CompilerFlagNode;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
 
 public class EmitCompilerFlag {
     public static void emitCompilerFlag(EmitterContext ctx, CompilerFlagNode node) {
@@ -20,5 +23,47 @@ public class EmitCompilerFlag {
         currentScope.strictOptionsStack.push(node.getStrictOptions());
 
         EmitterContext.fixupContext(ctx);
+
+        // Emit runtime code for warning scope if needed
+        int warningScopeId = node.getWarningScopeId();
+        if (warningScopeId > 0) {
+            emitWarningScopeLocal(ctx, warningScopeId);
+        }
+    }
+
+    /**
+     * Emits bytecode for: local ${^WARNING_SCOPE} = scopeId
+     * This uses DynamicVariableManager to save/restore the scope ID on block exit.
+     */
+    private static void emitWarningScopeLocal(EmitterContext ctx, int scopeId) {
+        MethodVisitor mv = ctx.mv;
+
+        // Mark that this subroutine uses local variables
+        ctx.javaClassInfo.usesLocal = true;
+
+        // Get the variable name for ${^WARNING_SCOPE}
+        String varName = "main::" + GlobalContext.WARNING_SCOPE.substring("main::".length());
+
+        // Call GlobalRuntimeScalar.makeLocal(varName) which:
+        // 1. Gets or creates the global variable
+        // 2. Saves its current value via DynamicVariableManager
+        // 3. Returns the variable for assignment
+        mv.visitLdcInsn(varName);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
+                "makeLocal",
+                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+
+        // Assign the scope ID: .set(scopeId)
+        mv.visitLdcInsn(scopeId);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "set",
+                "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+
+        // Pop the result (void context)
+        mv.visitInsn(Opcodes.POP);
     }
 }

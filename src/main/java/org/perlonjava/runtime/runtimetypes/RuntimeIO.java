@@ -862,7 +862,9 @@ public class RuntimeIO extends RuntimeScalar {
             s = s.substring(0, s.length() - 1);
         }
         if (s.indexOf('\0') >= 0) {
-            if (Warnings.warningManager.isWarningEnabled("syscalls")) {
+            // Check both compile-time and runtime warning suppression
+            if (Warnings.warningManager.isWarningEnabled("syscalls") 
+                    && !WarningFlags.isWarningSuppressedAtRuntime("syscalls")) {
                 String display = fileName.replace("\0", "\\0");
                 WarnDie.warn(
                         new RuntimeScalar("Invalid \\\\0 character in pathname for " + opName + ": " + display),
@@ -884,7 +886,9 @@ public class RuntimeIO extends RuntimeScalar {
             s = s.substring(0, s.length() - 1);
         }
         if (s.indexOf('\0') >= 0) {
-            if (Warnings.warningManager.isWarningEnabled("syscalls")) {
+            // Check both compile-time and runtime warning suppression
+            if (Warnings.warningManager.isWarningEnabled("syscalls")
+                    && !WarningFlags.isWarningSuppressedAtRuntime("syscalls")) {
                 String display = pattern.replace("\0", "\\0");
                 WarnDie.warn(
                         new RuntimeScalar("Invalid \\\\0 character in pattern for glob: " + display),

@@ -1,6 +1,10 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
@@ -28,9 +32,25 @@ public class Warnings extends PerlModuleBase {
             warnings.registerMethod("unimport", "noWarnings", ";$");
             warnings.registerMethod("warn", "warn", "$;$");
             warnings.registerMethod("warnif", "warnIf", "$;$");
+            warnings.registerMethod("register_categories", "registerCategories", ";@");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Warnings method: " + e.getMessage());
         }
+    }
+
+    /**
+     * Registers custom warning categories (used by warnings::register).
+     *
+     * @param args The arguments - category names to register.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList registerCategories(RuntimeArray args, int ctx) {
+        for (int i = 0; i < args.size(); i++) {
+            String category = args.get(i).toString();
+            WarningFlags.registerCategory(category);
+        }
+        return new RuntimeScalar().getList();
     }
 
     /**
@@ -67,19 +87,36 @@ public class Warnings extends PerlModuleBase {
 
     /**
      * Disables a warning category.
+     * This is called for "no warnings 'category'".
+     * Warning state is handled at compile time via the symbol table (like strict).
+     * Additionally, registers the disabled categories for runtime scope checking
+     * via $^WARNING_SCOPE mechanism (see dev/design/warnings-scope.md).
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList.
      */
     public static RuntimeList noWarnings(RuntimeArray args, int ctx) {
-        for (int i = 1; i < args.size(); i++) {
-            String category = args.get(i).toString();
-            if (!warningExists(category)) {
-                throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+        Set<String> categories = new HashSet<>();
+        
+        if (args.size() <= 1) {
+            // no warnings; - suppress all warnings
+            categories.add("all");
+            warningManager.disableWarning("all");
+        } else {
+            for (int i = 1; i < args.size(); i++) {
+                String category = args.get(i).toString();
+                if (!warningExists(category)) {
+                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+                }
+                categories.add(category);
+                warningManager.disableWarning(category);
             }
-            warningManager.disableWarning(category);
         }
+        
+        // Register scope for runtime checking (sets lastScopeId for StatementParser)
+        WarningFlags.registerScopeWarnings(categories);
+        
         return new RuntimeScalar().getList();
     }
 
@@ -127,6 +164,8 @@ public class Warnings extends PerlModuleBase {
 
     /**
      * Issues a warning if the category is enabled.
+     * When called with just a message, checks if the calling package's warning category is enabled.
+     * Also checks ${^WARNING_SCOPE} for runtime warning suppression via "no warnings 'category'".
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -136,10 +175,38 @@ public class Warnings extends PerlModuleBase {
         if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for warnIf()");
         }
-        String category = args.size() > 1 ? args.get(0).toString() : "all";
-        String message = args.get(args.size() - 1).toString();
+        
+        String category;
+        RuntimeScalar message;
+        
+        if (args.size() > 1) {
+            // warnif(category, message)
+            category = args.get(0).toString();
+            message = args.get(1);
+        } else {
+            // warnif(message) - check calling package's category
+            message = args.get(0);
+            // Get the calling package to use as category
+            RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
+            if (caller.size() > 0) {
+                category = caller.elements.get(0).toString();
+            } else {
+                category = "main";
+            }
+        }
+        
+        // Check runtime scope suppression via ${^WARNING_SCOPE}
+        // This allows "no warnings 'Category'" in user code to propagate to warnif() calls
+        RuntimeScalar scopeVar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        int scopeId = scopeVar.getInt();
+        if (scopeId > 0 && WarningFlags.isWarningDisabledInScope(scopeId, category)) {
+            // Warning is suppressed by caller's "no warnings"
+            return new RuntimeScalar().getList();
+        }
+        
         if (warningManager.isWarningEnabled(category)) {
-            System.err.println("Warning: " + message);
+            // Use WarnDie.warn to go through $SIG{__WARN__}
+            WarnDie.warn(message, new RuntimeScalar(""));
         }
         return new RuntimeScalar().getList();
     }

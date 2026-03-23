@@ -5,11 +5,13 @@ import org.perlonjava.frontend.analysis.Visitor;
 /**
  * The CompilerFlagNode class represents a node in the AST for handling
  * compiler flags such as warnings, features, and strict options.
+ * Also handles runtime warning scope propagation for "no warnings 'category'".
  */
 public class CompilerFlagNode extends AbstractNode {
     private final java.util.BitSet warningFlags;
     private final int featureFlags;
     private final int strictOptions;
+    private final int warningScopeId;  // Runtime scope ID for "no warnings" propagation
 
     /**
      * Constructs a new CompilerFlagNode with the specified flag states.
@@ -20,9 +22,23 @@ public class CompilerFlagNode extends AbstractNode {
      * @param tokenIndex    the index of the token in the source code
      */
     public CompilerFlagNode(java.util.BitSet warningFlags, int featureFlags, int strictOptions, int tokenIndex) {
+        this(warningFlags, featureFlags, strictOptions, 0, tokenIndex);
+    }
+
+    /**
+     * Constructs a new CompilerFlagNode with the specified flag states and warning scope ID.
+     *
+     * @param warningFlags    the bitmask representing the state of warning flags
+     * @param featureFlags    the bitmask representing the state of feature flags
+     * @param strictOptions   the bitmask representing the state of strict options
+     * @param warningScopeId  the runtime warning scope ID (0 if not applicable)
+     * @param tokenIndex      the index of the token in the source code
+     */
+    public CompilerFlagNode(java.util.BitSet warningFlags, int featureFlags, int strictOptions, int warningScopeId, int tokenIndex) {
         this.warningFlags = (java.util.BitSet) warningFlags.clone();
         this.featureFlags = featureFlags;
         this.strictOptions = strictOptions;
+        this.warningScopeId = warningScopeId;
         this.tokenIndex = tokenIndex;
     }
 
@@ -51,6 +67,16 @@ public class CompilerFlagNode extends AbstractNode {
      */
     public int getStrictOptions() {
         return strictOptions;
+    }
+
+    /**
+     * Returns the runtime warning scope ID for "no warnings" propagation.
+     * Used to emit "local ${^WARNING_SCOPE} = scopeId" for warnif() checking.
+     *
+     * @return the warning scope ID, or 0 if not applicable
+     */
+    public int getWarningScopeId() {
+        return warningScopeId;
     }
 
     /**
