@@ -1,6 +1,6 @@
 # Profile PerlOnJava
 
-## CRITICAL: NEVER USE `git stash`
+## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
 
 **DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
 
@@ -14,7 +14,7 @@ Profile and optimize PerlOnJava runtime performance using Java Flight Recorder.
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
-**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+**IMPORTANT: Always commit or save changes BEFORE switching branches.** Use `git diff > backup.patch` to save uncommitted work, or commit to a WIP branch.
 
 ```bash
 git checkout -b perf/optimization-name
