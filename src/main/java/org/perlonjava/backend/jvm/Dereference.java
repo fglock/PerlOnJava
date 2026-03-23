@@ -379,11 +379,24 @@ public class Dereference {
                     "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
             
+            // Save the list to a local variable before evaluating indices.
+            // This is necessary because indices may contain function calls that
+            // generate complex bytecode with exception handlers, and the JVM
+            // verifier requires consistent stack heights at merge points.
+            int listVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, listVar);
+            
             // Evaluate the indices
             ListNode indices = ((ArrayLiteralNode) node.right).asListNode();
             indices.accept(emitterVisitor.with(RuntimeContextType.LIST));
             
-            // Call RuntimeList.getSlice(indices)
+            // Save indices to local variable too
+            int indicesVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, indicesVar);
+            
+            // Load list and indices back, call RuntimeList.getSlice(indices)
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, listVar);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, indicesVar);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
                     "getSlice",
