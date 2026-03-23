@@ -322,6 +322,35 @@ public class RegexPreprocessor {
         while (i < len) {
             char ch = pattern.charAt(i);
 
+            // Skip extended character classes (?[...]]) entirely - they handle their own case folding
+            if (!escaped && ch == '(' && i + 2 < len && pattern.charAt(i + 1) == '?' && pattern.charAt(i + 2) == '[') {
+                // Find the end of the extended char class
+                int depth = 1;
+                int j = i + 3; // Start after (?[
+                while (j < len && depth > 0) {
+                    char c = pattern.charAt(j);
+                    if (c == '\\' && j + 1 < len) {
+                        // Skip escaped character
+                        j += 2;
+                        continue;
+                    }
+                    if (c == ']' && j + 1 < len && pattern.charAt(j + 1) == ')') {
+                        depth--;
+                        if (depth == 0) {
+                            break;
+                        }
+                    }
+                    if (c == '(' && j + 2 < len && pattern.charAt(j + 1) == '?' && pattern.charAt(j + 2) == '[') {
+                        depth++;
+                    }
+                    j++;
+                }
+                // Append (?[ ... ]) - the whole extended char class unchanged
+                result.append(pattern, i, j + 2);
+                i = j + 2;
+                continue;
+            }
+
             // Track if we're inside a character class [...]
             if (!escaped) {
                 if (ch == '[') {
@@ -351,8 +380,9 @@ public class RegexPreprocessor {
                     }
                 }
 
-                // Skip over \p{...}, \P{...}, \N{...}, \x{...}, \o{...} constructs without case folding
-                if (escaped && (ch == 'p' || ch == 'P' || ch == 'N' || ch == 'x' || ch == 'o')
+                // Skip over \p{...}, \P{...}, \x{...}, \o{...} constructs without case folding
+                // Note: \N{...} is handled separately below - it needs case-folding for special chars
+                if (escaped && (ch == 'p' || ch == 'P' || ch == 'x' || ch == 'o')
                         && i + 1 < len && pattern.charAt(i + 1) == '{') {
                     result.append(ch);
                     i++;
@@ -367,6 +397,46 @@ public class RegexPreprocessor {
                     }
                     escaped = false;
                     continue;
+                }
+
+                // Handle \N{...} specially - resolve and apply case-folding if needed
+                if (escaped && ch == 'N' && i + 1 < len && pattern.charAt(i + 1) == '{') {
+                    int endBrace = pattern.indexOf('}', i + 2);
+                    if (endBrace != -1) {
+                        String charName = pattern.substring(i + 2, endBrace).trim();
+                        try {
+                            int codePoint = UnicodeResolver.getCodePointFromName(charName);
+                            // Check if this character needs special case-fold expansion
+                            String charClassExpansion = expandSpecialSingleCharFoldInCharClass(codePoint);
+                            if (charClassExpansion != null) {
+                                // Remove the backslash that was already appended
+                                result.setLength(result.length() - 1);
+                                if (inCharClass) {
+                                    // Inside regular [...], append chars directly
+                                    result.append(charClassExpansion);
+                                } else {
+                                    // Not inside [...], wrap in character class
+                                    // This handles extended char class context like (?[ \N{KELVIN SIGN} ])
+                                    result.append('[').append(charClassExpansion).append(']');
+                                }
+                            } else {
+                                // No special expansion needed, keep the original \N{...}
+                                result.append(ch);
+                                for (int j = i + 1; j <= endBrace; j++) {
+                                    result.append(pattern.charAt(j));
+                                }
+                            }
+                            i = endBrace + 1;
+                            escaped = false;
+                            continue;
+                        } catch (IllegalArgumentException e) {
+                            // Unknown character name, pass through as-is
+                            result.append(ch);
+                            i++;
+                            escaped = false;
+                            continue;
+                        }
+                    }
                 }
 
                 result.append(ch);

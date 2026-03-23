@@ -1,7 +1,11 @@
 package org.perlonjava.runtime.regex;
 
+import com.ibm.icu.lang.UCharacter;
+
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ExtendedCharClass handles Perl's Extended Bracketed Character Classes (?[...])
@@ -27,6 +31,9 @@ import java.util.List;
  * and negation (^) operators.
  */
 public class ExtendedCharClass {
+    // Thread-local flag to communicate case-insensitivity to nested processing
+    private static final ThreadLocal<Boolean> caseInsensitive = ThreadLocal.withInitial(() -> false);
+
     /**
      * Handles Perl's Extended Bracketed Character Class (?[...])
      * Transforms it into Java-compatible character class syntax.
@@ -78,8 +85,19 @@ public class ExtendedCharClass {
 
         // try {
         // Parse and transform the extended character class
-        String transformed = transformExtendedClass(content, s, start);
-        sb.append(transformed);
+        // Set case-insensitivity flag for nested processing
+        boolean isCaseInsensitive = regexFlags.isCaseInsensitive();
+        caseInsensitive.set(isCaseInsensitive);
+        try {
+            String transformed = transformExtendedClass(content, s, start);
+            // Wrap in (?-i:...) to disable Java's /i flag for the extended character class.
+            // We handle case-folding manually for literals within the extended char class,
+            // but /i should NOT affect Unicode properties like \p{Blk=ASCII}.
+            // Wrapping ensures the character class uses only our manual case expansions.
+            sb.append("(?-i:").append(transformed).append(")");
+        } finally {
+            caseInsensitive.set(false);
+        }
 
         // Skip past the '])'
         return end + 1;
@@ -308,7 +326,7 @@ public class ExtendedCharClass {
                         // Check for interpolated regex pattern: (?FLAGS:(?[ ... ]))
                         // When a qr// pattern containing (?[...]) is interpolated, it becomes:
                         //   (?^:(?[ ... ])) or (?^i:(?[ ... ])) etc.
-                        // We need to extract just the inner (?[ ... ]) part
+                        // We need to extract just the inner (?[ ... ]) part AND preserve any /i flag
 
                         // Find the : after the flags (e.g., (?^: or (?^i:)
                         int colonPos = i + 2;
@@ -316,12 +334,16 @@ public class ExtendedCharClass {
                             colonPos++;
                         }
 
+                        // Extract and parse flags from this construct
+                        String outerFlags = content.substring(i + 2, colonPos);
+                        boolean hasInnerCaseInsensitive = outerFlags.contains("i");
+
                         // Check if this is followed by (?[ or another (?FLAGS:
                         if (colonPos < content.length() && content.charAt(colonPos) == ':' &&
                                 colonPos + 1 < content.length() && content.charAt(colonPos + 1) == '(') {
 
                             int searchPos = colonPos + 1;
-                            // Skip nested (?FLAGS: groups to find the actual (?[
+                            // Skip nested (?FLAGS: groups to find the actual (?[, collecting all flags
                             while (searchPos < content.length() && content.charAt(searchPos) == '(' &&
                                     searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?') {
                                 // Find the : after these flags
@@ -329,6 +351,11 @@ public class ExtendedCharClass {
                                 while (nextColon < content.length() && content.charAt(nextColon) != ':' &&
                                         content.charAt(nextColon) != ')') {
                                     nextColon++;
+                                }
+                                // Collect flags from this nested construct too
+                                String nestedFlags = content.substring(searchPos + 2, nextColon);
+                                if (nestedFlags.contains("i")) {
+                                    hasInnerCaseInsensitive = true;
                                 }
                                 if (nextColon < content.length() && content.charAt(nextColon) == ':') {
                                     if (nextColon + 3 < content.length() && content.charAt(nextColon + 1) == '(' &&
@@ -354,8 +381,24 @@ public class ExtendedCharClass {
                                 if (innerEnd != -1) {
                                     // Extract just the content between (?[ and ])
                                     String innerContent = content.substring(innerStart + 3, innerEnd - 1);
-                                    // Add as a character class token (will be processed recursively)
-                                    tokens.add(new Token(TokenType.CHAR_CLASS, "(?[" + innerContent + "])", tokenStart));
+
+                                    // If the interpolated pattern has /i flag, process with case-insensitivity
+                                    String processedContent;
+                                    if (hasInnerCaseInsensitive) {
+                                        // Temporarily enable case-insensitivity for this nested content
+                                        boolean savedCaseSensitive = caseInsensitive.get();
+                                        caseInsensitive.set(true);
+                                        try {
+                                            processedContent = transformExtendedClass(innerContent, content, innerStart + 3);
+                                        } finally {
+                                            caseInsensitive.set(savedCaseSensitive);
+                                        }
+                                    } else {
+                                        processedContent = "(?[" + innerContent + "])";
+                                    }
+
+                                    // Add as a character class token (already processed if had /i)
+                                    tokens.add(new Token(TokenType.CHAR_CLASS, processedContent, tokenStart));
                                     // Skip past the entire (?FLAGS:...(?[ ... ])) construct
                                     // We need to skip all the closing ) for the nested flag groups
                                     i = innerEnd + 1; // After the closing ) of (?[...)
@@ -710,6 +753,15 @@ public class ExtendedCharClass {
                                 String name = content.substring(i + 3, end).trim();
                                 try {
                                     int codePoint = UnicodeResolver.getCodePointFromName(name);
+                                    // Check if case-insensitive and needs special fold expansion
+                                    if (caseInsensitive.get()) {
+                                        String expansion = expandCaseFoldInCharClass(codePoint);
+                                        if (expansion != null) {
+                                            result.append(expansion);
+                                            i = end + 1;
+                                            continue;
+                                        }
+                                    }
                                     result.append(String.format("\\x{%X}", codePoint));
                                     i = end + 1;
                                     continue;
@@ -755,6 +807,34 @@ public class ExtendedCharClass {
                     i++;
                     lastChar = -1;  // Reset after POSIX class
                 } else {
+                    // Regular character - expand case variants if case-insensitive
+                    int codePoint = content.codePointAt(i);
+                    if (caseInsensitive.get()) {
+                        // First check for special folds (KELVIN SIGN, etc.)
+                        String expansion = expandCaseFoldInCharClass(codePoint);
+                        if (expansion != null) {
+                            result.append(expansion);
+                            i += Character.charCount(codePoint);
+                            lastChar = -1;  // Reset after expansion
+                            continue;
+                        }
+                        // For regular characters, add upper and lower case variants
+                        int lower = UCharacter.toLowerCase(codePoint);
+                        int upper = UCharacter.toUpperCase(codePoint);
+                        if (lower != upper) {
+                            // Has case variants - add both
+                            appendCharClassChar(result, codePoint);
+                            if (lower != codePoint) {
+                                appendCharClassChar(result, lower);
+                            }
+                            if (upper != codePoint) {
+                                appendCharClassChar(result, upper);
+                            }
+                            i += Character.charCount(codePoint);
+                            lastChar = -1;  // Reset after expansion
+                            continue;
+                        }
+                    }
                     result.append(c);
                     if (c != '-' && c != '^') {
                         lastChar = c;  // Remember this character
@@ -1039,5 +1119,76 @@ public class ExtendedCharClass {
             Token token = peek();
             RegexPreprocessor.regexError(originalRegex, token.position, message);
         }
+    }
+
+    // Special characters with unusual case folding (same as in RegexPreprocessor)
+    private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_FOLDS = Map.of(
+            0x00B5, 0x03BC,  // MICRO SIGN -> GREEK SMALL LETTER MU
+            0x212A, 0x006B,  // KELVIN SIGN -> k
+            0x212B, 0x00E5   // ANGSTROM SIGN -> å
+    );
+    private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_REVERSE_FOLDS = Map.of(
+            0x03BC, 0x00B5,  // GREEK SMALL LETTER MU -> MICRO SIGN
+            0x006B, 0x212A,  // k -> KELVIN SIGN
+            0x00E5, 0x212B   // å -> ANGSTROM SIGN
+    );
+
+    /**
+     * Expand a code point to include its case variants for case-insensitive matching.
+     * Only expands special characters that have unusual case folding.
+     * Returns null if no expansion is needed.
+     */
+    private static String expandCaseFoldInCharClass(int codePoint) {
+        int folded = UCharacter.foldCase(codePoint, true);
+
+        // Only expand if this is a known special fold character
+        if (!SPECIAL_SINGLE_CHAR_FOLDS.containsKey(codePoint)
+                && !SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.containsKey(folded)
+                && !SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.containsKey(codePoint)) {
+            return null;
+        }
+
+        LinkedHashSet<Integer> variants = new LinkedHashSet<>();
+        variants.add(codePoint);
+        variants.add(folded);
+
+        Integer reverse = SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.get(folded);
+        if (reverse != null) {
+            variants.add(reverse);
+        }
+        Integer reverse2 = SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.get(codePoint);
+        if (reverse2 != null) {
+            variants.add(reverse2);
+        }
+
+        // Include upper/lower variants of all participating code points
+        LinkedHashSet<Integer> expanded = new LinkedHashSet<>();
+        for (Integer cp : variants) {
+            expanded.add(cp);
+            expanded.add(UCharacter.toLowerCase(cp));
+            expanded.add(UCharacter.toUpperCase(cp));
+            expanded.add(UCharacter.foldCase(cp, true));
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (Integer cp : expanded) {
+            // Escape special characters in char class
+            if (cp == '\\' || cp == ']' || cp == '-' || cp == '^') {
+                sb.append('\\');
+            }
+            sb.appendCodePoint(cp);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Append a code point to a character class StringBuilder, escaping if necessary.
+     */
+    private static void appendCharClassChar(StringBuilder sb, int codePoint) {
+        // Escape special characters in character class
+        if (codePoint == '\\' || codePoint == ']' || codePoint == '-' || codePoint == '^' || codePoint == '[') {
+            sb.append('\\');
+        }
+        sb.appendCodePoint(codePoint);
     }
 }
