@@ -301,6 +301,43 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Gets a slice of this list by indices.
+     * This implements proper list slice semantics: if the original list is empty,
+     * the result is an empty list regardless of indices requested.
+     * If the list has elements but an index is out of bounds, undef is returned for that index.
+     *
+     * @param indices The list of indices to extract
+     * @return A RuntimeList containing the elements at the specified indices
+     */
+    public RuntimeList getSlice(RuntimeList indices) {
+        RuntimeList result = new RuntimeList();
+        
+        // First, flatten this list to get actual elements
+        RuntimeArray flattened = new RuntimeArray();
+        this.addToArray(flattened);
+        int size = flattened.size();
+        
+        // If the source list is empty, return empty list for any indices
+        if (size == 0) {
+            return result;
+        }
+        
+        // For each index, get the element (or undef if out of bounds)
+        for (RuntimeScalar indexScalar : indices) {
+            int index = indexScalar.getInt();
+            if (index < 0) {
+                index = size + index;
+            }
+            if (index >= 0 && index < size) {
+                result.elements.add(flattened.get(index));
+            } else {
+                result.elements.add(new RuntimeScalar());  // undef for out of bounds
+            }
+        }
+        return result;
+    }
+
+    /**
      * Removes the last character from each element in the list.
      *
      * @return A scalar representing the result of the chop operation.

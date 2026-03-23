@@ -365,13 +365,55 @@ public class Dereference {
             }
         }
         if (node.left instanceof ListNode list) { // ("a","b","c")[2]
-            // transform to:  ["a","b","c"]->[2]
-            BinaryOperatorNode refNode = new BinaryOperatorNode("->",
-                    new ArrayLiteralNode(list.elements, list.getIndex()),
-                    node.right, node.tokenIndex);
-            refNode.accept(emitterVisitor);
+            // Use proper list slice semantics: evaluate list, then slice
+            // This differs from array dereference because empty list returns empty, not undef
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) (list)[indices] - list slice");
+            
+            // Evaluate the list
+            list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            
+            // Convert to RuntimeList if not already (handles RuntimeScalar case)
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    "getList",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+            
+            // Evaluate the indices
+            ListNode indices = ((ArrayLiteralNode) node.right).asListNode();
+            indices.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            
+            // Call RuntimeList.getSlice(indices)
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "getSlice",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+            
+            // Handle context conversion
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                        "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            }
             return;
         }
+
+        // For function calls and other expressions: (func())[index]
+        // We need to use list slice semantics to handle empty lists correctly.
+        // However, this should NOT apply to chained dereferences like $matrix[1][0]
+        // where the first [1] returns a scalar (array reference) and the second
+        // [0] should dereference it.
+        // 
+        // List slice semantics apply when:
+        // 1. The left side is a ListNode (literal list) - handled above
+        // 2. The left side is a parenthesized function call (wantarray context)
+        //
+        // For now, we use the old transformation to ->[] for non-ListNode cases,
+        // as most cases are array dereferences, not list slices.
+        // TODO: Properly detect when the left side is a list-returning expression
+        //       vs. a scalar-returning expression.
 
         // default: call `->[]`
         BinaryOperatorNode refNode = new BinaryOperatorNode("->", node.left, node.right, node.tokenIndex);
