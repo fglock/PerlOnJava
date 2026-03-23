@@ -146,11 +146,19 @@ public class InterpreterState {
         return new ArrayList<>(frameStack.get());
     }
 
+    /**
+     * Get the PC stack in frame order (most recent first to match getStack()).
+     * The pcStack ArrayList stores PCs oldest-first, but getStack() returns
+     * frames newest-first, so we reverse the order here to match.
+     *
+     * @return A list of PCs from most recent (index 0) to oldest
+     */
     public static List<Integer> getPcStack() {
         ArrayList<int[]> pcs = pcStack.get();
         ArrayList<Integer> result = new ArrayList<>(pcs.size());
-        for (int[] holder : pcs) {
-            result.add(holder[0]);
+        // Iterate in reverse order to match frame order (newest first)
+        for (int i = pcs.size() - 1; i >= 0; i--) {
+            result.add(pcs.get(i)[0]);
         }
         return result;
     }
