@@ -351,6 +351,24 @@ public class RegexPreprocessor {
                     }
                 }
 
+                // Skip over \p{...}, \P{...}, \N{...}, \x{...}, \o{...} constructs without case folding
+                if (escaped && (ch == 'p' || ch == 'P' || ch == 'N' || ch == 'x' || ch == 'o')
+                        && i + 1 < len && pattern.charAt(i + 1) == '{') {
+                    result.append(ch);
+                    i++;
+                    // Now append everything up to and including the closing '}'
+                    while (i < len && pattern.charAt(i) != '}') {
+                        result.append(pattern.charAt(i));
+                        i++;
+                    }
+                    if (i < len) {
+                        result.append(pattern.charAt(i)); // append '}'
+                        i++;
+                    }
+                    escaped = false;
+                    continue;
+                }
+
                 result.append(ch);
                 escaped = false;
                 i++;
