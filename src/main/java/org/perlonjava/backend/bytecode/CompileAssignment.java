@@ -1253,7 +1253,9 @@ public class CompileAssignment {
                                     bytecodeCompiler.emitReg(hashReg);
                                     bytecodeCompiler.emit(nameIdx);
                                 }
-                            } else if (hashOp.operand instanceof OperatorNode) {
+                            } else if (hashOp.operand instanceof OperatorNode ||
+                                       hashOp.operand instanceof BlockNode) {
+                                // Handle @{$ref}{keys} or @{expr}{keys}
                                 bytecodeCompiler.compileNode(hashOp.operand, -1, rhsContext);
                                 int scalarRefReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
