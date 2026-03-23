@@ -84,10 +84,11 @@ Each call goes through multiple layers before reaching the actual interpreter ex
 - [x] Profile analysis (2026-03-23)
 - [x] Phase 1: ThreadLocal Caching (2026-03-23) - Cache RuntimeScalar reference, no measurable speedup but cleaner code
 - [x] Phase 2: Lazy CallerStack (2026-03-23) - **~19% speedup** (127s → 103s)
+- [x] Phase 3: Inline Apply Path (2026-03-23) - **~2% speedup** (103s → 101s)
+- [x] Phase 4: Register Array Pooling (2026-03-23) - **~4% speedup** (101s → 97s)
 
 ### Pending
-- [ ] Phase 3: Inline Apply Path
-- [ ] Phase 4: Cache pcToTokenIndex Lookup
+- [ ] Phase 5: Cache pcToTokenIndex Lookup (moved from Phase 4)
 
 ## Profile Results After Phase 1
 
@@ -102,6 +103,34 @@ Implemented lazy CallerStack:
 - `pop()` doesn't resolve lazy entries (no computation needed)
 
 **Benchmark improvement:** 127s → 103s = **~19% speedup**
+
+## Phase 3 Results
+
+Inline InterpretedCode apply path in CALL_SUB:
+- Check if code is `InterpretedCode` and call `BytecodeInterpreter.execute()` directly
+- Bypasses `RuntimeCode.apply()` → `InterpretedCode.apply()` chain
+
+**Benchmark improvement:** 103s → 101s = **~2% speedup**
+
+## Phase 4 Results
+
+Register array pooling in InterpretedCode:
+- `InterpretedCode.getRegisters()` caches register arrays per-code-object
+- Uses ThreadLocal for thread safety with recursion detection
+- Recursive calls fallback to fresh allocation (no contention)
+- `BytecodeInterpreter.execute()` releases registers in finally block
+
+**Benchmark improvement:** 101s → 97s = **~4% speedup**
+
+## Total Performance Improvement
+
+| Phase | Time (s) | Improvement |
+|-------|----------|-------------|
+| Baseline | 127 | - |
+| Phase 2 (Lazy CallerStack) | 103 | 19% |
+| Phase 3 (Inline Apply) | 101 | 2% |
+| Phase 4 (Register Pooling) | 97 | 4% |
+| **Total** | **97** | **~24%** |
 
 ## Verification
 
