@@ -299,7 +299,17 @@ public class NextMethod {
 
     static RuntimeScalar superMethod(RuntimeScalar currentSub, String methodName) {
         RuntimeScalar method;
-        String packageName = ((RuntimeCode) currentSub.value).packageName;
+        String packageName;
+        
+        // Get package name from currentSub if available, otherwise fall back to current package
+        if (currentSub != null && currentSub.value instanceof RuntimeCode code) {
+            packageName = code.packageName;
+        } else {
+            // Fall back to the current package from interpreter state
+            // This handles cases like SUPER::import called from top-level code
+            packageName = org.perlonjava.backend.bytecode.InterpreterState.currentPackage.get().toString();
+        }
+        
         method = InheritanceResolver.findMethodInHierarchy(
                 methodName.substring(7),    // method name without SUPER:: prefix
                 packageName,
