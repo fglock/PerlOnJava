@@ -49,35 +49,27 @@ sub parse_version {
 }
 
 # get_version - helper for parse_version
-# Simplified implementation that avoids package block issues
+# Based on the standard ExtUtils::MakeMaker implementation
 sub get_version {
     my ($self, $parsefile, $sigil, $name) = @_;
     my $line = $_; # from the while() loop in parse_version
-    # Clean up taint mode markers
-    $line = $1 if $line =~ m{^(.+)}s;
     
-    # Directly extract version from common patterns
-    # Pattern 1: $VERSION = '1.23' or $VERSION = "1.23"
-    if ($line =~ /\$VERSION\s*=\s*['"]([^'"]+)['"]/) {
-        return $1;
-    }
-    # Pattern 2: $VERSION = 1.23 (bare number)
-    if ($line =~ /\$VERSION\s*=\s*([\d._]+)/) {
-        return $1;
-    }
-    # Pattern 3: version->new('v1.2.3') or version->declare('v1.2.3')
-    if ($line =~ /version->(?:new|declare)\s*\(\s*['"]([^'"]+)['"]/) {
-        return $1;
-    }
-    # Fallback: try eval (may not work in all contexts)
+    # Clean up taint mode markers
+    $line = $1 if $line =~ /^(.+)/s;
+    
+    # Use eval to both set and retrieve the version in one step
+    # This avoids issues with symbolic dereferencing in JAR-loaded modules
     {
+        package ExtUtils::MakeMaker::_version;
+        undef *version;
+        eval { require version; version->import };
         no strict;
         no warnings;
-        local $ExtUtils::MakeMaker::_version::VERSION;
-        eval "package ExtUtils::MakeMaker::_version; $line"; ## no critic
-        return $ExtUtils::MakeMaker::_version::VERSION if defined $ExtUtils::MakeMaker::_version::VERSION;
+        local *{$name};
+        eval $line; ## no critic
+        # Use eval to retrieve the value - more reliable than ${$name}
+        return eval "\$$name"; ## no critic
     }
-    return;
 }
 
 # maybe_command - check if a file is an executable command (Unix version)
