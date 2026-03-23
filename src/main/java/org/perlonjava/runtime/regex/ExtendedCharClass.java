@@ -754,11 +754,26 @@ public class ExtendedCharClass {
                                 String name = content.substring(i + 3, end).trim();
                                 try {
                                     int codePoint = UnicodeResolver.getCodePointFromName(name);
-                                    // Check if case-insensitive and needs special fold expansion
+                                    // Check if case-insensitive and needs case expansion
                                     if (caseInsensitive.get()) {
+                                        // First check for special folds
                                         String expansion = expandCaseFoldInCharClass(codePoint);
                                         if (expansion != null) {
                                             result.append(expansion);
+                                            i = end + 1;
+                                            continue;
+                                        }
+                                        // Add upper/lower case variants
+                                        int lower = UCharacter.toLowerCase(codePoint);
+                                        int upper = UCharacter.toUpperCase(codePoint);
+                                        if (lower != upper) {
+                                            appendCharClassChar(result, codePoint);
+                                            if (lower != codePoint) {
+                                                appendCharClassChar(result, lower);
+                                            }
+                                            if (upper != codePoint) {
+                                                appendCharClassChar(result, upper);
+                                            }
                                             i = end + 1;
                                             continue;
                                         }
@@ -767,6 +782,44 @@ public class ExtendedCharClass {
                                     i = end + 1;
                                     continue;
                                 } catch (IllegalArgumentException e) {
+                                    // Let it fall through to be handled as regular escape
+                                }
+                            }
+                        } else if (next == 'x' && i + 2 < content.length() && content.charAt(i + 2) == '{') {
+                            // Hex escape \x{...}
+                            int end = content.indexOf('}', i + 3);
+                            if (end != -1) {
+                                String hex = content.substring(i + 3, end).trim();
+                                try {
+                                    int codePoint = Integer.parseInt(hex, 16);
+                                    // Check if case-insensitive and needs case expansion
+                                    if (caseInsensitive.get()) {
+                                        // First check for special folds
+                                        String expansion = expandCaseFoldInCharClass(codePoint);
+                                        if (expansion != null) {
+                                            result.append(expansion);
+                                            i = end + 1;
+                                            continue;
+                                        }
+                                        // Add upper/lower case variants
+                                        int lower = UCharacter.toLowerCase(codePoint);
+                                        int upper = UCharacter.toUpperCase(codePoint);
+                                        if (lower != upper) {
+                                            appendCharClassChar(result, codePoint);
+                                            if (lower != codePoint) {
+                                                appendCharClassChar(result, lower);
+                                            }
+                                            if (upper != codePoint) {
+                                                appendCharClassChar(result, upper);
+                                            }
+                                            i = end + 1;
+                                            continue;
+                                        }
+                                    }
+                                    result.append(String.format("\\x{%X}", codePoint));
+                                    i = end + 1;
+                                    continue;
+                                } catch (NumberFormatException e) {
                                     // Let it fall through to be handled as regular escape
                                 }
                             }
@@ -909,6 +962,28 @@ public class ExtendedCharClass {
                             appendCharClassChar(result, startLower);
                             result.append('-');
                             appendCharClassChar(result, endLower);
+                        }
+                        
+                        // Add special Unicode case folds for characters in the range
+                        // Check if any character in the range (or its case-folded equivalent)
+                        // has a special reverse fold mapping
+                        for (Map.Entry<Integer, Integer> entry : SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.entrySet()) {
+                            int baseChar = entry.getKey();
+                            int specialChar = entry.getValue();
+                            // Check if baseChar (or its upper/lower) falls within the range
+                            int baseLower = UCharacter.toLowerCase(baseChar);
+                            int baseUpper = UCharacter.toUpperCase(baseChar);
+                            int rangeLower = Math.min(codePoint, rangeEndCodePoint);
+                            int rangeUpper = Math.max(codePoint, rangeEndCodePoint);
+                            int rangeLowerFolded = Math.min(startLower, endLower);
+                            int rangeUpperFolded = Math.max(startUpper, endUpper);
+                            
+                            if ((baseChar >= rangeLower && baseChar <= rangeUpper) ||
+                                (baseLower >= rangeLowerFolded && baseLower <= rangeUpperFolded) ||
+                                (baseUpper >= rangeLower && baseUpper <= rangeUpper)) {
+                                // Add the special character
+                                appendCharClassChar(result, specialChar);
+                            }
                         }
                         
                         // Skip past the entire range (including any whitespace)
@@ -1207,12 +1282,14 @@ public class ExtendedCharClass {
     private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_FOLDS = Map.of(
             0x00B5, 0x03BC,  // MICRO SIGN -> GREEK SMALL LETTER MU
             0x212A, 0x006B,  // KELVIN SIGN -> k
-            0x212B, 0x00E5   // ANGSTROM SIGN -> å
+            0x212B, 0x00E5,  // ANGSTROM SIGN -> å
+            0x017F, 0x0073   // LATIN SMALL LETTER LONG S -> s
     );
     private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_REVERSE_FOLDS = Map.of(
             0x03BC, 0x00B5,  // GREEK SMALL LETTER MU -> MICRO SIGN
             0x006B, 0x212A,  // k -> KELVIN SIGN
-            0x00E5, 0x212B   // å -> ANGSTROM SIGN
+            0x00E5, 0x212B,  // å -> ANGSTROM SIGN
+            0x0073, 0x017F   // s -> LATIN SMALL LETTER LONG S
     );
 
     /**
