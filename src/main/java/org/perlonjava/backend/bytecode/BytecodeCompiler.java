@@ -3911,14 +3911,18 @@ public class BytecodeCompiler implements Visitor {
                 // This will add the current package if no package is specified
                 subName = NameNormalizer.normalizeVariableName(subName, getCurrentPackage());
 
-                // Allocate register for code reference
-                int rd = allocateOutputRegister();
-                int nameIdx = addToStringPool(subName);
+                // Cache the RuntimeScalar code reference at compile time.
+                // This matches Perl's behavior where the CV (code value) is cached
+                // in the compiled bytecode, surviving stash entry deletion.
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
-                // Emit LOAD_GLOBAL_CODE
-                emit(Opcodes.LOAD_GLOBAL_CODE);
+                // Allocate register and load from constant pool
+                int rd = allocateOutputRegister();
+                int constIdx = addToConstantPool(codeRef);
+
+                emit(Opcodes.LOAD_CONST);
                 emitReg(rd);
-                emit(nameIdx);
+                emit(constIdx);
 
                 lastResultReg = rd;
             } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {

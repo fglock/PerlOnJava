@@ -20,7 +20,7 @@ our $VERSION = '1.00_perlonjava';
 
 # Export functionality
 use Exporter 'import';
-our @EXPORT_OK = qw(svref_2object perlstring CVf_ANON SVf_IOK);
+our @EXPORT_OK = qw(svref_2object perlstring CVf_ANON SVf_IOK SVf_POK);
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
@@ -31,6 +31,7 @@ our $INCOMPLETE = 1;
 # SV flags (very partial)
 use constant {
     SVf_IOK => 0x0001,
+    SVf_POK => 0x0002,
 };
 
 # CV flags
@@ -54,9 +55,16 @@ package B::SV {
 
         # For the debugger source arrays (@{"_<..."}), perl stores lines as PVIV with IOK.
         # This stub implementation marks any defined, non-empty scalar as having IOK.
+        # Also mark strings with SVf_POK for CPAN::Meta::YAML compatibility.
         if (ref($r) eq 'SCALAR') {
             my $v = $$r;
-            return (defined($v) && length($v)) ? B::SVf_IOK() : 0;
+            my $flags = 0;
+            if (defined($v) && length($v)) {
+                $flags |= B::SVf_IOK();
+                # If the value is a string (not purely numeric), set POK
+                $flags |= B::SVf_POK() unless Scalar::Util::looks_like_number($v);
+            }
+            return $flags;
         }
 
         return 0;
@@ -181,6 +189,9 @@ sub CVf_ANON() { return 0x0004; }
 
 # Export SVf_IOK as a function
 sub SVf_IOK() { return 0x0001; }
+
+# Export SVf_POK as a function
+sub SVf_POK() { return 0x0002; }
 
 # Convert a string to its Perl source representation
 # This is used by modules like Specio for code generation

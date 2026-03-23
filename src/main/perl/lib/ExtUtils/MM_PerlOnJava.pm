@@ -20,6 +20,19 @@ our @ISA = qw(ExtUtils::MM_Unix);
 our $VERSION = '7.78';
 $VERSION =~ tr/_//d;
 
+# Override init_main to set PerlOnJava-specific defaults
+sub init_main {
+    my $self = shift;
+    $self->SUPER::init_main(@_);
+    
+    # Don't try to write perllocal.pod or .packlist to jar:PERL5LIB
+    # (which is not a real filesystem path)
+    $self->{NO_PERLLOCAL} = 1;
+    $self->{NO_PACKLIST} = 1;
+    
+    return;
+}
+
 # Installation base directory
 sub _perlonjava_lib {
     return $ENV{PERLONJAVA_LIB} 
@@ -78,6 +91,7 @@ sub init_xs {
 }
 
 # Override: Simplified test target
+# Sets PERL5LIB to include blib/lib so test subprocesses can find the module
 sub test {
     my($self, %attribs) = @_;
     
@@ -88,14 +102,14 @@ sub test {
     
     return '' unless $tests;
     
-    my $perl = $self->{FULLPERL} || $self->{PERL} || '$(PERL)';
-    
+    # Set PERL5LIB to add blib/lib and blib/arch to @INC for test subprocesses
+    # Test::Harness runs each test file as a subprocess, so we need PERL5LIB
     return <<"MAKE_FRAG";
 test :: pure_all
-	$perl -e 'use Test::Harness; runtests(glob(q{$tests}))'
+	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) -e 'use Test::Harness; runtests(glob(q{$tests}))'
 
 test_dynamic :: pure_all
-	$perl -e 'use Test::Harness; runtests(glob(q{$tests}))'
+	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) -e 'use Test::Harness; runtests(glob(q{$tests}))'
 
 test_static ::
 	\@echo "No static tests for PerlOnJava"

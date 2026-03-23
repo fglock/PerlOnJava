@@ -2,7 +2,7 @@ package ExtUtils::MM_Unix;
 use strict;
 use warnings;
 
-our $VERSION = '7.70_perlonjava';
+our $VERSION = '7.78_perlonjava';
 
 # MM_Unix provides Unix-specific methods for ExtUtils::MakeMaker.
 # In PerlOnJava, we only implement the methods needed by CPAN.pm.
@@ -49,27 +49,35 @@ sub parse_version {
 }
 
 # get_version - helper for parse_version
-# Based on the standard ExtUtils::MakeMaker implementation
+# Simplified implementation that avoids package block issues
 sub get_version {
     my ($self, $parsefile, $sigil, $name) = @_;
     my $line = $_; # from the while() loop in parse_version
-    
     # Clean up taint mode markers
-    $line = $1 if $line =~ /^(.+)/s;
+    $line = $1 if $line =~ m{^(.+)}s;
     
-    # Use eval to both set and retrieve the version in one step
-    # This avoids issues with symbolic dereferencing in JAR-loaded modules
+    # Directly extract version from common patterns
+    # Pattern 1: $VERSION = '1.23' or $VERSION = "1.23"
+    if ($line =~ /\$VERSION\s*=\s*['"]([^'"]+)['"]/) {
+        return $1;
+    }
+    # Pattern 2: $VERSION = 1.23 (bare number)
+    if ($line =~ /\$VERSION\s*=\s*([\d._]+)/) {
+        return $1;
+    }
+    # Pattern 3: version->new('v1.2.3') or version->declare('v1.2.3')
+    if ($line =~ /version->(?:new|declare)\s*\(\s*['"]([^'"]+)['"]/) {
+        return $1;
+    }
+    # Fallback: try eval (may not work in all contexts)
     {
-        package ExtUtils::MakeMaker::_version;
-        undef *version;
-        eval { require version; version->import };
         no strict;
         no warnings;
-        local *{$name};
-        eval $line; ## no critic
-        # Use eval to retrieve the value - more reliable than ${$name}
-        return eval "\$$name"; ## no critic
+        local $ExtUtils::MakeMaker::_version::VERSION;
+        eval "package ExtUtils::MakeMaker::_version; $line"; ## no critic
+        return $ExtUtils::MakeMaker::_version::VERSION if defined $ExtUtils::MakeMaker::_version::VERSION;
     }
+    return;
 }
 
 # maybe_command - check if a file is an executable command (Unix version)

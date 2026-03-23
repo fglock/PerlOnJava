@@ -310,6 +310,10 @@ public record OperatorHandler(String className, String methodName, int methodTyp
                         "scalar",
                         Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"));
+
+        // Thread-related (no-op in non-threaded Perl)
+        put("lock", "lock", "org/perlonjava/runtime/operators/TieOperators", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+
         operatorHandlers.put("each",
                 new OperatorHandler("org/perlonjava/runtime/runtimetypes/RuntimeBase",
                         "each",

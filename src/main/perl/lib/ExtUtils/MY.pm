@@ -2,7 +2,7 @@ package ExtUtils::MY;
 use strict;
 use warnings;
 
-our $VERSION = '7.70_perlonjava';
+our $VERSION = '7.78_perlonjava';
 
 # MY is used for user customizations in Makefile.PL
 # In PerlOnJava, this is a stub since we don't generate Makefiles.

@@ -19,6 +19,8 @@ public class Vars extends PerlModuleBase {
         Vars vars = new Vars();
         try {
             vars.registerMethod("import", "importVars", ";$");
+            // Set $VERSION so CPAN.pm can detect our bundled version
+            GlobalVariable.getGlobalVariable("vars::VERSION").set(new RuntimeScalar("1.05"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing vars method: " + e.getMessage());
         }
