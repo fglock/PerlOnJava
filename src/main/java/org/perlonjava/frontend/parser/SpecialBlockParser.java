@@ -98,6 +98,7 @@ public class SpecialBlockParser {
 
     /**
      * Executes a special block with the given block phase and block AST.
+     * Uses VOID context by default.
      *
      * @param parser     The parser instance.
      * @param blockPhase The phase of the block (e.g., BEGIN, END).
@@ -105,6 +106,19 @@ public class SpecialBlockParser {
      * @return A RuntimeList containing the result of the execution.
      */
     static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block) {
+        return runSpecialBlock(parser, blockPhase, block, RuntimeContextType.VOID);
+    }
+
+    /**
+     * Executes a special block with the given block phase, block AST, and context.
+     *
+     * @param parser      The parser instance.
+     * @param blockPhase  The phase of the block (e.g., BEGIN, END).
+     * @param block       The block AST to execute.
+     * @param contextType The context to use for execution (VOID, SCALAR, LIST).
+     * @return A RuntimeList containing the result of the execution.
+     */
+    static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block, int contextType) {
         int tokenIndex = parser.tokenIndex;
 
         // Create AST nodes for setting up the capture variables and package declaration
@@ -252,7 +266,8 @@ public class SpecialBlockParser {
             result = PerlLanguageProvider.executePerlAST(
                     new BlockNode(nodes, tokenIndex),
                     parser.tokens,
-                    parsedArgs);
+                    parsedArgs,
+                    contextType);
         } catch (PerlExitException e) {
             // exit() inside BEGIN block should terminate the program, not cause compilation error
             // Re-throw so it propagates to the CLI (Main.main()) which will call System.exit()
