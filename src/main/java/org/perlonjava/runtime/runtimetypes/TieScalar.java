@@ -63,20 +63,6 @@ public class TieScalar extends TiedVariableBase {
         return tieCall("STORE", v);
     }
 
-    /**
-     * Sets the value by calling STORE, then FETCH to get the actual stored value.
-     * This is needed for chained assignments like $s = $tied = value, where the
-     * tied variable might modify the value during STORE.
-     *
-     * @param value The new value to set.
-     * @return The result of FETCH after STORE.
-     */
-    @Override
-    public RuntimeScalar set(RuntimeScalar value) {
-        this.tiedStore(value);
-        return this.tiedFetch();
-    }
-
     public RuntimeScalar getPreviousValue() {
         return previousValue;
     }

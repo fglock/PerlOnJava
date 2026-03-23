@@ -79,13 +79,7 @@ public class ExtendedCharClass {
         // try {
         // Parse and transform the extended character class
         String transformed = transformExtendedClass(content, s, start);
-        // Wrap in (?-i:...) to disable case-insensitive matching for the character class.
-        // Perl's (?[...]) applies /i only to literal characters, not Unicode properties.
-        // Since we can't selectively apply /i within a Java character class, we disable it
-        // entirely and rely on case-folding having been done during the character class building.
-        // NOTE: This means /i on literals like [k] won't work correctly in extended classes.
-        // Full support would require manually expanding case variants for literals.
-        sb.append("(?-i:").append(transformed).append(")");
+        sb.append(transformed);
 
         // Skip past the '])'
         return end + 1;

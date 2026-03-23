@@ -321,9 +321,7 @@ public class RegexPreprocessorHelper {
                 try {
                     String translatedProperty = translateUnicodeProperty(property, negated);
                     sb.setLength(sb.length() - 1); // Remove the backslash
-                    // Wrap in (?-i:...) to ensure /i flag doesn't affect Unicode property matching
-                    // This is Perl compatible - properties match exact characters, not case variants
-                    sb.append("(?-i:").append(translatedProperty).append(")");
+                    sb.append(translatedProperty);
                 } catch (IllegalArgumentException e) {
                     // Perl allows user-defined properties (InFoo/IsFoo) to be unknown at compile time;
                     // they are resolved at runtime when the property sub is available.
