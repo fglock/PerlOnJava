@@ -43,31 +43,61 @@ public class ArgumentParser {
 
         // If no code was provided and no filename, try reading from stdin
         if (parsedArgs.code == null) {
-            try {
-                // Try to read from stdin - this will work for pipes, redirections, and interactive input
-                StringBuilder stdinContent = new StringBuilder();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-
-                // Check if we're reading from a pipe/redirection vs interactive terminal
-                boolean isInteractive = System.console() != null;
-
-                if (isInteractive) {
-                    // Interactive mode - prompt the user and read until EOF (Ctrl+D)
-                    System.err.println("Enter Perl code (press Ctrl+D when done):");
+            // If we have -M/-m modules but no code, use empty program
+            // This matches Perl 5 behavior: `perl -MModule` reads from stdin
+            // but doesn't prompt interactively
+            if (!parsedArgs.moduleUseStatements.isEmpty()) {
+                try {
+                    // Check if stdin has data available (pipe/redirection)
+                    if (System.in.available() > 0) {
+                        // Read from stdin without prompting
+                        StringBuilder stdinContent = new StringBuilder();
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            stdinContent.append(line).append("\n");
+                        }
+                        parsedArgs.code = stdinContent.toString();
+                        parsedArgs.fileName = "-";
+                    } else {
+                        // No stdin data, just run the modules with minimal code
+                        parsedArgs.code = "1;";
+                        parsedArgs.fileName = "-e";
+                    }
+                } catch (IOException e) {
+                    // If we can't check stdin, use minimal code
+                    parsedArgs.code = "1;";
+                    parsedArgs.fileName = "-e";
                 }
+            } else {
+                try {
+                    // Try to read from stdin - this will work for pipes, redirections, and interactive input
+                    StringBuilder stdinContent = new StringBuilder();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
-                // Read from stdin regardless of whether it's interactive or not
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    stdinContent.append(line).append("\n");
-                }
+                    // Check if we're reading from a pipe/redirection vs interactive terminal
+                    // Use available() to detect if there's data waiting (pipe/file)
+                    boolean hasStdinData = System.in.available() > 0;
+                    boolean isInteractive = System.console() != null && !hasStdinData;
 
-                if (stdinContent.length() > 0) {
-                    parsedArgs.code = stdinContent.toString();
-                    parsedArgs.fileName = "-"; // Indicate that code came from stdin
+                    if (isInteractive) {
+                        // Interactive mode - prompt the user and read until EOF (Ctrl+D)
+                        System.err.println("Enter Perl code (press Ctrl+D when done):");
+                    }
+
+                    // Read from stdin regardless of whether it's interactive or not
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stdinContent.append(line).append("\n");
+                    }
+
+                    if (stdinContent.length() > 0) {
+                        parsedArgs.code = stdinContent.toString();
+                        parsedArgs.fileName = "-"; // Indicate that code came from stdin
+                    }
+                } catch (IOException e) {
+                    // If we can't read from stdin, continue with normal error handling
                 }
-            } catch (IOException e) {
-                // If we can't read from stdin, continue with normal error handling
             }
         }
 
