@@ -262,9 +262,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Create ALIASES by making both names point to the same objects in the global maps
         // This is the key difference from the old implementation which created references
 
-        // Alias the CODE slot: both names point to the same code reference
+        // Alias the CODE slot: Update the existing RuntimeScalar's value instead of replacing it.
+        // This is critical because compiled code may have cached references to the existing
+        // RuntimeScalar at compile time. Replacing the map entry would leave cached references
+        // pointing to the old (now orphaned) RuntimeScalar, causing calls to fail after
+        // the stash entry is deleted.
         RuntimeScalar sourceCode = GlobalVariable.getGlobalCodeRef(globName);
-        GlobalVariable.globalCodeRefs.put(this.globName, sourceCode);
+        RuntimeScalar targetCode = GlobalVariable.getGlobalCodeRef(this.globName);
+        targetCode.set(sourceCode);  // Copy value into existing RuntimeScalar
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
 
