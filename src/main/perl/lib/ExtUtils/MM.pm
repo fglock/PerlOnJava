@@ -1,102 +1,84 @@
 package ExtUtils::MM;
-
 use strict;
 use warnings;
-use ExtUtils::MakeMaker::Config;
 
-our $VERSION = '7.78';
-$VERSION =~ tr/_//d;
+our $VERSION = '7.78_perlonjava';
+our @ISA;
 
-require ExtUtils::Liblist;
-require ExtUtils::MakeMaker;
-our @ISA = qw(ExtUtils::Liblist ExtUtils::MakeMaker);
+# MM is a compatibility shim that some modules expect.
+# In traditional MakeMaker, MM is the platform-specific Makefile generator.
+# In PerlOnJava, we use MM_PerlOnJava which handles the JVM-specific details.
 
-=head1 NAME
+# Load platform-specific module and set up inheritance
+BEGIN {
+    # Detect PerlOnJava environment - works on both Unix and Windows
+    # Check for PERLONJAVA_JAR env var or jperl in the interpreter path
+    my $Is_PerlOnJava = exists $ENV{PERLONJAVA_JAR} 
+                     || $^X =~ /jperl(?:\.bat|\.cmd)?$/i
+                     || exists $ENV{PERLONJAVA_LIB};
+    
+    if ($Is_PerlOnJava) {
+        require ExtUtils::MM_PerlOnJava;
+        push @ISA, 'ExtUtils::MM_PerlOnJava';
+    } elsif ($^O eq 'MSWin32') {
+        require ExtUtils::MM_Win32;
+        push @ISA, 'ExtUtils::MM_Win32';
+    } else {
+        require ExtUtils::MM_Unix;
+        push @ISA, 'ExtUtils::MM_Unix';
+    }
+}
 
-ExtUtils::MM - OS adjusted ExtUtils::MakeMaker subclass
+# Note: Do NOT use ExtUtils::MakeMaker here - it would create a circular dependency
+# ExtUtils::MakeMaker already requires ExtUtils::MM
 
-=head1 SYNOPSIS
-
-  require ExtUtils::MM;
-  my $mm = MM->new(...);
-
-=head1 DESCRIPTION
-
-B<FOR INTERNAL USE ONLY>
-
-ExtUtils::MM is a subclass of L<ExtUtils::MakeMaker> which automatically
-chooses the appropriate OS specific subclass for you
-(ie. L<ExtUtils::MM_Unix>, etc...).
-
-It also provides a convenient alias via the MM class (I didn't want
-MakeMaker modules outside of ExtUtils/).
-
-This class might turn out to be a temporary solution, but MM won't go
-away.
-
-=cut
-
+# Convenient alias - allows MM->method() syntax
 {
-    # Convenient alias.
     package MM;
     our @ISA = qw(ExtUtils::MM);
     sub DESTROY {}
 }
 
-sub _is_win95 {
-    # miniperl might not have the Win32 functions available and we need
-    # to run in miniperl.
-    my $have_win32 = eval { require Win32 };
-    return $have_win32 && defined &Win32::IsWin95 ? Win32::IsWin95()
-                                                  : ! defined $ENV{SYSTEMROOT};
+# Provide any methods that Makefile.PL might call on MM
+sub new {
+    my $class = shift;
+    my %args = @_;
+    bless \%args, $class;
 }
 
-my %Is = ();
-$Is{VMS}    = $^O eq 'VMS';
-$Is{OS2}    = $^O eq 'os2';
-$Is{MacOS}  = $^O eq 'MacOS';
-if( $^O eq 'MSWin32' ) {
-    _is_win95() ? $Is{Win95} = 1 : $Is{Win32} = 1;
-}
-$Is{UWIN}   = $^O =~ /^uwin(-nt)?$/;
-$Is{Cygwin} = $^O eq 'cygwin';
-$Is{NW5}    = $Config{osname} eq 'NetWare';  # intentional
-$Is{BeOS}   = ($^O =~ /beos/i or $^O eq 'haiku');
-$Is{DOS}    = $^O eq 'dos';
-if( $Is{NW5} ) {
-    $^O = 'NetWare';
-    delete $Is{Win32};
-}
-$Is{VOS}    = $^O eq 'vos';
-$Is{QNX}    = $^O eq 'qnx';
-$Is{AIX}    = $^O eq 'aix';
-$Is{Darwin} = $^O eq 'darwin';
-$Is{OS390}  = $^O eq 'os390';
+# These methods are sometimes called by complex Makefile.PL scripts
+sub parse_args { }
+sub init_dirscan { }
+sub init_others { }
+sub init_main { }
+sub init_PM { }
+sub init_INST { }
+sub init_INSTALL { }
+sub init_xs { }
 
-$Is{Unix}   = !grep { $_ } values %Is;
-
-# PerlOnJava detection - takes precedence over OS detection
-# PerlOnJava runs on JVM and cannot compile XS/C code
-my $Is_PerlOnJava = exists $ENV{PERLONJAVA_EXECUTABLE};
-
-map { delete $Is{$_} unless $Is{$_} } keys %Is;
-_assert( keys %Is == 1 );
-my($OS) = keys %Is;
-
-# Use MM_PerlOnJava if running under PerlOnJava
-my $class;
-if ($Is_PerlOnJava) {
-    $class = "ExtUtils::MM_PerlOnJava";
-} else {
-    $class = "ExtUtils::MM_$OS";
-}
-eval "require $class" unless $INC{"ExtUtils/MM_$OS.pm"} || $INC{"ExtUtils/MM_PerlOnJava.pm"}; ## no critic
-die $@ if $@;
-unshift @ISA, $class;
-
-
-sub _assert {
-    my $sanity = shift;
-    die sprintf "Assert failed at %s line %d\n", (caller)[1,2] unless $sanity;
+# Return empty hash for various attribute accessors
+sub AUTOLOAD {
+    my $self = shift;
+    our $AUTOLOAD;
     return;
 }
+
+sub DESTROY {}
+
+1;
+
+__END__
+
+=head1 NAME
+
+ExtUtils::MM - PerlOnJava stub
+
+=head1 DESCRIPTION
+
+This is a compatibility stub for modules that reference ExtUtils::MM directly.
+In PerlOnJava, the MakeMaker functionality is handled by ExtUtils::MakeMaker.
+
+On Unix-like systems, inherits from ExtUtils::MM_Unix.
+On Windows, inherits from ExtUtils::MM_Win32.
+
+=cut

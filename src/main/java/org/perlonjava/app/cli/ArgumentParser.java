@@ -43,42 +43,18 @@ public class ArgumentParser {
 
         // If no code was provided and no filename, try reading from stdin
         if (parsedArgs.code == null) {
-            // If we have -M/-m modules but no code, use empty program
-            // This matches Perl 5 behavior: `perl -MModule` reads from stdin
-            // but doesn't prompt interactively
-            if (!parsedArgs.moduleUseStatements.isEmpty()) {
-                try {
-                    // Check if stdin has data available (pipe/redirection)
-                    if (System.in.available() > 0) {
-                        // Read from stdin without prompting
-                        StringBuilder stdinContent = new StringBuilder();
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            stdinContent.append(line).append("\n");
-                        }
-                        parsedArgs.code = stdinContent.toString();
-                        parsedArgs.fileName = "-";
-                    } else {
-                        // No stdin data, just run the modules with minimal code
-                        parsedArgs.code = "1;";
-                        parsedArgs.fileName = "-e";
-                    }
-                } catch (IOException e) {
-                    // If we can't check stdin, use minimal code
-                    parsedArgs.code = "1;";
-                    parsedArgs.fileName = "-e";
-                }
+            // Check if we're reading from a pipe/redirection vs interactive terminal
+            boolean isInteractive = System.console() != null;
+            
+            // If interactive and we have -M modules, just run them without waiting for stdin
+            // This matches Perl behavior: perl -MModule=args runs the module and exits
+            if (isInteractive && !parsedArgs.moduleUseStatements.isEmpty()) {
+                parsedArgs.code = "";  // Empty code, just run the use statements
             } else {
                 try {
                     // Try to read from stdin - this will work for pipes, redirections, and interactive input
                     StringBuilder stdinContent = new StringBuilder();
                     BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-
-                    // Check if we're reading from a pipe/redirection vs interactive terminal
-                    // Use available() to detect if there's data waiting (pipe/file)
-                    boolean hasStdinData = System.in.available() > 0;
-                    boolean isInteractive = System.console() != null && !hasStdinData;
 
                     if (isInteractive) {
                         // Interactive mode - prompt the user and read until EOF (Ctrl+D)
