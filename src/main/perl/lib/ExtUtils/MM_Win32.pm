@@ -2,7 +2,7 @@ package ExtUtils::MM_Win32;
 use strict;
 use warnings;
 
-our $VERSION = '7.70_perlonjava';
+our $VERSION = '7.78_perlonjava';
 
 # MM_Win32 provides Windows-specific methods for ExtUtils::MakeMaker.
 # In PerlOnJava, we only implement the methods needed by CPAN.pm.

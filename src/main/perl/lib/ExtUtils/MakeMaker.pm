@@ -2,7 +2,7 @@ package ExtUtils::MakeMaker;
 use strict;
 use warnings;
 
-our $VERSION = '7.70';
+our $VERSION = '7.78';
 
 use Exporter 'import';
 our @EXPORT = qw(WriteMakefile prompt);

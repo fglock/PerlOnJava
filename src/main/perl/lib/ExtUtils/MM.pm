@@ -2,7 +2,7 @@ package ExtUtils::MM;
 use strict;
 use warnings;
 
-our $VERSION = '7.70_perlonjava';
+our $VERSION = '7.78_perlonjava';
 our @ISA;
 
 # MM is a compatibility shim that some modules expect.
