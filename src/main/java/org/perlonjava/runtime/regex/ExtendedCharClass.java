@@ -694,6 +694,7 @@ public class ExtendedCharClass {
             // Process the content - in extended character classes, spaces are ignored (xx mode)
             int i = 0;
             int lastChar = -1;  // Track last character for range validation
+            boolean atStart = true;  // Track if we're at the start (for ^ negation detection)
 
             while (i < content.length()) {
                 char c = content.charAt(i);
@@ -807,14 +808,61 @@ public class ExtendedCharClass {
                     i++;
                     lastChar = -1;  // Reset after POSIX class
                 } else {
-                    // Regular character - expand case variants if case-insensitive
+                    // Regular character - handle case variants if case-insensitive
                     int codePoint = content.codePointAt(i);
-                    if (caseInsensitive.get()) {
+                    int charLen = Character.charCount(codePoint);
+                    
+                    // Handle ^ at start as negation metacharacter (not a range start)
+                    if (codePoint == '^' && atStart) {
+                        result.append('^');
+                        i += charLen;
+                        atStart = false;
+                        // Note: don't set lastChar - ^ is a metacharacter, not a character in the class
+                        // Also, afterCaret means the next char is right after ^, so - should be literal
+                        continue;
+                    }
+                    
+                    // Check if - is at the start position (literal hyphen)
+                    // In [^-b], - is a literal because it's right after ^ (or at position 0)
+                    // atStart is true if we haven't seen any non-whitespace non-^ character yet
+                    boolean hyphenIsLiteral = (codePoint == '-' && (atStart || lastChar == -1));
+                    
+                    // After any non-whitespace, we're no longer at start
+                    atStart = false;
+                    
+                    // Check if this is the start of a range (followed by - and another char)
+                    // Skip whitespace when looking for the dash (extended char class syntax)
+                    boolean isRangeStart = false;
+                    int rangeEndCodePoint = -1;
+                    int rangeEndPos = -1;
+                    int dashPos = i + charLen;
+                    // Skip whitespace before dash
+                    while (dashPos < content.length() && Character.isWhitespace(content.charAt(dashPos))) {
+                        dashPos++;
+                    }
+                    if (dashPos < content.length() && content.charAt(dashPos) == '-') {
+                        int afterDashPos = dashPos + 1;
+                        // Skip whitespace after dash
+                        while (afterDashPos < content.length() && Character.isWhitespace(content.charAt(afterDashPos))) {
+                            afterDashPos++;
+                        }
+                        if (afterDashPos < content.length()) {
+                            char afterDash = content.charAt(afterDashPos);
+                            if (afterDash != ']' && afterDash != '-') {
+                                isRangeStart = true;
+                                rangeEndCodePoint = content.codePointAt(afterDashPos);
+                                rangeEndPos = afterDashPos;
+                            }
+                        }
+                    }
+                    
+                    if (caseInsensitive.get() && !isRangeStart) {
+                        // Not a range start - expand individual character
                         // First check for special folds (KELVIN SIGN, etc.)
                         String expansion = expandCaseFoldInCharClass(codePoint);
                         if (expansion != null) {
                             result.append(expansion);
-                            i += Character.charCount(codePoint);
+                            i += charLen;
                             lastChar = -1;  // Reset after expansion
                             continue;
                         }
@@ -830,11 +878,45 @@ public class ExtendedCharClass {
                             if (upper != codePoint) {
                                 appendCharClassChar(result, upper);
                             }
-                            i += Character.charCount(codePoint);
+                            i += charLen;
                             lastChar = -1;  // Reset after expansion
                             continue;
                         }
+                    } else if (caseInsensitive.get() && isRangeStart) {
+                        // Handle range with case-insensitivity
+                        // Keep original range, then add case-folded range
+                        int rangeEndCharLen = Character.charCount(rangeEndCodePoint);
+                        
+                        // Append original range: start-end
+                        appendCharClassChar(result, codePoint);
+                        result.append('-');
+                        appendCharClassChar(result, rangeEndCodePoint);
+                        
+                        // Add case-folded range if different
+                        int startLower = UCharacter.toLowerCase(codePoint);
+                        int startUpper = UCharacter.toUpperCase(codePoint);
+                        int endLower = UCharacter.toLowerCase(rangeEndCodePoint);
+                        int endUpper = UCharacter.toUpperCase(rangeEndCodePoint);
+                        
+                        // Add uppercase range if the original was lowercase
+                        if (startLower == codePoint && startUpper != codePoint) {
+                            appendCharClassChar(result, startUpper);
+                            result.append('-');
+                            appendCharClassChar(result, endUpper);
+                        }
+                        // Add lowercase range if the original was uppercase  
+                        else if (startUpper == codePoint && startLower != codePoint) {
+                            appendCharClassChar(result, startLower);
+                            result.append('-');
+                            appendCharClassChar(result, endLower);
+                        }
+                        
+                        // Skip past the entire range (including any whitespace)
+                        i = rangeEndPos + rangeEndCharLen;
+                        lastChar = -1;
+                        continue;
                     }
+                    
                     result.append(c);
                     if (c != '-' && c != '^') {
                         lastChar = c;  // Remember this character
