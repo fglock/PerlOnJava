@@ -33,6 +33,8 @@ public class Warnings extends PerlModuleBase {
             warnings.registerMethod("warn", "warn", "$;$");
             warnings.registerMethod("warnif", "warnIf", "$;$");
             warnings.registerMethod("register_categories", "registerCategories", ";@");
+            // Set $VERSION so CPAN.pm can detect our bundled version
+            GlobalVariable.getGlobalVariable("warnings::VERSION").set(new RuntimeScalar("1.74"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Warnings method: " + e.getMessage());
         }

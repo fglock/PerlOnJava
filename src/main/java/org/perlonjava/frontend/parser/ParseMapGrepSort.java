@@ -28,12 +28,27 @@ public class ParseMapGrepSort {
         if (nextToken.type == LexerTokenType.IDENTIFIER && !nextToken.text.equals("{")
                 && !ParserTables.CORE_PROTOTYPES.containsKey(nextToken.text)
                 && !ParsePrimary.isIsQuoteLikeOperator(nextToken.text)) {
+            // This could be a subroutine name for comparison (sort mysub LIST)
+            // or a class name for method call (sort MyClass->method)
+            // Save position and try to determine which
+            int identStart = parser.tokenIndex;
             String subName = IdentifierParser.parseSubroutineIdentifier(parser);
-            Node var = new OperatorNode("&",
-                    new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex);
-            operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
-            operand.handle = var;
-            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort identifier: " + operand.handle + " : " + operand);
+            
+            // Check if followed by -> (method call) - if so, backtrack and parse as list
+            if (peek(parser).text.equals("->")) {
+                // This is a method call like "sort MyClass->method" 
+                // Backtrack and parse the whole thing as a list expression
+                parser.tokenIndex = identStart;
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort method call: " + operand);
+            } else {
+                // This is a comparison subroutine name
+                Node var = new OperatorNode("&",
+                        new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex);
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+                operand.handle = var;
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort identifier: " + operand.handle + " : " + operand);
+            }
         } else {
             try {
                 operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);

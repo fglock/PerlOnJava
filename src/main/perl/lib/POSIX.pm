@@ -1,4 +1,5 @@
 package POSIX;
+our $VERSION = '2.21';
 
 #
 # Original POSIX module is part of the Perl core, maintained by the Perl 5 Porters.

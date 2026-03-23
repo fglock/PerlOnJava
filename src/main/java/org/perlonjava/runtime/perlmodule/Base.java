@@ -27,6 +27,8 @@ public class Base extends PerlModuleBase {
         Base base = new Base();
         try {
             base.registerMethod("import", "importBase", ";$");
+            // Set $VERSION so CPAN.pm can detect our bundled version
+            GlobalVariable.getGlobalVariable("base::VERSION").set(new RuntimeScalar("2.27"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Base method: " + e.getMessage());
         }

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -45,6 +46,8 @@ public class Strict extends PerlModuleBase {
         try {
             strict.registerMethod("import", "useStrict", ";$");
             strict.registerMethod("unimport", "noStrict", ";$");
+            // Set $VERSION so CPAN.pm can detect our bundled version
+            GlobalVariable.getGlobalVariable("strict::VERSION").set(new RuntimeScalar("1.14"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Strict method: " + e.getMessage());
         }

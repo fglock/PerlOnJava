@@ -1,39 +1,41 @@
 package ExtUtils::MakeMaker::Config;
+
 use strict;
 use warnings;
 
-our $VERSION = '7.70_perlonjava';
+our $VERSION = '7.78';
+$VERSION =~ tr/_//d;
 
-# This module provides a Config hash that MakeMaker uses.
-# It's a wrapper around the Config module.
+use Config ();
 
-use Config;
-
-# Re-export %Config
+# Give us an overridable config.
 our %Config = %Config::Config;
 
-# Add some PerlOnJava-specific values
-$Config{perlonjava} = 1;
-$Config{usedl} = 0;  # No dynamic loading of C code
-
 sub import {
-    my $class = shift;
     my $caller = caller;
-    
-    no strict 'refs';
-    *{"${caller}::Config"} = \%Config;
+
+    no strict 'refs';   ## no critic
+    *{$caller.'::Config'} = \%Config;
 }
 
 1;
 
-__END__
 
 =head1 NAME
 
-ExtUtils::MakeMaker::Config - Config wrapper for PerlOnJava
+ExtUtils::MakeMaker::Config - Wrapper around Config.pm
+
+
+=head1 SYNOPSIS
+
+  use ExtUtils::MakeMaker::Config;
+  print $Config{installbin};  # or whatever
+
 
 =head1 DESCRIPTION
 
-Provides access to %Config for MakeMaker scripts.
+B<FOR INTERNAL USE ONLY>
+
+A very thin wrapper around Config.pm so MakeMaker is easier to test.
 
 =cut

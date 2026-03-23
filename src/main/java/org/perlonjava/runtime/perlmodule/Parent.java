@@ -29,6 +29,8 @@ public class Parent extends PerlModuleBase {
         Parent parent = new Parent();
         try {
             parent.registerMethod("import", "importParent", ";$");
+            // Set $VERSION so CPAN.pm can detect our bundled version
+            GlobalVariable.getGlobalVariable("parent::VERSION").set(new RuntimeScalar("0.244"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Parent method: " + e.getMessage());
         }

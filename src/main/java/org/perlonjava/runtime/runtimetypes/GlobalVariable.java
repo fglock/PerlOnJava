@@ -34,6 +34,11 @@ public class GlobalVariable {
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 
+    // Pinned code references: RuntimeScalars that were accessed at compile time
+    // and should survive stash deletion. This matches Perl's behavior where
+    // compiled bytecode holds direct references to CVs that survive stash deletion.
+    private static final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
+
     // Stash aliasing: `*{Dst::} = *{Src::}` effectively makes Dst:: symbol table
     // behave like Src:: for method lookup and stash operations.
     // We keep this separate from globalCodeRefs/globalVariables so existing references
@@ -66,6 +71,7 @@ public class GlobalVariable {
         globalArrays.clear();
         globalHashes.clear();
         globalCodeRefs.clear();
+        pinnedCodeRefs.clear();
         globalIORefs.clear();
         globalFormatRefs.clear();
         globalGlobs.clear();
@@ -323,11 +329,23 @@ public class GlobalVariable {
 
     /**
      * Retrieves a global code reference by its key, initializing it if necessary.
+     * The returned RuntimeScalar is also pinned, meaning it will survive stash deletion.
+     * This matches Perl's behavior where compiled bytecode holds direct references to CVs.
      *
      * @param key The key of the global code reference.
      * @return The RuntimeScalar representing the global code reference.
      */
     public static RuntimeScalar getGlobalCodeRef(String key) {
+        // First check if we have a pinned reference that survives stash deletion
+        RuntimeScalar pinned = pinnedCodeRefs.get(key);
+        if (pinned != null) {
+            // Also ensure it's in globalCodeRefs for normal lookups
+            if (!globalCodeRefs.containsKey(key)) {
+                globalCodeRefs.put(key, pinned);
+            }
+            return pinned;
+        }
+
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
             var = new RuntimeScalar();
@@ -351,6 +369,10 @@ public class GlobalVariable {
             var.value = runtimeCode;
             globalCodeRefs.put(key, var);
         }
+
+        // Pin the RuntimeScalar so it survives stash deletion
+        pinnedCodeRefs.put(key, var);
+
         return var;
     }
 
