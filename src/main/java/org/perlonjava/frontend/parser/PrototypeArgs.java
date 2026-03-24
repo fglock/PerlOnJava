@@ -459,13 +459,16 @@ public class PrototypeArgs {
         }
 
         // Handle my/our/state with multiple variables: pipe(my ($r, $w))
-        // These should flatten to multiple arguments
+        // These should flatten to multiple arguments while preserving the declaration
         if (expr instanceof OperatorNode opNode && 
             (opNode.operator.equals("my") || opNode.operator.equals("our") || opNode.operator.equals("state")) &&
             opNode.operand instanceof ListNode listNode && listNode.elements.size() > 1) {
-            // Flatten all elements into args
+            // Flatten all elements into args, wrapping each in the same declaration type
+            String declOp = opNode.operator;
             for (Node element : listNode.elements) {
-                Node scalarArg = ParserNodeUtils.toScalarContext(element);
+                // Wrap each element in the same declaration type (my/our/state)
+                Node declNode = new OperatorNode(declOp, element, element.getIndex());
+                Node scalarArg = ParserNodeUtils.toScalarContext(declNode);
                 scalarArg.setAnnotation("context", "SCALAR");
                 args.elements.add(scalarArg);
             }
