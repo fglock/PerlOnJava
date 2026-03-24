@@ -22,6 +22,7 @@ snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "s
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 
 [plugins]
+cyclonedx = "org.cyclonedx.bom:2.3.0"
 ospackage = "com.netflix.nebula.ospackage:12.2.0"
 shadow = "com.gradleup.shadow:9.3.1"
 version-catalog-update = "nl.littlerobots.version-catalog-update:1.1.0"

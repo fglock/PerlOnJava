@@ -187,6 +187,28 @@
                     <forkCount>0</forkCount>
                 </configuration>
             </plugin>
+            <!-- CycloneDX SBOM generation -->
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+                <version>2.9.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>makeAggregateBom</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <projectType>application</projectType>
+                    <schemaVersion>1.6</schemaVersion>
+                    <includeBomSerialNumber>true</includeBomSerialNumber>
+                    <includeLicenseText>false</includeLicenseText>
+                    <outputFormat>all</outputFormat>
+                    <outputName>bom</outputName>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

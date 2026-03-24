@@ -20,6 +20,8 @@ plugins {
     alias(libs.plugins.ospackage)
     // Plugin for creating fat/uber JARs
     alias(libs.plugins.shadow)
+    // Plugin for generating CycloneDX SBOM (Software Bill of Materials)
+    alias(libs.plugins.cyclonedx)
 }
 
 // Main application class configuration
@@ -35,6 +37,23 @@ tasks.buildDeb {
 // Project metadata
 group = 'org.perlonjava'
 version = '5.42.0'
+
+// CycloneDX SBOM generation configuration
+cyclonedxBom {
+    projectType = "application"
+    schemaVersion = "1.6"
+    includeLicenseText = false
+    includeBomSerialNumber = true
+    outputName = "bom"
+    outputFormat = "all"  // Generate both JSON and XML
+    componentName = "perlonjava"
+    componentVersion = project.version
+    organizationalEntity { oe ->
+        oe.name = "PerlOnJava Project"
+        oe.urls = ["https://github.com/fglock/PerlOnJava"]
+    }
+}
+
 // Git info injection - injects commit ID and date into Configuration.java before compilation
 // This ensures the built JAR contains accurate version information for -v output
 def configFilePath = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
@@ -107,6 +126,13 @@ ospackage {
     into '/opt/perlonjava'
     from('build/install/perlonjava') {
         into '/opt/perlonjava'
+    }
+    
+    // Include SBOM in the package
+    from('build/reports') {
+        into '/opt/perlonjava/share/sbom'
+        include 'bom.json'
+        include 'bom.xml'
     }
 
     link('/usr/local/bin/jperl', '/opt/perlonjava/bin/jperl')
@@ -211,7 +237,15 @@ shadowJar {
     }
     exclude 'module-info.class'
     exclude 'META-INF/MANIFEST.MF'
+    
+    // Include SBOM in JAR's META-INF/sbom/ directory
+    from("$buildDir/reports/bom.json") {
+        into 'META-INF/sbom'
+    }
 }
+
+// Ensure SBOM is generated before shadowJar
+shadowJar.dependsOn cyclonedxBom
 
 // Make shadowJar part of the build process
 tasks.named('build') {

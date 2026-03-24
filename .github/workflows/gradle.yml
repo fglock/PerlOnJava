@@ -41,6 +41,21 @@ jobs:
         if: runner.os == 'Linux'
         run: make ci
 
+      - name: Generate SBOM (Linux only)
+        if: runner.os == 'Linux'
+        run: make sbom
+
+      - name: Upload SBOM artifacts
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            build/reports/bom.json
+            build/reports/bom.xml
+            build/reports/perl-bom.json
+          retention-days: 90
+
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4

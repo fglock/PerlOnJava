@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci
+.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci sbom sbom-java sbom-perl sbom-clean
 
 all: build
 
@@ -136,4 +136,31 @@ ifeq ($(OS),Windows_NT)
 else
 	./gradlew buildDeb
 endif
+
+# SBOM (Software Bill of Materials) generation
+# See dev/design/sbom.md for details
+
+# Generate all SBOMs (Java dependencies + Perl modules)
+sbom: sbom-java sbom-perl
+	@echo "SBOM generated in build/reports/"
+	@echo "  - bom.json / bom.xml: Java dependencies"
+	@echo "  - perl-bom.json: Bundled Perl modules"
+
+# Generate Java SBOM using CycloneDX Gradle plugin
+sbom-java: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat cyclonedxBom
+else
+	./gradlew cyclonedxBom
+endif
+
+# Generate Perl modules SBOM
+sbom-perl:
+	@mkdir -p build/reports
+	perl dev/tools/generate-perl-sbom.pl > build/reports/perl-bom.json
+	@echo "Perl SBOM generated: build/reports/perl-bom.json"
+
+# Clean generated SBOMs
+sbom-clean:
+	rm -f build/reports/bom.json build/reports/bom.xml build/reports/perl-bom.json
 
