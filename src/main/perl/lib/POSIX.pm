@@ -10,10 +10,21 @@ our $VERSION = '2.21';
 
 use strict;
 use warnings;
-use Exporter 'import';
+use Exporter ();
 
 use XSLoader;
 XSLoader::load('POSIX');
+
+# Custom import to support legacy foo_h form (without colon)
+# This rewrites locale_h to :locale_h, errno_h to :errno_h, etc.
+sub import {
+    my $pkg = shift;
+    my @list = @_;
+    # Rewrite legacy foo_h form to new :foo_h form
+    s/^(?=\w+_h$)/:/ for @list;
+    local $Exporter::ExportLevel = 1;
+    Exporter::import($pkg, @list);
+}
 
 # Export tags for different groups of functions/constants
 our @EXPORT = ();  # Default to exporting nothing
@@ -194,6 +205,11 @@ our %EXPORT_TAGS = (
     grp_h => [qw(
         getgrnam getgrgid getgrent setgrent endgrent
     )],
+
+    locale_h => [qw(
+        LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
+        localeconv setlocale
+    )],
 );
 
 # Process management functions
@@ -312,14 +328,12 @@ for my $const (qw(
     SIGSTOP SIGTSTP
 
     WNOHANG WUNTRACED
-
-    LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";
 }
 
-# Locale category constants fallback (in case XS constants are not available)
+# Locale category constants - defined directly since XS _const_ may not exist
 BEGIN {
     my %lc = (
         LC_ALL      => 0,
@@ -332,7 +346,7 @@ BEGIN {
     );
     no strict 'refs';
     for my $name (keys %lc) {
-        *{$name} = sub () { $lc{$name} };
+        *{"POSIX::$name"} = sub () { $lc{$name} };
     }
 }
 

@@ -1566,6 +1566,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        // Copy-on-write: If the object has the = overload, call it to create
+                        // a copy BEFORE any mutation. This implements Perl's COW semantics
+                        // where shared references are copied before modification.
+                        // Example: my $b = $a; $b++; should NOT modify $a
+                        RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
+                        if (copyResult != null) {
+                            // Copy the cloned object's fields into this
+                            this.type = copyResult.type;
+                            this.value = copyResult.value;
+                        }
+
                         // Try direct overload method for ++
                         RuntimeScalar result = ctx.tryOverload("(++", new RuntimeArray(this));
                         if (result != null) {
@@ -1664,6 +1675,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        // Copy-on-write: If the object has the = overload, call it to create
+                        // a copy BEFORE any mutation. This implements Perl's COW semantics
+                        // where shared references are copied before modification.
+                        RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
+                        if (copyResult != null) {
+                            // Copy the cloned object's fields into this
+                            this.type = copyResult.type;
+                            this.value = copyResult.value;
+                        }
+
                         // Try direct overload method for ++
                         RuntimeScalar result = ctx.tryOverload("(++", new RuntimeArray(this));
                         if (result != null) {
@@ -1744,6 +1765,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        // Copy-on-write: If the object has the = overload, call it to create
+                        // a copy BEFORE any mutation. This implements Perl's COW semantics
+                        // where shared references are copied before modification.
+                        RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
+                        if (copyResult != null) {
+                            // Copy the cloned object's fields into this
+                            this.type = copyResult.type;
+                            this.value = copyResult.value;
+                        }
+
                         // Try direct overload method for --
                         RuntimeScalar result = ctx.tryOverload("(--", new RuntimeArray(this));
                         if (result != null) {
@@ -1829,6 +1860,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        // Copy-on-write: If the object has the = overload, call it to create
+                        // a copy BEFORE any mutation. This implements Perl's COW semantics
+                        // where shared references are copied before modification.
+                        RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
+                        if (copyResult != null) {
+                            // Copy the cloned object's fields into this
+                            this.type = copyResult.type;
+                            this.value = copyResult.value;
+                        }
+
                         // Try direct overload method for --
                         RuntimeScalar result = ctx.tryOverload("(--", new RuntimeArray(this));
                         if (result != null) {

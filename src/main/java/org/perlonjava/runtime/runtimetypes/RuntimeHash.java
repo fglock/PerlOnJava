@@ -619,6 +619,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         if (ctx == RuntimeContextType.SCALAR) {
             // In scalar context, return the key count without materializing the key list.
+            // For tied hashes, we must iterate to count keys - don't use size() which
+            // would call the SCALAR method. keys() in scalar context should count keys
+            // via FIRSTKEY/NEXTKEY, not invoke SCALAR.
+            if (this.type == TIED_HASH) {
+                RuntimeArray keyList = keys();
+                return new RuntimeScalar(keyList.scalarContextSize);
+            }
             return new RuntimeScalar(this.size());
         }
         return keys();

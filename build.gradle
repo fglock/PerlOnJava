@@ -251,6 +251,9 @@ tasks.register('generatePerlSbom', Exec) {
     workingDir = projectDir
     commandLine 'bash', '-c', 
         "mkdir -p build/reports && perl dev/tools/generate-perl-sbom.pl > build/reports/perl-bom.json"
+    
+    // Declare output so Gradle waits for completion
+    outputs.file("build/reports/perl-bom.json")
 }
 
 // Task to merge Java and Perl SBOMs
@@ -259,9 +262,16 @@ tasks.register('mergeSbom', Exec) {
     group = 'sbom'
     dependsOn cyclonedxBom, generatePerlSbom
     
+    // Declare inputs so Gradle knows dependencies
+    inputs.file("build/reports/bom.json")
+    inputs.file("build/reports/perl-bom.json")
+    
     workingDir = projectDir
     commandLine 'bash', '-c',
         "perl dev/tools/merge-sbom.pl build/reports/bom.json build/reports/perl-bom.json > build/reports/sbom.json"
+    
+    // Declare output
+    outputs.file("build/reports/sbom.json")
 }
 
 // Ensure combined SBOM is generated before shadowJar
