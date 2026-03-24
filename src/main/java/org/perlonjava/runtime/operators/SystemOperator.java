@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.ForkOpenState;
+import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.BufferedReader;
@@ -91,20 +92,18 @@ public class SystemOperator {
             result = executeCommandDirect(flattenedArgs);
         }
 
-        // Set $? to the exit status
+        // Set $? and ${^CHILD_ERROR_NATIVE} to the wait status
+        // result.exitCode is already in wait status format (from waitForProcessWithStatus)
         if (result.exitCode == -1) {
             // Command failed to execute
             getGlobalVariable("main::?").set(-1);
             getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(-1);
             return new RuntimeScalar(-1);
         } else {
-            // Normal exit - put exit code in upper byte (Perl wait status convention)
-            // system() returns the same value as $?
-            int waitStatus = result.exitCode << 8;
-            getGlobalVariable("main::?").set(waitStatus);
-            // ${^CHILD_ERROR_NATIVE} also stores the wait status format
-            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(waitStatus);
-            return new RuntimeScalar(waitStatus);
+            // Wait status is already in correct format (exit_code << 8 or signal in lower bits)
+            getGlobalVariable("main::?").set(result.exitCode);
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(result.exitCode);
+            return new RuntimeScalar(result.exitCode);
         }
     }
     
@@ -215,12 +214,12 @@ public class SystemOperator {
                 });
 
                 stdoutThread.start();
-                exitCode = process.waitFor();
+                exitCode = waitForProcessWithStatus(process);
                 stdoutThread.join();
             } else {
                 // For system(): both stdout and stderr go to terminal (inherited)
                 // Just wait for process completion
-                exitCode = process.waitFor();
+                exitCode = waitForProcessWithStatus(process);
             }
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
@@ -276,7 +275,7 @@ public class SystemOperator {
                 System.err.println(line);
             }
 
-            exitCode = process.waitFor();
+            exitCode = waitForProcessWithStatus(process);
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
             setGlobalVariable("main::!", e.getMessage());
@@ -293,6 +292,37 @@ public class SystemOperator {
         }
 
         return new CommandResult("", exitCode);
+    }
+
+    /**
+     * Waits for a process to complete and returns the full wait status.
+     * On POSIX systems, uses native waitpid() to get signal information.
+     * On Windows or if native call fails, falls back to Java's waitFor() with shifted exit code.
+     *
+     * @param process The process to wait for
+     * @return The wait status (exit_code << 8 for normal exit, or signal in lower bits)
+     * @throws InterruptedException if the wait is interrupted
+     */
+    private static int waitForProcessWithStatus(Process process) throws InterruptedException {
+        // Use Java's waitFor and convert the exit code to wait status format
+        int exitCode = process.waitFor();
+        
+        // On POSIX systems (macOS/Linux), when a process is killed by a signal,
+        // Java returns 128 + signal_number for the exit code.
+        // We need to convert this to Perl's wait status format:
+        // - Normal exit: exit_code << 8 (signal bits are 0)
+        // - Signal termination: signal_number in low 7 bits, exit part is 0
+        if (!NativeUtils.IS_WINDOWS && exitCode >= 128 && exitCode < 256) {
+            // Likely killed by signal: exitCode = 128 + signal
+            int signal = exitCode - 128;
+            if (signal > 0 && signal < 128) {
+                // Return wait status with signal in low bits
+                return signal;
+            }
+        }
+        
+        // Normal exit or Windows - shift exit code to upper byte
+        return exitCode << 8;
     }
 
     /**
