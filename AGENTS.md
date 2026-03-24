@@ -98,6 +98,10 @@ Example format at the end of a design doc:
 
 - Reference the design doc or issue in commit messages when relevant
 - Use conventional commit format when possible
+- **Include `src/main/java/org/perlonjava/core/Configuration.java` in commits** - This file contains the git commit ID and date that help users identify the exact PerlOnJava version. The build system updates it automatically via `injectGitInfo` task, so always stage it:
+  ```bash
+  git add src/main/java/org/perlonjava/core/Configuration.java
+  ```
 
 ## Available Skills
 
