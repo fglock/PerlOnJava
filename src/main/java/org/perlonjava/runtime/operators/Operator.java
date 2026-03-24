@@ -280,15 +280,16 @@ public class Operator {
         if (offset < 0) {
             offset = strLength + offset;
             // When computed offset goes negative (before string start):
-            // - Clip offset to 0
-            // - Reduce length by the overshoot amount
-            // Example: substr("a", -2, 2) -> offset=-1, clip to 0, length=2+(-1)=1, returns "a"
-            // But: substr("hello", -10, 1) -> offset=-5, length=1+(-5)=-4 → warn and return undef
+            // - If adjusted length is negative, warn and return undef (too much overshoot)
+            // - If adjusted length is >= 0, clip offset to 0 and return substring (no warning)
+            // Example: substr("hello", -10, 1) -> offset=-5, adjustedLen=-4 -> warn + undef
+            // Example: substr("a", -2, 1) -> offset=-1, adjustedLen=0 -> "" (no warning)
+            // Example: substr("a", -2, 2) -> offset=-1, adjustedLen=1, returns "a" (no warning)
             if (offset < 0) {
-                // Check if adjusted length would be non-positive (Perl warns in this case)
+                // Adjust length by the overshoot (negative offset value)
                 int adjustedLength = length + offset;
-                if (adjustedLength <= 0) {
-                    // Warn and return undef (same as positive offset out of bounds)
+                if (adjustedLength < 0) {
+                    // Adjusted length is negative - warn and return undef
                     if (warnEnabled) {
                         WarnDie.warn(new RuntimeScalar("substr outside of string"),
                                 RuntimeScalarCache.scalarEmptyString);
@@ -301,7 +302,14 @@ public class Operator {
                     lvalue.value = null;
                     return lvalue;
                 }
-                // Reduce length by the overshoot (negative offset value)
+                if (adjustedLength == 0) {
+                    // Adjusted length is exactly zero - return empty string (defined), no warning
+                    if (replacement != null) {
+                        return new RuntimeScalar("");
+                    }
+                    return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
+                }
+                // Reduce length by the overshoot, no warning
                 length = adjustedLength;
                 offset = 0;
             }
