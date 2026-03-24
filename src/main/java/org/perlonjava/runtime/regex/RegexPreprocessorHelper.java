@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 import static org.perlonjava.runtime.regex.UnicodeResolver.translateUnicodeProperty;
 
 public class RegexPreprocessorHelper {
-    static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
+    static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset, RegexFlags regexFlags) {
         sb.append(Character.toChars(c));  // This appends the backslash
         final int length = s.length();
 
@@ -171,25 +171,35 @@ public class RegexPreprocessorHelper {
                 return end - 1;
             }
         } else if (nextChar == 's' || nextChar == 'S') {
-            // Perl's \s matches Unicode whitespace, Java's \s only matches ASCII whitespace
-            // Expand \s to match all Perl whitespace characters:
-            // \t \n \f \r space (ASCII: 09-0D, 20)
-            // U+000B (vertical tab - Perl includes this)
-            // U+1680 (OGHAM SPACE MARK)
-            // U+2000-U+200A (EN QUAD through HAIR SPACE)
-            // U+2028 (LINE SEPARATOR)
-            // U+2029 (PARAGRAPH SEPARATOR)
-            // U+202F (NARROW NO-BREAK SPACE)
-            // U+205F (MEDIUM MATHEMATICAL SPACE)
-            // U+3000 (IDEOGRAPHIC SPACE)
+            // Handle \s and \S based on ASCII mode
             sb.setLength(sb.length() - 1); // Remove the backslash
-            if (nextChar == 's') {
-                // Positive: matches whitespace
-                // Use \x20 instead of literal space to avoid issues with /x modifier
-                sb.append("[\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
+            if (regexFlags.isAscii()) {
+                // ASCII mode: \s matches only ASCII whitespace
+                if (nextChar == 's') {
+                    sb.append("[\\t\\n\\u000B\\f\\r\\x20]");
+                } else {
+                    sb.append("[^\\t\\n\\u000B\\f\\r\\x20]");
+                }
             } else {
-                // Negative: matches non-whitespace
-                sb.append("[^\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
+                // Unicode mode: Perl's \s matches Unicode whitespace
+                // Expand \s to match all Perl whitespace characters:
+                // \t \n \f \r space (ASCII: 09-0D, 20)
+                // U+000B (vertical tab - Perl includes this)
+                // U+1680 (OGHAM SPACE MARK)
+                // U+2000-U+200A (EN QUAD through HAIR SPACE)
+                // U+2028 (LINE SEPARATOR)
+                // U+2029 (PARAGRAPH SEPARATOR)
+                // U+202F (NARROW NO-BREAK SPACE)
+                // U+205F (MEDIUM MATHEMATICAL SPACE)
+                // U+3000 (IDEOGRAPHIC SPACE)
+                if (nextChar == 's') {
+                    // Positive: matches whitespace
+                    // Use \x20 instead of literal space to avoid issues with /x modifier
+                    sb.append("[\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
+                } else {
+                    // Negative: matches non-whitespace
+                    sb.append("[^\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
+                }
             }
             return offset;
         } else if (nextChar == 'h') {
@@ -367,6 +377,24 @@ public class RegexPreprocessorHelper {
             } else {
                 RegexPreprocessor.regexError(s, offset, "Missing right brace on \\o{}");
             }
+        } else if ((nextChar == 'w' || nextChar == 'W' || nextChar == 'd' || nextChar == 'D') && regexFlags.isAscii()) {
+            // In ASCII mode (/a flag), restrict \w, \W, \d, \D to ASCII only
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            switch (nextChar) {
+                case 'w':
+                    sb.append("[a-zA-Z0-9_]");
+                    break;
+                case 'W':
+                    sb.append("[^a-zA-Z0-9_]");
+                    break;
+                case 'd':
+                    sb.append("[0-9]");
+                    break;
+                case 'D':
+                    sb.append("[^0-9]");
+                    break;
+            }
+            return offset;
         } else {
             int c2 = s.codePointAt(offset);
             if (c2 >= '0' && c2 <= '7') {

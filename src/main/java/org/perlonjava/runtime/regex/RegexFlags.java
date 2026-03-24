@@ -19,11 +19,13 @@ import static java.util.regex.Pattern.*;
  * @param isExtended           x flag - ignore whitespace and # comments in pattern
  * @param preservesMatch       p flag - preserve match after failed matches
  * @param isUnicode            u flag - Unicode semantics (\w, \d, \s match Unicode)
+ * @param isAscii              a flag - ASCII-restrict (\w, \d, \s match only ASCII)
  */
 public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
-                         boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode) {
+                         boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
+                         boolean isAscii) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         return new RegexFlags(
@@ -40,7 +42,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("s"),
                 modifiers.contains("x"),
                 modifiers.contains("p"),
-                modifiers.contains("u")
+                modifiers.contains("u"),
+                modifiers.contains("a")
         );
     }
 
@@ -66,10 +69,11 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     public int toPatternFlags() {
         int flags = 0;
         
-        // Enable UNICODE_CHARACTER_CLASS by default to match Perl's behavior since 5.14
-        // where \w, \d, \s match Unicode characters for UTF-8 strings.
-        // The /a modifier (ASCII) can be used to restrict to ASCII only.
-        flags |= UNICODE_CHARACTER_CLASS;
+        // /u flag enables Unicode semantics for \w, \d, \s
+        // /a flag (ASCII-restrict) disables Unicode semantics
+        if (isUnicode && !isAscii) {
+            flags |= UNICODE_CHARACTER_CLASS;
+        }
         
         if (isCaseInsensitive) {
             // For proper Unicode case-insensitive matching, we need both flags:
@@ -98,6 +102,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         boolean newIsExtended = this.isExtended;
         boolean newPreservesMatch = this.preservesMatch;
         boolean newIsUnicode = this.isUnicode;
+        boolean newIsAscii = this.isAscii;
 
         // Handle positive flags
         if (positiveFlags.indexOf('n') >= 0) newFlagN = true;
@@ -107,6 +112,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
         if (positiveFlags.indexOf('p') >= 0) newPreservesMatch = true;
         if (positiveFlags.indexOf('u') >= 0) newIsUnicode = true;
+        if (positiveFlags.indexOf('a') >= 0) newIsAscii = true;
 
         // Handle negative flags
         if (negativeFlags.indexOf('n') >= 0) newFlagN = false;
@@ -115,6 +121,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (negativeFlags.indexOf('s') >= 0) newIsDotAll = false;
         if (negativeFlags.indexOf('x') >= 0) newIsExtended = false;
         if (negativeFlags.indexOf('u') >= 0) newIsUnicode = false;
+        if (negativeFlags.indexOf('a') >= 0) newIsAscii = false;
 
         return new RegexFlags(
                 this.isGlobalMatch,
@@ -130,7 +137,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 newIsDotAll,
                 newIsExtended,
                 newPreservesMatch,
-                newIsUnicode
+                newIsUnicode,
+                newIsAscii
         );
     }
 
@@ -146,6 +154,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isExtended) flagString.append('x');
         if (isNonDestructive) flagString.append('r');
         if (isUnicode) flagString.append('u');
+        if (isAscii) flagString.append('a');
 
         return flagString.toString();
     }
