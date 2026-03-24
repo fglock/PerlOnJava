@@ -199,38 +199,49 @@ public class EmitLiteral {
         }
 
         if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8) && !ctx.compilerOptions.isUnicodeSource) {
-            // Under `no utf8` - create a octet string
-
-            int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
-
-            if (stringIndex >= 0) {
-                // Use cached RuntimeScalar
-                mv.visitLdcInsn(stringIndex);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                        "getScalarByteString",
-                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-                return;
-            } else {
-                // String is too long for cache or null, create new object
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly");
-                mv.visitInsn(Opcodes.DUP);
-                emitStringValue(mv, node.value);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly",
-                        "<init>",
-                        "(Ljava/lang/String;)V",
-                        false);
-
-                // Set the Perl scalar type to BYTE_STRING
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(RuntimeScalarType.BYTE_STRING);
-                mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly", "type", "I");
-                return;
+            // Under `no utf8` - create an octet string, unless it contains wide characters (> 255)
+            // Wide characters (like \x{100}) force the string to be UTF-8 even without `use utf8`
+            boolean hasWideChars = false;
+            for (int i = 0; i < node.value.length(); i++) {
+                if (node.value.charAt(i) > 255) {
+                    hasWideChars = true;
+                    break;
+                }
             }
+            
+            if (!hasWideChars) {
+                int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
+
+                if (stringIndex >= 0) {
+                    // Use cached RuntimeScalar
+                    mv.visitLdcInsn(stringIndex);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                            "getScalarByteString",
+                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                    return;
+                } else {
+                    // String is too long for cache or null, create new object
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly");
+                    mv.visitInsn(Opcodes.DUP);
+                    emitStringValue(mv, node.value);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly",
+                            "<init>",
+                            "(Ljava/lang/String;)V",
+                            false);
+
+                    // Set the Perl scalar type to BYTE_STRING
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitLdcInsn(RuntimeScalarType.BYTE_STRING);
+                    mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly", "type", "I");
+                    return;
+                }
+            }
+            // Fall through to create UTF-8 string if hasWideChars
         }
 
         // Use cache for regular strings

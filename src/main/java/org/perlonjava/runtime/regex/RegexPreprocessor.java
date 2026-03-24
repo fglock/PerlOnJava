@@ -801,7 +801,7 @@ public class RegexPreprocessor {
                     break;
 
                 case '\\':  // Handle escape sequences
-                    offset = RegexPreprocessorHelper.handleEscapeSequences(s, sb, c, offset);
+                    offset = RegexPreprocessorHelper.handleEscapeSequences(s, sb, c, offset, regexFlags);
                     lastWasQuantifiable = true;
                     break;
 

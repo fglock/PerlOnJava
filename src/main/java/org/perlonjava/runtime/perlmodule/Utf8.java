@@ -320,10 +320,18 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for is_utf8() method");
         }
         RuntimeScalar scalar = args.get(0);
-        if (scalar.type == BYTE_STRING) {
-            return RuntimeScalarCache.scalarFalse.getList();
-        }
-        return RuntimeScalarCache.scalarTrue.getList();
+        return isUtf8(scalar) ? RuntimeScalarCache.scalarTrue.getList() : RuntimeScalarCache.scalarFalse.getList();
+    }
+
+    /**
+     * Internal helper to check if a scalar has the UTF-8 flag set.
+     * This is used by regex matching to determine whether to use Unicode semantics.
+     *
+     * @param scalar The scalar to check.
+     * @return true if the scalar is a UTF-8 string (not BYTE_STRING), false otherwise.
+     */
+    public static boolean isUtf8(RuntimeScalar scalar) {
+        return scalar.type != BYTE_STRING;
     }
 
     /**

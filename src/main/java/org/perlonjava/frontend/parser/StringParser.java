@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
 
 /*
@@ -508,6 +510,20 @@ public class StringParser {
     public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         String modStr = rawStr.buffers.get(1);
+        
+        // Add default modifiers from `use re` pragma if not already present
+        if (ctx.symbolTable != null) {
+            if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)) {
+                if (!modStr.contains("a") && !modStr.contains("u")) {
+                    modStr = "a" + modStr;
+                }
+            } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)) {
+                if (!modStr.contains("u") && !modStr.contains("a")) {
+                    modStr = "u" + modStr;
+                }
+            }
+        }
+        
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr);
         if (rawStr.startDelim == '?') {
             // `m?PAT?` matches exactly once

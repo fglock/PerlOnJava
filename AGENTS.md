@@ -75,6 +75,29 @@ Example format at the end of a design doc:
   ./jperl --int -e 'code'     # Interpreter
   ```
 
+### Perl Test Runner
+
+Use `dev/tools/perl_test_runner.pl` to run Perl test files and get pass/fail counts. **Run with `perl` (not `jperl`)** because it needs fork support.
+
+```bash
+# Run specific test files
+perl dev/tools/perl_test_runner.pl perl5_t/t/re/regexp.t perl5_t/t/op/utfhash.t
+
+# Run all tests in a directory
+perl dev/tools/perl_test_runner.pl perl5_t/t/op/
+
+# Common test directories
+perl dev/tools/perl_test_runner.pl perl5_t/t/re/    # Regex tests
+perl dev/tools/perl_test_runner.pl perl5_t/t/op/    # Operator tests
+perl dev/tools/perl_test_runner.pl perl5_t/t/uni/   # Unicode tests
+```
+
+The runner:
+- Executes tests in parallel (5 jobs by default)
+- Has a 300s timeout per test
+- Reports pass/fail counts in format: `passed/total`
+- Saves results to `test_results_YYYYMMDD_HHMMSS.txt`
+
 ### Git Workflow
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**

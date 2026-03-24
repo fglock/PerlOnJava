@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
@@ -62,9 +63,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
-    // Compiled regex pattern
+    // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;
+    // Compiled regex pattern for Unicode strings (Unicode \w, \d)
+    public Pattern patternUnicode;
     int patternFlags;
+    int patternFlagsUnicode;
     String patternString;
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     // Indicates if \G assertion is used (set from regexFlags during compilation)
@@ -118,6 +122,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
+            
+            // Always compute Unicode flags - we need the Unicode variant for when
+            // the input string contains non-ASCII characters (auto-Unicode detection)
+            // Only skip Unicode variant if /a flag is explicitly used
+            if (!regex.regexFlags.isAscii()) {
+                regex.patternFlagsUnicode = regex.patternFlags | Pattern.UNICODE_CHARACTER_CLASS;
+            } else {
+                regex.patternFlagsUnicode = regex.patternFlags;
+            }
 
             String javaPattern = null;
             try {
@@ -135,8 +148,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 regex.patternString = patternString;
 
-                // Compile the regex pattern
+                // Compile the regex pattern for byte strings (ASCII-only \w, \d)
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
+                
+                // Compile the Unicode variant for Unicode strings
+                // Only compile separately if the flags differ (saves memory when /a or /u is used)
+                if (regex.patternFlagsUnicode != regex.patternFlags) {
+                    regex.patternUnicode = Pattern.compile(javaPattern, regex.patternFlagsUnicode);
+                } else {
+                    regex.patternUnicode = regex.pattern;
+                }
 
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
@@ -164,6 +185,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
+                    regex.patternUnicode = regex.pattern;  // Error pattern - same for both
                 } else {
                     if (e instanceof PerlCompilerException) {
                         throw e;
@@ -195,6 +217,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.deferredUserDefinedUnicodeProperties = false;
         RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         regex.pattern = recompiled.pattern;
+        regex.patternUnicode = recompiled.patternUnicode;
         regex.patternFlags = recompiled.patternFlags;
         regex.regexFlags = recompiled.regexFlags;
         regex.useGAssertion = recompiled.useGAssertion;
@@ -266,6 +289,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Create a new regex with merged flags
             RuntimeRegex regex = new RuntimeRegex();
             regex.pattern = originalRegex.pattern;
+            regex.patternUnicode = originalRegex.patternUnicode;
             regex.patternString = originalRegex.patternString;
             regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
@@ -294,6 +318,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // Create a new regex with merged flags
                     RuntimeRegex regex = new RuntimeRegex();
                     regex.pattern = originalRegex.pattern;
+                    regex.patternUnicode = originalRegex.patternUnicode;
                     regex.patternString = originalRegex.patternString;
                     regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
@@ -366,6 +391,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Always start with the resolved regex properties
         regex.pattern = resolvedRegex.pattern;
+        regex.patternUnicode = resolvedRegex.patternUnicode;
         regex.patternString = resolvedRegex.patternString;
         regex.regexFlags = resolvedRegex.regexFlags;
         regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
@@ -388,6 +414,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (flagsChanged) {
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString, newFlags.toFlagString());
                 regex.pattern = recompiledRegex.pattern;
+                regex.patternUnicode = recompiledRegex.patternUnicode;
                 regex.patternString = recompiledRegex.patternString;
                 regex.regexFlags = recompiledRegex.regexFlags;
                 regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
@@ -461,6 +488,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
+                tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
@@ -489,30 +517,52 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         Pattern pattern = regex.pattern;
         String inputStr = string.toString();
+        
+        // Select appropriate pattern based on string's UTF-8 flag and content:
+        // - /a flag or inline (?a): always use ASCII-only pattern
+        // - BYTE_STRING: use ASCII-only pattern (Perl's "bytes" semantics)
+        // - UTF-8 string with Unicode chars (> 255): use Unicode pattern
+        // - UTF-8 string with only Latin-1 chars: use ASCII pattern (avoids false matches)
+        // This mimics Perl's behavior where \w, \d, \s semantics depend on UTF-8 flag
+        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
+            if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
+                // /a flag - always ASCII
+                pattern = regex.pattern;
+            } else if (hasInlineAsciiModifier(regex.patternString)) {
+                // Inline (?a...) in pattern - use ASCII to be safe
+                pattern = regex.pattern;
+            } else if (Utf8.isUtf8(string) && RuntimePosLvalue.hasUnicodeChars(string, inputStr)) {
+                // UTF-8 string with true Unicode content (> 255) - use Unicode matching
+                pattern = regex.patternUnicode;
+            }
+            // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
+        }
+        
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 
         // hexPrinter(inputStr);
 
-        // Use RuntimePosLvalue to get the current position
-        RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
-        boolean isPosDefined = posScalar.getDefinedBoolean();
-        int startPos = isPosDefined ? posScalar.getInt() : 0;
-
-        // Only use pos() for /g matches - non-/g matches always start from 0
-        if (!regex.regexFlags.isGlobalMatch()) {
-            isPosDefined = false;
-            startPos = 0;
-        }
-
-        // Check if previous call had zero-length match at this position (for SCALAR context)
-        // This prevents infinite loops in: while ($str =~ /pat/g)  
-        if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
-            String patternKey = regex.patternString;
-            if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
-                // Previous match was zero-length at this position - fail to break loop
-                posScalar.set(scalarUndef);
-                return RuntimeScalarCache.scalarFalse;
+        // Only look up pos() for /g matches - non-/g matches always start from 0
+        RuntimeScalar posScalar = null;
+        boolean isPosDefined = false;
+        int startPos = 0;
+        
+        if (regex.regexFlags.isGlobalMatch()) {
+            // Use RuntimePosLvalue to get the current position
+            posScalar = RuntimePosLvalue.pos(string);
+            isPosDefined = posScalar.getDefinedBoolean();
+            startPos = isPosDefined ? posScalar.getInt() : 0;
+            
+            // Check if previous call had zero-length match at this position (for SCALAR context)
+            // This prevents infinite loops in: while ($str =~ /pat/g)  
+            if (ctx == RuntimeContextType.SCALAR) {
+                String patternKey = regex.patternString;
+                if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
+                    // Previous match was zero-length at this position - fail to break loop
+                    posScalar.set(scalarUndef);
+                    return RuntimeScalarCache.scalarFalse;
+                }
             }
         }
 
@@ -597,17 +647,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                     if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
                         // Set pos to the end of the current match to prepare for the next search
-                        posScalar.set(matchEnd);
-                        // Record zero-length match for cross-call tracking
-                        if (matchEnd == matchStart) {
-                            RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
-                        } else {
-                            RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                        // (only for global matches - posScalar is null for non-global)
+                        if (posScalar != null) {
+                            posScalar.set(matchEnd);
+                            // Record zero-length match for cross-call tracking
+                            if (matchEnd == matchStart) {
+                                RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
+                            } else {
+                                RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                            }
                         }
                         break; // Break out of the loop after the first match in SCALAR context
                     } else {
                         startPos = matchEnd;
-                        posScalar.set(startPos);
+                        if (posScalar != null) {
+                            posScalar.set(startPos);
+                        }
                         // Update matcher region if we advanced past a zero-length match
                         if (startPos > matchStart) {
                             matcher.region(startPos, inputStr.length());
@@ -625,7 +680,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Reset pos() on failed match with /g, unless /c is set
-        if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition()) {
+        if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
             posScalar.set(scalarUndef);
         }
 
@@ -666,7 +721,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             // Reset pos() after global match in LIST context (matches Perl behavior)
-            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST) {
+            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST && posScalar != null) {
                 posScalar.set(scalarUndef);
             }
             // System.err.println("DEBUG: Match completed, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
@@ -778,6 +833,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
+                tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
@@ -790,6 +846,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 int flags = originalFlags != null ? originalFlags.toPatternFlags() : 0;
                 tempRegex.pattern = Pattern.compile("", flags);
+                tempRegex.patternUnicode = tempRegex.pattern;  // Empty pattern - same for both
                 tempRegex.patternString = "";
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
@@ -799,6 +856,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         Pattern pattern = regex.pattern;
+        
+        // Select appropriate pattern based on string's UTF-8 flag and content (same logic as matchRegex)
+        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
+            if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
+                // /a flag - always ASCII
+                pattern = regex.pattern;
+            } else if (hasInlineAsciiModifier(regex.patternString)) {
+                // Inline (?a...) in pattern - use ASCII to be safe
+                pattern = regex.pattern;
+            } else if (Utf8.isUtf8(string) && RuntimePosLvalue.hasUnicodeChars(string, inputStr)) {
+                // UTF-8 string with true Unicode content (> 255) - use Unicode matching
+                pattern = regex.patternUnicode;
+            }
+            // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
+        }
+        
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 
@@ -1027,6 +1100,70 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         // +1 because groupCount is zero-based, and we include the entire match
         return globalMatcher.groupCount() + 1;
+    }
+
+    /**
+     * Check if a string contains any non-ASCII characters (code point > 127).
+     * Used to determine if Unicode matching should be used.
+     * 
+     * @param s The string to check
+     * @return true if the string contains non-ASCII characters
+     */
+    private static boolean hasNonAscii(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 127) {
+                return true;  // Early exit at first non-ASCII
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a string contains any Unicode characters (code point > 255).
+     * Characters 128-255 are extended ASCII and don't require Unicode semantics.
+     * Characters > 255 are true Unicode and should trigger Unicode \w, \d, \s.
+     * 
+     * @param s The string to check
+     * @return true if the string contains Unicode characters (> 255)
+     */
+    private static boolean hasUnicodeChars(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 255) {
+                return true;  // Early exit at first Unicode char
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a pattern contains inline ASCII modifier (?a...).
+     * When present, we should use ASCII matching even for UTF-8 strings with non-ASCII content.
+     * 
+     * @param pattern The pattern string to check
+     * @return true if the pattern contains inline (?a...) modifier
+     */
+    private static boolean hasInlineAsciiModifier(String pattern) {
+        if (pattern == null) {
+            return false;
+        }
+        // Check for (?a...) inline modifier - matches (?a, (?a:, (?ai, (?ia, etc.
+        // The 'a' must appear in the modifier position after (?
+        int idx = 0;
+        while ((idx = pattern.indexOf("(?", idx)) >= 0) {
+            idx += 2;
+            // Scan modifier characters until we hit : or )
+            while (idx < pattern.length()) {
+                char c = pattern.charAt(idx);
+                if (c == 'a') {
+                    return true;  // Found inline ASCII modifier
+                }
+                if (c == ':' || c == ')' || c == '-' || c == '<' || c == '=' || c == '!' || c == '{' || c == '#') {
+                    break;  // End of modifier section
+                }
+                idx++;
+            }
+        }
+        return false;
     }
 
     /**

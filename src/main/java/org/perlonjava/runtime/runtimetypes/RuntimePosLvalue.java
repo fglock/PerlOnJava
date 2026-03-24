@@ -175,6 +175,7 @@ public class RuntimePosLvalue {
         boolean lastMatchWasZeroLength; // Track if last match was zero-length
         int lastMatchPosition; // Position of last zero-length match
         String lastMatchPattern; // Pattern that had the zero-length match
+        Boolean hasUnicodeChars; // Cached result of Unicode character check (null = not computed)
 
         CacheEntry(int valueHash, RuntimeScalar regexPosition) {
             this.valueHash = valueHash;
@@ -182,6 +183,54 @@ public class RuntimePosLvalue {
             this.lastMatchWasZeroLength = false;
             this.lastMatchPosition = -1;
             this.lastMatchPattern = null;
+            this.hasUnicodeChars = null;
         }
+    }
+    
+    /**
+     * Check if a string contains Unicode characters (code points > 255).
+     * Results are cached per-scalar to avoid re-scanning on every regex match.
+     *
+     * @param perlVariable the scalar to check
+     * @param stringValue the string value (already extracted from the scalar)
+     * @return true if the string contains characters > 255
+     */
+    public static boolean hasUnicodeChars(RuntimeScalar perlVariable, String stringValue) {
+        if (perlVariable == null || stringValue == null) {
+            return false;
+        }
+        
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        // Use the same hash calculation as pos() for consistency
+        int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
+        
+        // If cache entry exists and value hasn't changed, use cached result
+        if (cachedEntry != null && cachedEntry.valueHash == code && cachedEntry.hasUnicodeChars != null) {
+            return cachedEntry.hasUnicodeChars;
+        }
+        
+        // Compute hasUnicodeChars
+        boolean result = false;
+        for (int i = 0; i < stringValue.length(); i++) {
+            if (stringValue.charAt(i) > 255) {
+                result = true;
+                break;
+            }
+        }
+        
+        // Cache the result - but only update hasUnicodeChars, don't replace the whole entry
+        // if only hasUnicodeChars was missing (to preserve pos)
+        if (cachedEntry != null && cachedEntry.valueHash == code) {
+            // Entry exists with same hash, just update hasUnicodeChars
+            cachedEntry.hasUnicodeChars = result;
+        } else {
+            // Need to create new cache entry (value changed or no entry)
+            RuntimeScalar position = new PosLvalueScalar(perlVariable);
+            cachedEntry = new CacheEntry(code, position);
+            cachedEntry.hasUnicodeChars = result;
+            positionCache.put(perlVariable, cachedEntry);
+        }
+        
+        return result;
     }
 }
