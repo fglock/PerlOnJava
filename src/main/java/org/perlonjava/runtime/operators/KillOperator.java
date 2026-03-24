@@ -93,10 +93,25 @@ public class KillOperator {
             String sigName = getSignalName(signal);
             if (sigName != null) {
                 RuntimeScalar handler = getGlobalHash("main::SIG").get(sigName);
-                if (handler.getDefinedBoolean()) {
+                String handlerStr = handler.toString();
+                
+                // Check for IGNORE
+                if ("IGNORE".equals(handlerStr)) {
+                    return true;  // Signal ignored
+                }
+                
+                // Check for defined handler (not DEFAULT, not empty)
+                if (handler.getDefinedBoolean() && !"DEFAULT".equals(handlerStr) && !handlerStr.isEmpty()) {
                     PerlSignalQueue.enqueue(sigName, handler);
                     PerlSignalQueue.checkPendingSignals();
                     return true;
+                }
+                
+                // DEFAULT behavior or no handler: terminate for fatal signals
+                if (isDefaultFatalSignal(signal)) {
+                    // Exit with signal status (like Perl does)
+                    // The exit code is 128 + signal on POSIX systems
+                    System.exit(128 + signal);
                 }
             }
             return true;
@@ -235,5 +250,31 @@ public class KillOperator {
     // Set errno for error reporting
     private static void setErrno(int errno) {
         getGlobalVariable("main::!").set(new RuntimeScalar(errno));
+    }
+
+    /**
+     * Check if a signal should terminate the process by default.
+     * These are signals that Perl terminates on when no handler is set.
+     */
+    private static boolean isDefaultFatalSignal(int signal) {
+        return switch (signal) {
+            case 1 ->  true;  // HUP
+            case 2 ->  true;  // INT
+            case 3 ->  true;  // QUIT
+            case 4 ->  true;  // ILL
+            case 5 ->  true;  // TRAP
+            case 6 ->  true;  // ABRT
+            case 7 ->  true;  // BUS
+            case 8 ->  true;  // FPE
+            case 9 ->  true;  // KILL (cannot be caught anyway)
+            case 11 -> true;  // SEGV
+            case 13 -> true;  // PIPE
+            case 14 -> true;  // ALRM
+            case 15 -> true;  // TERM
+            case 24 -> true;  // XCPU
+            case 25 -> true;  // XFSZ
+            case 31 -> true;  // SYS
+            default -> false; // USR1, USR2, CHLD, CONT, STOP, etc. have different defaults
+        };
     }
 }

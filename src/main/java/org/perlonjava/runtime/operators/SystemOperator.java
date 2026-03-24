@@ -312,13 +312,14 @@ public class SystemOperator {
         // We need to convert this to Perl's wait status format:
         // - Normal exit: exit_code << 8 (signal bits are 0)
         // - Signal termination: signal_number in low 7 bits, exit part is 0
-        if (!NativeUtils.IS_WINDOWS && exitCode >= 128 && exitCode < 256) {
-            // Likely killed by signal: exitCode = 128 + signal
+        //
+        // We only detect signals 1-31 (standard POSIX signals).
+        // Higher exit codes like 255 (from die) are treated as normal exits.
+        if (!NativeUtils.IS_WINDOWS && exitCode >= 129 && exitCode <= 159) {
+            // Killed by signal: exitCode = 128 + signal (signals 1-31)
             int signal = exitCode - 128;
-            if (signal > 0 && signal < 128) {
-                // Return wait status with signal in low bits
-                return signal;
-            }
+            // Return wait status with signal in low bits
+            return signal;
         }
         
         // Normal exit or Windows - shift exit code to upper byte
