@@ -44,11 +44,12 @@ public class RuntimeList extends RuntimeBase {
 
     /**
      * Constructs a RuntimeList from another RuntimeList.
+     * Creates a shallow copy of the elements list to prevent mutation of the original.
      *
      * @param value The RuntimeList to initialize this list with.
      */
     public RuntimeList(RuntimeList value) {
-        this.elements = value.elements;
+        this.elements = new ArrayList<>(value.elements);
     }
 
     /**
