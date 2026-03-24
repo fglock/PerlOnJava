@@ -531,7 +531,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } else if (hasInlineAsciiModifier(regex.patternString)) {
                 // Inline (?a...) in pattern - use ASCII to be safe
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string) && hasUnicodeChars(inputStr)) {
+            } else if (Utf8.isUtf8(string) && RuntimePosLvalue.hasUnicodeChars(string, inputStr)) {
                 // UTF-8 string with true Unicode content (> 255) - use Unicode matching
                 pattern = regex.patternUnicode;
             }
@@ -543,25 +543,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // hexPrinter(inputStr);
 
-        // Use RuntimePosLvalue to get the current position
-        RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
-        boolean isPosDefined = posScalar.getDefinedBoolean();
-        int startPos = isPosDefined ? posScalar.getInt() : 0;
-
-        // Only use pos() for /g matches - non-/g matches always start from 0
-        if (!regex.regexFlags.isGlobalMatch()) {
-            isPosDefined = false;
-            startPos = 0;
-        }
-
-        // Check if previous call had zero-length match at this position (for SCALAR context)
-        // This prevents infinite loops in: while ($str =~ /pat/g)  
-        if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
-            String patternKey = regex.patternString;
-            if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
-                // Previous match was zero-length at this position - fail to break loop
-                posScalar.set(scalarUndef);
-                return RuntimeScalarCache.scalarFalse;
+        // Only look up pos() for /g matches - non-/g matches always start from 0
+        RuntimeScalar posScalar = null;
+        boolean isPosDefined = false;
+        int startPos = 0;
+        
+        if (regex.regexFlags.isGlobalMatch()) {
+            // Use RuntimePosLvalue to get the current position
+            posScalar = RuntimePosLvalue.pos(string);
+            isPosDefined = posScalar.getDefinedBoolean();
+            startPos = isPosDefined ? posScalar.getInt() : 0;
+            
+            // Check if previous call had zero-length match at this position (for SCALAR context)
+            // This prevents infinite loops in: while ($str =~ /pat/g)  
+            if (ctx == RuntimeContextType.SCALAR) {
+                String patternKey = regex.patternString;
+                if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
+                    // Previous match was zero-length at this position - fail to break loop
+                    posScalar.set(scalarUndef);
+                    return RuntimeScalarCache.scalarFalse;
+                }
             }
         }
 
@@ -646,17 +647,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                     if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
                         // Set pos to the end of the current match to prepare for the next search
-                        posScalar.set(matchEnd);
-                        // Record zero-length match for cross-call tracking
-                        if (matchEnd == matchStart) {
-                            RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
-                        } else {
-                            RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                        // (only for global matches - posScalar is null for non-global)
+                        if (posScalar != null) {
+                            posScalar.set(matchEnd);
+                            // Record zero-length match for cross-call tracking
+                            if (matchEnd == matchStart) {
+                                RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
+                            } else {
+                                RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                            }
                         }
                         break; // Break out of the loop after the first match in SCALAR context
                     } else {
                         startPos = matchEnd;
-                        posScalar.set(startPos);
+                        if (posScalar != null) {
+                            posScalar.set(startPos);
+                        }
                         // Update matcher region if we advanced past a zero-length match
                         if (startPos > matchStart) {
                             matcher.region(startPos, inputStr.length());
@@ -674,7 +680,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Reset pos() on failed match with /g, unless /c is set
-        if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition()) {
+        if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
             posScalar.set(scalarUndef);
         }
 
@@ -715,7 +721,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             // Reset pos() after global match in LIST context (matches Perl behavior)
-            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST) {
+            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST && posScalar != null) {
                 posScalar.set(scalarUndef);
             }
             // System.err.println("DEBUG: Match completed, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
@@ -859,7 +865,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } else if (hasInlineAsciiModifier(regex.patternString)) {
                 // Inline (?a...) in pattern - use ASCII to be safe
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string) && hasUnicodeChars(inputStr)) {
+            } else if (Utf8.isUtf8(string) && RuntimePosLvalue.hasUnicodeChars(string, inputStr)) {
                 // UTF-8 string with true Unicode content (> 255) - use Unicode matching
                 pattern = regex.patternUnicode;
             }
