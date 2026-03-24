@@ -10,7 +10,8 @@ import java.util.List;
  * for implementing the caller() function during operations like import() and unimport().
  */
 public class CallerStack {
-    private static final List<CallerInfo> callerStack = new ArrayList<>();
+    // Store either CallerInfo (resolved) or LazyCallerInfo (deferred)
+    private static final List<Object> callerStack = new ArrayList<>();
 
     /**
      * Pushes a new CallerInfo object onto the stack, representing a new entry in the calling sequence.
@@ -27,8 +28,24 @@ public class CallerStack {
     }
 
     /**
+     * Pushes a lazy CallerInfo onto the stack. The actual filename and line number
+     * will be computed only when peek() is called, avoiding expensive line number
+     * lookups for subroutine calls that never use caller().
+     *
+     * @param packageName The name of the package where the call originated.
+     * @param resolver    A function to compute the CallerInfo when needed.
+     */
+    public static void pushLazy(String packageName, CallerInfoResolver resolver) {
+        if (System.getenv("DEBUG_CALLER") != null) {
+            System.err.println("DEBUG CallerStack.pushLazy: pkg=" + packageName + " (stack size now " + (callerStack.size() + 1) + ")");
+        }
+        callerStack.add(new LazyCallerInfo(packageName, resolver));
+    }
+
+    /**
      * Retrieves the most recent CallerInfo object from the stack without removing it.
      * Zero is the most recent entry.
+     * If the entry is lazy, it will be resolved and replaced with the actual CallerInfo.
      *
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
@@ -40,11 +57,21 @@ public class CallerStack {
         if (index < 0) {
             return null;
         }
-        return callerStack.get(index);
+        Object entry = callerStack.get(index);
+        if (entry instanceof CallerInfo ci) {
+            return ci;
+        } else if (entry instanceof LazyCallerInfo lazy) {
+            // Resolve the lazy entry and cache it
+            CallerInfo resolved = lazy.resolve();
+            callerStack.set(index, resolved);
+            return resolved;
+        }
+        return null;
     }
 
     /**
      * Removes and returns the most recent CallerInfo object from the stack.
+     * If the entry is lazy, it will NOT be resolved (saves computation on pop).
      *
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
@@ -52,16 +79,52 @@ public class CallerStack {
         if (callerStack.isEmpty()) {
             return null;
         }
-        return callerStack.removeLast();
+        Object entry = callerStack.removeLast();
+        if (entry instanceof CallerInfo ci) {
+            return ci;
+        } else if (entry instanceof LazyCallerInfo lazy) {
+            // Don't resolve on pop - caller info not needed
+            return null;
+        }
+        return null;
     }
 
     /**
      * Retrieves a copy of the current calling stack.
+     * Lazy entries will be resolved.
      *
      * @return A list containing all CallerInfo objects in the stack.
      */
     public static List<CallerInfo> getStack() {
-        return new ArrayList<>(callerStack);
+        List<CallerInfo> result = new ArrayList<>();
+        for (int i = 0; i < callerStack.size(); i++) {
+            Object entry = callerStack.get(i);
+            if (entry instanceof CallerInfo ci) {
+                result.add(ci);
+            } else if (entry instanceof LazyCallerInfo lazy) {
+                CallerInfo resolved = lazy.resolve();
+                callerStack.set(i, resolved);
+                result.add(resolved);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Functional interface for lazy resolution of caller info.
+     */
+    @FunctionalInterface
+    public interface CallerInfoResolver {
+        CallerInfo resolve();
+    }
+
+    /**
+     * Holds deferred caller info computation.
+     */
+    private record LazyCallerInfo(String packageName, CallerInfoResolver resolver) {
+        CallerInfo resolve() {
+            return resolver.resolve();
+        }
     }
 
     /**

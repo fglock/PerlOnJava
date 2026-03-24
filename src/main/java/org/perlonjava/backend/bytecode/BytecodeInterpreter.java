@@ -74,8 +74,8 @@ public class BytecodeInterpreter {
         // Get PC holder for direct updates (avoids ThreadLocal lookups in hot loop)
         int[] pcHolder = InterpreterState.push(code, framePackageName, frameSubName);
 
-        // Pure register file (NOT stack-based - matches compiler for control flow correctness)
-        RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
+        // Get register array from cache (avoids allocation for non-recursive calls)
+        RuntimeBase[] registers = code.getRegisters();
 
         // Initialize special registers (same as compiler)
         registers[0] = code;           // $this (for closures - register 0)
@@ -111,8 +111,10 @@ public class BytecodeInterpreter {
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = usesLocalization ? DynamicVariableManager.getLocalLevel() : 0;
-        String savedPackage = InterpreterState.currentPackage.get().toString();
-        InterpreterState.currentPackage.get().set(framePackageName);
+        // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
+        RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
+        String savedPackage = currentPackageScalar.toString();
+        currentPackageScalar.set(framePackageName);
         if (usesLocalization) {
             RegexState.save();
         }
@@ -813,9 +815,9 @@ public class BytecodeInterpreter {
                                 // This matches the JVM backend's call to codeDerefNonStrict()
                                 // Only call for STRING/BYTE_STRING types (symbolic references)
                                 // For CODE, REFERENCE, etc. let RuntimeCode.apply() handle errors
-                                String currentPkg = InterpreterState.currentPackage.get().toString();
+                                // Use cached RuntimeScalar to avoid ThreadLocal lookup
                                 if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
-                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                    codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
                                 RuntimeBase argsBase = registers[argsReg];
@@ -830,12 +832,24 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                // Push call site info to CallerStack for caller() to see the correct location
-                                CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
-                                CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
+                                // Push lazy call site info to CallerStack for caller() to see the correct location
+                                // The actual line number computation is deferred until caller() is called
+                                // Capture variables needed for lazy resolution
+                                final String lazyPkg = currentPackageScalar.toString();
+                                final int lazyPc = callSitePc;
+                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
-                                    result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                    // Fast path for InterpretedCode: call execute() directly,
+                                    // bypassing RuntimeCode.apply() indirection chain
+                                    if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                        // Direct call to interpreter - skip RuntimeCode.apply overhead
+                                        // Pass null for subroutineName to enable frame caching
+                                        result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                    } else {
+                                        // Slow path for JVM-compiled code, symbolic references, etc.
+                                        result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                    }
 
                                     // Handle TAILCALL with trampoline loop (same as JVM backend)
                                     while (result.isNonLocalGoto()) {
@@ -844,7 +858,12 @@ public class BytecodeInterpreter {
                                             // Extract codeRef and args, call target
                                             codeRef = flow.getTailCallCodeRef();
                                             callArgs = flow.getTailCallArgs();
-                                            result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            // Use fast path for InterpretedCode
+                                            if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                                result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                            } else {
+                                                result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            }
                                             // Loop to handle chained tail calls
                                         } else {
                                             // Not TAILCALL - check labeled blocks or propagate
@@ -914,10 +933,11 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                // Push call site info to CallerStack for caller() to see the correct location
-                                String currentPkg = InterpreterState.currentPackage.get().toString();
-                                CallerStack.CallerInfo callSiteInfo = getCallSiteInfo(code, callSitePc, currentPkg);
-                                CallerStack.push(callSiteInfo.packageName(), callSiteInfo.filename(), callSiteInfo.line());
+                                // Push lazy call site info to CallerStack for caller() to see the correct location
+                                // Capture variables needed for lazy resolution
+                                final String lazyPkg = currentPackageScalar.toString();
+                                final int lazyPc = callSitePc;
+                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
                                     result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
@@ -1005,9 +1025,9 @@ public class BytecodeInterpreter {
                                         : codeRefBase.scalar();
 
                                 // Dereference symbolic code references
+                                // Use cached RuntimeScalar to avoid ThreadLocal lookup
                                 if (codeRef.type == RuntimeScalarType.STRING || codeRef.type == RuntimeScalarType.BYTE_STRING) {
-                                    String currentPkg = InterpreterState.currentPackage.get().toString();
-                                    codeRef = codeRef.codeDerefNonStrict(currentPkg);
+                                    codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
                                 // Get args
@@ -1611,8 +1631,9 @@ public class BytecodeInterpreter {
                             case Opcodes.SET_PACKAGE -> {
                                 // Non-scoped package declaration: package Foo;
                                 // Update the runtime current-package tracker so caller() returns the right package.
+                                // Uses cached RuntimeScalar reference to avoid ThreadLocal lookup
                                 int nameIdx = bytecode[pc++];
-                                InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+                                currentPackageScalar.set(code.stringPool[nameIdx]);
                             }
 
                             case Opcodes.PUSH_PACKAGE -> {
@@ -1876,8 +1897,10 @@ public class BytecodeInterpreter {
             if (usesLocalization) {
                 DynamicVariableManager.popToLocalLevel(savedLocalLevel);
             }
-            InterpreterState.currentPackage.get().set(savedPackage);
+            currentPackageScalar.set(savedPackage);
             InterpreterState.pop();
+            // Release cached registers for reuse
+            code.releaseRegisters();
         }
     }
 
