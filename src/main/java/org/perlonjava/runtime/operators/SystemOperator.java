@@ -42,16 +42,15 @@ public class SystemOperator {
         CommandResult result = executeCommand(command.toString(), true);
 
         // Set $? to the exit status
+        // Note: result.exitCode is already in wait status format (from waitForProcessWithStatus)
         if (result.exitCode == -1) {
             // Command failed to execute
             getGlobalVariable("main::?").set(-1);
             getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(-1);
         } else {
-            // Normal exit - put exit code in upper byte (Perl wait status convention)
-            int waitStatus = result.exitCode << 8;
-            getGlobalVariable("main::?").set(waitStatus);
-            // ${^CHILD_ERROR_NATIVE} also stores the wait status format
-            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(waitStatus);
+            // Wait status is already in correct format (exit_code << 8 or signal in lower bits)
+            getGlobalVariable("main::?").set(result.exitCode);
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(result.exitCode);
         }
 
         return processOutput(result.output, ctx);
@@ -76,7 +75,19 @@ public class SystemOperator {
 
         CommandResult result;
 
-        if (!hasHandle && flattenedArgs.size() == 1) {
+        if (hasHandle && flattenedArgs.size() >= 2) {
+            // Indirect object syntax: system { $program } @args
+            // In Perl, @args[0] becomes argv[0] (process name), @args[1:] are actual arguments
+            // Java's ProcessBuilder can't set argv[0] separately, so we skip it
+            // flattenedArgs = [$program, $argv0, $arg1, $arg2, ...]
+            // We want to execute: $program with arguments [$arg1, $arg2, ...]
+            String program = flattenedArgs.get(0);
+            // Skip flattenedArgs[1] (the custom argv[0]) since Java can't use it
+            List<String> actualArgs = new ArrayList<>();
+            actualArgs.add(program);
+            actualArgs.addAll(flattenedArgs.subList(2, flattenedArgs.size()));
+            result = executeCommandDirect(actualArgs);
+        } else if (!hasHandle && flattenedArgs.size() == 1) {
             // Single argument - check for shell metacharacters
             String command = flattenedArgs.getFirst();
             if (SHELL_METACHARACTERS.matcher(command).find()) {
@@ -406,7 +417,16 @@ public class SystemOperator {
 
             int exitCode;
 
-            if (!hasHandle && flattenedArgs.size() == 1) {
+            if (hasHandle && flattenedArgs.size() >= 2) {
+                // Indirect object syntax: exec { $program } @args
+                // In Perl, @args[0] becomes argv[0] (process name), @args[1:] are actual arguments
+                // Java's ProcessBuilder can't set argv[0] separately, so we skip it
+                String program = flattenedArgs.get(0);
+                List<String> actualArgs = new ArrayList<>();
+                actualArgs.add(program);
+                actualArgs.addAll(flattenedArgs.subList(2, flattenedArgs.size()));
+                exitCode = execCommandDirect(actualArgs);
+            } else if (!hasHandle && flattenedArgs.size() == 1) {
                 // Single argument - check for shell metacharacters
                 String command = flattenedArgs.getFirst();
                 if (SHELL_METACHARACTERS.matcher(command).find()) {
