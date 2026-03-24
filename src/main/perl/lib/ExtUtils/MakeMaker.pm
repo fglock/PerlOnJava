@@ -268,13 +268,16 @@ sub _install_pure_perl {
     print "Installation complete! ($installed files installed)\n";
     print "=" x 60, "\n\n";
     
+    # Create MM object first (needed by postamble)
+    my $mm = PerlOnJava::MM::Installed->new($args);
+    
     # Create a stub Makefile to satisfy CPAN.pm's check
-    _create_stub_makefile($name, $version, $args);
+    _create_stub_makefile($name, $version, $args, $mm);
     
     # Create MYMETA.yml for CPAN.pm dependency resolution
     _create_mymeta($name, $version, $args);
     
-    return PerlOnJava::MM::Installed->new($args);
+    return $mm;
 }
 
 sub _install_share_dirs {
@@ -363,11 +366,12 @@ sub _extract_version {
 }
 
 sub _create_stub_makefile {
-    my ($name, $version, $args) = @_;
+    my ($name, $version, $args, $mm) = @_;
     
     # Create a minimal Makefile that CPAN.pm can parse
     # This allows CPAN.pm to proceed through its make/test/install workflow
-    my $makefile = 'Makefile';
+    # Respect custom MAKEFILE name if provided
+    my $makefile = $args->{MAKEFILE} || 'Makefile';
     
     open my $fh, '>', $makefile or do {
         warn "Note: Could not create stub Makefile: $!\n";
@@ -387,25 +391,46 @@ sub _create_stub_makefile {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
     
+    # Convert module name to dist name (My::Module -> My-Module)
+    (my $distname = $name) =~ s/::/-/g;
+    
+    # Get INST_LIB and PREFIX from args, with defaults
+    my $inst_lib = $args->{INST_LIB} || 'blib/lib';
+    my $prefix = $args->{PREFIX} || '/usr/local';
+    my $siteprefix = $args->{SITEPREFIX} || $prefix;
+    my $installsitelib = $args->{INSTALLSITELIB} || '$(' . 'SITEPREFIX)/lib/perl5';
+    
     # Minimal Makefile that works with CPAN.pm
     print $fh <<"MAKEFILE";
 # Stub Makefile for PerlOnJava
 # This module was installed directly without 'make'
 
 NAME = $name
+DISTNAME = $distname
 VERSION = $version
 PERL = $perl
 INSTALLDIRS = site
+INST_LIB = $inst_lib
+PREFIX = $prefix
+SITEPREFIX = $siteprefix
+INSTALLSITELIB = $installsitelib
+NOECHO = \@
+RM_RF = rm -rf
 
-# PerlOnJava installs modules directly - these are no-ops
-all:
+# PerlOnJava installs modules directly - 'all' runs config for share directories
+all: config
 \t\@echo "PerlOnJava: Module already installed"
+
+# Use double-colon for config to allow postamble to add rules
+config::
 
 test:
 \t$test_cmd
 
-install:
-\t\@echo "PerlOnJava: Module already installed to $INSTALL_BASE"
+install: all
+\t\@echo "PerlOnJava: Installing to \$(INSTALLSITELIB)"
+\t\@mkdir -p \$(INSTALLSITELIB)/auto
+\t-\@cp -r \$(INST_LIB)/auto/share \$(INSTALLSITELIB)/auto/ 2>/dev/null || true
 
 clean:
 \t\@echo "PerlOnJava: Nothing to clean"
@@ -414,8 +439,18 @@ realclean: clean
 
 distclean: clean
 
-.PHONY: all test install clean realclean distclean
+.PHONY: all config test install clean realclean distclean
 MAKEFILE
+
+    # Call MY::postamble if it exists (File::ShareDir::Install uses this)
+    if (defined &MY::postamble) {
+        my $postamble = MY::postamble($mm);
+        if ($postamble) {
+            print $fh "\n# Postamble from MY::postamble\n";
+            print $fh $postamble;
+            print $fh "\n";
+        }
+    }
 
     close $fh;
 }
@@ -530,12 +565,50 @@ sub neatvalue {
 #############################################################################
 package PerlOnJava::MM::Installed;
 
+use Config;
+
 sub new { 
     my ($class, $args) = @_;
     bless { args => $args }, $class;
 }
 
 sub flush { 1 }
+
+# Methods needed by File::ShareDir::Install postamble
+sub oneliner {
+    my ($self, $code, $switches) = @_;
+    $switches ||= [];
+    my $perl = $^X;
+    # Remove leading/trailing whitespace and newlines from code
+    $code =~ s/^\s+//;
+    $code =~ s/\s+$//;
+    # Replace internal newlines with semicolons for proper one-liner
+    $code =~ s/\n/; /g;
+    # Escape quotes in code
+    $code =~ s/'/'\\''/g;
+    my $sw = join(' ', @$switches);
+    return qq{$perl $sw -e '$code'};
+}
+
+sub split_command {
+    my ($self, $cmd, @args) = @_;
+    # For simplicity, return a single command with all args
+    # Real MakeMaker splits long commands to avoid command line limits
+    return $cmd . ' ' . join(' ', @args);
+}
+
+sub quote_literal {
+    my ($self, $text) = @_;
+    return $text if !defined $text;
+    # Simple quoting - escape special characters
+    $text =~ s/([\\'])/\\$1/g;
+    return "'$text'";
+}
+
+sub catfile {
+    my ($self, @parts) = @_;
+    return File::Spec->catfile(@parts);
+}
 
 # No-op methods that Makefile.PL might call
 sub AUTOLOAD {
