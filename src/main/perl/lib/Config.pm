@@ -175,13 +175,16 @@ $os_name =~ s/\s+/_/g;
     d_getprotobyname => 'define',
     d_getservbyname => 'define',
 
-    # Signal handling
-    sig_name => 'HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM',
-    sig_num => '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15',
+    # Signal handling - signal 0 is ZERO (used for process existence checks)
+    # Note: Signal names vary by OS. This is a common POSIX subset.
+    # The index in the space-separated list corresponds to the signal number.
+    sig_name => 'ZERO HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM',
+    sig_num => '0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15',
 
     # Executable
     exe_ext => $os_name =~ /win/ ? '.exe' : '',
     _exe => $os_name =~ /win/ ? '.exe' : '',
+    perlpath => $^X,  # Path to the perl interpreter (jperl)
 
     # Version info
     version => '5.42.0',

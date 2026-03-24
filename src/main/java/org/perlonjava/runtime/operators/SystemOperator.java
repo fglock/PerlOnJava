@@ -33,13 +33,28 @@ public class SystemOperator {
      * Executes a system command and returns the output as a RuntimeBase.
      * This implements Perl's backtick operator (`command`).
      *
+     * Like Perl's native qx/backticks, this bypasses the shell for simple commands
+     * without metacharacters, and uses the shell only when necessary.
+     *
      * @param command The command to execute as a RuntimeScalar.
      * @param ctx     The context type, determining the return type (list or scalar).
      * @return The output of the command as a RuntimeBase.
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
     public static RuntimeBase systemCommand(RuntimeScalar command, int ctx) {
-        CommandResult result = executeCommand(command.toString(), true);
+        String cmd = command.toString();
+        CommandResult result;
+
+        // Check for shell metacharacters - if none, execute directly without shell
+        // This matches native Perl behavior where simple commands bypass the shell
+        if (SHELL_METACHARACTERS.matcher(cmd).find()) {
+            // Has shell metacharacters, use shell
+            result = executeCommand(cmd, true);
+        } else {
+            // No shell metacharacters, split into words and execute directly
+            String[] words = cmd.trim().split("\\s+");
+            result = executeCommandDirectCapture(Arrays.asList(words));
+        }
 
         // Set $? to the exit status
         // Note: result.exitCode is already in wait status format (from waitForProcessWithStatus)
@@ -303,6 +318,72 @@ public class SystemOperator {
         }
 
         return new CommandResult("", exitCode);
+    }
+
+    /**
+     * Executes a command directly without shell interpretation and captures output.
+     * This is used by backticks/qx for commands without shell metacharacters.
+     *
+     * @param commandArgs List of command and arguments.
+     * @return CommandResult containing captured output and exit code.
+     */
+    private static CommandResult executeCommandDirectCapture(List<String> commandArgs) {
+        StringBuilder output = new StringBuilder();
+        Process process = null;
+        int exitCode = -1;
+
+        try {
+            flushAllHandles();
+
+            ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+            String userDir = System.getProperty("user.dir");
+            processBuilder.directory(new File(userDir));
+            
+            // Copy %ENV to the subprocess environment
+            copyPerlEnvToProcessBuilder(processBuilder);
+
+            // Inherit stderr (goes to terminal like Perl's backticks)
+            processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+            process = processBuilder.start();
+
+            final Process finalProcess = process;
+            final StringBuilder finalOutput = output;
+
+            // Capture stdout
+            Thread stdoutThread = new Thread(() -> {
+                try (java.io.InputStream is = finalProcess.getInputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        baos.write(buffer, 0, bytesRead);
+                    }
+                    synchronized (finalOutput) {
+                        finalOutput.append(baos.toString());
+                    }
+                } catch (IOException e) {
+                    // Stream closed - this is normal when process terminates
+                }
+            });
+
+            stdoutThread.start();
+            exitCode = waitForProcessWithStatus(process);
+            stdoutThread.join();
+        } catch (IOException e) {
+            // Command failed to start - return -1 as per Perl spec
+            setGlobalVariable("main::!", e.getMessage());
+            exitCode = -1;
+        } catch (InterruptedException e) {
+            PerlSignalQueue.checkPendingSignals();
+            Thread.interrupted();
+        } finally {
+            if (process != null) {
+                process.destroy();
+            }
+        }
+
+        return new CommandResult(output.toString(), exitCode);
     }
 
     /**
