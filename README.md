@@ -4,6 +4,7 @@
 
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
+[![Hypercommit](https://img.shields.io/badge/Hypercommit-DB2475)](https://hypercommit.com/perlonjava)
 
 ## About Perl
 
