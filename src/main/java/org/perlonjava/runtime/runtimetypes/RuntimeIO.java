@@ -593,19 +593,14 @@ public class RuntimeIO extends RuntimeScalar {
             String arg = strings.getFirst();
             String mode = null;
             String ioLayers = "";
-            // Track if the mode was in a separate argument (3-arg form)
-            // When true, we should bypass shell even for single-element command lists
-            boolean separateMode = false;
 
             if (strings.size() > 1) {
                 if (arg.startsWith("|-")) {
                     mode = ">";
                     arg = arg.substring(2);
-                    separateMode = true;  // Mode was separate from command
                 } else if (arg.startsWith("-|")) {
                     mode = "<";
                     arg = arg.substring(2);
-                    separateMode = true;  // Mode was separate from command
                 }
 
                 // Check if mode contains IO layers (indicated by ':')
@@ -631,18 +626,16 @@ public class RuntimeIO extends RuntimeScalar {
                 strings.set(0, arg);
             }
 
-            // System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers + " separateMode=" + separateMode);
+            // System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers);
 
             if (">".equals(mode)) {
-                // For 3-arg form (separateMode), always use list constructor to bypass shell
-                if (strings.size() == 1 && !separateMode) {
+                if (strings.size() == 1) {
                     fh.ioHandle = new PipeOutputChannel(strings.getFirst());
                 } else {
                     fh.ioHandle = new PipeOutputChannel(strings);
                 }
             } else if ("<".equals(mode)) {
-                // For 3-arg form (separateMode), always use list constructor to bypass shell
-                if (strings.size() == 1 && !separateMode) {
+                if (strings.size() == 1) {
                     fh.ioHandle = new PipeInputChannel(strings.getFirst());
                 } else {
                     fh.ioHandle = new PipeInputChannel(strings);

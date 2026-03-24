@@ -114,11 +114,12 @@ sub capturex {
     $EXITVAL = -1;
     my $wantarray = wantarray();
 
-    # Use open with list form to bypass the shell completely
-    # For single-arg capturex, pass as single-element list to avoid shell
+    # Use open with list form to bypass the shell
+    # Note: PerlOnJava limitation - single-arg capturex may still use shell
+    # because PerlOnJava's pipe open doesn't support the no-shell mode that
+    # native Perl achieves with fork+exec { $cmd } $cmd
     my $fh;
-    my @cmd = ($command, @args);
-    if (!open($fh, "-|", @cmd)) {
+    if (!open($fh, "-|", $command, @args)) {
         croak sprintf(FAIL_START, $command, $!);
     }
 
