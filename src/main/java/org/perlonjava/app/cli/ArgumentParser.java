@@ -384,12 +384,12 @@ public class ArgumentParser {
                 case 'e':
                     // Handle inline code specified with -e
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
-                    break;
+                    return index;
                 case 'E':
                     // Handle inline code specified with -E
                     parsedArgs.useVersion = true;
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
-                    break;
+                    return index;
                 case 'f':
                     // No-op: don't do $sitelib/sitecustomize.pl at startup
                     break;
@@ -890,19 +890,24 @@ public class ArgumentParser {
      * @return The updated index after processing the inline code.
      */
     private static int handleInlineCode(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
-        if (j == arg.length() - 1 && index + 1 < args.length) {
+        String newCode;
+        if (j < arg.length() - 1) {
+            // If there's code specified immediately after -e (e.g., -e1, -e'print 1'), use it
+            newCode = arg.substring(j + 1);
+        } else if (index + 1 < args.length) {
             // If -e is the last character in the switch and there's a subsequent argument, treat it as code
-            String newCode = args[++index];
-            if (parsedArgs.code == null) {
-                parsedArgs.code = newCode;
-            } else {
-                parsedArgs.code += "\n" + newCode;
-            }
-            parsedArgs.fileName = "-e"; // Indicate that the code was provided inline
+            newCode = args[++index];
         } else {
             System.err.println("No code specified for -e.");
             System.exit(1);
+            return index;
         }
+        if (parsedArgs.code == null) {
+            parsedArgs.code = newCode;
+        } else {
+            parsedArgs.code += "\n" + newCode;
+        }
+        parsedArgs.fileName = "-e"; // Indicate that the code was provided inline
         return index;
     }
 
