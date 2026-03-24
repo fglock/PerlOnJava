@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
@@ -17,7 +18,6 @@ import static org.perlonjava.runtime.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
@@ -518,24 +518,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         Pattern pattern = regex.pattern;
         String inputStr = string.toString();
         
-        // Select appropriate pattern based on string content and flags:
+        // Select appropriate pattern based on string's UTF-8 flag and content:
         // - /a flag: always use ASCII-only pattern
-        // - /u flag: always use Unicode pattern
-        // - BYTE_STRING: always use ASCII-only pattern (can't have Unicode)
-        // - Otherwise: use Unicode pattern if string contains non-ASCII characters
-        // This mimics Perl's behavior where UTF-8 strings get Unicode matching
-        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern
-                && string.type != BYTE_STRING) {
+        // - BYTE_STRING: use ASCII-only pattern (Perl's "bytes" semantics)
+        // - UTF-8 string with non-ASCII content: use Unicode pattern
+        // - UTF-8 string with ASCII-only content: use ASCII pattern (optimization)
+        // This mimics Perl's behavior where \w, \d, \s semantics depend on UTF-8 flag
+        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
             if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
                 // /a flag - always ASCII
                 pattern = regex.pattern;
-            } else if (regex.regexFlags != null && regex.regexFlags.isUnicode()) {
-                // /u flag - always Unicode
-                pattern = regex.patternUnicode;
-            } else if (hasNonAscii(inputStr)) {
-                // String contains non-ASCII - use Unicode matching
+            } else if (Utf8.isUtf8(string) && hasNonAscii(inputStr)) {
+                // UTF-8 string with non-ASCII content - use Unicode matching
                 pattern = regex.patternUnicode;
             }
+            // else: BYTE_STRING or ASCII-only content - keep ASCII pattern (default)
         }
         
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
@@ -851,19 +848,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         Pattern pattern = regex.pattern;
         
-        // Select appropriate pattern based on string content and flags (same logic as matchRegex)
-        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern
-                && string.type != BYTE_STRING) {
+        // Select appropriate pattern based on string's UTF-8 flag and content (same logic as matchRegex)
+        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
             if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
                 // /a flag - always ASCII
                 pattern = regex.pattern;
-            } else if (regex.regexFlags != null && regex.regexFlags.isUnicode()) {
-                // /u flag - always Unicode
-                pattern = regex.patternUnicode;
-            } else if (hasNonAscii(inputStr)) {
-                // String contains non-ASCII - use Unicode matching
+            } else if (Utf8.isUtf8(string) && hasNonAscii(inputStr)) {
+                // UTF-8 string with non-ASCII content - use Unicode matching
                 pattern = regex.patternUnicode;
             }
+            // else: BYTE_STRING or ASCII-only content - keep ASCII pattern (default)
         }
         
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
