@@ -156,52 +156,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 return value;
             case REFERENCE:
+                // `*foo = \$bar` aliases the SCALAR slot to $bar, regardless of what $bar contains.
+                // This must replace the scalar container (alias) rather than storing into
+                // the existing scalar, otherwise tied scalars would invoke STORE.
+                // Note: \@array and \%hash come in as ARRAYREFERENCE/HASHREFERENCE types,
+                // not REFERENCE, so they are handled above in their respective cases.
                 if (value.value instanceof RuntimeScalar) {
-                    RuntimeScalar deref = value.scalarDeref();
-                    // `*foo = \&bar` creates a constant subroutine returning the code reference
-                    if (deref.type == RuntimeScalarType.CODE) {
-                        RuntimeCode constSub = new RuntimeCode("", null);
-                        constSub.constantValue = deref.getList();
-                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
-                        InheritanceResolver.invalidateCache();
-                    } else if (deref.type == RuntimeScalarType.ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
-                        // `*foo = \@bar` assigns to the ARRAY slot.
-                        // Also update all glob aliases
-                        for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
-                            GlobalVariable.globalArrays.put(aliasedName, arr);
-                        }
-                    } else if (deref.type == RuntimeScalarType.HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
-                        // `*foo = \%bar` assigns to the HASH slot.
-                        // Also update all glob aliases
-                        for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
-                            GlobalVariable.globalHashes.put(aliasedName, hash);
-                        }
-                    } else if (value.type == RuntimeScalarType.REFERENCE && deref.type == RuntimeScalarType.ARRAYREFERENCE) {
-                        // `*foo = \$array_ref` creates a constant subroutine returning the array reference
-                        RuntimeCode constSub = new RuntimeCode("", null);
-                        constSub.constantValue = deref.getList();
-                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
-                        InheritanceResolver.invalidateCache();
-                    } else if (value.type == RuntimeScalarType.REFERENCE && deref.type == RuntimeScalarType.HASHREFERENCE) {
-                        // `*foo = \$hash_ref` creates a constant subroutine returning the hash reference
-                        RuntimeCode constSub = new RuntimeCode("", null);
-                        constSub.constantValue = deref.getList();
-                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
-                        InheritanceResolver.invalidateCache();
-                    } else if (deref.type == RuntimeScalarType.STRING || deref.type == RuntimeScalarType.BYTE_STRING) {
-                        // `*foo = \$bar` creates a constant subroutine returning the scalar value
-                        RuntimeCode constSub = new RuntimeCode("", null);
-                        constSub.constantValue = deref.getList();
-                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
-                        // Also set the SCALAR slot for direct access
-                        GlobalVariable.globalVariables.put(this.globName, deref);
-                        InheritanceResolver.invalidateCache();
-                    } else {
-                        // `*foo = \$bar` (or `*foo = \1`) aliases the SCALAR slot.
-                        // This must replace the scalar container (alias) rather than storing into
-                        // the existing scalar, otherwise tied scalars would invoke STORE.
-                        GlobalVariable.aliasGlobalVariable(this.globName, (RuntimeScalar) value.value);
-                    }
+                    GlobalVariable.aliasGlobalVariable(this.globName, (RuntimeScalar) value.value);
                 }
                 return value;
             case UNDEF:
