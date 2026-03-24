@@ -41,7 +41,7 @@ version = '5.42.0'
 // CycloneDX SBOM generation configuration
 cyclonedxBom {
     projectType = "application"
-    schemaVersion = "1.6"
+    schemaVersion = "1.5"
     includeLicenseText = false
     includeBomSerialNumber = true
     outputName = "bom"
@@ -51,37 +51,6 @@ cyclonedxBom {
     organizationalEntity { oe ->
         oe.name = "PerlOnJava Project"
         oe.urls = ["https://github.com/fglock/PerlOnJava"]
-    }
-}
-
-// Suppress CycloneDX schema validation warnings about unknown keywords
-// The json-schema-validator library prints these directly to System.out
-tasks.named('cyclonedxBom') {
-    doFirst {
-        // Save original streams
-        def originalOut = System.out
-        def originalErr = System.err
-        // Create filter that suppresses the "Unknown keyword" messages
-        def filterOut = new PrintStream(originalOut) {
-            @Override
-            void println(String x) {
-                if (x == null || (!x.contains("Unknown keyword") && !x.contains("NonValidationKeyword"))) {
-                    super.println(x)
-                }
-            }
-        }
-        System.setOut(filterOut)
-        System.setErr(filterOut)
-        // Store originals for restoration
-        ext.originalOut = originalOut
-        ext.originalErr = originalErr
-    }
-    doLast {
-        // Restore original streams
-        if (ext.has('originalOut')) {
-            System.setOut(ext.originalOut)
-            System.setErr(ext.originalErr)
-        }
     }
 }
 
