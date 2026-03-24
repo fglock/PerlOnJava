@@ -80,9 +80,12 @@ PerlOnJava depends on third-party Java libraries and bundles Perl modules. These
 
 **Bundled Perl modules**: Check the [CPAN Security Advisory Database](https://security.metacpan.org/) and the [CPANSA feed](https://github.com/CPAN-Security/cpansa-feed) for known vulnerabilities in Perl modules.
 
-<!-- TODO: Once SBOM is implemented, add:
-**SBOM**: A Software Bill of Materials (SBOM) listing all components is available at [location]. Use this with vulnerability scanning tools to check for known issues.
--->
+**SBOM**: A Software Bill of Materials (SBOM) in CycloneDX format is available:
+- Embedded in the JAR at `META-INF/sbom/bom.json`
+- Generated via `make sbom` (outputs to `build/reports/`)
+- Uploaded as CI artifacts on each build
+
+Use these with vulnerability scanning tools like [OWASP Dependency-Track](https://dependencytrack.org/) or `cyclonedx-cli validate` to check for known issues.
 
 ## Recommendations for Safe Deployment
 
