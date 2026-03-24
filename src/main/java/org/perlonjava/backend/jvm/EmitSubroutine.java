@@ -364,18 +364,27 @@ public class EmitSubroutine {
         boolean isScalarVariable = false;
         boolean isLexicalSub = false;
         OperatorNode scalarOpNode = null;
+        boolean isBlockDeref = false;  // &{expr} syntax - always need to deref for symbolic refs
 
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("$")) {
             // This is &$var() or $var->() syntax
             isScalarVariable = true;
             scalarOpNode = operatorNode;
-        } else if (node.left instanceof BlockNode blockNode &&
-                blockNode.elements.size() == 1 &&
-                blockNode.elements.get(0) instanceof OperatorNode opNode &&
-                opNode.operator.equals("$")) {
-            // This is &{$var} syntax
-            isScalarVariable = true;
-            scalarOpNode = opNode;
+        } else if (node.left instanceof BlockNode blockNode) {
+            // This is &{expr} syntax where expr can be:
+            // - &{$var} - simple variable
+            // - &{$hash{key}} - hash element
+            // - &{$array[idx]} - array element
+            // - &{some_expression} - any expression
+            // All of these may return a string that needs to be resolved as a symbolic reference
+            isBlockDeref = true;
+            if (blockNode.elements.size() == 1 &&
+                    blockNode.elements.get(0) instanceof OperatorNode opNode &&
+                    opNode.operator.equals("$")) {
+                // Specific case: &{$var}
+                isScalarVariable = true;
+                scalarOpNode = opNode;
+            }
         }
 
         if (isScalarVariable && scalarOpNode != null) {
@@ -396,6 +405,16 @@ public class EmitSubroutine {
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
+        } else if (isBlockDeref && !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+            // For &{expr} where expr is not a simple variable (e.g., &{$hash{key}})
+            // We need to call codeDerefNonStrict to resolve symbolic references
+            // using the current package
+            emitterVisitor.pushCurrentPackage();
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "codeDerefNonStrict",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
         }
 
         int codeRefSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
