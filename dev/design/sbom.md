@@ -656,7 +656,8 @@ CycloneDX supports:
 - [x] Phase 3: Combined SBOM (2026-03-24)
   - Created dev/tools/merge-sbom.pl to merge Java and Perl SBOMs
   - Unified SBOM embedded in JAR at META-INF/sbom/sbom.json
-  - Gradle tasks: generatePerlSbom, mergeSbom
+  - Gradle tasks: generatePerlSbom, mergeSbom (configuration-cache compatible)
+  - Final SBOM contains 590 components (8 Java + 558 Perl + metadata)
 - [x] Makefile Integration (2026-03-24)
   - Added targets: sbom, sbom-java, sbom-perl, sbom-clean
 - [x] CI/CD Integration (2026-03-24)
