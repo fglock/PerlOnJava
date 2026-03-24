@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.VSTRING;
 
 // TODO - create test cases
 // $ perl -E ' use version; say version->declare("v1.2.3"); say version->declare("1.2.3"); say version->declare("1.2"); say version->declare("1.2.3.4"); say version->declare("1"); say version->declare(" 1.2.4 ")->normal; say version->new(1.2); say version->new(1.2)->normal; say version->new("1.200000"); say version->new("1.2"); '
@@ -63,48 +64,106 @@ public class Version extends PerlModuleBase {
      * Parses a version string into a version object.
      */
     public static RuntimeList parse(RuntimeArray args, int ctx) {
+        return parseInternal(args, ctx, false);
+    }
+    
+    /**
+     * Internal parse method with option to force qv mode.
+     * @param args The arguments array
+     * @param ctx The runtime context
+     * @param forceQv If true, always set qv=true (used by qv() function)
+     */
+    private static RuntimeList parseInternal(RuntimeArray args, int ctx, boolean forceQv) {
         if (args.size() < 2) {
             throw new IllegalStateException("version->parse() requires an argument");
         }
 
         RuntimeScalar versionStr = args.get(1);
-        String version = versionStr.toString();
-
-        version = version.trim();
-        if (version.isEmpty()) {
-            throw new PerlCompilerException("Invalid version format (version required)");
-        }
+        String version;
         
         // Preserve the original version string before any modifications
-        RuntimeScalar originalVersionStr = versionStr;
+        RuntimeScalar originalVersionStr;
         
-        // Track whether the original input was a v-string (starts with 'v')
-        boolean originalIsVString = version.startsWith("v");
+        // Track whether the original input was a v-string
+        boolean isVString = false;
         
-        if (versionStr.type == DOUBLE) {
-            // Format with enough precision but strip trailing zeros
-            version = String.format("%.6f", versionStr.getDouble());
-            // Remove trailing zeros after decimal point, but keep at least one decimal place
-            version = version.replaceAll("0+$", "").replaceAll("\\.$", ".0");
-            // Actually, Perl keeps the exact representation, so just strip trailing zeros
-            if (version.contains(".")) {
-                version = version.replaceAll("0+$", "");
-                // Remove trailing dot if all decimals were zeros (e.g., "1." -> "1")
-                if (version.endsWith(".")) {
-                    version = version.substring(0, version.length() - 1);
-                }
+        // Handle VSTRING type (bare v-strings like v1.2.3)
+        if (versionStr.type == VSTRING) {
+            isVString = true;
+            // Convert VSTRING to dotted format
+            String vstringValue = versionStr.value.toString();
+            StringBuilder dotted = new StringBuilder("v");
+            for (int i = 0; i < vstringValue.length(); i++) {
+                if (i > 0) dotted.append(".");
+                dotted.append((int) vstringValue.charAt(i));
             }
+            version = dotted.toString();
+            originalVersionStr = new RuntimeScalar(version);
+        } else {
+            version = versionStr.toString().trim();
+            
+            if (version.isEmpty()) {
+                throw new PerlCompilerException("Invalid version format (version required)");
+            }
+            
+            // Check if original starts with 'v'
+            isVString = version.startsWith("v");
+            
+            // Validate version format - check for multiple underscores
+            int underscoreCount = 0;
+            for (char c : version.toCharArray()) {
+                if (c == '_') underscoreCount++;
+            }
+            if (underscoreCount > 1) {
+                throw new PerlCompilerException("Invalid version format (multiple underscores)");
+            }
+            
+            // Validate version format - must contain at least one digit
+            // and be a valid version pattern (digits, dots, underscores, optional v prefix)
+            String checkVersion = isVString ? version.substring(1) : version;
+            checkVersion = checkVersion.replace("_", "");
+            
+            // Version must start with a digit and only contain digits and dots
+            // (after removing v prefix and underscores)
+            if (!checkVersion.matches("\\d+(\\.\\d+)*")) {
+                throw new PerlCompilerException("Invalid version format (non-numeric data)");
+            }
+            
+            if (versionStr.type == DOUBLE) {
+                // Format with enough precision but strip trailing zeros
+                version = String.format("%.6f", versionStr.getDouble());
+                // Remove trailing zeros after decimal point
+                if (version.contains(".")) {
+                    version = version.replaceAll("0+$", "");
+                    // Remove trailing dot if all decimals were zeros (e.g., "1." -> "1")
+                    if (version.endsWith(".")) {
+                        version = version.substring(0, version.length() - 1);
+                    }
+                }
+                originalVersionStr = new RuntimeScalar(version);
+            } else {
+                originalVersionStr = versionStr;
+            }
+        }
+        
+        // For qv(), prepend 'v' if not already present and set original with v prefix
+        if (forceQv) {
+            isVString = true;
+            if (!version.startsWith("v")) {
+                version = "v" + version;
+            }
+            // For qv(), the original is the v-prefixed version
             originalVersionStr = new RuntimeScalar(version);
         } else if (!version.startsWith("v")) {
             // Count the number of dots
             long dotCount = version.chars().filter(ch -> ch == '.').count();
 
-            // If exactly one dot, prepend "v" for internal processing
+            // If exactly one dot and short, prepend "v" for internal processing
             // but keep the original for stringify() and qv flag
             if (dotCount == 1 && version.length() < 4) {
                 version = "v" + version;
                 // Note: originalVersionStr stays as the user's input (e.g., "1.0")
-                // Note: originalIsVString remains false - this is a decimal version
+                // Note: isVString remains false - this is a decimal version
             }
         }
 
@@ -112,12 +171,10 @@ public class Version extends PerlModuleBase {
         RuntimeHash versionObj = new RuntimeHash();
 
         // Parse the version string
-        // Use originalIsVString to determine qv, not the modified version string
         if (version.startsWith("v")) {
             // v-string format (either originally or for internal processing)
             versionObj.put("alpha", scalarFalse);
-            // qv is true only if the ORIGINAL input was a v-string
-            versionObj.put("qv", getScalarBoolean(originalIsVString));
+            versionObj.put("qv", getScalarBoolean(isVString));
 
             // Parse components
             String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(version));
@@ -163,17 +220,18 @@ public class Version extends PerlModuleBase {
     /**
      * qv() - creates a dotted-decimal version object.
      * Always receives class name as first argument due to how it's exported.
+     * qv() always sets is_qv to true, ensuring the version is treated as a v-string.
      */
     public static RuntimeList qv(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
             throw new IllegalStateException("qv() requires an argument");
         }
 
-        // Create version object via parse
+        // Create version object via parseInternal with forceQv=true
         RuntimeArray parseArgs = new RuntimeArray();
         parseArgs.push(new RuntimeScalar("version"));  // class name
         parseArgs.push(RuntimeArray.pop(args));
-        return parse(parseArgs, ctx);
+        return parseInternal(parseArgs, ctx, true);  // forceQv=true
     }
 
     /**

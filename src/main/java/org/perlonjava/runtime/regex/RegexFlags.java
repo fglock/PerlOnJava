@@ -66,10 +66,10 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     public int toPatternFlags() {
         int flags = 0;
         
-        // /u flag enables Unicode semantics for \w, \d, \s
-        if (isUnicode) {
-            flags |= UNICODE_CHARACTER_CLASS;
-        }
+        // Enable UNICODE_CHARACTER_CLASS by default to match Perl's behavior since 5.14
+        // where \w, \d, \s match Unicode characters for UTF-8 strings.
+        // The /a modifier (ASCII) can be used to restrict to ASCII only.
+        flags |= UNICODE_CHARACTER_CLASS;
         
         if (isCaseInsensitive) {
             // For proper Unicode case-insensitive matching, we need both flags:

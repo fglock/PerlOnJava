@@ -87,6 +87,10 @@ $os_name =~ s/\s+/_/g;
     # Compiler settings (Java instead of C)
     cc => 'javac',
     ld => 'javac',
+    # ccflags includes -DSILENT_NO_TAINT_SUPPORT because PerlOnJava does not
+    # implement full taint checking. This allows tests that check for taint
+    # support to skip gracefully.
+    ccflags => '-DSILENT_NO_TAINT_SUPPORT',
 
     # Library/path configuration
     path_sep => $path_separator,

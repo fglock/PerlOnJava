@@ -84,7 +84,14 @@ public class GlobalContext {
             GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         }
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
-        GlobalVariable.globalVariables.put(encodeSpecialVar("TAINT"), RuntimeScalarCache.scalarZero); // ${^TAINT} - read-only, always 0 (taint mode not implemented)
+        // ${^TAINT} - set to 1 if -T (taint mode) was specified, 0 otherwise
+        // Only initialize if not already set (to avoid overwriting during re-initialization)
+        String taintVarName = encodeSpecialVar("TAINT");
+        if (!GlobalVariable.globalVariables.containsKey(taintVarName) || 
+            (compilerOptions.taintMode && GlobalVariable.globalVariables.get(taintVarName) == RuntimeScalarCache.scalarZero)) {
+            GlobalVariable.globalVariables.put(taintVarName, 
+                compilerOptions.taintMode ? RuntimeScalarCache.scalarOne : RuntimeScalarCache.scalarZero);
+        }
         GlobalVariable.getGlobalVariable("main::>");  // TODO
         GlobalVariable.getGlobalVariable("main::<");  // TODO
         GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034
