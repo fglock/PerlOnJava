@@ -40,7 +40,7 @@ public final class Configuration {
      * Automatically populated by Gradle/Maven during build.
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String gitCommitDate = "2026-03-23";
+    public static final String gitCommitDate = "2026-03-24";
 
     // Prevent instantiation
     private Configuration() {

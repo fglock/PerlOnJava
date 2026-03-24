@@ -140,11 +140,11 @@ endif
 # SBOM (Software Bill of Materials) generation
 # See dev/design/sbom.md for details
 
-# Generate all SBOMs (Java dependencies + Perl modules)
+# Generate combined SBOM (Java dependencies + Perl modules merged)
 sbom: sbom-java sbom-perl
-	@echo "SBOM generated in build/reports/"
-	@echo "  - bom.json / bom.xml: Java dependencies"
-	@echo "  - perl-bom.json: Bundled Perl modules"
+	@echo "Merging SBOMs..."
+	perl dev/tools/merge-sbom.pl build/reports/bom.json build/reports/perl-bom.json > build/reports/sbom.json
+	@echo "Combined SBOM generated: build/reports/sbom.json"
 
 # Generate Java SBOM using CycloneDX Gradle plugin
 sbom-java: wrapper
@@ -162,5 +162,5 @@ sbom-perl:
 
 # Clean generated SBOMs
 sbom-clean:
-	rm -f build/reports/bom.json build/reports/bom.xml build/reports/perl-bom.json
+	rm -f build/reports/bom.json build/reports/bom.xml build/reports/perl-bom.json build/reports/sbom.json
 

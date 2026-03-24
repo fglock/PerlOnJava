@@ -641,7 +641,7 @@ CycloneDX supports:
 
 ## Progress Tracking
 
-### Current Status: Phase 1 & 2 Complete
+### Current Status: Phase 1, 2 & 3 Complete (Unified SBOM)
 
 ### Completed Phases
 - [x] Phase 0: Research and design document (2026-03-19)
@@ -649,25 +649,26 @@ CycloneDX supports:
   - Added CycloneDX plugin to gradle/libs.versions.toml (v2.3.0)
   - Configured build.gradle with CycloneDX settings
   - Added cyclonedx-maven-plugin to pom.xml (v2.9.1)
-  - SBOM embedded in JAR at META-INF/sbom/bom.json
-  - SBOM included in DEB package at /opt/perlonjava/share/sbom/
 - [x] Phase 2: Perl SBOM Generation (2026-03-24)
   - Created dev/tools/generate-perl-sbom.pl using core Perl modules
   - Generates CycloneDX 1.6 compliant JSON
   - Scans 558 bundled Perl modules with version and license detection
+- [x] Phase 3: Combined SBOM (2026-03-24)
+  - Created dev/tools/merge-sbom.pl to merge Java and Perl SBOMs
+  - Unified SBOM embedded in JAR at META-INF/sbom/sbom.json
+  - Gradle tasks: generatePerlSbom, mergeSbom
 - [x] Makefile Integration (2026-03-24)
   - Added targets: sbom, sbom-java, sbom-perl, sbom-clean
 - [x] CI/CD Integration (2026-03-24)
-  - Updated .github/workflows/gradle.yml to generate and upload SBOMs
+  - Updated .github/workflows/gradle.yml to generate and upload combined SBOM
 
 ### Next Steps
-1. (Optional) Merge Java and Perl SBOMs using CycloneDX CLI
-2. (Optional) Add VEX (Vulnerability Exploitability eXchange) integration
-3. (Optional) Port SBOM::CycloneDX to run under PerlOnJava
+1. (Optional) Add VEX (Vulnerability Exploitability eXchange) integration
+2. (Optional) Port SBOM::CycloneDX to run under PerlOnJava
 
-### Open Questions to Resolve
-- Decide on separate vs. merged SBOM approach (currently separate)
-- Determine if Perl module license detection needs refinement
+### Open Questions Resolved
+- **Separate vs. merged SBOM**: Using unified/merged SBOM
+- **Perl module license detection**: Basic detection implemented, can be refined
 
 ---
 

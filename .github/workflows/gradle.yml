@@ -51,9 +51,7 @@ jobs:
         with:
           name: sbom
           path: |
-            build/reports/bom.json
-            build/reports/bom.xml
-            build/reports/perl-bom.json
+            build/reports/sbom.json
           retention-days: 90
 
       - name: Upload test results
