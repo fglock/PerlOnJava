@@ -593,6 +593,7 @@ public class RuntimeIO extends RuntimeScalar {
             String arg = strings.getFirst();
             String mode = null;
             String ioLayers = "";
+            boolean noShell = false;  // Flag to bypass shell interpretation
 
             if (strings.size() > 1) {
                 if (arg.startsWith("|-")) {
@@ -620,22 +621,31 @@ public class RuntimeIO extends RuntimeScalar {
                 }
             }
 
+            // Check for :noshell layer - bypasses shell for single-arg pipe open
+            // Usage: open($fh, "-|:noshell", $cmd) to execute $cmd literally without shell
+            if (ioLayers.contains(":noshell")) {
+                noShell = true;
+                ioLayers = ioLayers.replace(":noshell", "");
+            }
+
             if (arg.isEmpty()) {
                 strings.removeFirst();
             } else {
                 strings.set(0, arg);
             }
 
-            // System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers);
+            // System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers + " noShell=" + noShell);
 
             if (">".equals(mode)) {
-                if (strings.size() == 1) {
+                // When noShell is true, always use list constructor to bypass shell
+                if (strings.size() == 1 && !noShell) {
                     fh.ioHandle = new PipeOutputChannel(strings.getFirst());
                 } else {
                     fh.ioHandle = new PipeOutputChannel(strings);
                 }
             } else if ("<".equals(mode)) {
-                if (strings.size() == 1) {
+                // When noShell is true, always use list constructor to bypass shell
+                if (strings.size() == 1 && !noShell) {
                     fh.ioHandle = new PipeInputChannel(strings.getFirst());
                 } else {
                     fh.ioHandle = new PipeInputChannel(strings);
@@ -648,8 +658,10 @@ public class RuntimeIO extends RuntimeScalar {
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
 
-            // Apply any I/O layers
-            fh.binmode(ioLayers);
+            // Apply any I/O layers (excluding the already-processed :noshell)
+            if (!ioLayers.isEmpty()) {
+                fh.binmode(ioLayers);
+            }
         } catch (IOException e) {
             handleIOException(e, "open failed");
             fh = null;
