@@ -76,11 +76,12 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         }
         
         if (isCaseInsensitive) {
-            // For proper Unicode case-insensitive matching, we need both flags:
-            // - CASE_INSENSITIVE: enables case-insensitive matching
-            // - UNICODE_CASE: enables Unicode-aware case folding (not just ASCII)
-            // Without UNICODE_CASE, only ASCII A-Z matches a-z
-            flags |= CASE_INSENSITIVE | UNICODE_CASE;
+            flags |= CASE_INSENSITIVE;
+            // For Unicode case-insensitive matching, add UNICODE_CASE
+            // But NOT if /a flag (ASCII-restrict) is set - /a restricts case folding to ASCII
+            if (!isAscii) {
+                flags |= UNICODE_CASE;
+            }
         }
         if (isMultiLine) {
             flags |= MULTILINE;

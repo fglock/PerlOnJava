@@ -1067,7 +1067,16 @@ public class BytecodeCompiler implements Visitor {
         } else if (emitterContext != null && emitterContext.symbolTable != null
                 && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
                 && !emitterContext.compilerOptions.isUnicodeSource) {
-            opcode = Opcodes.LOAD_BYTE_STRING;
+            // Under `no utf8` - use BYTE_STRING, unless it contains wide characters (> 255)
+            // Wide characters (like \x{100}) force the string to be UTF-8 even without `use utf8`
+            boolean hasWideChars = false;
+            for (int i = 0; i < node.value.length(); i++) {
+                if (node.value.charAt(i) > 255) {
+                    hasWideChars = true;
+                    break;
+                }
+            }
+            opcode = hasWideChars ? Opcodes.LOAD_STRING : Opcodes.LOAD_BYTE_STRING;
         } else {
             opcode = Opcodes.LOAD_STRING;
         }

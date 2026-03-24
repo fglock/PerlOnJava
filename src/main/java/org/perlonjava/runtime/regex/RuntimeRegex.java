@@ -519,20 +519,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String inputStr = string.toString();
         
         // Select appropriate pattern based on string's UTF-8 flag and content:
-        // - /a flag: always use ASCII-only pattern
+        // - /a flag or inline (?a): always use ASCII-only pattern
         // - BYTE_STRING: use ASCII-only pattern (Perl's "bytes" semantics)
-        // - UTF-8 string with non-ASCII content: use Unicode pattern
-        // - UTF-8 string with ASCII-only content: use ASCII pattern (optimization)
+        // - UTF-8 string with Unicode chars (> 255): use Unicode pattern
+        // - UTF-8 string with only Latin-1 chars: use ASCII pattern (avoids false matches)
         // This mimics Perl's behavior where \w, \d, \s semantics depend on UTF-8 flag
         if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
             if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
                 // /a flag - always ASCII
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string) && hasNonAscii(inputStr)) {
-                // UTF-8 string with non-ASCII content - use Unicode matching
+            } else if (hasInlineAsciiModifier(regex.patternString)) {
+                // Inline (?a...) in pattern - use ASCII to be safe
+                pattern = regex.pattern;
+            } else if (Utf8.isUtf8(string) && hasUnicodeChars(inputStr)) {
+                // UTF-8 string with true Unicode content (> 255) - use Unicode matching
                 pattern = regex.patternUnicode;
             }
-            // else: BYTE_STRING or ASCII-only content - keep ASCII pattern (default)
+            // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
         }
         
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
@@ -853,11 +856,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
                 // /a flag - always ASCII
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string) && hasNonAscii(inputStr)) {
-                // UTF-8 string with non-ASCII content - use Unicode matching
+            } else if (hasInlineAsciiModifier(regex.patternString)) {
+                // Inline (?a...) in pattern - use ASCII to be safe
+                pattern = regex.pattern;
+            } else if (Utf8.isUtf8(string) && hasUnicodeChars(inputStr)) {
+                // UTF-8 string with true Unicode content (> 255) - use Unicode matching
                 pattern = regex.patternUnicode;
             }
-            // else: BYTE_STRING or ASCII-only content - keep ASCII pattern (default)
+            // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
         }
         
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
@@ -1101,6 +1107,54 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (int i = 0; i < s.length(); i++) {
             if (s.charAt(i) > 127) {
                 return true;  // Early exit at first non-ASCII
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a string contains any Unicode characters (code point > 255).
+     * Characters 128-255 are extended ASCII and don't require Unicode semantics.
+     * Characters > 255 are true Unicode and should trigger Unicode \w, \d, \s.
+     * 
+     * @param s The string to check
+     * @return true if the string contains Unicode characters (> 255)
+     */
+    private static boolean hasUnicodeChars(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 255) {
+                return true;  // Early exit at first Unicode char
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a pattern contains inline ASCII modifier (?a...).
+     * When present, we should use ASCII matching even for UTF-8 strings with non-ASCII content.
+     * 
+     * @param pattern The pattern string to check
+     * @return true if the pattern contains inline (?a...) modifier
+     */
+    private static boolean hasInlineAsciiModifier(String pattern) {
+        if (pattern == null) {
+            return false;
+        }
+        // Check for (?a...) inline modifier - matches (?a, (?a:, (?ai, (?ia, etc.
+        // The 'a' must appear in the modifier position after (?
+        int idx = 0;
+        while ((idx = pattern.indexOf("(?", idx)) >= 0) {
+            idx += 2;
+            // Scan modifier characters until we hit : or )
+            while (idx < pattern.length()) {
+                char c = pattern.charAt(idx);
+                if (c == 'a') {
+                    return true;  // Found inline ASCII modifier
+                }
+                if (c == ':' || c == ')' || c == '-' || c == '<' || c == '=' || c == '!' || c == '{' || c == '#') {
+                    break;  // End of modifier section
+                }
+                idx++;
             }
         }
         return false;
