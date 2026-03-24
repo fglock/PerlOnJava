@@ -4,6 +4,7 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.nativ.PosixLibrary;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -264,6 +265,39 @@ public class FileTestOperator {
                 Path path = cfc.getFilePath();
                 if (path != null) {
                     return fileTest(operator, new RuntimeScalar(path.toString()));
+                }
+            }
+            // Special handling for -t on standard streams (STDIN, STDOUT, STDERR)
+            if (operator.equals("-t")) {
+                String globName = null;
+                if (fileHandle.value instanceof RuntimeGlob rg) {
+                    globName = rg.globName;
+                } else if (fileHandle.value instanceof RuntimeIO rio) {
+                    globName = rio.globName;
+                }
+                if (globName != null) {
+                    int fd = -1;
+                    if (globName.endsWith("::STDIN") || globName.equals("STDIN")) {
+                        fd = 0;
+                    } else if (globName.endsWith("::STDOUT") || globName.equals("STDOUT")) {
+                        fd = 1;
+                    } else if (globName.endsWith("::STDERR") || globName.equals("STDERR")) {
+                        fd = 2;
+                    }
+                    if (fd >= 0) {
+                        try {
+                            boolean isTty = PosixLibrary.INSTANCE.isatty(fd) != 0;
+                            getGlobalVariable("main::!").set(0);
+                            return getScalarBoolean(isTty);
+                        } catch (Exception e) {
+                            // Fall back to System.console() check for fd 0
+                            if (fd == 0) {
+                                boolean isTty = System.console() != null;
+                                getGlobalVariable("main::!").set(0);
+                                return getScalarBoolean(isTty);
+                            }
+                        }
+                    }
                 }
             }
             // Fallback for non-file handles (pipes, sockets, etc.)
