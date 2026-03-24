@@ -15,6 +15,22 @@ use Exporter ();
 use XSLoader;
 XSLoader::load('POSIX');
 
+# Define O_* constants directly (same values as Fcntl.pm)
+# These are needed by many modules that use POSIX
+use constant O_RDONLY   => 0;
+use constant O_WRONLY   => 1;
+use constant O_RDWR     => 2;
+use constant O_CREAT    => 0100;    # 64 in decimal
+use constant O_EXCL     => 0200;    # 128
+use constant O_NOCTTY   => 0400;    # 256
+use constant O_TRUNC    => 01000;   # 512
+use constant O_APPEND   => 02000;   # 1024
+use constant O_NONBLOCK => 04000;   # 2048
+
+# Wait constants
+use constant WNOHANG    => 1;
+use constant WUNTRACED  => 2;
+
 # Custom import to support legacy foo_h form (without colon)
 # This rewrites locale_h to :locale_h, errno_h to :errno_h, etc.
 sub import {
@@ -27,7 +43,15 @@ sub import {
 }
 
 # Export tags for different groups of functions/constants
-our @EXPORT = ();  # Default to exporting nothing
+# Native Perl's POSIX exports many constants by default
+# Only export constants that are actually implemented in this module
+our @EXPORT = qw(
+    O_RDONLY O_WRONLY O_RDWR O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND O_NONBLOCK
+    WEXITSTATUS WIFEXITED WIFSIGNALED WIFSTOPPED WSTOPSIG WTERMSIG WCOREDUMP
+    WNOHANG WUNTRACED
+    SEEK_CUR SEEK_END SEEK_SET
+    F_OK R_OK W_OK X_OK
+);
 our @EXPORT_OK = qw(
     # Process functions
     _exit abort access alarm chdir chmod chown close ctermid dup dup2
@@ -310,14 +334,13 @@ sub strerror { POSIX::_strerror(@_) }
 sub signal { POSIX::_signal(@_) }
 sub raise { POSIX::_raise(@_) }
 
-# Constants - generate subs for each constant
+# Constants - generate subs for each constant that has Java implementation
+# Note: O_* and WNOHANG/WUNTRACED are defined with 'use constant' above
 for my $const (qw(
     EINTR ENOENT ESRCH EIO ENXIO E2BIG ENOEXEC EBADF ECHILD EAGAIN
     ENOMEM EACCES EFAULT ENOTBLK EBUSY EEXIST EXDEV ENODEV ENOTDIR
     EISDIR EINVAL ENFILE EMFILE ENOTTY ETXTBSY EFBIG ENOSPC ESPIPE
     EROFS EMLINK EPIPE EDOM ERANGE EPERM
-
-    O_RDONLY O_WRONLY O_RDWR O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND O_NONBLOCK
 
     SEEK_SET SEEK_CUR SEEK_END
 
@@ -326,8 +349,6 @@ for my $const (qw(
     SIGHUP SIGINT SIGQUIT SIGILL SIGTRAP SIGABRT SIGBUS SIGFPE SIGKILL
     SIGUSR1 SIGSEGV SIGUSR2 SIGPIPE SIGALRM SIGTERM SIGCHLD SIGCONT
     SIGSTOP SIGTSTP
-
-    WNOHANG WUNTRACED
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";

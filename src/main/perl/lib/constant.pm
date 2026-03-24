@@ -1,7 +1,6 @@
 package constant;
 
 use strict;
-use Symbol 'qualify_to_ref';
 
 sub import {
     my $class = shift;
@@ -23,9 +22,10 @@ sub import {
 
 sub _define_constant {
     my ($package, $name, $value) = @_;
-    my $full_name = "${package}::$name";
-    my $ref = qualify_to_ref($full_name);
-    *$ref = sub () { $value };
+    no strict 'refs';
+    # Store directly in stash as a reference - this creates a proper constant
+    # that RuntimeStashEntry recognizes and sets constantValue on the RuntimeCode
+    ${"${package}::"}{$name} = \$value;
 }
 
 1;
