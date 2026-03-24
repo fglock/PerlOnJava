@@ -1017,11 +1017,12 @@ public abstract class StringSegmentParser {
      * @return true if this character should prevent interpolation
      */
     private boolean isNonInterpolatingCharacter(String text) {
-        return switch (text) {
-            case "%", "|", "#", "\"", "\\",
-                 "?" -> true;
-            default -> false;
-        };
+        // Note: Special punctuation variables like $?, $|, $%, $", $\, $# etc.
+        // are all valid Perl special variables and SHOULD be interpolated.
+        // Previously this list incorrectly included these characters, preventing
+        // interpolation of valid special variables like $? (child error status).
+        // These characters are handled correctly by IdentifierParser.parseComplexIdentifier().
+        return false;
     }
 
     /**
