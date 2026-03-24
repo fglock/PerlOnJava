@@ -20,6 +20,8 @@ plugins {
     alias(libs.plugins.ospackage)
     // Plugin for creating fat/uber JARs
     alias(libs.plugins.shadow)
+    // Plugin for generating CycloneDX SBOM (Software Bill of Materials)
+    alias(libs.plugins.cyclonedx)
 }
 
 // Main application class configuration
@@ -35,6 +37,23 @@ tasks.buildDeb {
 // Project metadata
 group = 'org.perlonjava'
 version = '5.42.0'
+
+// CycloneDX SBOM generation configuration
+cyclonedxBom {
+    projectType = "application"
+    schemaVersion = "1.6"
+    includeLicenseText = false
+    includeBomSerialNumber = true
+    outputName = "bom"
+    outputFormat = "all"  // Generate both JSON and XML
+    componentName = "perlonjava"
+    componentVersion = project.version
+    organizationalEntity { oe ->
+        oe.name = "PerlOnJava Project"
+        oe.urls = ["https://github.com/fglock/PerlOnJava"]
+    }
+}
+
 // Git info injection - injects commit ID and date into Configuration.java before compilation
 // This ensures the built JAR contains accurate version information for -v output
 def configFilePath = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
@@ -107,6 +126,12 @@ ospackage {
     into '/opt/perlonjava'
     from('build/install/perlonjava') {
         into '/opt/perlonjava'
+    }
+    
+    // Include combined SBOM in the package
+    from('build/reports') {
+        into '/opt/perlonjava/share/sbom'
+        include 'sbom.json'
     }
 
     link('/usr/local/bin/jperl', '/opt/perlonjava/bin/jperl')
@@ -211,7 +236,36 @@ shadowJar {
     }
     exclude 'module-info.class'
     exclude 'META-INF/MANIFEST.MF'
+    
+    // Include combined SBOM in JAR's META-INF/sbom/ directory
+    from("$buildDir/reports/sbom.json") {
+        into 'META-INF/sbom'
+    }
 }
+
+// Task to generate Perl SBOM
+tasks.register('generatePerlSbom', Exec) {
+    description = 'Generate SBOM for bundled Perl modules'
+    group = 'sbom'
+    
+    workingDir = projectDir
+    commandLine 'bash', '-c', 
+        "mkdir -p build/reports && perl dev/tools/generate-perl-sbom.pl > build/reports/perl-bom.json"
+}
+
+// Task to merge Java and Perl SBOMs
+tasks.register('mergeSbom', Exec) {
+    description = 'Merge Java and Perl SBOMs into combined SBOM'
+    group = 'sbom'
+    dependsOn cyclonedxBom, generatePerlSbom
+    
+    workingDir = projectDir
+    commandLine 'bash', '-c',
+        "perl dev/tools/merge-sbom.pl build/reports/bom.json build/reports/perl-bom.json > build/reports/sbom.json"
+}
+
+// Ensure combined SBOM is generated before shadowJar
+shadowJar.dependsOn mergeSbom
 
 // Make shadowJar part of the build process
 tasks.named('build') {

@@ -5,7 +5,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## v5.42.3: Unreleased - Next minor version
 
-- Security: added `SECURITY.md` and `dev/design/sbom.md`
+- Security: added `SECURITY.md` and CycloneDX SBOM generation (`make sbom`)
 - Tools: added `jcpan` and `jperldoc`
 - Perl debugger with `-d` command line option
 - Add `defer` feature
