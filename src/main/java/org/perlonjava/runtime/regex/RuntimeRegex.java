@@ -17,6 +17,7 @@ import static org.perlonjava.runtime.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
@@ -62,9 +63,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
-    // Compiled regex pattern
+    // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;
+    // Compiled regex pattern for Unicode strings (Unicode \w, \d)
+    public Pattern patternUnicode;
     int patternFlags;
+    int patternFlagsUnicode;
     String patternString;
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     // Indicates if \G assertion is used (set from regexFlags during compilation)
@@ -118,6 +122,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
+            
+            // Compute Unicode flags for when /u is explicitly used
+            // Only add UNICODE_CHARACTER_CLASS if /u is used and /a is not
+            if (regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
+                regex.patternFlagsUnicode = regex.patternFlags | Pattern.UNICODE_CHARACTER_CLASS;
+            } else {
+                regex.patternFlagsUnicode = regex.patternFlags;
+            }
 
             String javaPattern = null;
             try {
@@ -135,8 +147,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 regex.patternString = patternString;
 
-                // Compile the regex pattern
+                // Compile the regex pattern for byte strings (ASCII-only \w, \d)
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
+                
+                // Compile the Unicode variant for Unicode strings
+                // Only compile separately if the flags differ (saves memory when /a or /u is used)
+                if (regex.patternFlagsUnicode != regex.patternFlags) {
+                    regex.patternUnicode = Pattern.compile(javaPattern, regex.patternFlagsUnicode);
+                } else {
+                    regex.patternUnicode = regex.pattern;
+                }
 
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
@@ -164,6 +184,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
+                    regex.patternUnicode = regex.pattern;  // Error pattern - same for both
                 } else {
                     if (e instanceof PerlCompilerException) {
                         throw e;
@@ -195,6 +216,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.deferredUserDefinedUnicodeProperties = false;
         RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         regex.pattern = recompiled.pattern;
+        regex.patternUnicode = recompiled.patternUnicode;
         regex.patternFlags = recompiled.patternFlags;
         regex.regexFlags = recompiled.regexFlags;
         regex.useGAssertion = recompiled.useGAssertion;
@@ -266,6 +288,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Create a new regex with merged flags
             RuntimeRegex regex = new RuntimeRegex();
             regex.pattern = originalRegex.pattern;
+            regex.patternUnicode = originalRegex.patternUnicode;
             regex.patternString = originalRegex.patternString;
             regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
@@ -294,6 +317,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // Create a new regex with merged flags
                     RuntimeRegex regex = new RuntimeRegex();
                     regex.pattern = originalRegex.pattern;
+                    regex.patternUnicode = originalRegex.patternUnicode;
                     regex.patternString = originalRegex.patternString;
                     regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
@@ -366,6 +390,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Always start with the resolved regex properties
         regex.pattern = resolvedRegex.pattern;
+        regex.patternUnicode = resolvedRegex.patternUnicode;
         regex.patternString = resolvedRegex.patternString;
         regex.regexFlags = resolvedRegex.regexFlags;
         regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
@@ -388,6 +413,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (flagsChanged) {
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString, newFlags.toFlagString());
                 regex.pattern = recompiledRegex.pattern;
+                regex.patternUnicode = recompiledRegex.patternUnicode;
                 regex.patternString = recompiledRegex.patternString;
                 regex.regexFlags = recompiledRegex.regexFlags;
                 regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
@@ -461,6 +487,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
+                tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
@@ -489,6 +516,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         Pattern pattern = regex.pattern;
         String inputStr = string.toString();
+        
+        // Select appropriate pattern based on /u flag:
+        // - /u flag: use patternUnicode with UNICODE_CHARACTER_CLASS (Unicode \w, \d)
+        // - /a flag or no flag: use pattern without UNICODE_CHARACTER_CLASS (ASCII-only \w, \d)
+        // Note: Perl's behavior also depends on string's UTF-8 flag, but PerlOnJava
+        // doesn't track this per-string, so we rely on explicit /u modifier.
+        if (regex.patternUnicode != null && regex.regexFlags != null && regex.regexFlags.isUnicode()) {
+            pattern = regex.patternUnicode;
+        }
+        
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 
@@ -778,6 +815,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
+                tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
@@ -790,6 +828,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 int flags = originalFlags != null ? originalFlags.toPatternFlags() : 0;
                 tempRegex.pattern = Pattern.compile("", flags);
+                tempRegex.patternUnicode = tempRegex.pattern;  // Empty pattern - same for both
                 tempRegex.patternString = "";
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
@@ -799,6 +838,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         Pattern pattern = regex.pattern;
+        
+        // Select appropriate pattern based on /u flag (same logic as matchRegex)
+        if (regex.patternUnicode != null && regex.regexFlags != null && regex.regexFlags.isUnicode()) {
+            pattern = regex.patternUnicode;
+        }
+        
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 
