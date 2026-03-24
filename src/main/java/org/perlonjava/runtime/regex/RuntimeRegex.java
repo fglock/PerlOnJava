@@ -123,9 +123,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
             
-            // Compute Unicode flags for when /u is explicitly used
-            // Only add UNICODE_CHARACTER_CLASS if /u is used and /a is not
-            if (regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
+            // Always compute Unicode flags - we need the Unicode variant for when
+            // the input string contains non-ASCII characters (auto-Unicode detection)
+            // Only skip Unicode variant if /a flag is explicitly used
+            if (!regex.regexFlags.isAscii()) {
                 regex.patternFlagsUnicode = regex.patternFlags | Pattern.UNICODE_CHARACTER_CLASS;
             } else {
                 regex.patternFlagsUnicode = regex.patternFlags;
@@ -517,13 +518,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         Pattern pattern = regex.pattern;
         String inputStr = string.toString();
         
-        // Select appropriate pattern based on /u flag:
-        // - /u flag: use patternUnicode with UNICODE_CHARACTER_CLASS (Unicode \w, \d)
-        // - /a flag or no flag: use pattern without UNICODE_CHARACTER_CLASS (ASCII-only \w, \d)
-        // Note: Perl's behavior also depends on string's UTF-8 flag, but PerlOnJava
-        // doesn't track this per-string, so we rely on explicit /u modifier.
-        if (regex.patternUnicode != null && regex.regexFlags != null && regex.regexFlags.isUnicode()) {
-            pattern = regex.patternUnicode;
+        // Select appropriate pattern based on string content and flags:
+        // - /a flag: always use ASCII-only pattern
+        // - /u flag: always use Unicode pattern
+        // - BYTE_STRING: always use ASCII-only pattern (can't have Unicode)
+        // - Otherwise: use Unicode pattern if string contains non-ASCII characters
+        // This mimics Perl's behavior where UTF-8 strings get Unicode matching
+        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern
+                && string.type != BYTE_STRING) {
+            if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
+                // /a flag - always ASCII
+                pattern = regex.pattern;
+            } else if (regex.regexFlags != null && regex.regexFlags.isUnicode()) {
+                // /u flag - always Unicode
+                pattern = regex.patternUnicode;
+            } else if (hasNonAscii(inputStr)) {
+                // String contains non-ASCII - use Unicode matching
+                pattern = regex.patternUnicode;
+            }
         }
         
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
@@ -839,9 +851,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         Pattern pattern = regex.pattern;
         
-        // Select appropriate pattern based on /u flag (same logic as matchRegex)
-        if (regex.patternUnicode != null && regex.regexFlags != null && regex.regexFlags.isUnicode()) {
-            pattern = regex.patternUnicode;
+        // Select appropriate pattern based on string content and flags (same logic as matchRegex)
+        if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern
+                && string.type != BYTE_STRING) {
+            if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
+                // /a flag - always ASCII
+                pattern = regex.pattern;
+            } else if (regex.regexFlags != null && regex.regexFlags.isUnicode()) {
+                // /u flag - always Unicode
+                pattern = regex.patternUnicode;
+            } else if (hasNonAscii(inputStr)) {
+                // String contains non-ASCII - use Unicode matching
+                pattern = regex.patternUnicode;
+            }
         }
         
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
@@ -1072,6 +1094,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         // +1 because groupCount is zero-based, and we include the entire match
         return globalMatcher.groupCount() + 1;
+    }
+
+    /**
+     * Check if a string contains any non-ASCII characters (code point > 127).
+     * Used to determine if Unicode matching should be used.
+     * 
+     * @param s The string to check
+     * @return true if the string contains non-ASCII characters
+     */
+    private static boolean hasNonAscii(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 127) {
+                return true;  // Early exit at first non-ASCII
+            }
+        }
+        return false;
     }
 
     /**
