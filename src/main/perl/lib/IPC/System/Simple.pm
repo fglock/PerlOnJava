@@ -39,6 +39,7 @@ use constant FAIL_BADEXIT   => q{"%s" unexpectedly returned exit value %d};
 use constant FAIL_UNDEF     => q{%s called with undefined command};
 use constant FAIL_TAINT     => q{%s called with tainted argument "%s"};
 use constant FAIL_TAINT_ENV => q{%s called with tainted environment $ENV{%s}};
+use constant FAIL_INTERNAL  => q{IPC::System::Simple Internal error: %s};
 
 # Signal name lookup
 my @Signal_from_number = split(' ', $Config{sig_name});
@@ -73,11 +74,11 @@ sub runx {
     _check_taint(@_);
     my ($valid_returns, $command, @args) = _process_args(@_);
 
-    # Use multi-arg system which bypasses the shell
-    # PerlOnJava's multi-arg system uses ProcessBuilder and returns -1
-    # if the command doesn't exist, matching native Perl behavior
-    no warnings 'exec';
-    CORE::system($command, @args);
+    # Use indirect object syntax to NEVER invoke the shell
+    # system { $program } $program, @args
+    # This forces Perl to treat $command as a literal program name
+    no warnings;
+    CORE::system { $command } $command, @args;
 
     return _process_child_error($?, $command, $valid_returns);
 }
@@ -113,10 +114,11 @@ sub capturex {
     $EXITVAL = -1;
     my $wantarray = wantarray();
 
-    # Use open with list form to bypass the shell
-    # This properly returns -1 if the command doesn't exist
+    # Use open with list form to bypass the shell completely
+    # For single-arg capturex, pass as single-element list to avoid shell
     my $fh;
-    if (!open($fh, "-|", $command, @args)) {
+    my @cmd = ($command, @args);
+    if (!open($fh, "-|", @cmd)) {
         croak sprintf(FAIL_START, $command, $!);
     }
 
@@ -233,6 +235,16 @@ sub WIFEXITED   { (($_[0] // 0) & 0x7f) == 0 }
 sub WEXITSTATUS { (($_[0] // 0) >> 8) & 0xff }
 sub WIFSIGNALED { my $s = ($_[0] // 0) & 0x7f; $s > 0 && $s < 0x7f }
 sub WTERMSIG    { ($_[0] // 0) & 0x7f }
+
+# Windows-only function - dies on non-Windows platforms
+sub _spawn_or_die {
+    if (not WINDOWS) {
+        croak sprintf(FAIL_INTERNAL, "_spawn_or_die called when not under Win32");
+    }
+    # Windows implementation would go here, but PerlOnJava on JVM
+    # doesn't support Windows-specific Win32::Process APIs
+    croak sprintf(FAIL_INTERNAL, "_spawn_or_die not implemented on this platform");
+}
 
 1;
 
