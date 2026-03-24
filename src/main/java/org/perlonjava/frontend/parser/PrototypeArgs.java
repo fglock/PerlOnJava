@@ -284,6 +284,7 @@ public class PrototypeArgs {
     private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype) {
         boolean isOptional = false;
         boolean needComma = false;
+        int skipCount = 0;  // Number of prototype characters to skip (for flattened my/our/state)
 
         // Check for consecutive commas which should always be a syntax error
         if (isConsecutiveCommas(parser)) {
@@ -307,8 +308,17 @@ public class PrototypeArgs {
                     needComma = true;
                 }
                 case '*' -> {
-                    handleTypeGlobArgument(parser, args, isOptional, needComma);
-                    needComma = true;
+                    // Skip if we got extra arguments from flattening my/our/state
+                    if (skipCount > 0) {
+                        skipCount--;
+                    } else {
+                        int added = handleTypeGlobArgument(parser, args, isOptional, needComma);
+                        // If more than 1 arg was added (flattened my/our/state), skip subsequent * chars
+                        if (added > 1) {
+                            skipCount = added - 1;
+                        }
+                        needComma = true;
+                    }
                 }
                 case '$' -> {
                     handleScalarArgument(parser, args, isOptional, needComma);
@@ -419,9 +429,14 @@ public class PrototypeArgs {
         args.elements.add(scalarArg);
     }
 
-    private static void handleTypeGlobArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
+    /**
+     * Handles a typeglob/filehandle argument for the '*' prototype character.
+     * Returns the number of arguments added (usually 1, but can be more if 
+     * my/our/state with multiple variables is flattened).
+     */
+    private static int handleTypeGlobArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
-            return;
+            return 0;
         }
 
         // Check if we're at the end of arguments
@@ -429,7 +444,7 @@ public class PrototypeArgs {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
             }
-            return;
+            return 0;
         }
 
         // Parse with precedence 20 (=~ level) which allows subscripts ([],{},->)
@@ -440,7 +455,21 @@ public class PrototypeArgs {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
             }
-            return;
+            return 0;
+        }
+
+        // Handle my/our/state with multiple variables: pipe(my ($r, $w))
+        // These should flatten to multiple arguments
+        if (expr instanceof OperatorNode opNode && 
+            (opNode.operator.equals("my") || opNode.operator.equals("our") || opNode.operator.equals("state")) &&
+            opNode.operand instanceof ListNode listNode && listNode.elements.size() > 1) {
+            // Flatten all elements into args
+            for (Node element : listNode.elements) {
+                Node scalarArg = ParserNodeUtils.toScalarContext(element);
+                scalarArg.setAnnotation("context", "SCALAR");
+                args.elements.add(scalarArg);
+            }
+            return listNode.elements.size();
         }
 
         // Handle different types
@@ -463,6 +492,7 @@ public class PrototypeArgs {
             scalarArg.setAnnotation("context", "SCALAR");
             args.elements.add(scalarArg);
         }
+        return 1;
     }
 
     private static void handleListOrHashArgument(Parser parser, ListNode args, boolean needComma) {

@@ -49,6 +49,15 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_SEEK_SET", "const_SEEK_SET", null);
             module.registerMethod("_const_SEEK_CUR", "const_SEEK_CUR", null);
             module.registerMethod("_const_SEEK_END", "const_SEEK_END", null);
+            
+            // Wait status macros
+            module.registerMethod("_WIFEXITED", "wifexited", null);
+            module.registerMethod("_WEXITSTATUS", "wexitstatus", null);
+            module.registerMethod("_WIFSIGNALED", "wifsignaled", null);
+            module.registerMethod("_WTERMSIG", "wtermsig", null);
+            module.registerMethod("_WIFSTOPPED", "wifstopped", null);
+            module.registerMethod("_WSTOPSIG", "wstopsig", null);
+            module.registerMethod("_WCOREDUMP", "wcoredump", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing POSIX method: " + e.getMessage());
         }
@@ -382,5 +391,104 @@ public class POSIX extends PerlModuleBase {
 
     public static RuntimeList const_SEEK_END(RuntimeArray args, int ctx) {
         return new RuntimeScalar(2).getList();
+    }
+
+    // POSIX wait status macros
+    // In Unix, wait() returns a status where:
+    // - If exited normally: bits 8-15 = exit code, bits 0-7 = 0
+    // - If signaled: bits 0-6 = signal number, bit 7 = core dump flag
+    // - If stopped: bits 8-15 = stop signal, bits 0-7 = 0x7f
+
+    /**
+     * WIFEXITED($status) - returns true if the child process exited normally
+     */
+    public static RuntimeList wifexited(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WIFEXITED: (status & 0x7f) == 0
+        boolean exited = (status & 0x7f) == 0;
+        return new RuntimeScalar(exited ? 1 : 0).getList();
+    }
+
+    /**
+     * WEXITSTATUS($status) - returns the exit code if WIFEXITED is true
+     */
+    public static RuntimeList wexitstatus(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WEXITSTATUS: (status >> 8) & 0xff
+        int exitCode = (status >> 8) & 0xff;
+        return new RuntimeScalar(exitCode).getList();
+    }
+
+    /**
+     * WIFSIGNALED($status) - returns true if the child was killed by a signal
+     */
+    public static RuntimeList wifsignaled(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WIFSIGNALED: (status & 0x7f) > 0 && (status & 0x7f) < 0x7f
+        int sigBits = status & 0x7f;
+        boolean signaled = sigBits > 0 && sigBits < 0x7f;
+        return new RuntimeScalar(signaled ? 1 : 0).getList();
+    }
+
+    /**
+     * WTERMSIG($status) - returns the signal number that killed the child
+     */
+    public static RuntimeList wtermsig(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WTERMSIG: status & 0x7f
+        int signal = status & 0x7f;
+        return new RuntimeScalar(signal).getList();
+    }
+
+    /**
+     * WIFSTOPPED($status) - returns true if the child was stopped
+     */
+    public static RuntimeList wifstopped(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WIFSTOPPED: (status & 0xff) == 0x7f
+        boolean stopped = (status & 0xff) == 0x7f;
+        return new RuntimeScalar(stopped ? 1 : 0).getList();
+    }
+
+    /**
+     * WSTOPSIG($status) - returns the signal that stopped the child
+     */
+    public static RuntimeList wstopsig(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WSTOPSIG: (status >> 8) & 0xff (same as WEXITSTATUS)
+        int stopSig = (status >> 8) & 0xff;
+        return new RuntimeScalar(stopSig).getList();
+    }
+
+    /**
+     * WCOREDUMP($status) - returns true if a core dump was produced
+     * Bit 7 of the status is the core dump flag
+     */
+    public static RuntimeList wcoredump(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int status = args.get(0).getInt();
+        // WCOREDUMP: (status & 0x80) != 0
+        boolean coreDumped = (status & 0x80) != 0;
+        return new RuntimeScalar(coreDumped ? 1 : 0).getList();
     }
 }
