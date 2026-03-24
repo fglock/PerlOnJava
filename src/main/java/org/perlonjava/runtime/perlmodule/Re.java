@@ -1,9 +1,12 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
  * The Re class provides functionalities similar to the Perl re module.
@@ -48,35 +51,57 @@ public class Re extends PerlModuleBase {
     }
 
     /**
-     * Handle `use re ...` import. Recognizes: 'strict'.
+     * Handle `use re ...` import. Recognizes: 'strict', '/a', '/u', '/aa'.
      * Enables appropriate experimental warning categories so our regex preprocessor can emit them.
      */
     public static RuntimeList importRe(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        
         for (int i = 0; i < args.size(); i++) {
             String opt = args.get(i).toString();
             // Normalize quotes if present
             opt = opt.replace("\"", "").replace("'", "").trim();
+            
             if (opt.equalsIgnoreCase("strict")) {
                 // Enable categories used by our preprocessor warnings
                 Warnings.warningManager.enableWarning("experimental::re_strict");
                 Warnings.warningManager.enableWarning("experimental::uniprop_wildcards");
                 Warnings.warningManager.enableWarning("experimental::vlb");
+            } else if (opt.equals("/a")) {
+                // use re '/a' - ASCII-restrict regex character classes
+                symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
+                symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE | Strict.HINT_RE_ASCII_AA);
+            } else if (opt.equals("/aa")) {
+                // use re '/aa' - Strict ASCII-restrict (also affects case folding)
+                symbolTable.enableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
+                symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE);
+            } else if (opt.equals("/u")) {
+                // use re '/u' - Unicode semantics for regex
+                symbolTable.enableStrictOption(Strict.HINT_RE_UNICODE);
+                symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             }
         }
         return new RuntimeList();
     }
 
     /**
-     * Handle `no re ...` unimport. Recognizes: 'strict'.
+     * Handle `no re ...` unimport. Recognizes: 'strict', '/a', '/u', '/aa'.
      */
     public static RuntimeList unimportRe(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        
         for (int i = 0; i < args.size(); i++) {
             String opt = args.get(i).toString();
             opt = opt.replace("\"", "").replace("'", "").trim();
+            
             if (opt.equalsIgnoreCase("strict")) {
                 Warnings.warningManager.disableWarning("experimental::re_strict");
                 Warnings.warningManager.disableWarning("experimental::uniprop_wildcards");
                 Warnings.warningManager.disableWarning("experimental::vlb");
+            } else if (opt.equals("/a") || opt.equals("/aa")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
+            } else if (opt.equals("/u")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE);
             }
         }
         return new RuntimeList();

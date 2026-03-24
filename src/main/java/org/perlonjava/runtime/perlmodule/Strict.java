@@ -30,6 +30,11 @@ public class Strict extends PerlModuleBase {
     // Bitmask for utf8 source code
     public static final int HINT_UTF8 = 0x00800000;
 
+    // Bitmask for `use re` regex modifiers
+    public static final int HINT_RE_ASCII = 0x01000000;     // use re '/a'
+    public static final int HINT_RE_UNICODE = 0x02000000;   // use re '/u'
+    public static final int HINT_RE_ASCII_AA = 0x04000000;  // use re '/aa'
+
     /**
      * Constructor for Strict.
      * Initializes the module with the name "strict".
