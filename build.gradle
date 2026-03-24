@@ -54,6 +54,37 @@ cyclonedxBom {
     }
 }
 
+// Suppress CycloneDX schema validation warnings about unknown keywords
+// The json-schema-validator library prints these directly to System.out
+tasks.named('cyclonedxBom') {
+    doFirst {
+        // Save original streams
+        def originalOut = System.out
+        def originalErr = System.err
+        // Create filter that suppresses the "Unknown keyword" messages
+        def filterOut = new PrintStream(originalOut) {
+            @Override
+            void println(String x) {
+                if (x == null || (!x.contains("Unknown keyword") && !x.contains("NonValidationKeyword"))) {
+                    super.println(x)
+                }
+            }
+        }
+        System.setOut(filterOut)
+        System.setErr(filterOut)
+        // Store originals for restoration
+        ext.originalOut = originalOut
+        ext.originalErr = originalErr
+    }
+    doLast {
+        // Restore original streams
+        if (ext.has('originalOut')) {
+            System.setOut(ext.originalOut)
+            System.setErr(ext.originalErr)
+        }
+    }
+}
+
 // Git info injection - injects commit ID and date into Configuration.java before compilation
 // This ensures the built JAR contains accurate version information for -v output
 def configFilePath = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
