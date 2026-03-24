@@ -36,6 +36,13 @@ public class Whitespace {
                         // Process heredocs before advancing past the NEWLINE
                         ParseHeredoc.parseHeredocAfterNewline(parser);
                         tokenIndex = parser.tokenIndex;
+                    } else if (parser.heredocNewlineIndex == tokenIndex && parser.heredocSkipToIndex > tokenIndex) {
+                        // Heredocs were already processed (e.g., before a BEGIN block).
+                        // Skip past the heredoc content that was already consumed.
+                        // Only skip when we reach the specific newline that was pre-processed.
+                        tokenIndex = parser.heredocSkipToIndex;
+                        parser.heredocSkipToIndex = -1;
+                        parser.heredocNewlineIndex = -1;
                     }
 
                     tokenIndex++;

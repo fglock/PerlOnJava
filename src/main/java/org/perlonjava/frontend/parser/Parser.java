@@ -48,6 +48,11 @@ public class Parser {
     public List<Node> classAdjustBlocks = new ArrayList<>();
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
+    // When heredocs are processed before BEGIN blocks, this tracks where to skip to
+    // after the NEWLINE (past the heredoc content that was already consumed).
+    public int heredocSkipToIndex = -1;
+    // The specific NEWLINE token index that should trigger the skip.
+    public int heredocNewlineIndex = -1;
 
     /**
      * Constructs a Parser with the given context and tokens.

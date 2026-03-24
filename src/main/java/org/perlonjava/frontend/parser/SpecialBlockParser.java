@@ -66,6 +66,35 @@ public class SpecialBlockParser {
         // Consume the closing brace '}'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
+        // Before executing BEGIN blocks, process any pending heredocs.
+        // This handles cases like: BEGIN { eval <<'END' } ... \n heredoc content \n END
+        // The heredoc content comes after the newline, but BEGIN must execute immediately.
+        // We need to fill in the heredoc content before BEGIN tries to use it.
+        if ("BEGIN".equals(blockName) && !parser.getHeredocNodes().isEmpty()) {
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("HEREDOC_BEGIN_FIX: Found " + parser.getHeredocNodes().size() + " pending heredocs after BEGIN block");
+            int savedIndex = parser.tokenIndex;
+            // Find the next NEWLINE token
+            int newlineIndex = -1;
+            for (int i = savedIndex; i < parser.tokens.size(); i++) {
+                if (parser.tokens.get(i).type == LexerTokenType.NEWLINE) {
+                    newlineIndex = i;
+                    break;
+                }
+            }
+            if (newlineIndex >= 0) {
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("HEREDOC_BEGIN_FIX: Processing at newlineIndex=" + newlineIndex + ", will skip to after heredocs");
+                // Temporarily advance to the newline to process heredocs
+                parser.tokenIndex = newlineIndex;
+                ParseHeredoc.parseHeredocAfterNewline(parser);
+                // Save where to skip to when we later encounter this specific newline
+                parser.heredocSkipToIndex = parser.tokenIndex;
+                parser.heredocNewlineIndex = newlineIndex;
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("HEREDOC_BEGIN_FIX: Set heredocSkipToIndex=" + parser.heredocSkipToIndex + ", heredocNewlineIndex=" + newlineIndex);
+                // Restore tokenIndex to continue parsing from after the '}'
+                parser.tokenIndex = savedIndex;
+            }
+        }
+
         // ADJUST blocks in class context are not executed at parse time
         // They are compiled as anonymous subs and stored for the constructor
         if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
