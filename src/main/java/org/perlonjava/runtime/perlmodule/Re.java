@@ -10,6 +10,28 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
  * The Re class provides functionalities similar to the Perl re module.
+ * 
+ * <p>Currently implemented features:
+ * <ul>
+ *   <li>{@code use re '/a'} - ASCII-restrict \w, \d, \s, \b</li>
+ *   <li>{@code use re '/aa'} - ASCII-restrict including case folding</li>
+ *   <li>{@code use re '/u'} - Unicode semantics for character classes</li>
+ *   <li>{@code use re 'strict'} - Enables experimental regex warnings</li>
+ *   <li>{@code re::is_regexp($ref)} - Check if reference is a compiled regex</li>
+ * </ul>
+ * 
+ * <p>TODO: Features not yet implemented (see {@code perldoc re}):
+ * <ul>
+ *   <li>{@code use re '/l'} - Locale-aware matching</li>
+ *   <li>{@code use re '/d'} - Default/legacy semantics</li>
+ *   <li>{@code use re 'eval'} - Allow (?{}) in interpolated patterns without 'use re eval'</li>
+ *   <li>{@code use re 'debug'} - Regex debugging output</li>
+ *   <li>{@code use re 'debugcolor'} - Colorized regex debugging</li>
+ *   <li>{@code use re 'taint'} - Taint mode for regex</li>
+ *   <li>{@code re::regexp_pattern($ref)} - Return pattern and modifiers from qr//</li>
+ *   <li>Combining multiple flags: {@code use re '/xms'}</li>
+ *   <li>Scoped flag restoration with {@code no re '/flags'}</li>
+ * </ul>
  */
 public class Re extends PerlModuleBase {
 
