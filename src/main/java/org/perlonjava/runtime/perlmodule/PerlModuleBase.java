@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.invoke.MethodHandle;
+import java.net.URL;
 
 /**
  * Abstract base class for Perl modules in the Java environment.
@@ -35,10 +36,26 @@ public abstract class PerlModuleBase {
     /**
      * Initializes the Perl module by setting the %INC hash to indicate
      * that the module is loaded.
+     * If a .pm stub file exists in the JAR, use the jar:PERL5LIB path format
+     * so that code opening %INC entries can find a real file.
      */
     private void initializeModule() {
+        String pmFileName = moduleName.replace("::", "/") + ".pm";
+        String incValue;
+        
+        // Check if there's a .pm file in the bundled lib (JAR)
+        String resourcePath = "/lib/" + pmFileName;
+        URL resource = PerlModuleBase.class.getResource(resourcePath);
+        if (resource != null) {
+            // Use jar:PERL5LIB path format - this can be opened by the runtime
+            incValue = GlobalContext.JAR_PERLLIB + "/" + pmFileName;
+        } else {
+            // No .pm stub file - use simple name (backwards compatible)
+            incValue = moduleName + ".pm";
+        }
+        
         // Set %INC to indicate the module is loaded
-        GlobalVariable.getGlobalHash("main::INC").put(moduleName.replace("::", "/") + ".pm", new RuntimeScalar(moduleName + ".pm"));
+        GlobalVariable.getGlobalHash("main::INC").put(pmFileName, new RuntimeScalar(incValue));
     }
 
     /**
