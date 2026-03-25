@@ -50,12 +50,16 @@ public class SpecialBlock {
 
     /**
      * Executes all code blocks stored in the endBlocks array in LIFO order.
-     * Per Perl semantics, $? is reset to 0 before END blocks run.
+     * 
+     * @param resetChildStatus if true, reset $? to 0 before running END blocks (normal exit).
+     *                         if false, preserve $? (die/exception path).
      */
-    public static void runEndBlocks() {
-        // Reset $? to 0 before END blocks run (Perl semantics)
-        // This ensures END blocks see $? = 0 unless they explicitly set it
-        getGlobalVariable("main::?").set(0);
+    public static void runEndBlocks(boolean resetChildStatus) {
+        if (resetChildStatus) {
+            // Reset $? to 0 before END blocks run (Perl semantics for normal exit)
+            // This ensures END blocks see $? = 0 unless they explicitly set it
+            getGlobalVariable("main::?").set(0);
+        }
         
         while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(endBlocks);
@@ -63,6 +67,14 @@ public class SpecialBlock {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
         }
+    }
+
+    /**
+     * Executes all code blocks stored in the endBlocks array in LIFO order.
+     * Resets $? to 0 before running (normal exit behavior).
+     */
+    public static void runEndBlocks() {
+        runEndBlocks(true);
     }
 
     /**
