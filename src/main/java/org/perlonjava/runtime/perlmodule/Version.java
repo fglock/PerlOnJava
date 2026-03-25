@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.UNDEF;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.VSTRING;
 
 // TODO - create test cases
@@ -87,8 +88,13 @@ public class Version extends PerlModuleBase {
         // Track whether the original input was a v-string
         boolean isVString = false;
         
+        // Handle undef - treat as version 0 (Perl behavior)
+        if (versionStr.type == UNDEF) {
+            version = "0";
+            originalVersionStr = new RuntimeScalar("0");
+        }
         // Handle VSTRING type (bare v-strings like v1.2.3)
-        if (versionStr.type == VSTRING) {
+        else if (versionStr.type == VSTRING) {
             isVString = true;
             // Convert VSTRING to dotted format
             String vstringValue = versionStr.value.toString();
@@ -102,47 +108,53 @@ public class Version extends PerlModuleBase {
         } else {
             version = versionStr.toString().trim();
             
-            if (version.isEmpty()) {
-                throw new PerlCompilerException("Invalid version format (version required)");
-            }
-            
-            // Check if original starts with 'v'
-            isVString = version.startsWith("v");
-            
-            // Validate version format - check for multiple underscores
-            int underscoreCount = 0;
-            for (char c : version.toCharArray()) {
-                if (c == '_') underscoreCount++;
-            }
-            if (underscoreCount > 1) {
-                throw new PerlCompilerException("Invalid version format (multiple underscores)");
-            }
-            
-            // Validate version format - must contain at least one digit
-            // and be a valid version pattern (digits, dots, underscores, optional v prefix)
-            String checkVersion = isVString ? version.substring(1) : version;
-            checkVersion = checkVersion.replace("_", "");
-            
-            // Version must start with a digit and only contain digits and dots
-            // (after removing v prefix and underscores)
-            if (!checkVersion.matches("\\d+(\\.\\d+)*")) {
-                throw new PerlCompilerException("Invalid version format (non-numeric data)");
-            }
-            
-            if (versionStr.type == DOUBLE) {
-                // Format with enough precision but strip trailing zeros
-                version = String.format("%.6f", versionStr.getDouble());
-                // Remove trailing zeros after decimal point
-                if (version.contains(".")) {
-                    version = version.replaceAll("0+$", "");
-                    // Remove trailing dot if all decimals were zeros (e.g., "1." -> "1")
-                    if (version.endsWith(".")) {
-                        version = version.substring(0, version.length() - 1);
-                    }
-                }
-                originalVersionStr = new RuntimeScalar(version);
+            // Handle literal string "undef" - treat as version 0 (Perl behavior)
+            if (version.equals("undef")) {
+                version = "0";
+                originalVersionStr = new RuntimeScalar("0");
             } else {
-                originalVersionStr = versionStr;
+                if (version.isEmpty()) {
+                    throw new PerlCompilerException("Invalid version format (version required)");
+                }
+            
+                // Check if original starts with 'v'
+                isVString = version.startsWith("v");
+            
+                // Validate version format - check for multiple underscores
+                int underscoreCount = 0;
+                for (char c : version.toCharArray()) {
+                    if (c == '_') underscoreCount++;
+                }
+                if (underscoreCount > 1) {
+                    throw new PerlCompilerException("Invalid version format (multiple underscores)");
+                }
+            
+                // Validate version format - must contain at least one digit
+                // and be a valid version pattern (digits, dots, underscores, optional v prefix)
+                String checkVersion = isVString ? version.substring(1) : version;
+                checkVersion = checkVersion.replace("_", "");
+            
+                // Version must start with a digit and only contain digits and dots
+                // (after removing v prefix and underscores)
+                if (!checkVersion.matches("\\d+(\\.\\d+)*")) {
+                    throw new PerlCompilerException("Invalid version format (non-numeric data)");
+                }
+            
+                if (versionStr.type == DOUBLE) {
+                    // Format with enough precision but strip trailing zeros
+                    version = String.format("%.6f", versionStr.getDouble());
+                    // Remove trailing zeros after decimal point
+                    if (version.contains(".")) {
+                        version = version.replaceAll("0+$", "");
+                        // Remove trailing dot if all decimals were zeros (e.g., "1." -> "1")
+                        if (version.endsWith(".")) {
+                            version = version.substring(0, version.length() - 1);
+                        }
+                    }
+                    originalVersionStr = new RuntimeScalar(version);
+                } else {
+                    originalVersionStr = versionStr;
+                }
             }
         }
         

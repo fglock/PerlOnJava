@@ -328,6 +328,10 @@ imports:
     target: perl5_t/version
     type: directory
 
+  # I18N::Langinfo - locale information (XS implementation in Java)
+  - source: perl5/ext/I18N-Langinfo/Langinfo.pm
+    target: src/main/perl/lib/I18N/Langinfo.pm
+
   # From core distribution
   - source: perl5/dist/Attribute-Handlers/lib/Attribute/Handlers.pm
     target: src/main/perl/lib/Attribute/Handlers.pm

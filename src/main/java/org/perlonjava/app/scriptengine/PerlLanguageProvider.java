@@ -241,6 +241,12 @@ public class PerlLanguageProvider {
         globalSymbolTable.addVariable("@_", "our", null);
         globalSymbolTable.addVariable("wantarray", "", null);
 
+        // Inherit $^H (strictOptions) from the caller's scope so BEGIN blocks
+        // can see and modify the enclosing scope's compile-time hints
+        if (savedCurrentScope != null) {
+            globalSymbolTable.setStrictOptions(savedCurrentScope.getStrictOptions());
+        }
+
         EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),
                 globalSymbolTable.snapShot(),
@@ -274,8 +280,10 @@ public class PerlLanguageProvider {
 
             return executeCode(runtimeCode, ctx, false, contextType);
         } finally {
-            // Restore the caller's scope
+            // Propagate $^H changes back to the caller's scope so subsequent
+            // code in the same lexical block sees the updated hints
             if (savedCurrentScope != null) {
+                savedCurrentScope.setStrictOptions(ctx.symbolTable.getStrictOptions());
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
         }
