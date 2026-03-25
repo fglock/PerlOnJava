@@ -176,7 +176,7 @@ sub harvest {
     $result->{name} = $name;
     $results{$name} = $result;
 
-    my %sym = (pass => "\x{2713}", fail => "\x{2717}", error => '!', timeout => 'T');
+    my %sym = (pass => "\x{2713}", fail => "\x{2717}", error => '!', timeout => 'T', incomplete => "\x{25CB}");
     my $ch = $sym{$result->{status}} // '?';
 
     printf "[%3d/%d] %-30s %s  %d/%d ok  (%.1fs)\n",
@@ -225,13 +225,15 @@ sub parse_tap {
     } elsif ($total == 0 && $exit_code != 0) {
         $status = 'error';
         push @errors, "exit code $exit_code with no TAP output";
-    } elsif ($fail == 0 && $pass > 0) {
-        $status = 'pass';
+    } elsif ($planned > 0 && $total < $planned) {
+        # Check for incomplete tests BEFORE marking as pass
+        my $missing = $planned - $total;
+        $status = 'incomplete';
+        push @errors, "missing $missing of $planned tests";
     } elsif ($fail > 0) {
         $status = 'fail';
-    } elsif ($planned > 0 && $total < $planned) {
-        $status = 'error';
-        push @errors, "planned $planned but ran $total";
+    } elsif ($fail == 0 && $pass > 0) {
+        $status = 'pass';
     } else {
         $status = $exit_code == 0 ? 'pass' : 'error';
     }
@@ -247,41 +249,47 @@ sub parse_tap {
 }
 
 sub print_summary {
-    my (%s, $total_pass, $total_fail, $total_planned);
-    $total_pass = $total_fail = $total_planned = 0;
+    my (%s, $total_pass, $total_fail, $total_planned, $total_missing);
+    $total_pass = $total_fail = $total_planned = $total_missing = 0;
     for my $r (values %results) {
         $s{$r->{status}}++;
         $total_pass    += $r->{pass}    // 0;
         $total_fail    += $r->{fail}    // 0;
         $total_planned += $r->{planned} // 0;
+        my $ran = ($r->{pass} // 0) + ($r->{fail} // 0);
+        my $plan = $r->{planned} // 0;
+        $total_missing += ($plan - $ran) if $plan > $ran;
     }
 
     print "\nEXIFTOOL TEST SUMMARY:\n";
     printf "  Test files:  %d\n", scalar keys %results;
-    printf "  Passed:      %d\n", $s{pass}    // 0;
-    printf "  Failed:      %d\n", $s{fail}    // 0;
-    printf "  Errors:      %d\n", $s{error}   // 0;
-    printf "  Timeouts:    %d\n", $s{timeout}  // 0;
+    printf "  Passed:      %d\n", $s{pass}       // 0;
+    printf "  Failed:      %d\n", $s{fail}       // 0;
+    printf "  Incomplete:  %d\n", $s{incomplete} // 0;
+    printf "  Errors:      %d\n", $s{error}      // 0;
+    printf "  Timeouts:    %d\n", $s{timeout}    // 0;
     print  "\n";
+    printf "  Planned:     %d\n", $total_planned;
     printf "  Total tests: %d\n", $total_pass + $total_fail;
     printf "  OK:          %d\n", $total_pass;
     printf "  Not OK:      %d\n", $total_fail;
+    printf "  Missing:     %d\n", $total_missing if $total_missing > 0;
 
-    if ($total_pass + $total_fail > 0) {
-        printf "  Pass rate:   %.1f%%\n", $total_pass * 100 / ($total_pass + $total_fail);
+    if ($total_planned > 0) {
+        printf "  Pass rate:   %.1f%% (of planned)\n", $total_pass * 100 / $total_planned;
     }
 
     my @failures = sort grep { $results{$_}{status} ne 'pass' } keys %results;
     if (@failures) {
-        print "\nFAILED/ERROR TESTS:\n";
+        print "\nFAILED/ERROR/INCOMPLETE TESTS:\n";
         for my $name (@failures) {
             my $r = $results{$name};
-            printf "  %-30s %s", $name, $r->{status};
+            printf "  %-30s %-10s", $name, $r->{status};
             printf "  (%d/%d ok)", $r->{pass}, $r->{planned} || ($r->{pass} + $r->{fail})
                 if $r->{pass} || $r->{fail};
             if ($r->{error}) {
                 my $err = $r->{error};
-                $err = substr($err, 0, 60) . "..." if length($err) > 60;
+                $err = substr($err, 0, 50) . "..." if length($err) > 50;
                 print "  $err";
             }
             print "\n";

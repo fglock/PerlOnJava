@@ -433,10 +433,31 @@ public class InlineOpcodeHandler {
     public static int executeArrayPush(int[] bytecode, int pc, RuntimeBase[] registers) {
         int arrayReg = bytecode[pc++];
         int valueReg = bytecode[pc++];
-        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+        RuntimeArray arr = getArrayFromRegister(registers, arrayReg);
         RuntimeBase val = registers[valueReg];
         arr.push(val);
         return pc;
+    }
+
+    /**
+     * Helper to get RuntimeArray from a register, handling RuntimeList conversion.
+     */
+    private static RuntimeArray getArrayFromRegister(RuntimeBase[] registers, int arrayReg) {
+        RuntimeBase arrayBase = registers[arrayReg];
+        if (arrayBase instanceof RuntimeArray) {
+            return (RuntimeArray) arrayBase;
+        } else if (arrayBase instanceof RuntimeList) {
+            // Convert RuntimeList to RuntimeArray (defensive handling)
+            RuntimeArray arr = new RuntimeArray();
+            arrayBase.addToArray(arr);
+            registers[arrayReg] = arr;
+            return arr;
+        } else {
+            // Fallback: try to get as array via dereference
+            RuntimeArray arr = arrayBase.scalar().arrayDeref();
+            registers[arrayReg] = arr;
+            return arr;
+        }
     }
 
     /**
@@ -446,7 +467,7 @@ public class InlineOpcodeHandler {
     public static int executeArrayPop(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int arrayReg = bytecode[pc++];
-        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+        RuntimeArray arr = getArrayFromRegister(registers, arrayReg);
         registers[rd] = RuntimeArray.pop(arr);
         return pc;
     }
@@ -458,7 +479,7 @@ public class InlineOpcodeHandler {
     public static int executeArrayShift(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int arrayReg = bytecode[pc++];
-        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+        RuntimeArray arr = getArrayFromRegister(registers, arrayReg);
         registers[rd] = RuntimeArray.shift(arr);
         return pc;
     }
@@ -470,7 +491,7 @@ public class InlineOpcodeHandler {
     public static int executeArrayUnshift(int[] bytecode, int pc, RuntimeBase[] registers) {
         int arrayReg = bytecode[pc++];
         int valueReg = bytecode[pc++];
-        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+        RuntimeArray arr = getArrayFromRegister(registers, arrayReg);
         RuntimeBase val = registers[valueReg];
         RuntimeArray.unshift(arr, val);
         return pc;
