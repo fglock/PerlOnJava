@@ -708,7 +708,8 @@ public class Disassemble {
                         break;
                     case Opcodes.POST_AUTOINCREMENT:
                         rd = interpretedCode.bytecode[pc++];
-                        sb.append("POST_AUTOINCREMENT r").append(rd).append("++\n");
+                        int postIncSrc = interpretedCode.bytecode[pc++];
+                        sb.append("POST_AUTOINCREMENT r").append(rd).append(" = r").append(postIncSrc).append("++\n");
                         break;
                     case Opcodes.PRE_AUTODECREMENT:
                         rd = interpretedCode.bytecode[pc++];
@@ -716,7 +717,8 @@ public class Disassemble {
                         break;
                     case Opcodes.POST_AUTODECREMENT:
                         rd = interpretedCode.bytecode[pc++];
-                        sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
+                        int postDecSrc = interpretedCode.bytecode[pc++];
+                        sb.append("POST_AUTODECREMENT r").append(rd).append(" = r").append(postDecSrc).append("--\n");
                         break;
                     case Opcodes.PRINT: {
                         int contentReg = interpretedCode.bytecode[pc++];
