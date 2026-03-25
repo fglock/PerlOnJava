@@ -476,7 +476,9 @@ public class RuntimeList extends RuntimeBase {
                 // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a))
                 RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
                 for (int i = 0; i < rhsValues.length; i++) {
-                    rhsValues[i] = new RuntimeScalar(rhsElements.get(i));
+                    RuntimeScalar elem = rhsElements.get(i);
+                    // Handle null elements (from delete $array[i])
+                    rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
                 }
                 
                 RuntimeArray result = new RuntimeArray(lhsSize);
