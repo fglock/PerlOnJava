@@ -304,9 +304,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     private RuntimeScalar getGlobSlot(RuntimeScalar index) {
         return switch (index.toString()) {
             case "CODE" -> {
-                // Only return CODE ref if the subroutine is actually defined
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
-                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
+                // Only return CODE ref if it's in the stash (globalCodeRefs).
+                // We must NOT use getGlobalCodeRef() here because it returns pinned
+                // references that survive stash deletion. When checking *{glob}{CODE},
+                // we want to see if the sub is actually in the stash, not if it was
+                // ever defined and pinned. This is critical for Moo's bootstrap
+                // mechanism where a sub deletes itself from the stash.
+                RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
+                if (codeRef != null && codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
                     if (code.defined()) {
                         yield codeRef;
                     }
