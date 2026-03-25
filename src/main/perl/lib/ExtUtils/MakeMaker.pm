@@ -195,10 +195,12 @@ sub _install_pure_perl {
         }
     } else {
         # Default: scan lib/ directory
+        # Include both .pm and .pl files (some modules like Image::ExifTool
+        # use .pl files loaded via require)
         if (-d 'lib') {
             find({
                 wanted => sub {
-                    return unless -f && /\.pm$/;
+                    return unless -f && /\.p[lm]$/;
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^lib/}{};
                     $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
@@ -211,7 +213,7 @@ sub _install_pure_perl {
         if (-d 'blib/lib') {
             find({
                 wanted => sub {
-                    return unless -f && /\.pm$/;
+                    return unless -f && /\.p[lm]$/;
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^blib/lib/}{};
                     $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
@@ -222,7 +224,7 @@ sub _install_pure_perl {
     }
     
     if (!%pm) {
-        print "Warning: No .pm files found to install.\n";
+        print "Warning: No .pm or .pl files found to install.\n";
         print "Expected structure: lib/Your/Module.pm\n\n";
         return PerlOnJava::MM::Installed->new($args);
     }
