@@ -462,6 +462,10 @@ imports:
     target: src/main/perl/lib/IO/Socket
     type: directory
 
+  # IO::Select - OO interface to select() (required by TAP::Parser::Multiplexer)
+  - source: perl5/dist/IO/lib/IO/Select.pm
+    target: src/main/perl/lib/IO/Select.pm
+
   # Phase 2: IO::Zlib - Compressed I/O (for Archive::Tar)
   - source: perl5/cpan/IO-Zlib/Zlib.pm
     target: src/main/perl/lib/IO/Zlib.pm
@@ -644,6 +648,23 @@ imports:
   # Tests for distribution
   - source: perl5/dist/constant/t
     target: perl5_t/constant
+    type: directory
+
+  # prove script - Test harness command-line tool (required by jprove wrapper)
+  - source: perl5/cpan/Test-Harness/bin/prove
+    target: src/main/perl/bin/prove
+
+  # App::Prove - prove application framework
+  - source: perl5/cpan/Test-Harness/lib/App/Prove.pm
+    target: src/main/perl/lib/App/Prove.pm
+
+  - source: perl5/cpan/Test-Harness/lib/App/Prove
+    target: src/main/perl/lib/App/Prove
+    type: directory
+
+  # Test-Harness tests
+  - source: perl5/cpan/Test-Harness/t
+    target: perl5_t/Test-Harness
     type: directory
 
   # Add more imports below as needed
