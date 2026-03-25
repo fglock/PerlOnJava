@@ -51,17 +51,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * otherwise allocates a new one (recursive call).
      */
     public RuntimeBase[] getRegisters() {
-        if (registersInUse.get()) {
-            // Recursive call - need fresh array
-            return new RuntimeBase[maxRegisters];
-        }
-        RuntimeBase[] regs = cachedRegisters.get();
-        if (regs == null || regs.length != maxRegisters) {
-            regs = new RuntimeBase[maxRegisters];
-            cachedRegisters.set(regs);
-        }
-        registersInUse.set(true);
-        return regs;
+        // Disable register pooling for now - it causes subtle bugs with stale values
+        // TODO: Investigate why Arrays.fill(regs, null) doesn't fully fix the issue
+        return new RuntimeBase[maxRegisters];
     }
 
     /**
