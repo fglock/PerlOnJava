@@ -168,6 +168,8 @@ public class RuntimeStash extends RuntimeHash {
         }
 
         // Get the CODE slot before deleting (most common case)
+        // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
+        // to continue calling the subroutine (Perl caches CVs at compile time)
         RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
 
         // Delete all other slots

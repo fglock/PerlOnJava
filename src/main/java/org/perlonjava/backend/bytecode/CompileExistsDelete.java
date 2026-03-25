@@ -398,12 +398,14 @@ public class CompileExistsDelete {
                 bc.emit(nameIdx);
                 return hashReg;
             } else {
-                leftOp.operand.accept(bc);
+                // Compile operand in SCALAR context to ensure we get a result register
+                bc.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
                 int scalarReg = bc.lastResultReg;
                 return derefHash(bc, scalarReg, tokenIndex);
             }
         } else if (hashAccess.left instanceof BinaryOperatorNode) {
-            hashAccess.left.accept(bc);
+            // Compile in SCALAR context to ensure we get a result register
+            bc.compileNode(hashAccess.left, -1, RuntimeContextType.SCALAR);
             int scalarReg = bc.lastResultReg;
             return derefHash(bc, scalarReg, tokenIndex);
         }

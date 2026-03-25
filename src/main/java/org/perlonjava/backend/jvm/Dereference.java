@@ -584,12 +584,28 @@ public class Dereference {
                     Node elem = nodeRight.elements.getFirst();
                     elem.accept(scalarVisitor);
                     if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                        // Use strict version (throws error on symbolic references)
+                        String methodName = switch (hashOperation) {
+                            case "get" -> "hashDerefGet";
+                            case "delete" -> "hashDerefDelete";
+                            case "exists" -> "hashDerefExists";
+                            default ->
+                                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+                        };
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "hashDerefGet", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     } else {
+                        // Use non-strict version (allows symbolic references)
+                        String methodName = switch (hashOperation) {
+                            case "get" -> "hashDerefGetNonStrict";
+                            case "delete" -> "hashDerefDeleteNonStrict";
+                            case "exists" -> "hashDerefExistsNonStrict";
+                            default ->
+                                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+                        };
                         emitterVisitor.pushCurrentPackage();
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "hashDerefGetNonStrict", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     }
                 } else {
                     // Multiple elements - this is a hash slice, but that's not commonly used with ${}
@@ -601,12 +617,28 @@ public class Dereference {
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/StringOperators",
                             "join", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                        // Use strict version (throws error on symbolic references)
+                        String methodName = switch (hashOperation) {
+                            case "get" -> "hashDerefGet";
+                            case "delete" -> "hashDerefDelete";
+                            case "exists" -> "hashDerefExists";
+                            default ->
+                                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+                        };
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "hashDerefGet", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     } else {
+                        // Use non-strict version (allows symbolic references)
+                        String methodName = switch (hashOperation) {
+                            case "get" -> "hashDerefGetNonStrict";
+                            case "delete" -> "hashDerefDeleteNonStrict";
+                            case "exists" -> "hashDerefExistsNonStrict";
+                            default ->
+                                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+                        };
                         emitterVisitor.pushCurrentPackage();
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                "hashDerefGetNonStrict", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                                methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                     }
                 }
 
