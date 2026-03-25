@@ -60,10 +60,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        if (variableId == Id.INPUT_LINE_NUMBER || variableId == Id.HINTS) {
+        if (variableId == Id.INPUT_LINE_NUMBER) {
             if (lvalue == null) {
                 lvalue = new RuntimeScalar(0);
             }
+            return;
+        }
+        // HINTS doesn't need lvalue - it always reads/writes from the symbol table
+        if (variableId == Id.HINTS) {
             return;
         }
         throw new PerlCompilerException("Modification of a read-only value attempted");
@@ -85,19 +89,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         }
         if (variableId == Id.HINTS) {
             int hints = value.getInt();
-            // Update the symbol table's strict options
+            // Update the symbol table's strict options directly
+            // No need to store in lvalue since reading always uses the symbol table
             ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
             if (symbolTable != null) {
-                // Clear all strict options and set the new ones
-                // The hints value contains the strict flags directly
                 symbolTable.setStrictOptions(hints);
             }
-            // Also store in lvalue for reading back
-            vivify();
-            lvalue.set(hints);
-            this.type = lvalue.type;
-            this.value = lvalue.value;
-            return lvalue;
+            // Return a scalar with the hints value
+            return getScalarInt(hints);
         }
         return super.set(value);
     }
@@ -212,11 +211,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield scalarUndef;
                 }
                 case HINTS -> {
-                    // $^H - Return stored lvalue first (preserves custom hint bits like 0x04000000)
-                    // Only fall back to symbol table strict options if no lvalue stored
-                    if (lvalue != null) {
-                        yield lvalue;
-                    }
+                    // $^H - Always read from the current scope's symbol table
+                    // This ensures lexical scoping - each scope has its own $^H value
                     ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
                     if (symbolTable != null) {
                         yield getScalarInt(symbolTable.getStrictOptions());
