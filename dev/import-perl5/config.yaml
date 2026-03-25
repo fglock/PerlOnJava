@@ -641,9 +641,10 @@ imports:
   - source: perl5/lib/Class/Struct.pm
     target: src/main/perl/lib/Class/Struct.pm
 
-  # From core distribution
+  # From core distribution - PerlOnJava has custom implementation
   - source: perl5/dist/constant/lib/constant.pm
     target: src/main/perl/lib/constant.pm
+    protected: true
 
   # Tests for distribution
   - source: perl5/dist/constant/t
