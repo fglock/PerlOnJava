@@ -16,7 +16,7 @@ package B;
 use strict;
 use warnings;
 
-our $VERSION = '1.00_perlonjava';
+our $VERSION = '1.88';
 
 # Export functionality
 use Exporter 'import';
