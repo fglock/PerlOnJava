@@ -1121,6 +1121,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield newScalar;
             }
             case REFERENCE -> (RuntimeScalar) value;
+            case REGEX -> {
+                // Dereferencing a Regexp (qr//) returns its stringified form
+                // In Perl, ${qr/foo/} returns "(?^:foo)"
+                RuntimeScalar result = new RuntimeScalar();
+                result.type = RuntimeScalarType.STRING;
+                result.value = this.value.toString();
+                yield result;
+            }
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 // e.g., ${*Foo::VERSION} or ${$glob} where $glob is a glob
