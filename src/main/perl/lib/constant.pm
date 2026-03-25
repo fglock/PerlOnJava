@@ -17,8 +17,8 @@ my %forced_into_main = map +($_, 1),
 
 my %forbidden = (%keywords, %forced_into_main);
 
-my $normal_constant_name = qr/^_?[^\W_0-9]\w*\z/;
-my $tolerable = qr/^[A-Za-z_]\w*\z/;
+my $normal_constant_name = qr/^_?[^\W_0-9]\w*\z/u;
+my $tolerable = qr/^[A-Za-z_]\w*\z/u;
 my $boolean = qr/^[01]?\z/;
 
 BEGIN {
