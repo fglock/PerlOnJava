@@ -208,6 +208,10 @@ public class ArchiveZip extends PerlModuleBase {
                 return new RuntimeScalar(AZ_IO_ERROR).getList();
             }
 
+            // Extract raw DOS timestamps from central directory
+            // (Java's ZipEntry uses extended timestamps when available)
+            java.util.Map<String, Long> rawDosTimestamps = extractRawDosTimestamps(filename);
+
             try (ZipFile zipFile = new ZipFile(filename)) {
                 // Store the zipfile comment
                 String comment = zipFile.getComment();
@@ -221,8 +225,9 @@ public class ArchiveZip extends PerlModuleBase {
                 while (entries.hasMoreElements()) {
                     ZipEntry entry = entries.nextElement();
 
-                    // Create member object
-                    RuntimeHash member = createMemberFromEntry(zipFile, entry);
+                    // Create member object with raw DOS timestamp if available
+                    Long rawDosTime = rawDosTimestamps.get(entry.getName());
+                    RuntimeHash member = createMemberFromEntry(zipFile, entry, rawDosTime);
                     RuntimeScalar memberRef = member.createReference();
                     ReferenceOperators.bless(memberRef, new RuntimeScalar("Archive::Zip::Member"));
 
@@ -285,6 +290,9 @@ public class ArchiveZip extends PerlModuleBase {
                 return new RuntimeScalar(AZ_IO_ERROR).getList();
             }
 
+            // Extract raw DOS timestamps from the ZIP data
+            java.util.Map<String, Long> rawDosTimestamps = extractRawDosTimestampsFromBytes(zipData);
+
             // Create a ZipInputStream from the byte array
             try (ByteArrayInputStream bais = new ByteArrayInputStream(zipData);
                  ZipInputStream zis = new ZipInputStream(bais)) {
@@ -311,8 +319,15 @@ public class ArchiveZip extends PerlModuleBase {
                     // Store Unix timestamp (seconds since epoch) for lastModTime
                     long timeMillis = entry.getTime();
                     member.put("_lastModTime", new RuntimeScalar(timeMillis >= 0 ? timeMillis / 1000 : 0));
+                    
                     // Store raw MS-DOS format for lastModFileDateTime
-                    member.put("_lastModFileDateTime", new RuntimeScalar(getRawDosTime(entry)));
+                    // Use the raw DOS timestamp extracted from ZIP data if available
+                    Long rawDosTime = rawDosTimestamps.get(entry.getName());
+                    if (rawDosTime != null) {
+                        member.put("_lastModFileDateTime", new RuntimeScalar(rawDosTime));
+                    } else {
+                        member.put("_lastModFileDateTime", new RuntimeScalar(getRawDosTime(entry)));
+                    }
                     
                     member.put("_crc32", new RuntimeScalar(entry.getCrc() >= 0 ? entry.getCrc() : 0));
                     
@@ -1094,7 +1109,7 @@ public class ArchiveZip extends PerlModuleBase {
         return membersRef.arrayDeref();
     }
 
-    private static RuntimeHash createMemberFromEntry(ZipFile zipFile, ZipEntry entry) throws IOException {
+    private static RuntimeHash createMemberFromEntry(ZipFile zipFile, ZipEntry entry, Long rawDosTimestamp) throws IOException {
         RuntimeHash member = new RuntimeHash();
         member.put("_name", new RuntimeScalar(entry.getName()));
         member.put("_externalFileName", new RuntimeScalar(""));
@@ -1107,7 +1122,12 @@ public class ArchiveZip extends PerlModuleBase {
         long timeMillis = entry.getTime();
         member.put("_lastModTime", new RuntimeScalar(timeMillis / 1000));
         // Store raw MS-DOS format for lastModFileDateTime
-        member.put("_lastModFileDateTime", new RuntimeScalar(getRawDosTime(entry)));
+        // Use the raw DOS timestamp from central directory if available
+        if (rawDosTimestamp != null) {
+            member.put("_lastModFileDateTime", new RuntimeScalar(rawDosTimestamp));
+        } else {
+            member.put("_lastModFileDateTime", new RuntimeScalar(getRawDosTime(entry)));
+        }
         
         member.put("_crc32", new RuntimeScalar(entry.getCrc()));
         
@@ -1189,6 +1209,201 @@ public class ArchiveZip extends PerlModuleBase {
     }
 
     /**
+     * Parse the ZIP central directory to extract raw DOS timestamps.
+     * This is necessary because Java's ZipEntry uses extended Unix timestamps
+     * when available, but we need the raw DOS timestamps for compatibility
+     * with Perl's Archive::Zip.
+     * 
+     * @return Map from entry name to raw DOS timestamp (32-bit value)
+     */
+    private static java.util.Map<String, Long> extractRawDosTimestamps(String filename) {
+        java.util.Map<String, Long> timestamps = new java.util.HashMap<>();
+        
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(filename, "r")) {
+            // Find the end of central directory record
+            long fileLen = raf.length();
+            long eocdOffset = -1;
+            
+            // EOCD signature is 0x06054b50 (little endian: 50 4b 05 06)
+            // Search backwards from the end (EOCD can have a variable-length comment)
+            long searchStart = Math.max(0, fileLen - 65536 - 22);
+            for (long pos = fileLen - 22; pos >= searchStart; pos--) {
+                raf.seek(pos);
+                if (raf.readInt() == 0x06054b50) {
+                    // Found EOCD, but readInt uses big endian, we need little endian
+                }
+                // Read 4 bytes as little endian
+                raf.seek(pos);
+                int b0 = raf.read();
+                int b1 = raf.read();
+                int b2 = raf.read();
+                int b3 = raf.read();
+                int sig = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+                if (sig == 0x06054b50) {
+                    eocdOffset = pos;
+                    break;
+                }
+            }
+            
+            if (eocdOffset < 0) {
+                return timestamps; // EOCD not found
+            }
+            
+            // Read central directory offset from EOCD
+            raf.seek(eocdOffset + 16);
+            int b0 = raf.read();
+            int b1 = raf.read();
+            int b2 = raf.read();
+            int b3 = raf.read();
+            long cdOffset = (b0 & 0xFFL) | ((b1 & 0xFFL) << 8) | ((b2 & 0xFFL) << 16) | ((b3 & 0xFFL) << 24);
+            
+            // Parse central directory entries
+            raf.seek(cdOffset);
+            while (true) {
+                // Read signature
+                long pos = raf.getFilePointer();
+                if (pos >= eocdOffset) break;
+                
+                b0 = raf.read();
+                b1 = raf.read();
+                b2 = raf.read();
+                b3 = raf.read();
+                int sig = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+                
+                if (sig != 0x02014b50) break; // Not a central directory file header
+                
+                // Skip to time/date fields (offset 12 from start of header)
+                raf.seek(pos + 12);
+                
+                // Read last mod file time (2 bytes, little endian)
+                int timeB0 = raf.read();
+                int timeB1 = raf.read();
+                int modTime = (timeB0 & 0xFF) | ((timeB1 & 0xFF) << 8);
+                
+                // Read last mod file date (2 bytes, little endian)
+                int dateB0 = raf.read();
+                int dateB1 = raf.read();
+                int modDate = (dateB0 & 0xFF) | ((dateB1 & 0xFF) << 8);
+                
+                // Combine into 32-bit DOS timestamp: (date << 16) | time
+                long dosTimestamp = ((long) modDate << 16) | modTime;
+                
+                // Skip to file name length (offset 28 from start)
+                raf.seek(pos + 28);
+                int fnLenB0 = raf.read();
+                int fnLenB1 = raf.read();
+                int fileNameLen = (fnLenB0 & 0xFF) | ((fnLenB1 & 0xFF) << 8);
+                
+                int efLenB0 = raf.read();
+                int efLenB1 = raf.read();
+                int extraFieldLen = (efLenB0 & 0xFF) | ((efLenB1 & 0xFF) << 8);
+                
+                int fcLenB0 = raf.read();
+                int fcLenB1 = raf.read();
+                int fileCommentLen = (fcLenB0 & 0xFF) | ((fcLenB1 & 0xFF) << 8);
+                
+                // Skip to file name (offset 46 from start)
+                raf.seek(pos + 46);
+                byte[] nameBytes = new byte[fileNameLen];
+                raf.readFully(nameBytes);
+                String fileName = new String(nameBytes, StandardCharsets.UTF_8);
+                
+                timestamps.put(fileName, dosTimestamp);
+                
+                // Move to next entry (46 + fileNameLen + extraFieldLen + fileCommentLen)
+                raf.seek(pos + 46 + fileNameLen + extraFieldLen + fileCommentLen);
+            }
+        } catch (Exception e) {
+            // Fall back to empty map if parsing fails
+        }
+        
+        return timestamps;
+    }
+
+    /**
+     * Parse ZIP data from a byte array to extract raw DOS timestamps.
+     * This is similar to extractRawDosTimestamps but works with in-memory data.
+     * 
+     * @return Map from entry name to raw DOS timestamp (32-bit value)
+     */
+    private static java.util.Map<String, Long> extractRawDosTimestampsFromBytes(byte[] zipData) {
+        java.util.Map<String, Long> timestamps = new java.util.HashMap<>();
+        
+        try {
+            // Find the end of central directory record
+            int fileLen = zipData.length;
+            int eocdOffset = -1;
+            
+            // EOCD signature is 0x06054b50 (little endian: 50 4b 05 06)
+            // Search backwards from the end (EOCD can have a variable-length comment)
+            int searchStart = Math.max(0, fileLen - 65536 - 22);
+            for (int pos = fileLen - 22; pos >= searchStart; pos--) {
+                int b0 = zipData[pos] & 0xFF;
+                int b1 = zipData[pos + 1] & 0xFF;
+                int b2 = zipData[pos + 2] & 0xFF;
+                int b3 = zipData[pos + 3] & 0xFF;
+                int sig = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+                if (sig == 0x06054b50) {
+                    eocdOffset = pos;
+                    break;
+                }
+            }
+            
+            if (eocdOffset < 0) {
+                return timestamps; // EOCD not found
+            }
+            
+            // Read central directory offset from EOCD (at offset 16 from EOCD start)
+            int cdOffset = (zipData[eocdOffset + 16] & 0xFF) |
+                          ((zipData[eocdOffset + 17] & 0xFF) << 8) |
+                          ((zipData[eocdOffset + 18] & 0xFF) << 16) |
+                          ((zipData[eocdOffset + 19] & 0xFF) << 24);
+            
+            // Parse central directory entries
+            int pos = cdOffset;
+            while (pos < eocdOffset) {
+                if (pos + 46 > fileLen) break;
+                
+                // Read signature
+                int b0 = zipData[pos] & 0xFF;
+                int b1 = zipData[pos + 1] & 0xFF;
+                int b2 = zipData[pos + 2] & 0xFF;
+                int b3 = zipData[pos + 3] & 0xFF;
+                int sig = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+                
+                if (sig != 0x02014b50) break; // Not a central directory file header
+                
+                // Read last mod file time (at offset 12 from entry start, 2 bytes, little endian)
+                int modTime = (zipData[pos + 12] & 0xFF) | ((zipData[pos + 13] & 0xFF) << 8);
+                
+                // Read last mod file date (at offset 14, 2 bytes, little endian)
+                int modDate = (zipData[pos + 14] & 0xFF) | ((zipData[pos + 15] & 0xFF) << 8);
+                
+                // Combine into 32-bit DOS timestamp: (date << 16) | time
+                long dosTimestamp = ((long) modDate << 16) | modTime;
+                
+                // Read file name length (at offset 28, 2 bytes, little endian)
+                int fileNameLen = (zipData[pos + 28] & 0xFF) | ((zipData[pos + 29] & 0xFF) << 8);
+                int extraFieldLen = (zipData[pos + 30] & 0xFF) | ((zipData[pos + 31] & 0xFF) << 8);
+                int fileCommentLen = (zipData[pos + 32] & 0xFF) | ((zipData[pos + 33] & 0xFF) << 8);
+                
+                // Extract file name (at offset 46)
+                if (pos + 46 + fileNameLen > fileLen) break;
+                String fileName = new String(zipData, pos + 46, fileNameLen, StandardCharsets.UTF_8);
+                
+                timestamps.put(fileName, dosTimestamp);
+                
+                // Move to next entry (46 + fileNameLen + extraFieldLen + fileCommentLen)
+                pos += 46 + fileNameLen + extraFieldLen + fileCommentLen;
+            }
+        } catch (Exception e) {
+            // Fall back to empty map if parsing fails
+        }
+        
+        return timestamps;
+    }
+
+    /**
      * Get the raw DOS time from a ZipEntry.
      * Java's ZipEntry.getTime() converts to UTC, but we need the raw DOS timestamp.
      * We try reflection first; if that fails, fall back to conversion.
@@ -1222,7 +1437,8 @@ public class ArchiveZip extends PerlModuleBase {
      * - Bits 21-24: month (1-12)
      * - Bits 25-31: year - 1980 (0-127)
      * 
-     * Note: We use UTC timezone to match the raw DOS timestamp values stored in ZIP files.
+     * Note: Java's ZipEntry.getTime() interprets DOS timestamps using the local timezone,
+     * so we use the local timezone here to get back the original DOS timestamp values.
      */
     private static long unixTimeToDosFmt(long unixTimeMillis) {
         if (unixTimeMillis < 0) {
@@ -1230,8 +1446,9 @@ public class ArchiveZip extends PerlModuleBase {
             return (0L << 25) | (1L << 21) | (1L << 16) | (0L << 11) | (0L << 5) | 0L;
         }
         
-        // Use UTC timezone to avoid local timezone conversion issues
-        java.util.Calendar cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        // Use local timezone because Java's ZipEntry.getTime() applied local timezone
+        // when converting the DOS timestamp to milliseconds
+        java.util.Calendar cal = java.util.Calendar.getInstance();
         cal.setTimeInMillis(unixTimeMillis);
         
         int year = cal.get(java.util.Calendar.YEAR) - 1980;
