@@ -202,6 +202,8 @@ sub perlstring {
     # Escape special characters
     $str =~ s/\\/\\\\/g;
     $str =~ s/"/\\"/g;
+    $str =~ s/\$/\\\$/g;    # Escape $ to prevent interpolation
+    $str =~ s/\@/\\\@/g;    # Escape @ to prevent interpolation
     $str =~ s/\n/\\n/g;
     $str =~ s/\r/\\r/g;
     $str =~ s/\t/\\t/g;
