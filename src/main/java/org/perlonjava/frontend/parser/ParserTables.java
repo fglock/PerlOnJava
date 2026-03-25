@@ -27,14 +27,14 @@ public class ParserTables {
     public static final Set<String> OVERRIDABLE_OP = Set.of(
             "caller", "chdir", "close", "connect",
             "die", "do",
-            "exit",
+            "exec", "exit",
             "fork",
             "getpwuid", "glob",
             "hex",
             "kill",
             "oct", "open",
             "readline", "readpipe", "rename", "require",
-            "stat",
+            "stat", "system",
             "time",
             "uc",
             "warn"

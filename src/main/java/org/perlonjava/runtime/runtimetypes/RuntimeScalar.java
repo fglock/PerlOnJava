@@ -625,6 +625,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    /**
+     * Returns whether this scalar is tainted.
+     * Will be updated to check type == TAINTED when taint mode is fully implemented.
+     *
+     * @return false for regular scalars, true for tainted scalars
+     */
+    public boolean isTainted() {
+        return false;
+    }
+
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray runtimeArray) {
         switch (runtimeArray.type) {

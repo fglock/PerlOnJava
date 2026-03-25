@@ -157,17 +157,12 @@ sub _quote_command {
 
 sub _check_taint {
     return if not ${^TAINT};
+    
+    # Phase 1 taint mode: block ALL external commands when -T is active
+    # This is a minimal implementation - future phases will implement
+    # proper taint propagation and allow untainting via regex captures
     my $caller = (caller(1))[3];
-    foreach my $var (@_) {
-        if (tainted($var)) {
-            croak sprintf(FAIL_TAINT, $caller, $var);
-        }
-    }
-    foreach my $var (@Check_tainted_env) {
-        if (tainted($ENV{$var})) {
-            croak sprintf(FAIL_TAINT_ENV, $caller, $var);
-        }
-    }
+    croak("Insecure dependency in $caller while running with -T switch");
 }
 
 sub _process_child_error {
