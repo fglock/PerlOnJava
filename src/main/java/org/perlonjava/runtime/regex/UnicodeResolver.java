@@ -389,6 +389,12 @@ public class UnicodeResolver {
                 }
             }
 
+            // Strip 'Is' prefix for Perl compatibility (e.g., IsPrint -> Print, IsDigit -> Digit)
+            // ICU4J doesn't recognize Is-prefixed property names, but they're valid in Perl
+            if (property.startsWith("Is") && property.length() > 2 && Character.isUpperCase(property.charAt(2))) {
+                property = property.substring(2);
+            }
+
             // Map Perl block aliases to Unicode block names
             if (property.equalsIgnoreCase("ASCII")) {
                 property = "Basic_Latin";

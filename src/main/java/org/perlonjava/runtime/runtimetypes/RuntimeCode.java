@@ -174,15 +174,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * Push @_ onto the args stack when entering a subroutine.
+     * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
-    private static void pushArgs(RuntimeArray args) {
+    public static void pushArgs(RuntimeArray args) {
         argsStack.get().push(args);
     }
 
     /**
      * Pop @_ from the args stack when exiting a subroutine.
+     * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
-    private static void popArgs() {
+    public static void popArgs() {
         Deque<RuntimeArray> stack = argsStack.get();
         if (!stack.isEmpty()) {
             stack.pop();
