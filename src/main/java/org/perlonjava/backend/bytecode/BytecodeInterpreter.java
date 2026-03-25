@@ -844,8 +844,14 @@ public class BytecodeInterpreter {
                                     // bypassing RuntimeCode.apply() indirection chain
                                     if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
                                         // Direct call to interpreter - skip RuntimeCode.apply overhead
-                                        // Pass null for subroutineName to enable frame caching
-                                        result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                        // Push args to argsStack for getCallerArgs() support (used by List::Util::any/all/etc.)
+                                        RuntimeCode.pushArgs(callArgs);
+                                        try {
+                                            // Pass null for subroutineName to enable frame caching
+                                            result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                        } finally {
+                                            RuntimeCode.popArgs();
+                                        }
                                     } else {
                                         // Slow path for JVM-compiled code, symbolic references, etc.
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);
@@ -860,7 +866,13 @@ public class BytecodeInterpreter {
                                             callArgs = flow.getTailCallArgs();
                                             // Use fast path for InterpretedCode
                                             if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
-                                                result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                                // Push args for tail call too
+                                                RuntimeCode.pushArgs(callArgs);
+                                                try {
+                                                    result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                                } finally {
+                                                    RuntimeCode.popArgs();
+                                                }
                                             } else {
                                                 result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
                                             }
