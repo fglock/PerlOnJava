@@ -140,10 +140,17 @@ public class Warnings extends PerlModuleBase {
      * @return A RuntimeList containing a boolean value.
      */
     public static RuntimeList enabled(RuntimeArray args, int ctx) {
-        if (args.size() < 1 || args.size() > 2) {
+        if (args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for warnings::enabled()");
         }
-        String category = args.get(0).toString();
+        String category;
+        if (args.size() < 1) {
+            // No category specified - check if warnings are enabled for calling package
+            // Use "all" as the category to check general warning state
+            category = "all";
+        } else {
+            category = args.get(0).toString();
+        }
         boolean isEnabled = warningManager.isWarningEnabled(category);
         return new RuntimeScalar(isEnabled).getList();
     }
