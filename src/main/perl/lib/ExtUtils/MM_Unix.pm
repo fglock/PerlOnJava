@@ -57,12 +57,12 @@ sub get_version {
     $line = $1 if $line =~ m{^(.+)}s;
     
     # Directly extract version from common patterns
-    # Pattern 1: $VERSION = '1.23' or $VERSION = "1.23"
-    if ($line =~ /\$VERSION\s*=\s*['"]([^'"]+)['"]/) {
+    # Pattern 1: $VERSION = '1.23' or $Package::VERSION = '1.23'
+    if ($line =~ /\$[\w:]*VERSION\s*=\s*['"]([^'"]+)['"]/) {
         return $1;
     }
     # Pattern 2: $VERSION = 1.23 (bare number)
-    if ($line =~ /\$VERSION\s*=\s*([\d._]+)/) {
+    if ($line =~ /\$[\w:]*VERSION\s*=\s*([\d._]+)/) {
         return $1;
     }
     # Pattern 3: version->new('v1.2.3') or version->declare('v1.2.3')
