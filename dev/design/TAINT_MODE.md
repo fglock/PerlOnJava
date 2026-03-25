@@ -359,21 +359,27 @@ After implementing the TAINTED type approach:
 
 ## Progress Tracking
 
-### Current Status: Phase 1 not started
+### Current Status: Phase 1 complete
 
-### Completed
+### Completed Phases
+
+- [x] **Phase 1: Minimal Fix for IPC::System::Simple** (2026-03-24)
+  - Modified `src/main/perl/lib/IPC/System/Simple.pm` `_check_taint()` to block ALL external commands when `${^TAINT}` is set
+  - Added `isTainted()` method to RuntimeScalar.java (returns false, ready for Phase 2)
+  - Updated `ScalarUtil.tainted()` to use `isTainted()` method
+  - **Bonus fix**: Reset `$?` to 0 before END blocks in SpecialBlock.java (Perl semantics) - this fixed spurious "Looks like your test exited with X" warnings from Test::Builder
+  - **Test results**: IPC::System::Simple 15/17 test programs pass, 169/181 subtests (93%)
+
+### Infrastructure Complete
 - [x] `-T` flag parsing
 - [x] `${^TAINT}` variable
+- [x] `isTainted()` method stub
 
-### Phase 1 TODO
-- [ ] Modify IPC::System::Simple to check ${^TAINT}
-- [ ] Test with t/10_formatting.t
-
-### Phase 2 TODO
-- [ ] Add TAINTED type constant
-- [ ] Add helper methods
-- [ ] Mark $^X, %ENV, @ARGV as tainted
-- [ ] Update tainted() function
+### Next Steps (Phase 2)
+1. Add TAINTED type constant to RuntimeScalarType.java
+2. Implement `taint()` and `getActualScalar()` methods
+3. Mark `$^X`, `%ENV`, `@ARGV` as tainted sources
+4. Update `tainted()` to return true for TAINTED type
 
 ### Open Questions
 - Should @ARGV be tainted? (Yes in Perl)
