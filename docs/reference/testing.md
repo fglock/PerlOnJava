@@ -63,7 +63,51 @@ perl dev/tools/perl_test_runner.pl --jobs 4 --timeout 20 src/test/resources/unit
 --jperl PATH       Path to jperl executable (default: ./jperl)
 ```
 
-### 2. JUnit/Gradle Testing (For CI/CD)
+### 2. Using jprove (Standard Perl prove)
+
+PerlOnJava includes `jprove`, a wrapper that runs the standard Perl `prove` test harness with jperl:
+
+```bash
+# Run tests in a directory
+./jprove src/test/resources/unit
+
+# Run with verbose output
+./jprove -v t/*.t
+
+# Run specific test files
+./jprove t/basic.t t/advanced.t
+
+# Run recursively
+./jprove -r t/
+
+# Run with parallel jobs
+./jprove -j4 t/
+```
+
+**Common Options:**
+```bash
+-v, --verbose      Print all test lines
+-l, --lib          Add 'lib' to @INC
+-r, --recurse      Recursively descend into directories
+-j, --jobs N       Run N test jobs in parallel
+-q, --quiet        Suppress some test output
+--timer            Print elapsed time after each test
+--color            Colored test output (default)
+--nocolor          Disable colored output
+```
+
+**Example Output:**
+```
+./jprove src/test/resources/unit/array.t
+src/test/resources/unit/array.t .. ok
+All tests successful.
+Files=1, Tests=15, 1 wallclock secs
+Result: PASS
+```
+
+`jprove` is useful when you want standard Perl `prove` behavior and options, while `perl_test_runner.pl` provides additional features like JSON reporting and feature impact analysis.
+
+### 3. JUnit/Gradle Testing (For CI/CD)
 
 Uses JUnit 5 with tags for test filtering:
 
