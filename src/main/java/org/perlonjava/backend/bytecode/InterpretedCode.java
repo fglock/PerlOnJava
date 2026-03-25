@@ -228,12 +228,25 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      */
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
-        return BytecodeInterpreter.execute(this, args, callContext);
+        // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
+        // This matches what RuntimeCode.apply() does for JVM-compiled subs
+        RuntimeCode.pushArgs(args);
+        try {
+            return BytecodeInterpreter.execute(this, args, callContext);
+        } finally {
+            RuntimeCode.popArgs();
+        }
     }
 
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
-        return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
+        // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
+        RuntimeCode.pushArgs(args);
+        try {
+            return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
+        } finally {
+            RuntimeCode.popArgs();
+        }
     }
 
     /**

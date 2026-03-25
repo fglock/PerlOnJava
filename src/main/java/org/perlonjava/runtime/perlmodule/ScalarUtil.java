@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -234,18 +235,44 @@ public class ScalarUtil extends PerlModuleBase {
     }
 
     /**
-     * Placeholder for the openhandle functionality.
+     * Checks if a value is an open filehandle.
+     * Returns the filehandle itself if it's open, undef otherwise.
      *
-     * @param args The arguments passed to the method.
+     * @param args The arguments passed to the method (a single value).
      * @param ctx  The context in which the method is called.
-     * @return A RuntimeList indicating if the scalar is an open handle.
+     * @return The filehandle if open, undef otherwise.
      */
     public static RuntimeList openhandle(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for openhandle() method");
         }
-        // Placeholder for openhandle functionality
-        return new RuntimeScalar(false).getList();
+        RuntimeScalar arg = args.get(0);
+        
+        // Check if it's a GLOB or GLOBREFERENCE (filehandle)
+        if (arg.type == GLOB || arg.type == GLOBREFERENCE) {
+            Object value = arg.value;
+            
+            // Handle RuntimeGlob
+            if (value instanceof RuntimeGlob glob) {
+                RuntimeScalar io = glob.getIO();
+                if (io != null && io.value instanceof RuntimeIO runtimeIO) {
+                    // Check if the handle is open (not a ClosedIOHandle)
+                    if (!(runtimeIO.ioHandle instanceof ClosedIOHandle)) {
+                        return arg.getList();  // Return the filehandle itself
+                    }
+                }
+            }
+            // Handle RuntimeIO directly
+            else if (value instanceof RuntimeIO runtimeIO) {
+                if (!(runtimeIO.ioHandle instanceof ClosedIOHandle)) {
+                    return arg.getList();  // Return the filehandle itself
+                }
+            }
+        }
+        // Check for blessed object with *{} overload (handled in Perl code)
+        // For now, just return undef for non-glob types
+        
+        return new RuntimeScalar().getList();  // Return undef
     }
 
     /**
