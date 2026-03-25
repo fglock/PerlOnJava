@@ -107,10 +107,21 @@ public class Internals extends PerlModuleBase {
                         RuntimeScalarReadOnly readonlyScalar;
                         if (targetScalar.type == RuntimeScalarType.INTEGER) {
                             readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getInt());
+                        } else if (targetScalar.type == RuntimeScalarType.DOUBLE) {
+                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getDouble());
                         } else if (targetScalar.type == RuntimeScalarType.BOOLEAN) {
                             readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getBoolean());
-                        } else if (targetScalar.type == RuntimeScalarType.STRING) {
+                        } else if (targetScalar.type == RuntimeScalarType.STRING || targetScalar.type == RuntimeScalarType.BYTE_STRING) {
                             readonlyScalar = new RuntimeScalarReadOnly(targetScalar.toString());
+                        } else if (targetScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
+                                   targetScalar.type == RuntimeScalarType.HASHREFERENCE ||
+                                   targetScalar.type == RuntimeScalarType.REFERENCE ||
+                                   targetScalar.type == RuntimeScalarType.CODE ||
+                                   targetScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+                            // For reference types, don't modify the value - just mark as readonly
+                            // In Perl, making a reference readonly prevents reassignment of the variable
+                            // but doesn't change the referenced data
+                            return new RuntimeList();
                         } else {
                             readonlyScalar = new RuntimeScalarReadOnly(); // undef
                         }

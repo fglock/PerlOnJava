@@ -33,25 +33,39 @@ public class SystemOperator {
      * Executes a system command and returns the output as a RuntimeBase.
      * This implements Perl's backtick operator (`command`).
      *
+     * Like Perl's native qx/backticks, this bypasses the shell for simple commands
+     * without metacharacters, and uses the shell only when necessary.
+     *
      * @param command The command to execute as a RuntimeScalar.
      * @param ctx     The context type, determining the return type (list or scalar).
      * @return The output of the command as a RuntimeBase.
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
     public static RuntimeBase systemCommand(RuntimeScalar command, int ctx) {
-        CommandResult result = executeCommand(command.toString(), true);
+        String cmd = command.toString();
+        CommandResult result;
+
+        // Check for shell metacharacters - if none, execute directly without shell
+        // This matches native Perl behavior where simple commands bypass the shell
+        if (SHELL_METACHARACTERS.matcher(cmd).find()) {
+            // Has shell metacharacters, use shell
+            result = executeCommand(cmd, true);
+        } else {
+            // No shell metacharacters, split into words and execute directly
+            String[] words = cmd.trim().split("\\s+");
+            result = executeCommandDirectCapture(Arrays.asList(words));
+        }
 
         // Set $? to the exit status
+        // Note: result.exitCode is already in wait status format (from waitForProcessWithStatus)
         if (result.exitCode == -1) {
             // Command failed to execute
             getGlobalVariable("main::?").set(-1);
             getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(-1);
         } else {
-            // Normal exit - put exit code in upper byte (Perl wait status convention)
-            int waitStatus = result.exitCode << 8;
-            getGlobalVariable("main::?").set(waitStatus);
-            // ${^CHILD_ERROR_NATIVE} also stores the wait status format
-            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(waitStatus);
+            // Wait status is already in correct format (exit_code << 8 or signal in lower bits)
+            getGlobalVariable("main::?").set(result.exitCode);
+            getGlobalVariable(encodeSpecialVar("CHILD_ERROR_NATIVE")).set(result.exitCode);
         }
 
         return processOutput(result.output, ctx);
@@ -76,7 +90,19 @@ public class SystemOperator {
 
         CommandResult result;
 
-        if (!hasHandle && flattenedArgs.size() == 1) {
+        if (hasHandle && flattenedArgs.size() >= 2) {
+            // Indirect object syntax: system { $program } @args
+            // In Perl, @args[0] becomes argv[0] (process name), @args[1:] are actual arguments
+            // Java's ProcessBuilder can't set argv[0] separately, so we skip it
+            // flattenedArgs = [$program, $argv0, $arg1, $arg2, ...]
+            // We want to execute: $program with arguments [$arg1, $arg2, ...]
+            String program = flattenedArgs.get(0);
+            // Skip flattenedArgs[1] (the custom argv[0]) since Java can't use it
+            List<String> actualArgs = new ArrayList<>();
+            actualArgs.add(program);
+            actualArgs.addAll(flattenedArgs.subList(2, flattenedArgs.size()));
+            result = executeCommandDirect(actualArgs);
+        } else if (!hasHandle && flattenedArgs.size() == 1) {
             // Single argument - check for shell metacharacters
             String command = flattenedArgs.getFirst();
             if (SHELL_METACHARACTERS.matcher(command).find()) {
@@ -295,6 +321,72 @@ public class SystemOperator {
     }
 
     /**
+     * Executes a command directly without shell interpretation and captures output.
+     * This is used by backticks/qx for commands without shell metacharacters.
+     *
+     * @param commandArgs List of command and arguments.
+     * @return CommandResult containing captured output and exit code.
+     */
+    private static CommandResult executeCommandDirectCapture(List<String> commandArgs) {
+        StringBuilder output = new StringBuilder();
+        Process process = null;
+        int exitCode = -1;
+
+        try {
+            flushAllHandles();
+
+            ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+            String userDir = System.getProperty("user.dir");
+            processBuilder.directory(new File(userDir));
+            
+            // Copy %ENV to the subprocess environment
+            copyPerlEnvToProcessBuilder(processBuilder);
+
+            // Inherit stderr (goes to terminal like Perl's backticks)
+            processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+            process = processBuilder.start();
+
+            final Process finalProcess = process;
+            final StringBuilder finalOutput = output;
+
+            // Capture stdout
+            Thread stdoutThread = new Thread(() -> {
+                try (java.io.InputStream is = finalProcess.getInputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        baos.write(buffer, 0, bytesRead);
+                    }
+                    synchronized (finalOutput) {
+                        finalOutput.append(baos.toString());
+                    }
+                } catch (IOException e) {
+                    // Stream closed - this is normal when process terminates
+                }
+            });
+
+            stdoutThread.start();
+            exitCode = waitForProcessWithStatus(process);
+            stdoutThread.join();
+        } catch (IOException e) {
+            // Command failed to start - return -1 as per Perl spec
+            setGlobalVariable("main::!", e.getMessage());
+            exitCode = -1;
+        } catch (InterruptedException e) {
+            PerlSignalQueue.checkPendingSignals();
+            Thread.interrupted();
+        } finally {
+            if (process != null) {
+                process.destroy();
+            }
+        }
+
+        return new CommandResult(output.toString(), exitCode);
+    }
+
+    /**
      * Waits for a process to complete and returns the full wait status.
      * On POSIX systems, uses native waitpid() to get signal information.
      * On Windows or if native call fails, falls back to Java's waitFor() with shifted exit code.
@@ -406,7 +498,16 @@ public class SystemOperator {
 
             int exitCode;
 
-            if (!hasHandle && flattenedArgs.size() == 1) {
+            if (hasHandle && flattenedArgs.size() >= 2) {
+                // Indirect object syntax: exec { $program } @args
+                // In Perl, @args[0] becomes argv[0] (process name), @args[1:] are actual arguments
+                // Java's ProcessBuilder can't set argv[0] separately, so we skip it
+                String program = flattenedArgs.get(0);
+                List<String> actualArgs = new ArrayList<>();
+                actualArgs.add(program);
+                actualArgs.addAll(flattenedArgs.subList(2, flattenedArgs.size()));
+                exitCode = execCommandDirect(actualArgs);
+            } else if (!hasHandle && flattenedArgs.size() == 1) {
                 // Single argument - check for shell metacharacters
                 String command = flattenedArgs.getFirst();
                 if (SHELL_METACHARACTERS.matcher(command).find()) {

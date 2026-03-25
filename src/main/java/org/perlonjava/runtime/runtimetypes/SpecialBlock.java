@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+
 /**
  * The SpecialBlock class manages different types of code blocks (end, init, check, and unitcheck)
  * that can be saved and executed in a specific order. This class provides methods to save and run
@@ -48,14 +50,31 @@ public class SpecialBlock {
 
     /**
      * Executes all code blocks stored in the endBlocks array in LIFO order.
+     * 
+     * @param resetChildStatus if true, reset $? to 0 before running END blocks (normal exit).
+     *                         if false, preserve $? (die/exception path).
      */
-    public static void runEndBlocks() {
+    public static void runEndBlocks(boolean resetChildStatus) {
+        if (resetChildStatus) {
+            // Reset $? to 0 before END blocks run (Perl semantics for normal exit)
+            // This ensures END blocks see $? = 0 unless they explicitly set it
+            getGlobalVariable("main::?").set(0);
+        }
+        
         while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(endBlocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
         }
+    }
+
+    /**
+     * Executes all code blocks stored in the endBlocks array in LIFO order.
+     * Resets $? to 0 before running (normal exit behavior).
+     */
+    public static void runEndBlocks() {
+        runEndBlocks(true);
     }
 
     /**

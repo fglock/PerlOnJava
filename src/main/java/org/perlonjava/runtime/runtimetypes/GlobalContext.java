@@ -216,6 +216,7 @@ public class GlobalContext {
         // Initialize built-in Perl classes
         DiamondIO.initialize(compilerOptions);
         Universal.initialize();
+        Mro.initialize();  // mro functions available without 'use mro'
         Vars.initialize();
         Subs.initialize();
         Builtin.initialize();

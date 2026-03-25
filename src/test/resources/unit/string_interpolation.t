@@ -59,6 +59,35 @@ subtest 'Special variables and array access' => sub {
     # This tests complex variable access patterns
 };
 
+subtest 'Special punctuation variable interpolation' => sub {
+    # Test that special punctuation variables interpolate correctly
+    # These were previously blocked by isNonInterpolatingCharacter
+    
+    # $? - child process status (should be 0 or empty initially)
+    system("true") if $^O ne 'MSWin32';  # Set $? to 0
+    my $child_status = "$?";
+    like($child_status, qr/^\d*$/, "\$? interpolates as numeric value");
+    
+    # $| - autoflush
+    local $| = 1;
+    is("$|", "1", "\$| interpolates correctly");
+    
+    # $% - page number
+    is("$%", "0", "\$% interpolates correctly");
+    
+    # $\ - output record separator
+    local $\ = "";
+    is("$\\", "", "\$\\ interpolates correctly");
+    
+    # $( - real group ID
+    my $gid = "$(";
+    like($gid, qr/^\d+/, "\$( interpolates as numeric GID");
+    
+    # $) - effective group ID  
+    my $egid = "$)";
+    like($egid, qr/^\d+/, "\$) interpolates as numeric EGID");
+};
+
 subtest 'Array reference interpolation' => sub {
     is("@{[123]}", "123", "Single element array ref interpolation");
     is("@{[123, 456]}", "123 456", "Multiple element array ref interpolation");

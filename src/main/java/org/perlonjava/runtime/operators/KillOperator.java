@@ -30,8 +30,10 @@ public class KillOperator {
         int signal;
 
         // Handle named signals (e.g., "TERM", "KILL", "HUP")
-        if (signalArg.isString()) {
-            signal = getSignalNumber(signalArg.toString());
+        // But first check if it's a numeric string like "9" from @ARGV
+        String strVal = signalArg.toString();
+        if (signalArg.isString() && !isNumericString(strVal)) {
+            signal = getSignalNumber(strVal);
             if (signal == -1) {
                 // Invalid signal name
                 setErrno(22); // EINVAL
@@ -250,6 +252,25 @@ public class KillOperator {
     // Set errno for error reporting
     private static void setErrno(int errno) {
         getGlobalVariable("main::!").set(new RuntimeScalar(errno));
+    }
+
+    // Check if a string represents a numeric value
+    private static boolean isNumericString(String s) {
+        if (s == null || s.isEmpty()) {
+            return false;
+        }
+        // Handle optional leading minus sign
+        int start = 0;
+        if (s.charAt(0) == '-') {
+            if (s.length() == 1) return false;
+            start = 1;
+        }
+        for (int i = start; i < s.length(); i++) {
+            if (!Character.isDigit(s.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

@@ -78,6 +78,21 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     }
 
     /**
+     * Constructs a RuntimeScalarReadOnly representing a double value.
+     *
+     * @param d the double value
+     */
+    public RuntimeScalarReadOnly(double d) {
+        super();
+        this.b = (d != 0.0);
+        this.i = (int) d;
+        this.s = ScalarUtils.formatLikePerl(d);
+        this.d = d;
+        this.value = d;
+        this.type = RuntimeScalarType.DOUBLE;
+    }
+
+    /**
      * Throws an exception as this scalar is immutable and cannot be modified.
      *
      * @throws RuntimeException indicating that the constant item cannot be modified

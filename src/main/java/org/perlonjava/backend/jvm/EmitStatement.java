@@ -7,11 +7,8 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
-import org.perlonjava.frontend.astnode.For3Node;
-import org.perlonjava.frontend.astnode.IfNode;
-import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.frontend.astnode.TryNode;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +35,112 @@ public class EmitStatement {
     }
 
     /**
+     * Tries to determine if a condition node is a compile-time constant.
+     * This enables dead code elimination for patterns like:
+     *   use constant WINDOWS => 0;
+     *   if (WINDOWS) { ... Windows-only code ... }
+     *
+     * @param condition The condition node to evaluate
+     * @param currentPackage The current package name for resolving identifiers
+     * @return Boolean.TRUE if constant true, Boolean.FALSE if constant false, null if not constant
+     */
+    private static Boolean getConstantConditionValue(Node condition, String currentPackage) {
+        // Handle literal numbers (e.g., if (0), if (1))
+        if (condition instanceof NumberNode numNode) {
+            try {
+                double value = Double.parseDouble(numNode.value);
+                return value != 0;
+            } catch (NumberFormatException e) {
+                // Non-numeric value, treat as non-constant
+                return null;
+            }
+        }
+
+        // Handle literal strings (e.g., if (""), if ("0"), if ("true"))
+        if (condition instanceof StringNode strNode) {
+            String value = strNode.value;
+            // Perl false: "", "0"
+            return !value.isEmpty() && !value.equals("0");
+        }
+
+        // Handle bare identifiers that might be constant subroutines (e.g., if (WINDOWS))
+        if (condition instanceof IdentifierNode idNode) {
+            String fullName = NameNormalizer.normalizeVariableName(idNode.name, currentPackage);
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                if (code.constantValue != null) {
+                    // This is a constant subroutine - evaluate its value
+                    RuntimeList constList = code.constantValue;
+                    if (constList.elements.isEmpty()) {
+                        return false; // Empty list is false
+                    }
+                    RuntimeBase firstElement = constList.elements.getFirst();
+                    if (firstElement instanceof RuntimeScalar scalar) {
+                        return scalar.getBoolean();
+                    }
+                }
+            }
+        }
+
+        // Handle explicit subroutine calls like WINDOWS() - check if it's a call to a constant sub
+        // The AST for WINDOWS() or WINDOWS looks like:
+        //   BinaryOperatorNode("(", OperatorNode("&", IdentifierNode("WINDOWS")), ListNode())
+        if (condition instanceof BinaryOperatorNode binNode && "(".equals(binNode.operator)) {
+            // Check if the left side is a subroutine reference: OperatorNode("&", IdentifierNode)
+            if (binNode.left instanceof OperatorNode opNode && "&".equals(opNode.operator)) {
+                if (opNode.operand instanceof IdentifierNode idNode) {
+                    // Check if the arguments are empty (no-arg call like CONSTANT())
+                    boolean hasNoArgs = binNode.right == null
+                            || (binNode.right instanceof ListNode listNode && listNode.elements.isEmpty());
+                    if (hasNoArgs) {
+                        String fullName = NameNormalizer.normalizeVariableName(idNode.name, currentPackage);
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                            if (code.constantValue != null) {
+                                RuntimeList constList = code.constantValue;
+                                if (constList.elements.isEmpty()) {
+                                    return false;
+                                }
+                                RuntimeBase firstElement = constList.elements.getFirst();
+                                if (firstElement instanceof RuntimeScalar scalar) {
+                                    return scalar.getBoolean();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Also handle the case where left is a bare IdentifierNode (older AST representation)
+            if (binNode.left instanceof IdentifierNode idNode) {
+                // Check if the arguments are empty (no-arg call like CONSTANT())
+                boolean hasNoArgs = binNode.right == null
+                        || (binNode.right instanceof ListNode listNode && listNode.elements.isEmpty());
+                if (hasNoArgs) {
+                    String fullName = NameNormalizer.normalizeVariableName(idNode.name, currentPackage);
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                    if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                        if (code.constantValue != null) {
+                            RuntimeList constList = code.constantValue;
+                            if (constList.elements.isEmpty()) {
+                                return false;
+                            }
+                            RuntimeBase firstElement = constList.elements.getFirst();
+                            if (firstElement instanceof RuntimeScalar scalar) {
+                                return scalar.getBoolean();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Not a constant we can evaluate at compile time
+        return null;
+    }
+
+    /**
      * Emits bytecode for an if statement, including support for 'unless'.
+     * Performs dead code elimination when the condition is a compile-time constant.
      *
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The if node representing the if statement.
@@ -46,6 +148,62 @@ public class EmitStatement {
     public static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF start: " + node.operator);
 
+        // Try to evaluate the condition at compile time for dead code elimination
+        String currentPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
+        Boolean constantValue = getConstantConditionValue(node.condition, currentPackage);
+
+        // For "unless", invert the condition
+        if (constantValue != null && "unless".equals(node.operator)) {
+            constantValue = !constantValue;
+        }
+
+        // If we have a constant condition, we can eliminate dead code
+        if (constantValue != null) {
+            if (CompilerOptions.DEBUG_ENABLED) {
+                emitterVisitor.ctx.logDebug("IF constant folding: condition is " + constantValue);
+            }
+
+            if (constantValue) {
+                // Condition is constant true - emit only the then branch
+                // Still need to set up scope and labels for potential nested constructs
+                List<String> branchLabels = new ArrayList<>();
+                EmitBlock.collectIfChainLabels(node, branchLabels);
+                int branchLabelsPushed = EmitBlock.pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, branchLabels);
+
+                int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+                node.thenBranch.accept(emitterVisitor);
+                emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
+
+                for (int i = 0; i < branchLabelsPushed; i++) {
+                    emitterVisitor.ctx.javaClassInfo.popGotoLabels();
+                }
+            } else {
+                // Condition is constant false - emit only the else branch
+                if (node.elseBranch != null) {
+                    List<String> branchLabels = new ArrayList<>();
+                    EmitBlock.collectIfChainLabels(node, branchLabels);
+                    int branchLabelsPushed = EmitBlock.pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, branchLabels);
+
+                    int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+                    node.elseBranch.accept(emitterVisitor);
+                    emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
+
+                    for (int i = 0; i < branchLabelsPushed; i++) {
+                        emitterVisitor.ctx.javaClassInfo.popGotoLabels();
+                    }
+                } else {
+                    // No else branch - emit undef if not void context
+                    if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                        EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+                    }
+                }
+            }
+
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF end (constant folded)");
+            return;
+        }
+
+        // Non-constant condition - emit normal if/else code
         List<String> branchLabels = new ArrayList<>();
         EmitBlock.collectIfChainLabels(node, branchLabels);
         int branchLabelsPushed = EmitBlock.pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, branchLabels);

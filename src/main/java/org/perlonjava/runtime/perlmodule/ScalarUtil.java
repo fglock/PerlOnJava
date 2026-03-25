@@ -293,7 +293,7 @@ public class ScalarUtil extends PerlModuleBase {
 
 
     /**
-     * Placeholder for the tainted functionality.
+     * Checks if a scalar is tainted (contains data from external sources).
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -303,7 +303,6 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for tainted() method");
         }
-        // Placeholder for tainted functionality
-        return new RuntimeScalar(false).getList();
+        return new RuntimeScalar(args.get(0).isTainted()).getList();
     }
 }

@@ -5015,6 +5015,34 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(IfNode node) {
+        // Try to evaluate the condition at compile time for dead code elimination
+        String currentPackage = symbolTable.getCurrentPackage();
+        Boolean constantValue = getConstantConditionValue(node.condition, currentPackage);
+
+        // For "unless", invert the condition
+        if (constantValue != null && "unless".equals(node.operator)) {
+            constantValue = !constantValue;
+        }
+
+        // If we have a constant condition, we can eliminate dead code
+        if (constantValue != null) {
+            if (constantValue) {
+                // Condition is constant true - compile only the then branch
+                if (node.thenBranch != null) {
+                    node.thenBranch.accept(this);
+                }
+            } else {
+                // Condition is constant false - compile only the else branch
+                if (node.elseBranch != null) {
+                    node.elseBranch.accept(this);
+                } else {
+                    lastResultReg = -1;
+                }
+            }
+            return;
+        }
+
+        // Non-constant condition - compile normal if/else bytecode
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
         int condReg = lastResultReg;
 
@@ -5065,6 +5093,110 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = thenResultReg;
         }
+    }
+
+    /**
+     * Tries to determine if a condition node is a compile-time constant.
+     * This enables dead code elimination for patterns like:
+     *   use constant WINDOWS => 0;
+     *   if (WINDOWS) { ... Windows-only code ... }
+     *
+     * @param condition The condition node to evaluate
+     * @param currentPackage The current package name for resolving identifiers
+     * @return Boolean.TRUE if constant true, Boolean.FALSE if constant false, null if not constant
+     */
+    private static Boolean getConstantConditionValue(Node condition, String currentPackage) {
+        // Handle literal numbers (e.g., if (0), if (1))
+        if (condition instanceof NumberNode numNode) {
+            try {
+                double value = Double.parseDouble(numNode.value);
+                return value != 0;
+            } catch (NumberFormatException e) {
+                // Non-numeric value, treat as non-constant
+                return null;
+            }
+        }
+
+        // Handle literal strings (e.g., if (""), if ("0"), if ("true"))
+        if (condition instanceof StringNode strNode) {
+            String value = strNode.value;
+            // Perl false: "", "0"
+            return !value.isEmpty() && !value.equals("0");
+        }
+
+        // Handle bare identifiers that might be constant subroutines (e.g., if (WINDOWS))
+        if (condition instanceof IdentifierNode idNode) {
+            String fullName = NameNormalizer.normalizeVariableName(idNode.name, currentPackage);
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                if (code.constantValue != null) {
+                    // This is a constant subroutine - evaluate its value
+                    RuntimeList constList = code.constantValue;
+                    if (constList.elements.isEmpty()) {
+                        return false; // Empty list is false
+                    }
+                    RuntimeBase firstElement = constList.elements.getFirst();
+                    if (firstElement instanceof RuntimeScalar scalar) {
+                        return scalar.getBoolean();
+                    }
+                }
+            }
+        }
+
+        // Handle explicit subroutine calls like WINDOWS() - check if it's a call to a constant sub
+        // The AST for WINDOWS() or WINDOWS looks like:
+        //   BinaryOperatorNode("(", OperatorNode("&", IdentifierNode("WINDOWS")), ListNode())
+        if (condition instanceof BinaryOperatorNode binNode && "(".equals(binNode.operator)) {
+            // Check if the left side is a subroutine reference: OperatorNode("&", IdentifierNode)
+            if (binNode.left instanceof OperatorNode opNode && "&".equals(opNode.operator)) {
+                if (opNode.operand instanceof IdentifierNode idNode) {
+                    // Check if the arguments are empty (no-arg call like CONSTANT())
+                    boolean hasNoArgs = binNode.right == null
+                            || (binNode.right instanceof ListNode listNode && listNode.elements.isEmpty());
+                    if (hasNoArgs) {
+                        String fullName = NameNormalizer.normalizeVariableName(idNode.name, currentPackage);
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                            if (code.constantValue != null) {
+                                RuntimeList constList = code.constantValue;
+                                if (constList.elements.isEmpty()) {
+                                    return false;
+                                }
+                                RuntimeBase firstElement = constList.elements.getFirst();
+                                if (firstElement instanceof RuntimeScalar scalar) {
+                                    return scalar.getBoolean();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Also handle the case where left is a bare IdentifierNode (older AST representation)
+            if (binNode.left instanceof IdentifierNode idNode) {
+                // Check if the arguments are empty (no-arg call like CONSTANT())
+                boolean hasNoArgs = binNode.right == null
+                        || (binNode.right instanceof ListNode listNode && listNode.elements.isEmpty());
+                if (hasNoArgs) {
+                    String fullName = NameNormalizer.normalizeVariableName(idNode.name, currentPackage);
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                    if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                        if (code.constantValue != null) {
+                            RuntimeList constList = code.constantValue;
+                            if (constList.elements.isEmpty()) {
+                                return false;
+                            }
+                            RuntimeBase firstElement = constList.elements.getFirst();
+                            if (firstElement instanceof RuntimeScalar scalar) {
+                                return scalar.getBoolean();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Not a constant we can evaluate at compile time
+        return null;
     }
 
     @Override

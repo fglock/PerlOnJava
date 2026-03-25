@@ -637,6 +637,15 @@ imports:
   - source: perl5/lib/Class/Struct.pm
     target: src/main/perl/lib/Class/Struct.pm
 
+  # From core distribution
+  - source: perl5/dist/constant/lib/constant.pm
+    target: src/main/perl/lib/constant.pm
+
+  # Tests for distribution
+  - source: perl5/dist/constant/t
+    target: perl5_t/constant
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
