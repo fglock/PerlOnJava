@@ -469,7 +469,7 @@ No new dependencies required. FFM is part of the Java standard library since Jav
 
 ## Progress Tracking
 
-### Current Status: Phase 2 complete
+### Current Status: Phase 3 in progress
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2026-03-26)
@@ -484,20 +484,24 @@ No new dependencies required. FFM is part of the Java standard library since Jav
   - Fixed getppid JVM bytecode emission (was missing explicit handler in EmitOperatorNode)
   - Updated Java version requirement to 22 (FFM finalized in Java 22)
   - Files: FFMPosixLinux.java, ScalarSpecialVariable.java, GlobalContext.java, EmitOperatorNode.java, EmitOperator.java, build.gradle
-- [ ] Phase 3: Struct-Based Functions
+- [x] Phase 3: Struct-Based Functions (2026-03-26) - partial
+  - Implemented stat() and lstat() with FFM
+  - Added platform-specific struct stat layouts for Linux x86_64 and macOS x86_64/arm64
+  - Proper errno capture using Linker.Option.captureCallState()
+  - Tested: stat values match native Perl exactly
+  - TODO: getpwnam, getpwuid, getpwent, setpwent, endpwent
 - [ ] Phase 4: Windows Support
 - [ ] Phase 5: Testing & Migration
 - [ ] Phase 6: Cleanup
 
 ### Next Steps
-1. Implement struct-based functions (stat, lstat, getpwnam, getpwuid)
-2. Define struct layouts for FileStat and Passwd
-3. Test FFM functions thoroughly on Linux and macOS
-4. Handle errno capture with Linker.Option.captureCallState()
+1. Implement passwd functions (getpwnam, getpwuid, getpwent, etc.)
+2. Define struct passwd layout for Linux and macOS
+3. Test on Linux CI
 
-### Open Questions
-- Should we implement macOS-specific functions in FFMPosixMacOS or share with FFMPosixLinux?
-- How to handle the different struct sizes between Linux and macOS?
+### Resolved Questions
+- **macOS vs FFMPosixLinux**: Sharing implementation in FFMPosixLinux works well since both are POSIX-compliant. Platform detection handles struct layout differences.
+- **Struct size differences**: Using platform-specific offsets with `IS_MACOS` flag successfully handles different field sizes and layouts.
 
 ## References
 
