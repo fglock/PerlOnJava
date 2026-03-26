@@ -1,74 +1,54 @@
 # PerlOnJava
 
-> Perl running natively on the JVM
+> Perl 5 on the JVM — single jar, batteries included
 
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
 
-## About Perl
+PerlOnJava compiles Perl to JVM bytecode. One jar file runs on Linux, macOS, and Windows — just add Java 22+.
 
-[Perl](https://www.perl.org/) is a high-level, general-purpose programming language known for text processing, system administration, web development, and database integration. It combines features from C, shell scripting, and other languages with powerful regular expressions and flexible syntax.
+## Features
 
-**Learn more:** [www.perl.org](https://www.perl.org/)
-
-## What is PerlOnJava?
-
-A Perl compiler and runtime for the JVM that:
-- Compiles Perl scripts to Java bytecode
-- Integrates with Java libraries (JDBC databases, Maven dependencies)
-- Supports most Perl 5.42.0 features
-- Includes 150+ core Perl modules (DBI, HTTP::Tiny, JSON, YAML, Text::CSV)
+- **Single jar distribution** — no installation, no dependencies beyond Java
+- **Full toolchain** — `jperl`, `jperldoc`, `jcpan`, `jprove`
+- **150+ modules included** — [DBI](docs/guides/database-access.md), HTTP::Tiny, JSON, YAML, Text::CSV, and more
+- **Install more with jcpan** — [pure-Perl CPAN modules](docs/guides/using-cpan-modules.md) work out of the box
+- **JDBC database access** — [PostgreSQL, MySQL, SQLite, Oracle](docs/guides/database-access.md) via standard JDBC drivers
+- **Embed in Java apps** — [JSR-223 ScriptEngine](docs/guides/java-integration.md) integration
+- **Perl 5.42+ features** — [see feature matrix](docs/reference/feature-matrix.md)
 
 ## Quick Start
 
 ```bash
-# Build
+git clone https://github.com/fglock/PerlOnJava.git
+cd PerlOnJava
 make
 
-# Run Perl
 ./jperl -E 'say "Hello World"'
+./jperl -MJSON -E 'say encode_json({hello => "world"})'
 ```
 
-**→ [Full Quick Start Guide](QUICKSTART.md)** - Installation, examples, and database setup
-
-**→ [Database Access Guide](docs/guides/database-access.md)** - DBI with JDBC drivers
+**[Full Quick Start Guide](QUICKSTART.md)** — Installation options, database setup, Docker
 
 ## Documentation
 
-### Getting Started
-- **[Installation](docs/getting-started/installation.md)** - Build and setup
-- **[Quick Start](QUICKSTART.md)** - Get running in 5 minutes
-- **[Docker](docs/getting-started/docker.md)** - Run in containers
-- **[One-liners](docs/getting-started/oneliners.md)** - Quick examples
+| Getting Started | Guides | Reference |
+|-----------------|--------|-----------|
+| [Installation](docs/getting-started/installation.md) | [Database Access](docs/guides/database-access.md) | [Feature Matrix](docs/reference/feature-matrix.md) |
+| [Quick Start](QUICKSTART.md) | [Java Integration](docs/guides/java-integration.md) | [CLI Options](docs/reference/cli-options.md) |
+| [Docker](docs/getting-started/docker.md) | [Using CPAN Modules](docs/guides/using-cpan-modules.md) | [Architecture](docs/reference/architecture.md) |
+| [One-liners](docs/getting-started/oneliners.md) | [Module Porting](docs/guides/module-porting.md) | [Testing](docs/reference/testing.md) |
 
-### Guides
-- **[Database Access](docs/guides/database-access.md)** - Using DBI with JDBC drivers
-- **[Java Integration](docs/guides/java-integration.md)** - Call Perl from Java (JSR-223)
-- **[Using CPAN Modules](docs/guides/using-cpan-modules.md)** - Install and use CPAN modules
-- **[Module Porting](docs/guides/module-porting.md)** - Port Perl modules
+**About:** [Why PerlOnJava?](docs/about/why-perlonjava.md) | [Roadmap](docs/about/roadmap.md) | [Changelog](docs/about/changelog.md) | [Support](docs/about/support.md)
 
-### Reference
-- **[Feature Matrix](docs/reference/feature-matrix.md)** - What's implemented
-- **[Testing](docs/reference/testing.md)** - Test suite information
-- **[Architecture](docs/reference/architecture.md)** - How it works
-- **[CLI Options](docs/reference/cli-options.md)** - Command-line reference
-- **[Configure.pl](docs/reference/configure.md)** - Configuration and dependency management
+## About Perl
 
-### About
-- **[Why PerlOnJava?](docs/about/why-perlonjava.md)** - Project goals and use cases
-- **[Roadmap](docs/about/roadmap.md)** - Future plans
-- **[Changelog](docs/about/changelog.md)** - Release history
-- **[Support](docs/about/support.md)** - Get help and contribute
-- **[Resources](docs/about/resources.md)** - External links
+[Perl](https://www.perl.org/) is a high-level, general-purpose language known for text processing, system administration, and web development. **Learn more:** [www.perl.org](https://www.perl.org/)
 
 ## Contributing
 
-We welcome contributions! See **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
-- How to build and test
-- Code organization
-- Submitting pull requests
-- Developer documentation
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for build instructions, code organization, and how to submit pull requests.
 
 ## License
 
-[Artistic License 2.0](LICENSE.md) - Copyright (c) Flavio Glock
+[Artistic License 2.0](LICENSE.md) — Copyright (c) Flavio Glock
