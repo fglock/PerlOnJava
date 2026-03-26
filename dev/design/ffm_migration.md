@@ -450,10 +450,15 @@ No new dependencies required. FFM is part of the Java standard library since Jav
 
 ## Progress Tracking
 
-### Current Status: Not started
+### Current Status: Phase 1 complete
 
 ### Completed Phases
-- [ ] Phase 1: Infrastructure
+- [x] Phase 1: Infrastructure (2026-03-26)
+  - Created FFMPosixInterface with all method signatures
+  - Created FFMPosix factory with platform detection
+  - Created stub implementations for Linux, macOS, Windows
+  - Added feature flag (perlonjava.ffm.enabled)
+  - Windows implementation includes Java/ProcessHandle fallbacks
 - [ ] Phase 2: Simple Functions
 - [ ] Phase 3: Struct-Based Functions
 - [ ] Phase 4: Windows Support
@@ -461,9 +466,9 @@ No new dependencies required. FFM is part of the Java standard library since Jav
 - [ ] Phase 6: Cleanup
 
 ### Next Steps
-1. Review this design document
-2. Approve minimum Java 22 requirement
-3. Begin Phase 1 implementation
+1. Implement simple FFM functions (kill, isatty, getuid, etc.)
+2. Test on Linux and macOS
+3. Handle errno capture with Linker.Option.captureCallState()
 
 ## References
 
