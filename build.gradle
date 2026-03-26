@@ -137,10 +137,10 @@ ospackage {
     link('/usr/local/bin/jperl', '/opt/perlonjava/bin/jperl')
 }
 
-// Java toolchain configuration - requires Java 21
+// Java toolchain configuration - requires Java 22 (for FFM API)
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(22)
     }
 }
 

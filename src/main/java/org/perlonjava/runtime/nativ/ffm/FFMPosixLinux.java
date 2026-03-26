@@ -1,5 +1,12 @@
 package org.perlonjava.runtime.nativ.ffm;
 
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -8,39 +15,131 @@ import java.nio.file.Path;
  * 
  * <p>This class uses Java's Foreign Function & Memory (FFM) API to call
  * native Linux/glibc functions directly, without JNR-POSIX.</p>
- * 
- * <p><b>Note:</b> This is a stub implementation for Phase 1. Methods will be
- * implemented incrementally in subsequent phases.</p>
- * 
- * <p>When implementing FFM calls, import:</p>
- * <pre>{@code
- * import java.lang.foreign.Arena;
- * import java.lang.foreign.FunctionDescriptor;
- * import java.lang.foreign.Linker;
- * import java.lang.foreign.MemorySegment;
- * import java.lang.foreign.SymbolLookup;
- * import java.lang.foreign.ValueLayout;
- * import java.lang.invoke.MethodHandle;
- * }</pre>
  */
 public class FFMPosixLinux implements FFMPosixInterface {
     
-    // Thread-local errno storage
+    // Thread-local errno storage (used as fallback)
     private static final ThreadLocal<Integer> threadErrno = ThreadLocal.withInitial(() -> 0);
+    
+    // Lazy-initialized FFM components
+    private static volatile boolean initialized = false;
+    private static Linker linker;
+    private static SymbolLookup stdlib;
+    
+    // Method handles for simple functions (no errno capture needed)
+    private static MethodHandle getuidHandle;
+    private static MethodHandle geteuidHandle;
+    private static MethodHandle getgidHandle;
+    private static MethodHandle getegidHandle;
+    private static MethodHandle getppidHandle;
+    private static MethodHandle isattyHandle;
+    private static MethodHandle umaskHandle;
+    
+    // Method handles that need errno capture
+    private static MethodHandle killHandle;
+    private static MethodHandle chmodHandle;
+    
+    // Linker options for errno capture
+    private static Linker.Option captureErrno;
+    private static long errnoOffset;
+    
+    /**
+     * Initialize FFM components lazily.
+     */
+    private static synchronized void ensureInitialized() {
+        if (initialized) return;
+        
+        try {
+            linker = Linker.nativeLinker();
+            stdlib = linker.defaultLookup();
+            
+            // Set up errno capture
+            captureErrno = Linker.Option.captureCallState("errno");
+            errnoOffset = Linker.Option.captureStateLayout()
+                .byteOffset(java.lang.foreign.MemoryLayout.PathElement.groupElement("errno"));
+            
+            // Simple functions (return value only, no errno)
+            getuidHandle = linker.downcallHandle(
+                stdlib.find("getuid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+            
+            geteuidHandle = linker.downcallHandle(
+                stdlib.find("geteuid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+            
+            getgidHandle = linker.downcallHandle(
+                stdlib.find("getgid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+            
+            getegidHandle = linker.downcallHandle(
+                stdlib.find("getegid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+            
+            getppidHandle = linker.downcallHandle(
+                stdlib.find("getppid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+            
+            isattyHandle = linker.downcallHandle(
+                stdlib.find("isatty").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            umaskHandle = linker.downcallHandle(
+                stdlib.find("umask").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            // Functions that need errno capture
+            killHandle = linker.downcallHandle(
+                stdlib.find("kill").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            chmodHandle = linker.downcallHandle(
+                stdlib.find("chmod").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            initialized = true;
+        } catch (Throwable e) {
+            throw new RuntimeException("Failed to initialize FFM POSIX bindings", e);
+        }
+    }
     
     // ==================== Process Functions ====================
     
     @Override
     public int kill(int pid, int signal) {
-        // TODO: Implement with FFM in Phase 2
-        // For now, throw UnsupportedOperationException to indicate not yet implemented
-        throw new UnsupportedOperationException("FFM kill() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) killHandle.invokeExact(capturedState, pid, signal);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(1); // EPERM
+            return -1;
+        }
     }
     
     @Override
     public int getppid() {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM getppid() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) getppidHandle.invokeExact();
+        } catch (Throwable e) {
+            return 1; // Return init's PID as fallback
+        }
     }
     
     @Override
@@ -53,26 +152,42 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public int getuid() {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM getuid() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) getuidHandle.invokeExact();
+        } catch (Throwable e) {
+            return -1;
+        }
     }
     
     @Override
     public int geteuid() {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM geteuid() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) geteuidHandle.invokeExact();
+        } catch (Throwable e) {
+            return -1;
+        }
     }
     
     @Override
     public int getgid() {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM getgid() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) getgidHandle.invokeExact();
+        } catch (Throwable e) {
+            return -1;
+        }
     }
     
     @Override
     public int getegid() {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM getegid() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) getegidHandle.invokeExact();
+        } catch (Throwable e) {
+            return -1;
+        }
     }
     
     @Override
@@ -121,8 +236,20 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public int chmod(String path, int mode) {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM chmod() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pathSegment = arena.allocateFrom(path);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) chmodHandle.invokeExact(capturedState, pathSegment, mode);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(1); // EPERM
+            return -1;
+        }
     }
     
     @Override
@@ -147,8 +274,12 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public int isatty(int fd) {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM isatty() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) isattyHandle.invokeExact(fd);
+        } catch (Throwable e) {
+            return 0;
+        }
     }
     
     // ==================== File Control Functions ====================
@@ -161,8 +292,12 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public int umask(int mask) {
-        // TODO: Implement with FFM in Phase 2
-        throw new UnsupportedOperationException("FFM umask() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            return (int) umaskHandle.invokeExact(mask);
+        } catch (Throwable e) {
+            return 022; // Default umask
+        }
     }
     
     // ==================== Error Handling ====================
@@ -188,6 +323,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
             case 4 -> "Interrupted system call";
             case 5 -> "I/O error";
             case 9 -> "Bad file descriptor";
+            case 10 -> "No child processes";
             case 12 -> "Out of memory";
             case 13 -> "Permission denied";
             case 17 -> "File exists";
@@ -205,7 +341,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
     /**
      * Map Java exceptions to errno values.
      */
-    private int getErrnoForException(Exception e) {
+    protected int getErrnoForException(Exception e) {
         String msg = e.getMessage();
         if (msg == null) return 5; // EIO
         msg = msg.toLowerCase();
