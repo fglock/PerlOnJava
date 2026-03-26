@@ -290,13 +290,18 @@ Implement in order of complexity:
 
 ### Phase 5: Testing & Migration (Week 5)
 
-**Goal**: Enable FFM by default, remove JNR-POSIX
+**Goal**: Enable FFM by default, update minimum Java version
 
-1. Run full test suite with `perlonjava.ffm.enabled=true`
-2. Fix any discrepancies
-3. Change default to FFM
-4. Mark JNR-POSIX code as deprecated
-5. Update minimum Java version in documentation
+1. **Update minimum Java version to 22**:
+   - Update `build.gradle` sourceCompatibility/targetCompatibility
+   - Update `pom.xml` maven.compiler.source/target
+   - Update CI workflows (`.github/workflows/`)
+   - Update documentation (README.md, QUICKSTART.md, installation.md)
+   - Update presentations
+2. Run full test suite with `perlonjava.ffm.enabled=true`
+3. Fix any discrepancies
+4. Change default to FFM (flip feature flag)
+5. Mark JNR-POSIX code as deprecated
 6. Remove `--sun-misc-unsafe-memory-access` flag logic from jperl/jperl.bat
 
 ### Phase 6: Cleanup (Week 6)
@@ -444,9 +449,23 @@ No new dependencies required. FFM is part of the Java standard library since Jav
 ## Documentation Updates
 
 1. Update `README.md` with Java 22+ requirement
-2. Update `docs/getting-started/installation.md`
-3. Remove `--sun-misc-unsafe-memory-access` documentation from jperl scripts
-4. Document any Windows-specific limitations
+2. Update `QUICKSTART.md` with Java 22+ requirement
+3. Update `docs/getting-started/installation.md` with Java 22+ requirement
+4. Update `dev/presentations/` slides with Java 22+ requirement
+5. Remove `--sun-misc-unsafe-memory-access` documentation from jperl scripts
+6. Document any Windows-specific limitations
+
+### Files to Update for Java 22
+
+| File | Change |
+|------|--------|
+| `build.gradle` | `sourceCompatibility = JavaVersion.VERSION_22` |
+| `pom.xml` | `<maven.compiler.source>22</maven.compiler.source>` |
+| `.github/workflows/*.yml` | `java-version: '22'` |
+| `README.md` | "Requires Java 22+" |
+| `QUICKSTART.md` | "JDK 22 or later" |
+| `docs/getting-started/installation.md` | "Java 22 or higher" |
+| `dev/presentations/**/*.md` | "Requires: Java 22+" |
 
 ## Progress Tracking
 
