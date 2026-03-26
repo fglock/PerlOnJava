@@ -4,4 +4,15 @@
 # Runs the standard cpan script with jperl
 #
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-exec "$SCRIPT_DIR/jperl" "$SCRIPT_DIR/src/main/perl/bin/cpan" "$@"
+
+# Find cpan script - check development path first, then installed path
+if [ -f "$SCRIPT_DIR/src/main/perl/bin/cpan" ]; then
+    CPAN_SCRIPT="$SCRIPT_DIR/src/main/perl/bin/cpan"
+elif [ -f "$SCRIPT_DIR/bin/cpan" ]; then
+    CPAN_SCRIPT="$SCRIPT_DIR/bin/cpan"
+else
+    echo "Error: cpan script not found" >&2
+    exit 1
+fi
+
+exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "$@"

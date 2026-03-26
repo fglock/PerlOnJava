@@ -18,6 +18,9 @@ export PERLONJAVA_EXECUTABLE="$JPERL_PATH"
 # Check development environment first (target directory)
 if [ -f "$SCRIPT_DIR/target/perlonjava-5.42.0.jar" ]; then
     JAR_PATH="$SCRIPT_DIR/target/perlonjava-5.42.0.jar"
+elif [ -f "$SCRIPT_DIR/perlonjava-5.42.0.jar" ]; then
+    # Docker or local installation with jar in same directory
+    JAR_PATH="$SCRIPT_DIR/perlonjava-5.42.0.jar"
 else
     # Use installed package path (when installed via deb package)
     JAR_PATH="$SCRIPT_DIR/../lib/perlonjava-5.42.0.jar"

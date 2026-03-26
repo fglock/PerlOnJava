@@ -21,8 +21,26 @@ RUN mvn clean package
 # Use Eclipse Temurin JDK image to run the application
 FROM eclipse-temurin:22-jdk
 
-# Copy the built JAR file from the Maven container
-COPY --from=build /app/target/perlonjava-5.42.0.jar /app/perlonjava.jar
+WORKDIR /app
 
-# Set the entry point to run the JAR file
-ENTRYPOINT ["java", "-jar", "/app/perlonjava.jar"]
+# Copy the built JAR file from the Maven container
+COPY --from=build /app/target/perlonjava-5.42.0.jar /app/perlonjava-5.42.0.jar
+
+# Copy the wrapper scripts
+COPY --from=build /app/jperl /app/jperl
+COPY --from=build /app/jcpan /app/jcpan
+COPY --from=build /app/jperldoc /app/jperldoc
+COPY --from=build /app/jprove /app/jprove
+
+# Copy the Perl bin scripts (needed by jcpan, jperldoc, jprove)
+COPY --from=build /app/src/main/perl/bin /app/bin
+
+# Make scripts executable and create symlinks in /usr/local/bin
+RUN chmod +x /app/jperl /app/jcpan /app/jperldoc /app/jprove && \
+    ln -s /app/jperl /usr/local/bin/jperl && \
+    ln -s /app/jcpan /usr/local/bin/jcpan && \
+    ln -s /app/jperldoc /usr/local/bin/jperldoc && \
+    ln -s /app/jprove /usr/local/bin/jprove
+
+# Set the entry point to run jperl by default
+ENTRYPOINT ["jperl"]

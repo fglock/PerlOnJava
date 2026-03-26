@@ -4,4 +4,15 @@
 # Runs the standard prove script with jperl
 #
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-exec "$SCRIPT_DIR/jperl" "$SCRIPT_DIR/src/main/perl/bin/prove" "$@"
+
+# Find prove script - check development path first, then installed path
+if [ -f "$SCRIPT_DIR/src/main/perl/bin/prove" ]; then
+    PROVE_SCRIPT="$SCRIPT_DIR/src/main/perl/bin/prove"
+elif [ -f "$SCRIPT_DIR/bin/prove" ]; then
+    PROVE_SCRIPT="$SCRIPT_DIR/bin/prove"
+else
+    echo "Error: prove script not found" >&2
+    exit 1
+fi
+
+exec "$SCRIPT_DIR/jperl" "$PROVE_SCRIPT" "$@"
