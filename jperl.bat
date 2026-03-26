@@ -18,5 +18,13 @@ rem --enable-native-access=ALL-UNNAMED: Required by FFM (Foreign Function & Memo
 rem   for native system calls (file operations, process management).
 set JVM_OPTS=--enable-native-access=ALL-UNNAMED
 
+rem Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
+rem warnings from fastjson2 library.
+for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do (
+    for /f "tokens=1 delims=." %%m in ("%%~v") do (
+        if %%m GEQ 23 set JVM_OPTS=%JVM_OPTS% --sun-misc-unsafe-memory-access=allow
+    )
+)
+
 rem Launch Java
 java %JVM_OPTS% %JPERL_OPTS% -cp "%CLASSPATH%;%SCRIPT_DIR%target\perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main %*
