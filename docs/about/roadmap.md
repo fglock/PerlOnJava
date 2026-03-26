@@ -75,8 +75,8 @@ Work currently in progress:
 
 ### Core Language Gaps
 
-- **`DESTROY` Support** — Implement scope-based destructors for predictable cleanup at block boundaries, with GC-based fallback for edge cases. Critical for `File::Temp`, `SelectSaver`, tied variable cleanup, and many CPAN modules. See `dev/design/destroy_support.md`.
-- **Weak References** — Implement `Scalar::Util::weaken`/`isweak` with minimal memory overhead (external WeakHashMap registry or sentinel value approach). Required by Moo, Moose, and many OO frameworks. See `dev/design/weak_references.md`.
+- **`DESTROY` Support** — Implement scope-based destructors for predictable cleanup at block boundaries, with GC-based fallback for edge cases. Critical for `File::Temp`, `SelectSaver`, tied variable cleanup, and many CPAN modules. See `dev/design/object_lifecycle.md`.
+- **Weak References** — Implement `Scalar::Util::weaken`/`isweak` with minimal memory overhead (external WeakHashMap registry or sentinel value approach). Required by Moo, Moose, and many OO frameworks. See `dev/design/object_lifecycle.md`.
 - **Taint Mode (`-T`)** — Track external data provenance using a `TAINTED` wrapper type (no extra storage for untainted scalars). Required for security-sensitive Perl applications. See `dev/design/TAINT_MODE.md`.
 - **Dynamically-Scoped Regex Variables** — `$1`, `$2`, etc. should be localized per regex match in the dynamic scope.
 
@@ -254,9 +254,11 @@ Introduce a normalization pass between parsing and code generation to eliminate 
 
 *Priority: Long-term — Major architectural work required.*
 
+See `dev/design/concurrency.md` for the comprehensive design covering multiplicity, fork emulation, and threads.
+
 ### Multiplicity
 
-Enable multiple independent Perl runtimes within a single JVM process. See `dev/design/multiplicity.md`.
+Enable multiple independent Perl runtimes within a single JVM process.
 
 **Why it matters:**
 - Enables fork emulation, ithreads, and concurrent web request handling.
@@ -269,7 +271,7 @@ Enable multiple independent Perl runtimes within a single JVM process. See `dev/
 
 ### Fork Emulation
 
-Implement `fork()` via runtime cloning + thread. Currently returns `undef`. See `dev/design/fork.md`.
+Implement `fork()` via runtime cloning + thread. Currently returns `undef`.
 
 - Support common fork patterns: `if (fork() == 0) { ... exit; }`.
 - Deep-copy runtime state for child "process".
@@ -277,7 +279,7 @@ Implement `fork()` via runtime cloning + thread. Currently returns `undef`. See 
 
 ### Threads (ithreads)
 
-Implement Perl's `threads` module using JVM threads with per-thread runtime cloning. See `dev/design/threads.md`.
+Implement Perl's `threads` module using JVM threads with per-thread runtime cloning.
 
 - Variable isolation per thread (copy on creation).
 - `:shared` attribute for synchronized cross-thread variables.

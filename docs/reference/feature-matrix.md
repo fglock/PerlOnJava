@@ -780,7 +780,7 @@ The DBI module provides seamless integration with JDBC drivers:
 
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
-  - For more details see: `dev/design/auto_close.md`.
+  - For more details see: `dev/design/object_lifecycle.md`.
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
   - `DESTROY` method in tied variables is also not implemented. DESTROY is called when the variable is `untie`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
