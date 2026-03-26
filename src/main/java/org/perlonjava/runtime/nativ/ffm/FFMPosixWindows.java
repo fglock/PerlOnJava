@@ -1,0 +1,387 @@
+package org.perlonjava.runtime.nativ.ffm;
+
+import java.io.Console;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.DosFileAttributes;
+
+/**
+ * Windows implementation of FFM POSIX interface.
+ * 
+ * <p>Windows is not POSIX-compliant, so this class provides Windows-specific
+ * implementations or emulations for POSIX functions:</p>
+ * <ul>
+ *   <li>Some functions use Windows API via FFM (kernel32.dll)</li>
+ *   <li>Some functions use pure Java alternatives</li>
+ *   <li>Some functions return simulated/default values</li>
+ *   <li>Some functions are not supported (throw UnsupportedOperationException)</li>
+ * </ul>
+ * 
+ * <p><b>Note:</b> This is a stub implementation for Phase 1. Windows-specific
+ * implementations will be added in Phase 4.</p>
+ */
+public class FFMPosixWindows implements FFMPosixInterface {
+    
+    // Thread-local errno storage
+    private static final ThreadLocal<Integer> threadErrno = ThreadLocal.withInitial(() -> 0);
+    
+    // Default UID/GID values for Windows (simulated)
+    private static final int DEFAULT_UID = 1000;
+    private static final int DEFAULT_GID = 1000;
+    private static final int ID_RANGE = 65536;
+    
+    // Cached user info
+    private static final int CURRENT_UID;
+    private static final int CURRENT_GID;
+    private static final String CURRENT_USER;
+    
+    static {
+        CURRENT_USER = System.getProperty("user.name", "user");
+        CURRENT_UID = Math.abs(CURRENT_USER.hashCode()) % ID_RANGE;
+        
+        String computerName = System.getenv("COMPUTERNAME");
+        CURRENT_GID = computerName != null ? 
+            Math.abs(computerName.hashCode()) % ID_RANGE : DEFAULT_GID;
+    }
+    
+    // ==================== Process Functions ====================
+    
+    @Override
+    public int kill(int pid, int signal) {
+        // Windows implementation using ProcessHandle
+        try {
+            if (signal == 0) {
+                // Signal 0 = check if process exists
+                return ProcessHandle.of(pid).map(ph -> ph.isAlive() ? 0 : -1).orElse(-1);
+            }
+            
+            var proc = ProcessHandle.of(pid);
+            if (proc.isEmpty()) {
+                setErrno(3); // ESRCH - No such process
+                return -1;
+            }
+            
+            boolean destroyed = switch (signal) {
+                case 9 -> proc.get().destroyForcibly(); // SIGKILL
+                case 2, 3, 15 -> proc.get().destroy();  // SIGINT, SIGQUIT, SIGTERM
+                default -> {
+                    setErrno(22); // EINVAL - not supported
+                    yield false;
+                }
+            };
+            
+            return destroyed ? 0 : -1;
+        } catch (Exception e) {
+            setErrno(1); // EPERM
+            return -1;
+        }
+    }
+    
+    @Override
+    public int getppid() {
+        return ProcessHandle.current().parent()
+            .map(ph -> (int) ph.pid())
+            .orElse(0);
+    }
+    
+    @Override
+    public long waitpid(int pid, int[] status, int options) {
+        // Windows doesn't have waitpid - use ProcessHandle
+        try {
+            var proc = ProcessHandle.of(pid);
+            if (proc.isEmpty()) {
+                setErrno(10); // ECHILD
+                return -1;
+            }
+            
+            // Check WNOHANG
+            boolean noHang = (options & 1) != 0;
+            if (noHang && proc.get().isAlive()) {
+                return 0;
+            }
+            
+            proc.get().onExit().join();
+            if (status != null && status.length > 0) {
+                status[0] = 0; // Exit status not available via ProcessHandle
+            }
+            return pid;
+        } catch (Exception e) {
+            setErrno(10); // ECHILD
+            return -1;
+        }
+    }
+    
+    // ==================== User/Group Functions ====================
+    
+    @Override
+    public int getuid() {
+        return CURRENT_UID;
+    }
+    
+    @Override
+    public int geteuid() {
+        return CURRENT_UID;
+    }
+    
+    @Override
+    public int getgid() {
+        return CURRENT_GID;
+    }
+    
+    @Override
+    public int getegid() {
+        return CURRENT_GID;
+    }
+    
+    @Override
+    public PasswdEntry getpwnam(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        
+        // Return info for current user or simulated info
+        if (name.equals(CURRENT_USER)) {
+            return new PasswdEntry(
+                CURRENT_USER,
+                "x",
+                CURRENT_UID,
+                CURRENT_GID,
+                "",
+                System.getProperty("user.home", "C:\\Users\\" + CURRENT_USER),
+                "cmd.exe",
+                0,
+                0
+            );
+        }
+        
+        // Simulated entry for other users
+        int uid = name.equals("Administrator") ? 500 : 1001;
+        return new PasswdEntry(
+            name,
+            "x",
+            uid,
+            513,
+            "",
+            "C:\\Users\\" + name,
+            "cmd.exe",
+            0,
+            0
+        );
+    }
+    
+    @Override
+    public PasswdEntry getpwuid(int uid) {
+        if (uid == CURRENT_UID) {
+            return getpwnam(CURRENT_USER);
+        }
+        return null;
+    }
+    
+    @Override
+    public PasswdEntry getpwent() {
+        // Not supported on Windows
+        return null;
+    }
+    
+    @Override
+    public void setpwent() {
+        // No-op on Windows
+    }
+    
+    @Override
+    public void endpwent() {
+        // No-op on Windows
+    }
+    
+    // ==================== File Functions ====================
+    
+    @Override
+    public StatResult stat(String path) {
+        try {
+            Path p = Path.of(path);
+            BasicFileAttributes basic = Files.readAttributes(p, BasicFileAttributes.class);
+            DosFileAttributes dos = null;
+            try {
+                dos = Files.readAttributes(p, DosFileAttributes.class);
+            } catch (UnsupportedOperationException ignored) {
+            }
+            
+            int mode = calculateMode(basic, dos, p);
+            
+            return new StatResult(
+                0,                                          // dev
+                basic.fileKey() != null ? 
+                    basic.fileKey().hashCode() : 0,         // ino (simulated)
+                mode,                                        // mode
+                1,                                          // nlink
+                CURRENT_UID,                                // uid
+                CURRENT_GID,                                // gid
+                0,                                          // rdev
+                basic.size(),                               // size
+                basic.lastAccessTime().toMillis() / 1000,   // atime
+                basic.lastModifiedTime().toMillis() / 1000, // mtime
+                basic.creationTime().toMillis() / 1000,     // ctime
+                4096,                                       // blksize
+                (basic.size() + 511) / 512                  // blocks
+            );
+        } catch (Exception e) {
+            setErrno(getErrnoForException(e));
+            return null;
+        }
+    }
+    
+    @Override
+    public StatResult lstat(String path) {
+        // Windows doesn't have symlink distinction in the same way
+        return stat(path);
+    }
+    
+    @Override
+    public int chmod(String path, int mode) {
+        // Windows only supports read-only attribute
+        try {
+            Path p = Path.of(path);
+            boolean readOnly = (mode & 0200) == 0; // No owner write = read-only
+            Files.setAttribute(p, "dos:readonly", readOnly);
+            return 0;
+        } catch (Exception e) {
+            setErrno(getErrnoForException(e));
+            return -1;
+        }
+    }
+    
+    @Override
+    public int link(String oldPath, String newPath) {
+        try {
+            Files.createLink(Path.of(newPath), Path.of(oldPath));
+            return 0;
+        } catch (Exception e) {
+            setErrno(getErrnoForException(e));
+            return -1;
+        }
+    }
+    
+    @Override
+    public int utimes(String path, long atime, long mtime) {
+        try {
+            Path p = Path.of(path);
+            Files.setLastModifiedTime(p, java.nio.file.attribute.FileTime.fromMillis(mtime * 1000));
+            // Access time not easily settable on Windows via NIO
+            return 0;
+        } catch (Exception e) {
+            setErrno(getErrnoForException(e));
+            return -1;
+        }
+    }
+    
+    // ==================== Terminal Functions ====================
+    
+    @Override
+    public int isatty(int fd) {
+        // Use Java Console detection
+        Console console = System.console();
+        if (console != null) {
+            // If Console exists, stdin/stdout/stderr are likely terminals
+            return (fd >= 0 && fd <= 2) ? 1 : 0;
+        }
+        return 0;
+    }
+    
+    // ==================== File Control Functions ====================
+    
+    @Override
+    public int fcntl(int fd, int cmd, int arg) {
+        // Not supported on Windows
+        setErrno(38); // ENOSYS
+        return -1;
+    }
+    
+    @Override
+    public int umask(int mask) {
+        // Simulated - Windows doesn't have umask
+        // Just return a reasonable default
+        return 022;
+    }
+    
+    // ==================== Error Handling ====================
+    
+    @Override
+    public int errno() {
+        return threadErrno.get();
+    }
+    
+    @Override
+    public void setErrno(int errno) {
+        threadErrno.set(errno);
+    }
+    
+    @Override
+    public String strerror(int errno) {
+        return switch (errno) {
+            case 0 -> "Success";
+            case 1 -> "Operation not permitted";
+            case 2 -> "No such file or directory";
+            case 3 -> "No such process";
+            case 5 -> "I/O error";
+            case 10 -> "No child processes";
+            case 13 -> "Permission denied";
+            case 17 -> "File exists";
+            case 22 -> "Invalid argument";
+            case 38 -> "Function not implemented";
+            default -> "Unknown error " + errno;
+        };
+    }
+    
+    // ==================== Helper Methods ====================
+    
+    /**
+     * Calculate Unix-style mode bits from Windows attributes.
+     */
+    private int calculateMode(BasicFileAttributes basic, DosFileAttributes dos, Path path) {
+        int mode = 0;
+        
+        // File type
+        if (basic.isDirectory()) {
+            mode |= 0040000; // S_IFDIR
+        } else if (basic.isRegularFile()) {
+            mode |= 0100000; // S_IFREG
+        } else if (basic.isSymbolicLink()) {
+            mode |= 0120000; // S_IFLNK
+        }
+        
+        // Default permissions (Windows doesn't have Unix permissions)
+        // Check if read-only
+        boolean readOnly = dos != null && dos.isReadOnly();
+        
+        if (basic.isDirectory()) {
+            mode |= readOnly ? 0555 : 0755;
+        } else {
+            mode |= readOnly ? 0444 : 0644;
+            
+            // Check if executable (by extension)
+            String name = path.getFileName().toString().toLowerCase();
+            if (name.endsWith(".exe") || name.endsWith(".bat") || 
+                name.endsWith(".cmd") || name.endsWith(".com")) {
+                mode |= 0111;
+            }
+        }
+        
+        return mode;
+    }
+    
+    /**
+     * Map Java exceptions to errno values.
+     */
+    private int getErrnoForException(Exception e) {
+        String msg = e.getMessage();
+        if (msg == null) return 5; // EIO
+        msg = msg.toLowerCase();
+        
+        if (msg.contains("no such file") || msg.contains("cannot find")) return 2;
+        if (msg.contains("access") && msg.contains("denied")) return 13;
+        if (msg.contains("already exists")) return 17;
+        
+        return 5; // EIO
+    }
+}
