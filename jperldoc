@@ -4,4 +4,15 @@
 # Runs the standard perldoc script with jperl
 #
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-exec "$SCRIPT_DIR/jperl" "$SCRIPT_DIR/src/main/perl/bin/perldoc" "$@"
+
+# Find perldoc script - check development path first, then installed path
+if [ -f "$SCRIPT_DIR/src/main/perl/bin/perldoc" ]; then
+    PERLDOC_SCRIPT="$SCRIPT_DIR/src/main/perl/bin/perldoc"
+elif [ -f "$SCRIPT_DIR/bin/perldoc" ]; then
+    PERLDOC_SCRIPT="$SCRIPT_DIR/bin/perldoc"
+else
+    echo "Error: perldoc script not found" >&2
+    exit 1
+fi
+
+exec "$SCRIPT_DIR/jperl" "$PERLDOC_SCRIPT" "$@"

@@ -34,6 +34,39 @@ tasks.buildDeb {
     dependsOn installDist
 }
 
+// Copy custom wrapper scripts to installDist bin directory
+tasks.register('copyWrapperScripts', Copy) {
+    dependsOn installDist
+    from(projectDir) {
+        include 'jperl'
+        include 'jperl.bat'
+        include 'jcpan'
+        include 'jcpan.bat'
+        include 'jperldoc'
+        include 'jperldoc.bat'
+        include 'jprove'
+        include 'jprove.bat'
+    }
+    into "${buildDir}/install/perlonjava/bin"
+}
+
+// Copy Perl bin scripts (cpan, perldoc, prove) to installDist bin directory
+tasks.register('copyPerlBinScripts', Copy) {
+    dependsOn installDist
+    from('src/main/perl/bin') {
+        include 'cpan'
+        include 'perldoc'
+        include 'prove'
+    }
+    into "${buildDir}/install/perlonjava/bin"
+}
+
+// Make buildDeb depend on both copy tasks
+tasks.buildDeb {
+    dependsOn copyWrapperScripts
+    dependsOn copyPerlBinScripts
+}
+
 // Project metadata
 group = 'org.perlonjava'
 version = '5.42.0'
@@ -135,6 +168,9 @@ ospackage {
     }
 
     link('/usr/local/bin/jperl', '/opt/perlonjava/bin/jperl')
+    link('/usr/local/bin/jcpan', '/opt/perlonjava/bin/jcpan')
+    link('/usr/local/bin/jperldoc', '/opt/perlonjava/bin/jperldoc')
+    link('/usr/local/bin/jprove', '/opt/perlonjava/bin/jprove')
 }
 
 // Java toolchain configuration - requires Java 22 (for FFM API)
