@@ -128,20 +128,18 @@ src/main/java/org/perlonjava/
 
 ### 1. Lexer
 
-The `Lexer` class tokenizes Perl source code into a stream of tokens (identifiers, operators, strings, numbers, etc.). It handles:
-- Perl's context-sensitive tokenization
-- Here-documents
-- Quote-like operators (`q//`, `qq//`, `qw//`, etc.)
-- Regular expression literals
+The `Lexer` class performs fast, simple tokenization of Perl source code:
+- Identifiers, numbers, operators, whitespace, newlines
+- Optimized for speed; the Parser handles ambiguity resolution (e.g., `qq<=>` vs `<=>`)
 
 ### 2. Parser
 
-The parser transforms tokens into an Abstract Syntax Tree (AST):
+The parser transforms tokens into an Abstract Syntax Tree (AST), handling Perl's context-sensitive syntax:
 - **Parser.java**: Entry point and coordination
 - **StatementParser.java**: Statement-level constructs
 - **OperatorParser.java**: Expression parsing with precedence
 - **SubroutineParser.java**: Subroutine and method definitions
-- **StringParser.java**: Domain-specific parsing for regex, string interpolation, format strings
+- **StringParser.java**: Here-documents, quote-like operators (`q//`, `qq//`, `qw//`), regex literals, string interpolation
 
 ### 3. Code Generation
 
