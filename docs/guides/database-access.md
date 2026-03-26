@@ -50,7 +50,7 @@ gradle clean build
    
     Calling java directly with the classpath is also possible:
     ```bash
-    java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main myscript.pl
+    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main myscript.pl
     ```
 
 ## Database Connection Examples

@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
@@ -49,7 +49,7 @@ public class WaitpidOperator {
         }
         try {
             int[] status = new int[1];
-            long result = PosixLibrary.INSTANCE.waitpid(pid, status, flags);
+            long result = FFMPosix.get().waitpid(pid, status, flags);
 
             if (result > 0) {
                 setExitStatus(status[0]);
@@ -57,7 +57,7 @@ public class WaitpidOperator {
             } else if (result == 0) {
                 return new RuntimeScalar(0);
             } else {
-                int errno = PosixLibrary.INSTANCE.errno();
+                int errno = FFMPosix.get().errno();
                 if (errno == 10) { // ECHILD
                     return new RuntimeScalar(-1);
                 }

@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
 import org.perlonjava.runtime.regex.RegexTimeoutException;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -64,7 +64,7 @@ public class Operator {
                     success = false;
                 }
             } else {
-                int result = PosixLibrary.INSTANCE.chmod(path, mode);
+                int result = FFMPosix.get().chmod(path, mode);
                 success = (result == 0);
             }
 

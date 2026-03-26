@@ -469,7 +469,7 @@ No new dependencies required. FFM is part of the Java standard library since Jav
 
 ## Progress Tracking
 
-### Current Status: Phase 3 complete
+### Current Status: Phase 6 complete - JNR-POSIX dependency removed
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2026-03-26)
@@ -492,15 +492,30 @@ No new dependencies required. FFM is part of the Java standard library since Jav
   - Helper functions: readStatResult(), readPasswdEntry(), readCString()
   - Proper errno capture using Linker.Option.captureCallState()
   - Tested: stat values match native Perl exactly
-- [ ] Phase 4: Windows Support
-- [ ] Phase 5: Testing & Migration
-- [ ] Phase 6: Cleanup
+- [x] Phase 4: Windows Support (2026-03-26)
+  - Windows uses Java fallbacks (ProcessHandle, NIO) - no native FFM calls needed
+  - isatty via System.console() check
+  - stat via Files.readAttributes()
+- [x] Phase 5: Testing & Migration (2026-03-26)
+  - FFM enabled by default (perlonjava.ffm.enabled=true)
+  - All 122 unit tests pass
+  - Updated Java minimum version to 22 in build.gradle
+  - All JNR-POSIX code replaced with FFM equivalents
+  - Migrated files: NativeUtils, Stat, KillOperator, Operator (chmod), FileTestOperator (isatty), 
+    DebugHooks (isatty), UmaskOperator, POSIX (strerror), IOOperator (fcntl), UtimeOperator (utimes),
+    WaitpidOperator, ExtendedNativeUtils (passwd functions)
+- [x] Phase 6: Cleanup (2026-03-26)
+  - Removed JNR-POSIX from build.gradle dependencies
+  - Removed JNR-POSIX from libs.versions.toml
+  - Simplified PosixLibrary.java (removed JNR-POSIX references)
+  - Removed `--sun-misc-unsafe-memory-access` flag from jperl and jperl.bat scripts
+  - Updated documentation to remove sun.misc.Unsafe flag references
 
-### Next Steps
-1. Test on Linux CI to verify struct layouts work correctly
-2. Implement remaining functions (utimes, waitpid, fcntl)
-3. Phase 4: Enhance Windows support
-4. Phase 5: Integration testing and migration from JNR-POSIX
+### Migration Complete
+
+The FFM migration is complete. PerlOnJava no longer depends on JNR-POSIX and uses Java's 
+Foreign Function & Memory API (FFM) for all native system calls. This eliminates the 
+sun.misc.Unsafe deprecation warnings that appeared on Java 24+.
 
 ### Resolved Questions
 - **macOS vs FFMPosixLinux**: Sharing implementation in FFMPosixLinux works well since both are POSIX-compliant. Platform detection handles struct layout differences.

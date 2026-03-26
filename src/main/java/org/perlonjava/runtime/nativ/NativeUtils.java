@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.nativ;
 
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
@@ -14,9 +16,8 @@ public class NativeUtils {
     public static final boolean IS_WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
     public static final boolean IS_MAC = System.getProperty("os.name", "").toLowerCase().contains("mac");
 
-    private static final int DEFAULT_UID = 1000;
-    private static final int DEFAULT_GID = 1000;
-    private static final int ID_RANGE = 65536;
+    // FFM POSIX implementation (handles platform-specific logic internally)
+    private static final FFMPosixInterface posix = FFMPosix.get();
 
     public static RuntimeScalar symlink(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
@@ -79,71 +80,30 @@ public class NativeUtils {
         }
 
         try {
-            if (IS_WINDOWS) {
-                Files.createLink(Paths.get(newFile), Paths.get(oldFile));
-                return new RuntimeScalar(1);
-            } else {
-                int result = PosixLibrary.INSTANCE.link(oldFile, newFile);
-                return new RuntimeScalar(result == 0 ? 1 : 0);
-            }
+            int result = posix.link(oldFile, newFile);
+            return new RuntimeScalar(result == 0 ? 1 : 0);
         } catch (Exception e) {
             return new RuntimeScalar(0);
         }
     }
 
     public static RuntimeScalar getppid(int ctx, RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            return ProcessHandle.current().parent()
-                    .map(ph -> new RuntimeScalar(ph.pid()))
-                    .orElse(new RuntimeScalar(0));
-        } else {
-            return new RuntimeScalar(PosixLibrary.INSTANCE.getppid());
-        }
+        return new RuntimeScalar(posix.getppid());
     }
 
     public static RuntimeScalar getuid(int ctx, RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            try {
-                String userName = System.getProperty("user.name");
-                if (userName != null && !userName.isEmpty()) {
-                    return new RuntimeScalar(Math.abs(userName.hashCode()) % ID_RANGE);
-                }
-            } catch (Exception e) {
-            }
-            return new RuntimeScalar(DEFAULT_UID);
-        } else {
-            return new RuntimeScalar(PosixLibrary.INSTANCE.getuid());
-        }
+        return new RuntimeScalar(posix.getuid());
     }
 
     public static RuntimeScalar geteuid(int ctx, RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            return getuid(ctx, args);
-        } else {
-            return new RuntimeScalar(PosixLibrary.INSTANCE.geteuid());
-        }
+        return new RuntimeScalar(posix.geteuid());
     }
 
     public static RuntimeScalar getgid(int ctx, RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            try {
-                String computerName = System.getenv("COMPUTERNAME");
-                if (computerName != null && !computerName.isEmpty()) {
-                    return new RuntimeScalar(Math.abs(computerName.hashCode()) % ID_RANGE);
-                }
-            } catch (Exception e) {
-            }
-            return new RuntimeScalar(DEFAULT_GID);
-        } else {
-            return new RuntimeScalar(PosixLibrary.INSTANCE.getgid());
-        }
+        return new RuntimeScalar(posix.getgid());
     }
 
     public static RuntimeScalar getegid(int ctx, RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            return getgid(ctx, args);
-        } else {
-            return new RuntimeScalar(PosixLibrary.INSTANCE.getegid());
-        }
+        return new RuntimeScalar(posix.getegid());
     }
 }

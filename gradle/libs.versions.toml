@@ -3,7 +3,6 @@ asm = "9.9.1"
 commons-csv = "1.14.1"
 fastjson2 = "2.0.61"
 icu4j = "78.2"
-jnr-posix = "3.1.19"
 junit-jupiter = "6.1.0-M1"
 snakeyaml-engine = "3.0.1"
 tomlj = "1.1.1"
@@ -14,12 +13,12 @@ asm-util = { module = "org.ow2.asm:asm-util", version.ref = "asm" }
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
 fastjson2 = { module = "com.alibaba.fastjson2:fastjson2", version.ref = "fastjson2" }
 icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
-jnr-posix = { module = "com.github.jnr:jnr-posix", version.ref = "jnr-posix" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
+
 
 [plugins]
 cyclonedx = "org.cyclonedx.bom:2.3.0"

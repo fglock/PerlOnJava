@@ -1,7 +1,8 @@
 package org.perlonjava.runtime.nativ;
 
-import jnr.posix.Passwd;
 import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.net.InetAddress;
@@ -40,19 +41,19 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
     }
 
-    private static RuntimeList passwdToList(Passwd pw) {
+    private static RuntimeList passwdToList(FFMPosixInterface.PasswdEntry pw) {
         if (pw == null) return new RuntimeList();
         RuntimeArray result = new RuntimeArray();
-        String name = pw.getLoginName();
-        String passwd = pw.getPassword();
-        int uid = (int) pw.getUID();
-        int gid = (int) pw.getGID();
+        String name = pw.name();
+        String passwd = pw.passwd();
+        int uid = pw.uid();
+        int gid = pw.gid();
         if (IS_MAC) {
-            long change = pw.getPasswdChangeTime();
-            String gecos = pw.getGECOS();
-            String dir = pw.getHome();
-            String shell = pw.getShell();
-            long expire = pw.getExpire();
+            long change = pw.change();
+            String gecos = pw.gecos();
+            String dir = pw.dir();
+            String shell = pw.shell();
+            long expire = pw.expire();
             RuntimeArray.push(result, new RuntimeScalar(name));
             RuntimeArray.push(result, new RuntimeScalar(passwd));
             RuntimeArray.push(result, new RuntimeScalar(uid));
@@ -64,9 +65,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, new RuntimeScalar(shell));
             RuntimeArray.push(result, new RuntimeScalar(expire));
         } else {
-            String gecos = pw.getGECOS();
-            String dir = pw.getHome();
-            String shell = pw.getShell();
+            String gecos = pw.gecos();
+            String dir = pw.dir();
+            String shell = pw.shell();
             RuntimeArray.push(result, new RuntimeScalar(name));
             RuntimeArray.push(result, new RuntimeScalar(passwd));
             RuntimeArray.push(result, new RuntimeScalar(uid));
@@ -82,12 +83,12 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     private static RuntimeList nativeGetpwnam(String username) {
-        Passwd pw = PosixLibrary.INSTANCE.getpwnam(username);
+        FFMPosixInterface.PasswdEntry pw = FFMPosix.get().getpwnam(username);
         return passwdToList(pw);
     }
 
     private static RuntimeList nativeGetpwuid(int uid) {
-        Passwd pw = PosixLibrary.INSTANCE.getpwuid(uid);
+        FFMPosixInterface.PasswdEntry pw = FFMPosix.get().getpwuid(uid);
         return passwdToList(pw);
     }
 
@@ -100,8 +101,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
         try {
             if (ctx == RuntimeContextType.SCALAR) {
-                Passwd pw = PosixLibrary.INSTANCE.getpwnam(username);
-                if (pw != null) return new RuntimeScalar((int) pw.getUID()).getList();
+                FFMPosixInterface.PasswdEntry pw = FFMPosix.get().getpwnam(username);
+                if (pw != null) return new RuntimeScalar(pw.uid()).getList();
                 return new RuntimeList();
             }
             return nativeGetpwnam(username);
@@ -119,8 +120,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
         try {
             if (ctx == RuntimeContextType.SCALAR) {
-                Passwd pw = PosixLibrary.INSTANCE.getpwuid(uid);
-                if (pw != null) return new RuntimeScalar(pw.getLoginName()).getList();
+                FFMPosixInterface.PasswdEntry pw = FFMPosix.get().getpwuid(uid);
+                if (pw != null) return new RuntimeScalar(pw.name()).getList();
                 return new RuntimeList();
             }
             return nativeGetpwuid(uid);
@@ -213,10 +214,10 @@ public class ExtendedNativeUtils extends NativeUtils {
     public static RuntimeList getpwent(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) return new RuntimeList();
         try {
-            Passwd pw = PosixLibrary.INSTANCE.getpwent();
+            FFMPosixInterface.PasswdEntry pw = FFMPosix.get().getpwent();
             if (pw == null) return new RuntimeList();
             if (ctx == RuntimeContextType.SCALAR) {
-                return new RuntimeScalar(pw.getLoginName()).getList();
+                return new RuntimeScalar(pw.name()).getList();
             }
             return passwdToList(pw);
         } catch (Exception e) {
@@ -242,7 +243,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
         if (!IS_WINDOWS) {
             try {
-                PosixLibrary.INSTANCE.setpwent();
+                FFMPosix.get().setpwent();
             } catch (Exception e) {
             }
         }
@@ -260,7 +261,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     public static RuntimeScalar endpwent(int ctx, RuntimeBase... args) {
         if (!IS_WINDOWS) {
             try {
-                PosixLibrary.INSTANCE.endpwent();
+                FFMPosix.get().endpwent();
             } catch (Exception e) {
             }
         }

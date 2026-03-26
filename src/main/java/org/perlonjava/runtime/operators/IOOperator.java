@@ -6,7 +6,7 @@ import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -1762,13 +1762,12 @@ public class IOOperator {
             RuntimeScalar filenoResult = fh.ioHandle.fileno();
             int fd = filenoResult.getDefinedBoolean() ? filenoResult.getInt() : -1;
 
-            // If we have a valid native fd, use jnr-posix
+            // If we have a valid native fd, use FFM POSIX
             if (fd >= 0 && !NativeUtils.IS_WINDOWS) {
                 try {
-                    jnr.constants.platform.Fcntl fcntlCmd = jnr.constants.platform.Fcntl.valueOf(function);
-                    int result = PosixLibrary.INSTANCE.fcntl(fd, fcntlCmd, arg);
+                    int result = FFMPosix.get().fcntl(fd, function, arg);
                     if (result == -1) {
-                        getGlobalVariable("main::!").set(PosixLibrary.INSTANCE.errno());
+                        getGlobalVariable("main::!").set(FFMPosix.get().errno());
                         return scalarUndef;
                     }
                     return new RuntimeScalar(result);

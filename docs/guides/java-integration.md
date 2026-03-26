@@ -175,7 +175,7 @@ dependencies {
 3. Add to your classpath:
    ```bash
    javac -cp perlonjava-5.42.0-all.jar YourApp.java
-   java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -cp .:perlonjava-5.42.0-all.jar YourApp
+   java --enable-native-access=ALL-UNNAMED -cp .:perlonjava-5.42.0-all.jar YourApp
    ```
 
 ## Use Cases

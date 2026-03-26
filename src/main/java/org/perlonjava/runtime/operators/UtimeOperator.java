@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -77,9 +77,7 @@ public class UtimeOperator {
 
     private static boolean changeFileTimesPosix(String filename, long accessTime, long modTime) {
         try {
-            long[] atimeval = {accessTime, 0};
-            long[] mtimeval = {modTime, 0};
-            int result = PosixLibrary.INSTANCE.utimes(filename, atimeval, mtimeval);
+            int result = FFMPosix.get().utimes(filename, accessTime, modTime);
             if (result == 0) return true;
             return changeFileTimesJava(filename, accessTime, modTime);
         } catch (Exception e) {

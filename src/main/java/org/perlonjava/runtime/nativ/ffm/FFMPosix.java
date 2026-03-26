@@ -49,11 +49,13 @@ public final class FFMPosix {
         OS_NAME = System.getProperty("os.name", "").toLowerCase();
         OS_ARCH = System.getProperty("os.arch", "").toLowerCase();
         
-        // Check feature flag (system property takes precedence over env var)
+        // FFM is now enabled by default (JNR-POSIX migration complete)
+        // Can be disabled via system property or environment variable for testing
         String sysProp = System.getProperty(FFM_ENABLED_PROPERTY);
         String envVar = System.getenv(FFM_ENABLED_ENV);
-        ENABLED = "true".equalsIgnoreCase(sysProp) || 
-                  (sysProp == null && "true".equalsIgnoreCase(envVar));
+        // Default to true unless explicitly set to false
+        ENABLED = !"false".equalsIgnoreCase(sysProp) && 
+                  (sysProp != null || !"false".equalsIgnoreCase(envVar));
         
         INSTANCE = createInstance();
     }

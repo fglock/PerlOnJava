@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -321,7 +321,7 @@ public class POSIX extends PerlModuleBase {
         // Return a basic error message - could be enhanced with actual errno mapping
         String msg = "Error " + errno;
         try {
-            msg = org.perlonjava.runtime.nativ.PosixLibrary.INSTANCE.strerror(errno);
+            msg = FFMPosix.get().strerror(errno);
         } catch (Exception e) {
             // Fall back to generic message
         }

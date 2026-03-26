@@ -3,7 +3,7 @@ package org.perlonjava.runtime.debugger;
 import org.perlonjava.backend.bytecode.EvalStringHandler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
@@ -111,7 +111,7 @@ public class DebugHooks {
         // Use POSIX isatty() to check if file descriptor 0 (stdin) is a terminal
         boolean isInteractive = true;
         try {
-            isInteractive = PosixLibrary.INSTANCE.isatty(0) != 0;
+            isInteractive = FFMPosix.get().isatty(0) != 0;
         } catch (Exception e) {
             // If isatty check fails, fall back to System.console() check
             isInteractive = System.console() != null;
