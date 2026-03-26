@@ -469,7 +469,7 @@ No new dependencies required. FFM is part of the Java standard library since Jav
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete
+### Current Status: Phase 2 complete
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2026-03-26)
@@ -478,16 +478,26 @@ No new dependencies required. FFM is part of the Java standard library since Jav
   - Created stub implementations for Linux, macOS, Windows
   - Added feature flag (perlonjava.ffm.enabled)
   - Windows implementation includes Java/ProcessHandle fallbacks
-- [ ] Phase 2: Simple Functions
+- [x] Phase 2: Simple Functions (2026-03-26)
+  - Implemented FFM-based getuid, geteuid, getgid, getegid, getppid, umask, chmod, kill, isatty for Linux/macOS
+  - Added $< (REAL_UID) and $> (EFFECTIVE_UID) special variables with lazy evaluation
+  - Fixed getppid JVM bytecode emission (was missing explicit handler in EmitOperatorNode)
+  - Updated Java version requirement to 22 (FFM finalized in Java 22)
+  - Files: FFMPosixLinux.java, ScalarSpecialVariable.java, GlobalContext.java, EmitOperatorNode.java, EmitOperator.java, build.gradle
 - [ ] Phase 3: Struct-Based Functions
 - [ ] Phase 4: Windows Support
 - [ ] Phase 5: Testing & Migration
 - [ ] Phase 6: Cleanup
 
 ### Next Steps
-1. Implement simple FFM functions (kill, isatty, getuid, etc.)
-2. Test on Linux and macOS
-3. Handle errno capture with Linker.Option.captureCallState()
+1. Implement struct-based functions (stat, lstat, getpwnam, getpwuid)
+2. Define struct layouts for FileStat and Passwd
+3. Test FFM functions thoroughly on Linux and macOS
+4. Handle errno capture with Linker.Option.captureCallState()
+
+### Open Questions
+- Should we implement macOS-specific functions in FFMPosixMacOS or share with FFMPosixLinux?
+- How to handle the different struct sizes between Linux and macOS?
 
 ## References
 
