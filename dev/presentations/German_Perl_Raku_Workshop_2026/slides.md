@@ -35,7 +35,7 @@ A common scenario in enterprise environments. Large Perl codebases that work wel
 - Not an interpreter wrapping a Perl binary
 - Targets **Perl 5.42+** semantics
 
-**Requires:** Java 21+ (any JDK)
+**Requires:** Java 22+ (any JDK)
 
 Note:
 PerlOnJava generates real JVM bytecode — the same instructions that javac produces. Perl code gets all JVM benefits: cross-platform execution, Java library access, JVM tooling.

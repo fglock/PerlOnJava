@@ -4,7 +4,7 @@ Get PerlOnJava running in 5 minutes.
 
 ## Prerequisites
 
-- **Java Development Kit (JDK) 21 or later**
+- **Java Development Kit (JDK) 22 or later**
 - **Git** for cloning the repository
 - **Make** (optional - can use Gradle directly)
 

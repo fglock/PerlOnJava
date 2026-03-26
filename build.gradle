@@ -121,7 +121,7 @@ ospackage {
     packageName = 'perlonjava'
     version = project.version
     maintainer = 'Flavio Soibelmann Glock <fglock@gmail.com>'
-    // Java 21+ is required at runtime (any distribution: Oracle, Azul, Temurin, OpenJDK, etc.)
+    // Java 22+ is required at runtime (any distribution: Oracle, Azul, Temurin, OpenJDK, etc.)
 
     into '/opt/perlonjava'
     from('build/install/perlonjava') {
