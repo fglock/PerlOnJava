@@ -24,7 +24,7 @@ FROM eclipse-temurin:22-jdk
 WORKDIR /app
 
 # Copy the built JAR file from the Maven container
-COPY --from=build /app/target/perlonjava-5.42.0.jar /app/perlonjava.jar
+COPY --from=build /app/target/perlonjava-5.42.0.jar /app/perlonjava-5.42.0.jar
 
 # Copy the wrapper scripts
 COPY --from=build /app/jperl /app/jperl
