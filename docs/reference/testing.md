@@ -65,7 +65,7 @@ perl dev/tools/perl_test_runner.pl --jobs 4 --timeout 20 src/test/resources/unit
 
 ### 2. Using jprove (Standard Perl prove)
 
-PerlOnJava includes `jprove`, a wrapper that runs the standard Perl `prove` test harness with jperl:
+PerlOnJava includes `jprove` (Unix) and `jprove.bat` (Windows), wrappers that run the standard Perl `prove` test harness with jperl:
 
 ```bash
 # Run tests in a directory

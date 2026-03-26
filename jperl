@@ -26,15 +26,17 @@ fi
 # Determine JVM options based on Java version
 # --enable-native-access=ALL-UNNAMED: Required by JNR-POSIX library for native system calls
 #   (file operations, process management). Can be removed if JNR-POSIX is replaced.
-# --sun-misc-unsafe-memory-access=allow: Only needed for Java 21-22 to suppress JFFI warnings.
-#   Java 23+ uses the Foreign Function & Memory API, so this flag is not needed (and may error).
+# --sun-misc-unsafe-memory-access=allow: Needed for Java 24+ to suppress JFFI warnings.
+#   The flag was introduced in Java 23 (JEP 471) with default 'allow'.
+#   In Java 24 (JEP 498), the default changed to 'warn', so we need to specify 'allow'.
+#   Java 21-22 don't have this flag.
 JVM_OPTS="--enable-native-access=ALL-UNNAMED"
 
 # Get Java major version (e.g., "21", "22", "23", "24")
 JAVA_VERSION=$(java -version 2>&1 | head -1 | sed -E 's/.*"([0-9]+).*/\1/')
 
-# Add unsafe memory access flag only for Java 21-22
-if [ "$JAVA_VERSION" = "21" ] || [ "$JAVA_VERSION" = "22" ]; then
+# Add unsafe memory access flag for Java 24+ to suppress JFFI warnings
+if [ "$JAVA_VERSION" -ge 24 ] 2>/dev/null; then
     JVM_OPTS="$JVM_OPTS --sun-misc-unsafe-memory-access=allow"
 fi
 
