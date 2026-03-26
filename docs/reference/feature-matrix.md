@@ -753,8 +753,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 
 #### JDBC Integration
 The DBI module provides seamless integration with JDBC drivers:
-- Configure JDBC drivers: See [Adding JDBC Drivers](JDBC_GUIDE.md#adding-jdbc-drivers)
-- Connect to databases: See [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples)
+- Configure JDBC drivers: See [Adding JDBC Drivers](../guides/database-access.md#adding-jdbc-drivers)
+- Connect to databases: See [Database Connection Examples](../guides/database-access.md#database-connection-examples)
 
 #### Implemented Methods
 - `connect`, `prepare`, `execute`

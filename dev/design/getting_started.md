@@ -100,10 +100,10 @@ java -jar target/perlonjava-5.42.0.jar --disassemble script.pl
 
 ## Next Steps
 
-- Check [FEATURE_MATRIX.md](../FEATURE_MATRIX.md) for supported features
-- See [JDBC_GUIDE.md](JDBC_GUIDE.md) for database connectivity
-- Review [DEBUGGING.md](DEBUGGING.md) for troubleshooting
-- Visit [SUPPORT.md](../SUPPORT.md) for help and contributing
+- Check the [Feature Matrix](../../docs/reference/feature-matrix.md) for supported features
+- See [Database Access Guide](../../docs/guides/database-access.md) for database connectivity
+- Review the [Debugger Guide](../../docs/reference/debugger.md) for troubleshooting
+- Visit [Support](../../docs/about/support.md) for help and contributing
 
 ## Tips and Best Practices
 

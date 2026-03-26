@@ -230,9 +230,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added `builtin` methods: `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
   - Added command line switches: `-S`.
   - Added low-precedence xor `^^` operator.
-  - Added [Configure.pl](Configure.pl) to set compiler options and add JDBC drivers.
+  - Added [Configure.pl](../../Configure.pl) to set compiler options and add JDBC drivers.
   - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
-  - Added [SUPPORT.md](docs/SUPPORT.md)
+  - Added [SUPPORT.md](support.md)
  
 ## v2.1.0: Core modules and optimization
   - Added `Getopt::Long`, `JSON` modules.
