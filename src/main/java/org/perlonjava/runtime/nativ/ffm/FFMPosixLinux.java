@@ -48,6 +48,13 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle statHandle;
     private static MethodHandle lstatHandle;
     
+    // Method handles for passwd functions
+    private static MethodHandle getpwnamHandle;
+    private static MethodHandle getpwuidHandle;
+    private static MethodHandle getpwentHandle;
+    private static MethodHandle setpwentHandle;
+    private static MethodHandle endpwentHandle;
+    
     // Linker options for errno capture
     private static Linker.Option captureErrno;
     private static long errnoOffset;
@@ -67,6 +74,18 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static long ST_ATIME_OFFSET;
     private static long ST_MTIME_OFFSET;
     private static long ST_CTIME_OFFSET;
+    
+    // Struct passwd field offsets (platform-dependent)
+    private static long PW_NAME_OFFSET;
+    private static long PW_PASSWD_OFFSET;
+    private static long PW_UID_OFFSET;
+    private static long PW_GID_OFFSET;
+    private static long PW_CHANGE_OFFSET;   // macOS only
+    private static long PW_CLASS_OFFSET;    // macOS only
+    private static long PW_GECOS_OFFSET;
+    private static long PW_DIR_OFFSET;
+    private static long PW_SHELL_OFFSET;
+    private static long PW_EXPIRE_OFFSET;   // macOS only
     
     /**
      * Initialize FFM components lazily.
@@ -148,6 +167,35 @@ public class FFMPosixLinux implements FFMPosixInterface {
                 captureErrno
             );
             
+            // passwd functions - return pointers to static passwd struct
+            getpwnamHandle = linker.downcallHandle(
+                stdlib.find("getpwnam").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+            
+            getpwuidHandle = linker.downcallHandle(
+                stdlib.find("getpwuid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
+            );
+            
+            getpwentHandle = linker.downcallHandle(
+                stdlib.find("getpwent").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS)
+            );
+            
+            setpwentHandle = linker.downcallHandle(
+                stdlib.find("setpwent").orElseThrow(),
+                FunctionDescriptor.ofVoid()
+            );
+            
+            endpwentHandle = linker.downcallHandle(
+                stdlib.find("endpwent").orElseThrow(),
+                FunctionDescriptor.ofVoid()
+            );
+            
+            // Initialize passwd struct offsets
+            initPasswdOffsets();
+            
             initialized = true;
         } catch (Throwable e) {
             throw new RuntimeException("Failed to initialize FFM POSIX bindings", e);
@@ -203,6 +251,66 @@ public class FFMPosixLinux implements FFMPosixInterface {
             ST_MTIME_OFFSET = 88;
             // struct timespec st_ctim at offset 104
             ST_CTIME_OFFSET = 104;
+        }
+    }
+    
+    /**
+     * Initialize platform-specific struct passwd field offsets.
+     * 
+     * The struct passwd layout differs between Linux and macOS.
+     * - Linux: simpler struct with just the basics
+     * - macOS: includes additional fields like pw_change, pw_class, pw_expire
+     */
+    private static void initPasswdOffsets() {
+        // Pointer size on 64-bit systems
+        int ptrSize = 8;
+        
+        if (IS_MACOS) {
+            // macOS struct passwd layout (from pwd.h)
+            // struct passwd {
+            //     char *pw_name;      // 0
+            //     char *pw_passwd;    // 8
+            //     uid_t pw_uid;       // 16 (4 bytes)
+            //     gid_t pw_gid;       // 20 (4 bytes)
+            //     time_t pw_change;   // 24 (8 bytes) - macOS specific
+            //     char *pw_class;     // 32 (pointer) - macOS specific
+            //     char *pw_gecos;     // 40
+            //     char *pw_dir;       // 48
+            //     char *pw_shell;     // 56
+            //     time_t pw_expire;   // 64 (8 bytes) - macOS specific
+            //     int pw_fields;      // 72 (4 bytes) - macOS specific
+            // };
+            PW_NAME_OFFSET = 0;
+            PW_PASSWD_OFFSET = 8;
+            PW_UID_OFFSET = 16;
+            PW_GID_OFFSET = 20;
+            PW_CHANGE_OFFSET = 24;
+            PW_CLASS_OFFSET = 32;
+            PW_GECOS_OFFSET = 40;
+            PW_DIR_OFFSET = 48;
+            PW_SHELL_OFFSET = 56;
+            PW_EXPIRE_OFFSET = 64;
+        } else {
+            // Linux struct passwd layout (from pwd.h)
+            // struct passwd {
+            //     char *pw_name;      // 0
+            //     char *pw_passwd;    // 8
+            //     uid_t pw_uid;       // 16 (4 bytes)
+            //     gid_t pw_gid;       // 20 (4 bytes)
+            //     char *pw_gecos;     // 24
+            //     char *pw_dir;       // 32
+            //     char *pw_shell;     // 40
+            // };
+            PW_NAME_OFFSET = 0;
+            PW_PASSWD_OFFSET = 8;
+            PW_UID_OFFSET = 16;
+            PW_GID_OFFSET = 20;
+            PW_GECOS_OFFSET = 24;
+            PW_DIR_OFFSET = 32;
+            PW_SHELL_OFFSET = 40;
+            PW_CHANGE_OFFSET = -1;  // Not available on Linux
+            PW_CLASS_OFFSET = -1;   // Not available on Linux
+            PW_EXPIRE_OFFSET = -1;  // Not available on Linux
         }
     }
     
@@ -285,32 +393,103 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public PasswdEntry getpwnam(String name) {
-        // TODO: Implement with FFM in Phase 3
-        throw new UnsupportedOperationException("FFM getpwnam() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nameSegment = arena.allocateFrom(name);
+            MemorySegment result = (MemorySegment) getpwnamHandle.invokeExact(nameSegment);
+            if (result.address() == 0) {
+                return null;
+            }
+            return readPasswdEntry(result);
+        } catch (Throwable e) {
+            return null;
+        }
     }
     
     @Override
     public PasswdEntry getpwuid(int uid) {
-        // TODO: Implement with FFM in Phase 3
-        throw new UnsupportedOperationException("FFM getpwuid() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            MemorySegment result = (MemorySegment) getpwuidHandle.invokeExact(uid);
+            if (result.address() == 0) {
+                return null;
+            }
+            return readPasswdEntry(result);
+        } catch (Throwable e) {
+            return null;
+        }
     }
     
     @Override
     public PasswdEntry getpwent() {
-        // TODO: Implement with FFM in Phase 3
-        throw new UnsupportedOperationException("FFM getpwent() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            MemorySegment result = (MemorySegment) getpwentHandle.invokeExact();
+            if (result.address() == 0) {
+                return null;
+            }
+            return readPasswdEntry(result);
+        } catch (Throwable e) {
+            return null;
+        }
     }
     
     @Override
     public void setpwent() {
-        // TODO: Implement with FFM in Phase 3
-        throw new UnsupportedOperationException("FFM setpwent() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            setpwentHandle.invokeExact();
+        } catch (Throwable e) {
+            // Ignore errors
+        }
     }
     
     @Override
     public void endpwent() {
-        // TODO: Implement with FFM in Phase 3
-        throw new UnsupportedOperationException("FFM endpwent() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try {
+            endpwentHandle.invokeExact();
+        } catch (Throwable e) {
+            // Ignore errors
+        }
+    }
+    
+    /**
+     * Read a passwd entry from a native struct pointer.
+     */
+    private PasswdEntry readPasswdEntry(MemorySegment passwdPtr) {
+        // Reinterpret the pointer as having enough size to read all fields
+        MemorySegment passwd = passwdPtr.reinterpret(128);  // Should be big enough for the struct
+        
+        // Read string pointers and convert to Java strings
+        String name = readCString(passwd.get(ValueLayout.ADDRESS, PW_NAME_OFFSET));
+        String passwdField = readCString(passwd.get(ValueLayout.ADDRESS, PW_PASSWD_OFFSET));
+        int uid = passwd.get(ValueLayout.JAVA_INT, PW_UID_OFFSET);
+        int gid = passwd.get(ValueLayout.JAVA_INT, PW_GID_OFFSET);
+        String gecos = readCString(passwd.get(ValueLayout.ADDRESS, PW_GECOS_OFFSET));
+        String dir = readCString(passwd.get(ValueLayout.ADDRESS, PW_DIR_OFFSET));
+        String shell = readCString(passwd.get(ValueLayout.ADDRESS, PW_SHELL_OFFSET));
+        
+        // macOS-specific fields
+        long change = 0;
+        long expire = 0;
+        if (IS_MACOS && PW_CHANGE_OFFSET >= 0) {
+            change = passwd.get(ValueLayout.JAVA_LONG, PW_CHANGE_OFFSET);
+            expire = passwd.get(ValueLayout.JAVA_LONG, PW_EXPIRE_OFFSET);
+        }
+        
+        return new PasswdEntry(name, passwdField, uid, gid, gecos, dir, shell, change, expire);
+    }
+    
+    /**
+     * Read a C string from a native pointer.
+     */
+    private String readCString(MemorySegment ptr) {
+        if (ptr.address() == 0) {
+            return "";
+        }
+        // Reinterpret with max size to find null terminator
+        return ptr.reinterpret(1024).getString(0);
     }
     
     // ==================== File Functions ====================
