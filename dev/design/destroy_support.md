@@ -1,7 +1,9 @@
 # DESTROY/Destructor Support Design
 
-**Status**: Analysis complete, implementation deferred  
+**Status**: Design Proposal (Technically Reviewed)  
+**Version**: 1.1  
 **Created**: 2026-03-17  
+**Last Reviewed**: 2026-03-26  
 **Related**: moo_support.md (Phase 30)
 
 ## Overview
@@ -192,6 +194,117 @@ our @saved;
 sub DESTROY { push @saved, $_[0] }  # Object survives!
 ```
 
+## Prior Art: How Other JVM Languages Handle Destructors
+
+### Jython (Python on JVM) — `__del__` via `FinalizeTrigger`
+
+Jython's approach is the most mature prior art. Key details from the Jython 2.7 source:
+
+- **`FinalizeTrigger` companion object**: When an object needs finalization, Jython attaches a
+  `FinalizeTrigger` instance as an attribute (`JyAttribute.FINALIZE_TRIGGER_ATTR`). The trigger
+  is a separate Java object that holds a reference to the Python object.
+- **Registration at construction time**: Classes that implement `FinalizablePyObject` call
+  `FinalizeTrigger.ensureFinalizer(this)` in their constructor. This is analogous to our
+  proposed registration at `bless()` time.
+- **Two-tier finalizer system**:
+  - `FinalizablePyObject.__del__()` — can be overridden by Python-side `__del__` methods
+  - `FinalizableBuiltin.__del_builtin__()` — always called, even if Python overrides `__del__`
+  - Both can coexist; `__del__()` runs first, then `__del_builtin__()`
+- **Object resurrection**: Jython handles resurrection (like CPython 3.4+) — the finalizer is
+  called only once by default. To re-enable finalization after resurrection, code must
+  explicitly call `FinalizeTrigger.ensureFinalizer(this)` again.
+- **Toggle support**: Finalization can be turned on/off per-object at any time via
+  `FinalizeTrigger.clear()` and `FinalizeTrigger.trigger(obj)`.
+- **GC-driven timing**: Jython does NOT use reference counting. `__del__` is called when the
+  JVM garbage collector determines the object is unreachable. Timing is non-deterministic.
+- **Known limitation**: Objects created before their class acquires a `__del__` method are NOT
+  finalized (unlike CPython). Jython provides `__ensure_finalizer__()` as a manual workaround.
+
+**Lesson for PerlOnJava**: The companion-object pattern (FinalizeTrigger) avoids the problems
+with `Object.finalize()` while keeping state accessible during cleanup. The two-tier system
+(Java-side vs language-side) is relevant for DESTROY vs DEMOLISH (Moo).
+
+### JRuby (Ruby on JVM) — `ObjectSpace.define_finalizer`
+
+JRuby's finalizer system has gone through multiple iterations:
+
+- **Current approach (JRuby 9.x)**: Uses Java's `Object.finalize()` internally through a
+  `Finalizer` object that wraps registered finalizer procs. The `Finalizer` holds a WeakReference
+  to the target object and stores the proc to run when finalization triggers.
+- **Migration to Cleaner (JRuby 10)**: JRuby issue #8328 tracks eliminating all uses of
+  `Object.finalize()` (deprecated since Java 18) in favor of `java.lang.ref.Cleaner`. This
+  affects:
+  - Abandoned IO cleanup
+  - Abandoned Fiber termination
+  - `ObjectSpace.define_finalizer`
+- **Issue #8465** (Nov 2024): Tracks updating to Java 21 APIs including `Reference.refersTo()`
+  for efficient identity checks and new weak reference set utilities.
+- **Critical caveat**: Ruby's `define_finalizer` does NOT receive the object itself — it only
+  receives the object's ID. This avoids the "object already collected" problem but means the
+  finalizer cannot access object state. This is a fundamental design difference from Perl's
+  DESTROY, which passes `$_[0]` (the object itself).
+
+**Lesson for PerlOnJava**: JRuby's ongoing migration from `finalize()` to `Cleaner` confirms
+that `Cleaner` is the correct modern JVM approach. Ruby's limitation (no object access in
+finalizer) highlights why we need the companion-object pattern — Perl's DESTROY requires
+access to the object.
+
+### Java Native — `Cleaner` API (Java 9+)
+
+The `java.lang.ref.Cleaner` is Java's recommended replacement for `Object.finalize()`:
+
+```java
+// Create a shared Cleaner instance (one daemon thread)
+private static final Cleaner cleaner = Cleaner.create();
+
+// Register cleanup when object becomes phantom-reachable
+Cleaner.Cleanable cleanable = cleaner.register(obj, () -> {
+    // Cleanup action — runs on Cleaner's daemon thread
+    // CRITICAL: this Runnable must NOT reference 'obj' directly,
+    // or the object will never become phantom-reachable
+    releaseResources(resourceHandle);
+});
+
+// Can also trigger cleanup manually (idempotent)
+cleanable.clean();
+```
+
+Key properties:
+- **PhantomReference + ReferenceQueue**: Internally uses phantom references; the daemon thread
+  polls the queue and invokes cleaning actions
+- **No object access**: The cleaning action Runnable must NOT hold a strong reference to the
+  object, or GC will never collect it. State needed for cleanup must be captured separately.
+- **Thread safety**: Cleaning actions may run concurrently; they should be quick and non-blocking
+- **Idempotent manual trigger**: `Cleanable.clean()` can be called explicitly and is safe to
+  call multiple times (runs only once)
+- **Auto-cleanup of Cleaner itself**: The Cleaner's daemon thread terminates when the Cleaner
+  instance becomes phantom-reachable and all cleaning actions are complete
+
+### Summary: JVM Destructor Patterns Compared
+
+| Feature | Jython `__del__` | JRuby finalizer | Java `Cleaner` | Perl DESTROY |
+|---------|------------------|-----------------|-----------------|-------------|
+| Timing | GC-driven (non-deterministic) | GC-driven (non-deterministic) | GC-driven (non-deterministic) | Refcount (deterministic) |
+| Object access in finalizer | Yes (via FinalizeTrigger) | No (only object ID) | No (must capture state separately) | Yes (`$_[0]`) |
+| Resurrection support | Yes (manual re-register) | No | No | Yes (store `$_[0]`) |
+| Inheritance | Python MRO | N/A (proc-based) | N/A | Perl MRO |
+| Toggle on/off | Yes | No | Yes (`clean()` to force) | No |
+| JVM mechanism | `Object.finalize()` | `Object.finalize()` → `Cleaner` (JRuby 10) | `PhantomReference` + `ReferenceQueue` | N/A |
+
+### Implications for PerlOnJava Design
+
+Based on this analysis, the recommended approach combines insights from all three:
+
+1. **Use `Cleaner` API** (not `finalize()`) — following JRuby 10's direction and Java best practice
+2. **Companion-object pattern** (like Jython's `FinalizeTrigger`) — store object state in a
+   separate cleanup record so DESTROY can access `$_[0]`. The cleanup record holds a strong
+   reference to the RuntimeHash/RuntimeArray, while the Cleaner tracks the RuntimeScalar wrapper.
+3. **Scope-based deterministic path** (unique to PerlOnJava) — neither Jython nor JRuby attempt
+   deterministic destruction. Since Perl code often relies on DESTROY timing (e.g., file handles,
+   database connections), we should add scope-exit hooks for the common case.
+4. **Object resurrection** — follow Jython's model: call DESTROY once by default, allow
+   re-registration if the object is resurrected.
+
 ## Alternative Approaches Considered
 
 ### Try-with-resources / AutoCloseable
@@ -202,18 +315,205 @@ Periodically check WeakReferences, but by the time they're cleared, object is go
 
 ### Full reference counting
 Most accurate but significant performance overhead on every assignment.
+Jython explicitly chose NOT to implement reference counting. JRuby likewise relies on GC.
 
 ### Compiler analysis
 Statically determine object lifetimes at compile time. Complex and incomplete.
 
+### `Object.finalize()` (deprecated)
+Used by Jython and JRuby historically. Deprecated since Java 18, with removal planned.
+JRuby is actively migrating away (issue #8328). Not a viable long-term option.
+
 ## Open Questions
 
 1. Should we implement lightweight reference counting just for blessed objects?
+   - **Review recommendation**: Yes, but only for blessed objects. This is the approach suggested by the existing design and aligns with the "scope-based deterministic path" goal.
+
 2. How much performance overhead is acceptable?
+   - **Review recommendation**: Reference counting only for blessed objects minimizes overhead. Most Perl code creates many unblessed data structures but relatively few blessed objects.
+
 3. Which test patterns are most important to support?
+   - **Review recommendation**: Based on library code analysis (File::Temp, IO::Handle, Test2::*, etc.), the most critical patterns are:
+     - Scope-exit cleanup (file handles, database connections)
+     - Explicit `undef $obj` cleanup
+     - Exception safety (DESTROY runs even after die)
+
 4. Should DESTROY be opt-in (require explicit registration)?
+   - **Review recommendation**: No. Perl semantics require automatic DESTROY for any blessed object whose class (or parent class) defines DESTROY. Registration should happen automatically at `bless()` time.
+
+5. Should we support Jython-style per-object finalization toggle?
+   - **Review recommendation**: Not initially. This adds complexity and Perl doesn't have equivalent functionality. Add later if needed for specific use cases.
+
+6. How should we handle DESTROY during global shutdown (END blocks)?
+   - **Review recommendation**: Must implement `${^GLOBAL_PHASE}` and use Java shutdown hook. Order of destruction should be unpredictable (matching Perl's behavior).
 
 ## Related Documents
 
 - `moo_support.md` - Moo/Mo test status and roadmap
 - `caller_package_context.md` - Stack frame handling (relevant for DESTROY error messages)
+
+## References
+
+- Jython `FinalizablePyObject` API: https://www.javadoc.io/static/org.python/jython-standalone/2.7.1/org/python/core/finalization/FinalizablePyObject.html
+- JRuby issue #8328 "Eliminate all uses of finalization": https://github.com/jruby/jruby/issues/8328
+- JRuby issue #8465 "WeakReference and finalization updates for Java 21": https://github.com/jruby/jruby/issues/8465
+- Java `Cleaner` API (Java 21): https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/Cleaner.html
+
+---
+
+## Technical Review Summary (2026-03-26)
+
+### Research Conducted
+- Perl perlobj documentation for DESTROY semantics
+- Java Cleaner API documentation (Java 21)
+- JRuby issue #8328 (verified: open, targeting JRuby 10.1.0.0)
+- PerlOnJava codebase: bless implementation, tied variable DESTROY support
+
+### Key Validations
+1. **JRuby migration to Cleaner confirmed**: Issue #8328 is open and scheduled for JRuby 10.1.0.0
+2. **Cleaner API usage guidance verified**: The cleaning action Runnable must NOT hold a strong reference to the object (critical design constraint)
+3. **Tied variable DESTROY already works**: `TieScalar.tiedDestroy()` calls `tieCallIfExists("DESTROY")` — this provides a working reference implementation
+
+### Existing Infrastructure (not mentioned in original doc)
+
+PerlOnJava already has scope-exit callback infrastructure that can be leveraged:
+
+1. **`DeferBlock` class**: Implements scope-exit callbacks via `DynamicVariableManager.pushLocalVariable()`. This is the "defer" feature infrastructure.
+
+2. **`B::Hooks::EndOfScope`**: Compile-time scope callbacks for modules like `namespace::clean`. Less relevant for DESTROY but shows pattern.
+
+3. **Tied variable DESTROY**: Working implementation path:
+   ```java
+   // TieScalar.java:41
+   public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
+       return ((TieScalar) runtimeScalar.value).tieCallIfExists("DESTROY");
+   }
+   ```
+   This pattern can be generalized for regular blessed objects.
+
+### Missing Perl DESTROY Semantics (to be added)
+
+From perlobj documentation, several behaviors not covered in the design:
+
+1. **`${^GLOBAL_PHASE}` variable**: Must implement this special variable so DESTROY methods can detect `eq 'DESTRUCT'` (global destruction phase). Introduced in Perl 5.14.
+
+2. **Read-only `$_[0]`**: In DESTROY, `$_[0]` should be read-only — you cannot assign to it.
+
+3. **Global status variable localization**: DESTROY should localize these before running user code:
+   ```perl
+   local($., $@, $!, $^E, $?);
+   ```
+
+4. **AUTOLOAD interaction**: If a class has AUTOLOAD but no DESTROY, AUTOLOAD will be called with "DESTROY". Classes using AUTOLOAD typically define an empty `sub DESTROY { }`.
+
+5. **Exception handling**: DESTROY exceptions are reported as warnings with "(in cleanup)" but don't propagate.
+
+6. **Global destruction order**: "The order in which objects are destroyed during the global destruction before the program exits is unpredictable."
+
+### Design Gap: Global Variables
+
+The current design focuses on lexical variables going out of scope. Missing consideration:
+
+**Objects in global variables** (package variables, cached objects, singletons):
+- Never go out of scope during normal execution
+- Only destroyed during global destruction (END blocks, program exit)
+- Need shutdown hook or END block support
+
+Proposed addition:
+```java
+// In shutdown/END block handler:
+Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+    DestructorRegistry.runGlobalDestruction();
+}));
+```
+
+### Implementation Priority (revised)
+
+Based on review, recommended implementation order:
+
+1. **Phase 1: Tied DESTROY pattern generalization**
+   - Already works for tied variables
+   - Generalize to blessed objects using same `tieCallIfExists("DESTROY")` approach
+
+2. **Phase 2: Explicit undef/reassignment DESTROY**
+   - Hook into `RuntimeScalar.undefine()` and assignment operators
+   - Use reference counting for blessed objects only
+
+3. **Phase 3: Scope-exit DESTROY**
+   - Leverage existing `DeferBlock`/`DynamicVariableManager` infrastructure
+   - Register blessed lexicals for scope-exit cleanup
+
+4. **Phase 4: GC-based fallback with Cleaner**
+   - For objects that escape scope tracking
+   - Companion object pattern (like Jython's FinalizeTrigger)
+
+5. **Phase 5: Global destruction phase**
+   - Implement `${^GLOBAL_PHASE}` special variable
+   - Add shutdown hook for global object cleanup
+   - Handle `Devel::GlobalDestruction` compatibility
+
+### Cleaner API Caveat (Java 9+, not 21-specific)
+
+Note: The `Cleaner` API was introduced in Java 9, not Java 21. However, Java 21 (our target) has better virtual thread integration. Key caveat:
+
+> "Note that the cleaning action must not refer to the object being registered. If so, the object will not become phantom reachable and the cleaning action will not be invoked automatically."
+
+This necessitates the companion-object pattern:
+```java
+// Correct: state captured in separate object
+record DestroyState(RuntimeHash data, String className) implements Runnable {
+    public void run() { callDestroy(data, className); }
+}
+Cleaner.Cleanable cleanable = cleaner.register(runtimeScalar, new DestroyState(hash, pkg));
+
+// WRONG: lambda captures runtimeScalar, preventing GC
+cleaner.register(runtimeScalar, () -> callDestroy(runtimeScalar));  // Memory leak!
+```
+
+### Test Plan
+
+Add to existing Perl test suite:
+```perl
+# src/test/resources/unit/destroy.t
+use Test::More;
+
+# Basic DESTROY
+{
+    my @log;
+    package DestroyTest {
+        sub new { bless {}, shift }
+        sub DESTROY { push @log, "destroyed" }
+    }
+    { my $obj = DestroyTest->new; }
+    is_deeply(\@log, ["destroyed"], "DESTROY called at scope exit");
+}
+
+# Multiple references
+{
+    my @log;
+    package MultiRef {
+        sub new { bless {}, shift }
+        sub DESTROY { push @log, "destroyed" }
+    }
+    my $obj1 = MultiRef->new;
+    my $obj2 = $obj1;  # Second reference
+    undef $obj1;       # Should NOT call DESTROY
+    is_deeply(\@log, [], "DESTROY not called with refs remaining");
+    undef $obj2;       # Should call DESTROY
+    is_deeply(\@log, ["destroyed"], "DESTROY called when last ref gone");
+}
+
+# Exception in DESTROY
+{
+    my $ran_after = 0;
+    package ExceptionDestroy {
+        sub new { bless {}, shift }
+        sub DESTROY { die "DESTROY error" }
+    }
+    { my $obj = ExceptionDestroy->new; }
+    $ran_after = 1;
+    ok($ran_after, "Execution continues after DESTROY exception");
+}
+
+done_testing();
+```
