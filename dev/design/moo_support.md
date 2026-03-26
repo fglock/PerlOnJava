@@ -699,7 +699,7 @@ The remaining test failures require implementing core Perl features that are cur
 #### Phase 31: DESTROY/Destructor Support (High Impact)
 **Enables**: demolish tests (6 failures), proper object cleanup  
 **Status**: Analysis complete, implementation deferred  
-**Design doc**: `dev/design/destroy_support.md`
+**Design doc**: `dev/design/object_lifecycle.md`
 
 Perl's DESTROY relies on reference counting; Java uses GC. The challenge is detecting
 when an object becomes unreachable while we can still access it to call DESTROY.
@@ -710,7 +710,7 @@ detailed analysis of implementation strategies, challenges, and test cases.
 #### Phase 32: Weak Reference Emulation (High Impact)  
 **Enables**: accessor-weaken tests (20 failures), no-moo.t (5 failures)  
 **Status**: Analysis complete, implementation deferred  
-**Design doc**: `dev/design/weak_references.md`
+**Design doc**: `dev/design/object_lifecycle.md`
 
 Perl's weak references are tied to reference counting, which Java doesn't have.
 
