@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci sbom sbom-java sbom-perl sbom-clean
+.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 all: build
 
@@ -163,4 +163,11 @@ sbom-perl:
 # Clean generated SBOMs
 sbom-clean:
 	rm -f build/reports/bom.json build/reports/bom.xml build/reports/perl-bom.json build/reports/sbom.json
+
+# Documentation link checker
+# Requires: brew install lychee (or cargo install lychee)
+check-links:
+	@command -v lychee >/dev/null 2>&1 || { echo "Error: lychee not found. Install with: brew install lychee"; exit 1; }
+	@echo "Checking documentation links..."
+	lychee --offline docs/ dev/design/
 
