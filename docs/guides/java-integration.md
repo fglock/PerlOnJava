@@ -175,7 +175,7 @@ dependencies {
 3. Add to your classpath:
    ```bash
    javac -cp perlonjava-5.42.0-all.jar YourApp.java
-   java --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -cp .:perlonjava-5.42.0-all.jar YourApp
+   java --enable-native-access=ALL-UNNAMED -cp .:perlonjava-5.42.0-all.jar YourApp
    ```
 
 ## Use Cases
@@ -258,7 +258,7 @@ See also:
 If `getEngineByName("perl")` returns null:
 1. Ensure `perlonjava-*.jar` is in classpath
 2. Check `META-INF/services/javax.script.ScriptEngineFactory` exists in JAR
-3. Verify Java 21 or later is being used
+3. Verify Java 22 or later is being used
 
 ### ClassNotFoundException
 

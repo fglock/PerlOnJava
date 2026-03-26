@@ -1,12 +1,12 @@
 package org.perlonjava.runtime.operators;
 
-import jnr.posix.FileStat;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
@@ -27,19 +27,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class Stat {
 
     static NativeStatFields lastNativeStatFields;
+    
+    // FFM POSIX implementation
+    private static final FFMPosixInterface posix = FFMPosix.get();
 
     static NativeStatFields nativeStat(String path, boolean followLinks) {
         try {
             if (NativeUtils.IS_WINDOWS) return null;
-            FileStat fs = followLinks
-                    ? PosixLibrary.INSTANCE.stat(path)
-                    : PosixLibrary.INSTANCE.lstat(path);
-            if (fs == null) return null;
+            FFMPosixInterface.StatResult sr = followLinks
+                    ? posix.stat(path)
+                    : posix.lstat(path);
+            if (sr == null) return null;
             return new NativeStatFields(
-                    fs.dev(), fs.ino(), fs.mode(), fs.nlink(),
-                    fs.uid(), fs.gid(), fs.rdev(), fs.st_size(),
-                    fs.atime(), fs.mtime(), fs.ctime(),
-                    fs.blockSize(), fs.blocks()
+                    sr.dev(), sr.ino(), sr.mode(), sr.nlink(),
+                    sr.uid(), sr.gid(), sr.rdev(), sr.size(),
+                    sr.atime(), sr.mtime(), sr.ctime(),
+                    sr.blksize(), sr.blocks()
             );
         } catch (Throwable e) {
             return null;

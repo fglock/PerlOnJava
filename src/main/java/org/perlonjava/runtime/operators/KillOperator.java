@@ -1,7 +1,8 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.runtimetypes.PerlSignalQueue;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -13,6 +14,9 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * Implementation of Perl's kill operator for PerlOnJava
  */
 public class KillOperator {
+
+    // FFM POSIX implementation
+    private static final FFMPosixInterface posix = FFMPosix.get();
 
     /**
      * Send a signal to a process (following Perl's kill operator)
@@ -153,9 +157,9 @@ public class KillOperator {
                     return false;
             }
         } else {
-            int result = PosixLibrary.INSTANCE.kill(pid, signal);
+            int result = posix.kill(pid, signal);
             if (result != 0) {
-                setErrno(PosixLibrary.INSTANCE.errno());
+                setErrno(posix.errno());
                 return false;
             }
             return true;
@@ -164,9 +168,9 @@ public class KillOperator {
 
     // Helper method for sending signals to process groups (Unix only)
     private static boolean sendSignalToProcessGroup(int pgid, int signal) {
-        int result = PosixLibrary.INSTANCE.kill(-pgid, signal);
+        int result = posix.kill(-pgid, signal);
         if (result != 0) {
-            setErrno(PosixLibrary.INSTANCE.errno());
+            setErrno(posix.errno());
             return false;
         }
         return true;

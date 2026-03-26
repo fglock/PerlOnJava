@@ -92,8 +92,8 @@ public class GlobalContext {
             GlobalVariable.globalVariables.put(taintVarName, 
                 compilerOptions.taintMode ? RuntimeScalarCache.scalarOne : RuntimeScalarCache.scalarZero);
         }
-        GlobalVariable.getGlobalVariable("main::>");  // TODO
-        GlobalVariable.getGlobalVariable("main::<");  // TODO
+        GlobalVariable.globalVariables.put("main::>", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_UID));  // $> - effective UID (lazy)
+        GlobalVariable.globalVariables.put("main::<", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_UID));  // $< - real UID (lazy)
         GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034
         GlobalVariable.globalVariables.put("main::(", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_GID));  // $( - real GID (lazy)
         GlobalVariable.globalVariables.put("main::)", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_GID));  // $) - effective GID (lazy)

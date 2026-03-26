@@ -96,6 +96,7 @@ public class EmitOperatorNode {
             // Miscellaneous operators
             case "time", "wait" -> EmitOperator.handleTimeOperator(emitterVisitor, node);
             case "wantarray" -> EmitOperator.handleWantArrayOperator(emitterVisitor, node);
+            case "getppid" -> EmitOperator.handleGetppidOperator(emitterVisitor, node);
             case "undef" -> EmitOperator.handleUndefOperator(emitterVisitor, node);
             case "gmtime", "localtime", "reset", "select", "times" ->
                     EmitOperator.handleTimeRelatedOperator(emitterVisitor, node);

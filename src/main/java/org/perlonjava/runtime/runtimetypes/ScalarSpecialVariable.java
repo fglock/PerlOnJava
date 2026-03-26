@@ -227,6 +227,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     // $) - Effective group ID (lazy evaluation to avoid JNA overhead at startup)
                     yield new RuntimeScalar(NativeUtils.getegid(0));
                 }
+                case REAL_UID -> {
+                    // $< - Real user ID (lazy evaluation to avoid JNA overhead at startup)
+                    yield NativeUtils.getuid(0);
+                }
+                case EFFECTIVE_UID -> {
+                    // $> - Effective user ID (lazy evaluation to avoid JNA overhead at startup)
+                    yield NativeUtils.geteuid(0);
+                }
             };
             return result;
         } catch (IllegalStateException e) {
@@ -413,6 +421,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         HINTS, // $^H - Compile-time hints (strict, etc.)
         REAL_GID, // $( - Real group ID (lazy, JNA call only on access)
         EFFECTIVE_GID, // $) - Effective group ID (lazy, JNA call only on access)
+        REAL_UID, // $< - Real user ID (lazy, JNA call only on access)
+        EFFECTIVE_UID, // $> - Effective user ID (lazy, JNA call only on access)
     }
 
     private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {

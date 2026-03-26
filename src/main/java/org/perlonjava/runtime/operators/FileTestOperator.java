@@ -4,7 +4,7 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -286,7 +286,7 @@ public class FileTestOperator {
                     }
                     if (fd >= 0) {
                         try {
-                            boolean isTty = PosixLibrary.INSTANCE.isatty(fd) != 0;
+                            boolean isTty = FFMPosix.get().isatty(fd) != 0;
                             getGlobalVariable("main::!").set(0);
                             return getScalarBoolean(isTty);
                         } catch (Exception e) {

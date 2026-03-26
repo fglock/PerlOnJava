@@ -1014,6 +1014,11 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    static void handleGetppidOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        emitterVisitor.pushCallContext();
+        emitOperator(node, emitterVisitor);
+    }
+
     static void handleUndefOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if (node.operand == null) {
             if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

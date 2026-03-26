@@ -47,7 +47,7 @@
 - Perl compiler and runtime for the JVM
 - Compiles to native JVM bytecode — same as Java, Kotlin, Scala
 - Not an interpreter wrapping a Perl binary
-- Targets Perl 5.42+ semantics. Requires Java 21+.
+- Targets Perl 5.42+ semantics. Requires Java 22+.
 
 **Slide 4 — Why the JVM?**
 - 30 years of JIT optimization — hot code becomes native machine code

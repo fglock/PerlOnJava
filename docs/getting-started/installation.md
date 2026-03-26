@@ -23,7 +23,7 @@
    - [Important Notes](#important-notes)
 
 ## Prerequisites
-- Java 21 or higher
+- Java 22 or higher
 - Maven or Gradle
 - Optional: JDBC drivers for database connectivity
 
@@ -148,7 +148,7 @@ See [Database Access Guide](../guides/database-access.md) for detailed connectio
 ## Build Notes
 - Maven builds use `maven-shade-plugin` for creating the shaded JAR
 - Gradle builds use `com.github.johnrengelman.shadow` plugin
-- Both configurations target Java 21
+- Both configurations target Java 22
 
 ## Java Library Upgrades
 

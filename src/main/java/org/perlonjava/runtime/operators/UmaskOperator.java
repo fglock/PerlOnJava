@@ -1,7 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
-import org.perlonjava.runtime.nativ.PosixLibrary;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -69,18 +69,18 @@ public class UmaskOperator {
                 // No argument - just get current umask
                 // umask() always sets a value, so we need to call it twice
                 // to get the current value without changing it
-                int current = PosixLibrary.INSTANCE.umask(0);
-                PosixLibrary.INSTANCE.umask(current); // Restore original
+                int current = FFMPosix.get().umask(0);
+                FFMPosix.get().umask(current); // Restore original
                 return new RuntimeScalar(current);
             }
 
             // Set new umask and get previous value
-            int previousMask = PosixLibrary.INSTANCE.umask(newMask);
+            int previousMask = FFMPosix.get().umask(newMask);
 
             // Check Perl's special behavior: die if trying to restrict self
             if ((newMask & 0700) > 0) {
                 // Restore previous umask before throwing
-                PosixLibrary.INSTANCE.umask(previousMask);
+                FFMPosix.get().umask(previousMask);
                 throw new PerlCompilerException("umask not implemented");
             }
 
@@ -157,8 +157,8 @@ public class UmaskOperator {
         } else {
             try {
                 // Get current umask by setting and immediately restoring
-                int current = PosixLibrary.INSTANCE.umask(0);
-                PosixLibrary.INSTANCE.umask(current);
+                int current = FFMPosix.get().umask(0);
+                FFMPosix.get().umask(current);
                 return current;
             } catch (Exception e) {
                 // If native call fails, return default
@@ -215,7 +215,7 @@ public class UmaskOperator {
             windowsSimulatedUmask = DEFAULT_UMASK;
         } else {
             try {
-                PosixLibrary.INSTANCE.umask(DEFAULT_UMASK);
+                FFMPosix.get().umask(DEFAULT_UMASK);
             } catch (Exception ignored) {
                 // Best effort
             }
