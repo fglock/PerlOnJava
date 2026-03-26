@@ -2,183 +2,236 @@
 
 ## Overview
 
-PerlOnJava compiles Perl source code into JVM bytecode, enabling Perl programs to run natively on the Java Virtual Machine. PerlOnJava provides two execution modes:
+PerlOnJava compiles Perl source code into JVM bytecode, enabling Perl programs to run natively on the Java Virtual Machine. The system provides two execution backends:
 
-1. **Compiler Mode** (default): Transforms Perl scripts into JVM bytecode classes at runtime, providing high performance after JIT warmup (~82M ops/sec).
-2. **Interpreter Mode** (`--interpreter` flag): Executes Perl bytecode directly in a register-based interpreter, offering faster startup and lower memory usage (~47M ops/sec, 1.75x slower than compiler).
+1. **JVM Backend** (default): Transforms Perl scripts into JVM bytecode classes at runtime using the ASM library, leveraging JIT compilation for optimized execution.
+2. **Interpreter Backend**: Executes Perl bytecode directly in a register-based interpreter, used automatically for `eval STRING` and large code blocks that exceed JVM method size limits.
 
-Both modes provide seamless integration with Java libraries and frameworks while maintaining Perl semantics, and share 100% of the same runtime APIs.
+Both backends share 100% of the same runtime APIs and can call each other seamlessly.
 
-**Key features:**
-- Compile-time transformation from Perl to JVM bytecode (compiler mode)
-- Direct bytecode interpretation with register-based VM (interpreter mode)
-- Direct access to Java libraries via JDBC, Maven, and other JVM tools
-- Implements most Perl 5.42 features including references, closures, and regular expressions
+**Key capabilities:**
+- Compile-time transformation from Perl to JVM bytecode
+- Direct bytecode interpretation with register-based VM
+- Direct access to Java libraries via JDBC, JSR-223, and standard JVM tools
+- Implements most Perl 5.40+ features including references, closures, and regular expressions
 - Includes 150+ core Perl modules
 - Bidirectional calling between compiled and interpreted code
 
 This document describes the internal architecture and compilation pipeline.
 
-## Internal Modules
-
-### Project Structure
+## Project Structure
 
 ```
-/
-├── src/
-│   ├── main/
-│   │   ├── perl/
-│   │   │   └── lib/
-│   │   │       └── Perl modules (strict.pm, etc)
-│   │   └── java/
-│   │       └── org/
-│   │           └── perlonjava/
-│   │               ├── app/
-│   │               │   ├── cli/
-│   │               │   │   ├── Main.java
-│   │               │   │   ├── ArgumentParser.java
-│   │               │   ├── scriptengine/
-│   │               │   │   ├── PerlScriptEngine.java
-│   │               │   │   └── other script engine classes
-│   │               ├── frontend/
-│   │               │   ├── analysis/
-│   │               │   │   ├── Visitor.java
-│   │               │   │   └── other AST node visitor classes
-│   │               │   ├── lexer/
-│   │               │   │   ├── Lexer.java
-│   │               │   │   └── other lexer classes
-│   │               │   ├── astnode/
-│   │               │   │   ├── Node.java
-│   │               │   │   └── other AST node classes
-│   │               │   ├── semantic/
-│   │               │   │   ├── ScopedSymbolTable.java
-│   │               │   │   └── other symbol table classes
-│   │               │   └── parser/
-│   │               │       ├── Parser.java
-│   │               │       └── other parser classes
-│   │               ├── backend/
-│   │               │   ├── bytecode/
-│   │               │   │   ├── BytecodeInterpreter.java
-│   │               │   │   ├── BytecodeCompiler.java
-│   │               │   │   ├── InterpretedCode.java
-│   │               │   │   ├── Opcodes.java
-│   │               │   │   ├── SlowOpcodeHandler.java
-│   │               │   │   ├── VariableCaptureAnalyzer.java
-│   │               │   │   └── other interpreter classes
-│   │               │   └── jvm/
-│   │               │       └── JVM bytecode generator classes
-│   │               ├── runtime/
-│   │               │   ├── perlmodule/
-│   │               │   │   ├── Universal.java
-│   │               │   │   └── other internalized Perl module classes
-│   │               │   ├── operators/
-│   │               │   │   ├── OperatorHandler.java
-│   │               │   │   ├── ArithmeticOperators.java
-│   │               │   │   └── other operator handling classes
-│   │               │   ├── regex/
-│   │               │   │   ├── RuntimeRegex.java
-│   │               │   │   └── other regex classes
-│   │               │   ├── io/
-│   │               │   │   ├── SocketIO.java
-│   │               │   │   └── other io classes
-│   │               │   ├── mro/
-│   │               │   │   ├── C3.java
-│   │               │   │   └── other mro classes
-│   │               │   ├── terminal/
-│   │               │   │   ├── TerminalHandler.java
-│   │               │   │   └── other platform-specific terminal classes
-│   │               │   └── runtimetypes/
-│   │               │       ├── RuntimeScalar.java
-│   │               │       └── other runtime types
-│   └── test/
-│       ├── java/
-│       │   └── org/
-│       │       └── perlonjava/
-│       │           └── PerlScriptExecutionTest.java
-│       └── resources/
-│           └── Perl test files
-├── build.gradle
-├── pom.xml
-├── settings.gradle
-├── examples/
-│   └── Perl example files
-├── docs/
-│   └── project documentation files
-├── dev/
-│   └── custom_bytecode/
-│       ├── architecture/
-│       └── tests/
-├── t/
-│   └── Perl test suite placeholder
+src/main/java/org/perlonjava/
+├── app/
+│   ├── cli/
+│   │   ├── Main.java              # Entry point
+│   │   ├── ArgumentParser.java    # Command-line argument parsing
+│   │   └── CompilerOptions.java   # Compilation settings
+│   └── scriptengine/
+│       ├── PerlScriptEngine.java       # JSR-223 ScriptEngine
+│       ├── PerlScriptEngineFactory.java
+│       ├── PerlCompiledScript.java     # Compilable interface
+│       └── PerlLanguageProvider.java   # Language server protocol
+│
+├── core/
+│   └── Configuration.java         # Version and build info
+│
+├── frontend/
+│   ├── lexer/
+│   │   └── Lexer.java             # Tokenizer
+│   ├── parser/
+│   │   ├── Parser.java            # Main parser
+│   │   ├── StatementParser.java   # Statement parsing
+│   │   ├── OperatorParser.java    # Expression/operator parsing
+│   │   ├── SubroutineParser.java  # Subroutine definitions
+│   │   └── StringParser.java      # String interpolation, regex
+│   ├── astnode/
+│   │   ├── Node.java              # Base AST node interface
+│   │   ├── AbstractNode.java      # Common node implementation
+│   │   ├── BlockNode.java         # Code blocks
+│   │   ├── SubroutineNode.java    # Subroutine definitions
+│   │   ├── OperatorNode.java      # Unary operators
+│   │   ├── BinaryOperatorNode.java
+│   │   └── ...                    # 30+ AST node types
+│   ├── analysis/
+│   │   ├── Visitor.java           # AST visitor interface
+│   │   ├── EmitterVisitor.java    # Code generation visitor
+│   │   ├── PrintVisitor.java      # AST pretty-printer
+│   │   └── ...                    # Analysis passes
+│   └── semantic/
+│       ├── ScopedSymbolTable.java # Variable scoping
+│       └── SymbolTable.java       # Symbol management
+│
+├── backend/
+│   ├── jvm/                       # JVM bytecode generation
+│   │   ├── EmitterMethodCreator.java  # Class/method generation
+│   │   ├── EmitBlock.java         # Block compilation
+│   │   ├── EmitOperator.java      # Operator compilation
+│   │   ├── EmitSubroutine.java    # Subroutine compilation
+│   │   ├── EmitControlFlow.java   # if/while/for/loop
+│   │   ├── CompiledCode.java      # Compiled code container
+│   │   ├── CustomClassLoader.java # Dynamic class loading
+│   │   └── ...                    # 20+ emit classes
+│   └── bytecode/                  # Interpreter backend
+│       ├── BytecodeInterpreter.java   # Main execution loop
+│       ├── BytecodeCompiler.java      # AST to bytecode
+│       ├── InterpretedCode.java       # Bytecode container
+│       ├── Opcodes.java               # Instruction definitions
+│       ├── SlowOpcodeHandler.java     # Infrequent operations
+│       └── ...                        # Opcode handlers
+│
+└── runtime/
+    ├── runtimetypes/
+    │   ├── RuntimeScalar.java     # Perl scalar ($x)
+    │   ├── RuntimeArray.java      # Perl array (@x)
+    │   ├── RuntimeHash.java       # Perl hash (%x)
+    │   ├── RuntimeCode.java       # Perl subroutine
+    │   ├── RuntimeGlob.java       # Perl typeglob (*x)
+    │   ├── RuntimeIO.java         # File handles
+    │   ├── RuntimeList.java       # List context values
+    │   ├── GlobalVariable.java    # Package variables
+    │   └── ...                    # 70+ runtime classes
+    ├── operators/
+    │   ├── Operator.java          # Core operators
+    │   ├── StringOperators.java   # String operations
+    │   ├── MathOperators.java     # Numeric operations
+    │   ├── IOOperator.java        # I/O operations
+    │   ├── ListOperators.java     # List operations
+    │   └── ...                    # 30+ operator classes
+    ├── perlmodule/
+    │   ├── Universal.java         # UNIVERSAL methods
+    │   ├── DBI.java               # Database interface
+    │   ├── Json.java              # JSON encoding
+    │   ├── DateTime.java          # DateTime XS fallback
+    │   └── ...                    # 60+ Java XS modules
+    ├── regex/
+    │   ├── RuntimeRegex.java      # Regex compilation/matching
+    │   └── ...                    # Regex support classes
+    ├── mro/
+    │   ├── InheritanceResolver.java  # Method resolution
+    │   └── C3.java                # C3 linearization
+    ├── io/
+    │   └── SocketIO.java          # Socket operations
+    ├── nativ/
+    │   └── ffm/                   # Foreign Function & Memory API
+    │       └── LibC.java          # POSIX bindings
+    ├── debugger/
+    │   └── DebugHooks.java        # Perl debugger support
+    ├── terminal/
+    │   └── TerminalHandler.java   # Terminal I/O
+    └── util/
+        └── ...                    # Utility classes
 ```
 
+## Compilation Pipeline
 
-### Lexer and Parser
+### 1. Lexer
 
-- **Lexer**: Used to split the code into symbols like space, identifier, operator.
-- **Parser**: Picks up the symbols and organizes them into an Abstract Syntax Tree (AST) of objects like block, subroutine.
-- **StringParser**: Used to parse domain-specific languages within Perl, such as Regex and string interpolation.
+The `Lexer` class tokenizes Perl source code into a stream of tokens (identifiers, operators, strings, numbers, etc.). It handles:
+- Perl's context-sensitive tokenization
+- Here-documents
+- Quote-like operators (`q//`, `qq//`, `qw//`, etc.)
+- Regular expression literals
 
-### JVM Code Generation (Compiler)
+### 2. Parser
 
-- **EmitterVisitor**: Used to generate the bytecode for the operations within the method. It traverses the AST and generates the corresponding ASM bytecode.
-- **EmitterContext**: Holds the current state of the Symbol Table and calling context (void, scalar, list).
-- **PrinterVisitor**: Provides pretty-print stringification for the AST.
-- **EmitterMethodCreator**: Used to generate the bytecode for the class. The user code is translated into a method, then the generated bytecode is loaded using a custom class loader.
+The parser transforms tokens into an Abstract Syntax Tree (AST):
+- **Parser.java**: Entry point and coordination
+- **StatementParser.java**: Statement-level constructs
+- **OperatorParser.java**: Expression parsing with precedence
+- **SubroutineParser.java**: Subroutine and method definitions
+- **StringParser.java**: Domain-specific parsing for regex, string interpolation, format strings
 
-### Custom Bytecode VM
+### 3. Code Generation
 
-The Custom Bytecode VM provides an alternative execution mode that runs Perl bytecode directly without generating JVM bytecode. It offers faster startup time and lower memory usage compared to the compiler.
+Two backends share the same AST and runtime:
 
-- **BytecodeInterpreter**: Main execution loop with register-based architecture. Executes interpreter bytecode using a unified switch statement with tableswitch optimization.
-- **BytecodeCompiler**: Translates AST to interpreter bytecode with register allocation. Assigns variables to register indices and generates compact bytecode instructions.
-- **InterpretedCode**: Container for compiled interpreter bytecode with metadata (string pool, constants, max registers). Includes disassembler for debugging with `--disassemble` flag.
-- **Opcodes**: Defines bytecode instruction set (0-99) organized into categories:
-  - Control flow (RETURN, GOTO, conditionals)
-  - Constants (LOAD_INT, LOAD_STRING)
-  - Variables (GET_VAR, SET_VAR, CREATE_CLOSURE_VAR)
-  - Arithmetic and comparison operations
-  - Array and hash operations
-  - Subroutine calls and references
-  - Superinstructions for common patterns
-- **SlowOpcodeHandler**: Handles rare operations (system calls, socket operations) via SLOW_OP gateway to keep main interpreter loop compact.
-- **VariableCaptureAnalyzer**: Analyzes which lexical variables are captured by named subroutines to enable variable sharing between interpreted and compiled code.
+#### JVM Backend (`backend/jvm/`)
 
-**Key Features:**
-- Register-based architecture (not stack-based)
-- Dense opcode numbering enables JVM tableswitch optimization
-- Shares 100% of runtime APIs with compiler (RuntimeScalar, RuntimeArray, RuntimeHash, etc.)
-- Supports closures and bidirectional calling between compiled and interpreted code
-- Variable sharing via persistent storage using BEGIN mechanism
-- Performance: ~47M ops/sec (1.75x slower than compiler, within 2-5x target)
+Generates JVM bytecode using the ASM library:
+- **EmitterVisitor**: Traverses AST and generates bytecode
+- **EmitterMethodCreator**: Creates Java class structure
+- **EmitBlock/EmitOperator/etc.**: Specialized code generators
+- **CustomClassLoader**: Loads generated classes at runtime
 
-**Execution Mode:**
-- Enabled with `--interpreter` flag: `./jperl --interpreter script.pl`
-- Used automatically for `eval STRING` in both compiler and interpreter modes
-- Suitable for short-lived scripts, development/debugging, and dynamic code evaluation
+#### Interpreter Backend (`backend/bytecode/`)
 
-### AST Nodes: *Node*
+Generates and executes custom bytecode:
+- **BytecodeCompiler**: Translates AST to interpreter bytecode
+- **BytecodeInterpreter**: Register-based execution loop
+- **InterpretedCode**: Container for bytecode and metadata
+- **Opcodes**: Defines ~100 bytecode instructions
 
-- Representations of AST nodes for code blocks, variable declarations, and operations.
+### 4. Runtime System
 
-### Runtime packages: *Runtime* and *Operators*
+Both backends use the same runtime classes:
 
-- **Runtime**: Provides the implementation of the behavior of a Perl scalar variable, Code, Array, Hash.
+#### Core Types (`runtime/runtimetypes/`)
+- **RuntimeScalar**: Perl scalar with type coercion
+- **RuntimeArray**: Perl array with autovivification
+- **RuntimeHash**: Perl hash with tied variable support
+- **RuntimeCode**: Subroutine references and closures
+- **RuntimeGlob**: Symbol table entries
 
-### Symbol Table
+#### Operators (`runtime/operators/`)
+Java implementations of Perl operators, organized by category.
 
-- **ScopedSymbolTable**: Manage variable names and their corresponding local variable indices.
+#### Perl Modules (`runtime/perlmodule/`)
+Java XS implementations for modules that normally use C XS code (DateTime, DBI, JSON, etc.).
 
-### Perl Module classes
+## Interpreter Backend Details
 
-- **perlmodule**: Provides ports of Perl classes implemented in Java, such as `UNIVERSAL` and `Symbol`.
+The interpreter provides an alternative execution path:
 
-### Main Method
+### Architecture
+- **Register-based**: Variables mapped to register indices (not stack-based)
+- **Dense opcodes**: Enables JVM `tableswitch` optimization in main loop
+- **Shared runtime**: 100% API compatibility with JVM backend
 
-- The main method generates the bytecode for the program body.
-- The generated method is loaded into a variable as a code reference and executed.
+### Opcode Categories
+- Control flow: `RETURN`, `GOTO`, `JUMP_IF_FALSE`, `JUMP_IF_TRUE`
+- Constants: `LOAD_INT`, `LOAD_STRING`, `LOAD_DOUBLE`
+- Variables: `GET_VAR`, `SET_VAR`, `CREATE_CLOSURE_VAR`
+- Operations: Arithmetic, comparison, string, bitwise
+- Data structures: Array/hash access, push/pop/shift
+- Subroutines: `CALL`, `CALL_METHOD`, `TAILCALL`
 
-### PerlScriptEngine
+### Automatic Usage
+The interpreter is used automatically for:
+- `eval STRING` expressions (both backends)
+- Code blocks exceeding JVM method size limits (~64KB bytecode)
+- Dynamic code generation scenarios
 
-- `PerlScriptEngine` is a Java class that allows you to execute Perl scripts using the Java Scripting API (JSR 223).
+## Symbol Table
 
+**ScopedSymbolTable** manages lexical scoping:
+- Tracks variable declarations (`my`, `our`, `local`, `state`)
+- Assigns JVM local variable indices
+- Handles closure variable capture
+- Manages pragma state (`strict`, `warnings`)
+
+## JSR-223 Script Engine
+
+PerlOnJava implements the Java Scripting API:
+- **PerlScriptEngine**: `ScriptEngine` implementation
+- **PerlScriptEngineFactory**: Engine discovery
+- **PerlCompiledScript**: `Compilable` interface for compile-once, run-many
+
+## Test Structure
+
+```
+src/test/
+├── java/org/perlonjava/
+│   └── PerlScriptExecutionTest.java  # JUnit test runner
+└── resources/
+    └── unit/                          # Perl test files (.t)
+```
+
+Tests use Perl's TAP (Test Anything Protocol) format and are executed via JUnit integration.
+
+## Related Documentation
+
+- `dev/design/interpreter.md` - Interpreter design details
+- `dev/design/shared_ast_transformer.md` - AST normalization
+- `dev/custom_bytecode/` - Bytecode VM documentation
