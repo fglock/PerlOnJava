@@ -102,6 +102,8 @@ The runner:
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
+**IMPORTANT: Always run `make` and ensure it passes before pushing commits or updating PRs.** This runs all unit tests and catches regressions early.
+
 1. **Create a feature branch** before making changes:
    ```bash
    git checkout -b feature/descriptive-name
@@ -109,13 +111,18 @@ The runner:
 
 2. **Make commits** on the feature branch with clear messages
 
-3. **Push the feature branch** and create a PR:
+3. **Verify tests pass** before pushing:
+   ```bash
+   make  # Must succeed before pushing
+   ```
+
+4. **Push the feature branch** and create a PR:
    ```bash
    git push origin feature/descriptive-name
    gh pr create --title "Title" --body "Description"
    ```
 
-4. **Wait for review** before merging
+5. **Wait for review** before merging
 
 ### Commits
 
