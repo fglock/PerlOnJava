@@ -81,6 +81,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
     private boolean deferredUserDefinedUnicodeProperties = false;
+    private boolean hasBranchReset = false;  // True if pattern uses (?|...) branch reset
 
     public RuntimeRegex() {
         this.regexFlags = null;
@@ -145,6 +146,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // These need to be resolved later, once the corresponding Perl subs are defined.
                 regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch() || RegexPreprocessor.hadInlinePFlag();
+                regex.hasBranchReset = RegexPreprocessor.hadBranchReset();
 
                 regex.patternString = patternString;
 
@@ -620,10 +622,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (ctx == RuntimeContextType.LIST) {
                         for (int i = 1; i <= captureCount; i++) {
                             String matchedStr = matcher.group(i);
-                            // Include undef for groups that didn't participate in the match
-                            // This is important for patterns like m{^(.*/)?(.*)}s where
-                            // the optional group returns undef when it doesn't match
-                            matchedGroups.add(new RuntimeScalar(matchedStr));
+                            if (regex.hasBranchReset) {
+                                // For branch reset patterns (?|...), skip null groups
+                                // because Java creates separate groups for each alternative
+                                // but Perl reuses group numbers across alternatives
+                                if (matchedStr != null) {
+                                    matchedGroups.add(new RuntimeScalar(matchedStr));
+                                }
+                            } else {
+                                // Include undef for groups that didn't participate in the match
+                                // This is important for patterns like m{^(.*/)?(.*)}s where
+                                // the optional group returns undef when it doesn't match
+                                matchedGroups.add(new RuntimeScalar(matchedStr));
+                            }
                         }
                     }
                 }
