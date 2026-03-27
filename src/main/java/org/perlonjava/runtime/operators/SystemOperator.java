@@ -557,9 +557,19 @@ public class SystemOperator {
         try {
             flushAllHandles();
             
-            // Build the command
+            // Build the command - mirror the logic from exec() for consistency
             List<String> command;
-            if (!hasHandle && flattenedArgs.size() == 1) {
+            if (hasHandle && flattenedArgs.size() >= 2) {
+                // Indirect object syntax: exec { $program } @args
+                // flattenedArgs[0] is the program from the indirect object
+                // flattenedArgs[1:] are the arguments from @args
+                // In Perl, @args[0] becomes argv[0] (process name), @args[1:] are actual arguments
+                // Java's ProcessBuilder can't set argv[0] separately, so we skip it
+                String program = flattenedArgs.get(0);
+                command = new ArrayList<>();
+                command.add(program);
+                command.addAll(flattenedArgs.subList(2, flattenedArgs.size()));
+            } else if (!hasHandle && flattenedArgs.size() == 1) {
                 String cmdStr = flattenedArgs.getFirst();
                 if (SHELL_METACHARACTERS.matcher(cmdStr).find()) {
                     // Use shell for metacharacters
