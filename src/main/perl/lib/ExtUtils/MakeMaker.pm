@@ -14,13 +14,14 @@ use File::Find;
 use File::Spec;
 use File::Basename;
 use Cwd qw(getcwd abs_path);
+use Config;
 
 # Load ExtUtils::MM to set up the MM package with parse_version, etc.
 # CPAN.pm and other tools expect MM->parse_version() to work after loading MakeMaker
 require ExtUtils::MM;
 
-# Installation directory (configurable via environment)
-our $INSTALL_BASE = $ENV{PERLONJAVA_LIB};
+# Installation directory - priority: environment > Config.pm > fallback
+our $INSTALL_BASE = $ENV{PERLONJAVA_LIB} || $Config{installsitelib} || _default_install_base();
 
 # Parse command-line arguments like INSTALL_BASE=/path
 # This is called by Makefile.PL scripts that use MY->parse_args(@ARGV)
@@ -60,9 +61,6 @@ sub WriteMakefile {
     
     print "PerlOnJava MakeMaker: $name v$version\n";
     print "=" x 60, "\n";
-    
-    # Set install base if not set
-    $INSTALL_BASE //= _default_install_base();
     
     # Check prerequisites first
     if ($args{PREREQ_PM}) {
@@ -195,12 +193,14 @@ sub _install_pure_perl {
         }
     } else {
         # Default: scan lib/ directory
-        # Include both .pm and .pl files (some modules like Image::ExifTool
-        # use .pl files loaded via require)
+        # Include .pm, .pl, and common data files (.dat, .json, .yml, .yaml, .xml, .txt)
+        # Some modules like Image::ExifTool use .pl files loaded via require
+        # and .dat files for data (e.g., Geolocation.dat)
+        my $installable_re = qr/\.(?:pm|pl|pod|dat|json|ya?ml|xml|txt|cfg|conf|ini)$/i;
         if (-d 'lib') {
             find({
                 wanted => sub {
-                    return unless -f && /\.p[lm]$/;
+                    return unless -f && /$installable_re/;
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^lib/}{};
                     $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
@@ -213,7 +213,7 @@ sub _install_pure_perl {
         if (-d 'blib/lib') {
             find({
                 wanted => sub {
-                    return unless -f && /\.p[lm]$/;
+                    return unless -f && /$installable_re/;
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^blib/lib/}{};
                     $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
@@ -224,7 +224,7 @@ sub _install_pure_perl {
     }
     
     if (!%pm) {
-        print "Warning: No .pm or .pl files found to install.\n";
+        print "Warning: No installable files found (no .pm, .pl, .dat, etc.).\n";
         print "Expected structure: lib/Your/Module.pm\n\n";
         return PerlOnJava::MM::Installed->new($args);
     }
@@ -396,11 +396,10 @@ sub _create_stub_makefile {
     # Convert module name to dist name (My::Module -> My-Module)
     (my $distname = $name) =~ s/::/-/g;
     
-    # Get INST_LIB and PREFIX from args, with defaults
+    # Get INST_LIB and installation directories
+    # Use INSTALL_BASE for consistency with where we actually install modules
     my $inst_lib = $args->{INST_LIB} || 'blib/lib';
-    my $prefix = $args->{PREFIX} || '/usr/local';
-    my $siteprefix = $args->{SITEPREFIX} || $prefix;
-    my $installsitelib = $args->{INSTALLSITELIB} || '$(' . 'SITEPREFIX)/lib/perl5';
+    my $installsitelib = $args->{INSTALLSITELIB} || $INSTALL_BASE;
     
     # Minimal Makefile that works with CPAN.pm
     print $fh <<"MAKEFILE";
@@ -413,8 +412,6 @@ VERSION = $version
 PERL = $perl
 INSTALLDIRS = site
 INST_LIB = $inst_lib
-PREFIX = $prefix
-SITEPREFIX = $siteprefix
 INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_RF = rm -rf
