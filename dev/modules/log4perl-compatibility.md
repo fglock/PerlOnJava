@@ -187,7 +187,7 @@ BEGIN failed--compilation aborted at -e line 1, near ""
 - `src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java`
 - `src/main/java/org/perlonjava/runtime/runtimetypes/ExceptionFormatter.java`
 
-**Design Document:** `dev/design/caller_line_number_fix.md`
+**Design Document:** `../design/caller_line_number_fix.md`
 
 ### Issue 2: Stack Trace Format (%T) - FIXED
 

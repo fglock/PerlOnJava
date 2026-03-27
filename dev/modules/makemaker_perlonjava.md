@@ -335,6 +335,6 @@ jperl Makefile.PL
 
 ## Related Documents
 
-- `dev/design/cpan_client.md` - CPAN client status
+- `cpan_client.md` - CPAN client status
 - `docs/guides/module-porting.md` - Module porting guide
 - `.cognition/skills/port-cpan-module/` - Port CPAN module skill
