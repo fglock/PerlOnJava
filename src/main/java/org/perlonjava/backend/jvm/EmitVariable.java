@@ -346,7 +346,8 @@ public class EmitVariable {
             if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
 
             if (sigil.equals("*")) {
-                // typeglob
+                // typeglob - return a detached copy to preserve IO during local scope
+                // This is crucial for the `do { local *FH; *FH }` pattern
                 String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 mv.visitLdcInsn(fullName); // emit string
                 emitterVisitor.ctx.mv.visitMethodInsn(
@@ -354,6 +355,13 @@ public class EmitVariable {
                         "org/perlonjava/runtime/runtimetypes/GlobalVariable",
                         "getGlobalIO",
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
+                        false);
+                // Create detached copy NOW (before local restores) to capture current IO
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
+                        "createDetachedCopy",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                         false);
                 return;
             }

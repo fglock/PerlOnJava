@@ -344,15 +344,11 @@ public class CustomFileChannel implements IOHandle {
      *
      * <p>Java's FileChannel does not expose the underlying OS file descriptor.
      * We return undef to match Perl's behavior for handles without a real fd.
-     * Note: Validity checks should be done in the Java backend, not via fileno().
      *
      * @return RuntimeScalar with undef (Java doesn't expose real fds)
      */
     @Override
     public RuntimeScalar fileno() {
-        // Java's FileChannel does not expose the underlying OS file descriptor.
-        // Return undef to match Perl's behavior for handles without a real fd.
-        // Note: Validity checks should be done in the Java backend, not via fileno().
         return RuntimeScalarCache.scalarUndef;
     }
 

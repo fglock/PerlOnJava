@@ -40,23 +40,33 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Creates a detached copy of this glob that shares the current IO slot reference.
-     * Used when assigning a glob to a scalar: `my $fh = *FH`
+     * Creates a detached copy of this glob that has its own independent IO slot.
      * 
-     * <p>This is crucial for `local *GLOB` semantics. When you do:
+     * <p>This is crucial for the {@code do { local *GLOB; *GLOB }} pattern used to create
+     * anonymous filehandles. When you do:
      * <pre>
-     *   local *FH;
-     *   open FH, ...; 
-     *   my $captured = *FH;
-     *   return $captured;
+     *   my $fh = do { local *FH; open FH, ...; *FH };
      * </pre>
-     * After the local scope ends, *FH's IO is restored, but $captured should
-     * still have the IO that was opened. This method creates a new RuntimeGlob
-     * that points to the CURRENT IO object, so when local restores the original
-     * glob, the captured copy is unaffected.
+     * The returned glob must retain the IO that was opened, even after the local scope
+     * ends and restores the global *FH. This method creates a new RuntimeGlob that:
+     * <ul>
+     *   <li>Has the same globName (for stringification)</li>
+     *   <li>Shares the CURRENT IO RuntimeScalar reference, so that opening a file
+     *       on the original glob also affects this copy</li>
+     * </ul>
      * 
-     * <p>Subclasses (like RuntimeStashEntry) should override this to return 
-     * the same instance, preserving their special ref() behavior.
+     * <p><b>IMPORTANT:</b> The copy shares the same IO RuntimeScalar object as the
+     * original at the time of copying. This means:
+     * <ul>
+     *   <li>If you call {@code setIO()} on the original, it modifies the shared IO in place,
+     *       so the copy sees the change</li>
+     *   <li>When {@code local} restores the original glob's IO reference (via
+     *       {@code this.IO = savedIO}), the copy's IO reference is NOT affected because
+     *       it's a separate field</li>
+     * </ul>
+     * 
+     * <p>Subclasses (like RuntimeStashEntry) should override this to return the same
+     * instance, preserving their special ref() behavior.
      *
      * @return A new RuntimeGlob with the same globName and IO reference.
      */
@@ -64,6 +74,34 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeGlob copy = new RuntimeGlob(this.globName);
         copy.IO = this.IO;  // Share the current IO reference
         return copy;
+    }
+
+    /**
+     * Returns a hash code based on the glob name.
+     * This ensures that all copies of the same glob (including detached copies)
+     * have the same hash code, which is necessary for correct stringification
+     * and equality comparisons in Perl code like `$_[0] eq \*FOO`.
+     *
+     * @return Hash code based on the glob name
+     */
+    @Override
+    public int hashCode() {
+        return globName != null ? globName.hashCode() : 0;
+    }
+
+    /**
+     * Checks equality based on glob name.
+     * Two RuntimeGlob objects are equal if they have the same globName.
+     * This ensures that detached copies compare equal to the original glob.
+     *
+     * @param obj The object to compare
+     * @return true if both are RuntimeGlob with the same globName
+     */
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof RuntimeGlob other)) return false;
+        return globName != null ? globName.equals(other.globName) : other.globName == null;
     }
 
     public static boolean isGlobAssigned(String globName) {
@@ -235,8 +273,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         InheritanceResolver.invalidateCache();
 
         // Alias the IO slot: both names point to the same IO object
+        // Must update BOTH this.IO (for detached copies) AND the global glob's IO
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
+        RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
         this.IO = sourceIO.IO;
+        targetIO.IO = sourceIO.IO;
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
@@ -503,9 +544,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Returns an integer representation of the typeglob reference.
-     * This is the hash code of the current instance.
+     * This is the unsigned interpretation of the hash code.
+     * Note: This may overflow for hash codes > Integer.MAX_VALUE, but
+     * getDoubleRef() returns the correct unsigned value.
      *
-     * @return The hash code of this instance.
+     * @return The hash code of this instance as unsigned (may overflow).
      */
     public int getIntRef() {
         return this.hashCode();
@@ -513,12 +556,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Returns a double representation of the typeglob reference.
-     * This is the hash code of the current instance, cast to a double.
+     * This is the unsigned interpretation of the hash code, matching what
+     * hex() would return from the stringified address in toStringRef().
      *
-     * @return The hash code of this instance as a double.
+     * @return The hash code as an unsigned value (as double).
      */
     public double getDoubleRef() {
-        return this.hashCode();
+        return Integer.toUnsignedLong(this.hashCode());
     }
 
     /**
