@@ -692,6 +692,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **ExtUtils::MakeMaker** module: PerlOnJava version installs pure Perl modules directly.
 - ✅  **Fcntl** module
 - ✅  **FileHandle** module
+- ✅  **Filter::Simple** module: `FILTER` and `FILTER_ONLY` for source code filtering.
 - ✅  **File::Basename** use the same version as Perl.
 - ✅  **File::Find** use the same version as Perl.
 - ✅  **File::Spec::Functions** module.
