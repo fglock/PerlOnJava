@@ -293,6 +293,29 @@ public class FilterUtilCall extends PerlModuleBase {
                             if (debug) {
                                 System.err.println("[FILTER] Got chunk: " + chunk);
                             }
+
+                            // Check if the chunk ends with __DATA__, __END__, or "no Module;" terminator
+                            // If so, stop filtering and append remaining source unchanged
+                            // This is important for Filter::Simple which stops at these terminators
+                            // Pattern matches:
+                            // - __DATA__ or __END__ at end of line
+                            // - "no ModuleName;" at start of line (with optional comment)
+                            if (chunk.matches("(?sm).*^__(?:DATA|END)__\\s*$") ||
+                                chunk.matches("(?sm).*^\\s*no\\s+[\\w:]+\\s*;.*$")) {
+                                // Append remaining source unchanged
+                                if (debug) {
+                                    System.err.println("[FILTER] Hit terminator, currentLine=" + context.currentLine + 
+                                        ", totalLines=" + context.sourceLines.length);
+                                }
+                                while (context.currentLine < context.sourceLines.length) {
+                                    filteredCode.append(context.sourceLines[context.currentLine]);
+                                    context.currentLine++;
+                                }
+                                continueFiltering = false;
+                                if (debug) {
+                                    System.err.println("[FILTER] Hit __DATA__/__END__ terminator, appending remaining source unchanged");
+                                }
+                            }
                         }
 
                         // Check status - convert to scalar if it's a list
@@ -318,7 +341,8 @@ public class FilterUtilCall extends PerlModuleBase {
             }
 
             if (debug) {
-                System.err.println("[FILTER] Final filtered code: " + filteredCode.toString().substring(0, Math.min(200, filteredCode.length())));
+                System.err.println("[FILTER] Final filtered code length: " + filteredCode.length());
+                System.err.println("[FILTER] Final filtered code: " + filteredCode.toString());
             }
             return filteredCode.toString();
 
