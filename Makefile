@@ -13,6 +13,7 @@ endif
 # Check Java/Gradle compatibility and fix if needed
 # For Java 25+, we need Gradle 9.1.0+ (see https://docs.gradle.org/current/userguide/compatibility.html)
 # Note: On Windows CI, Make uses Git Bash, so we use bash-compatible syntax throughout
+# Note: We modify gradle-wrapper.properties directly because older gradle can't run on Java 25+
 check-java-gradle:
 	@JAVA_MAJOR=$$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'); \
 	if [ "$$JAVA_MAJOR" -ge 25 ] 2>/dev/null; then \
@@ -21,8 +22,8 @@ check-java-gradle:
 		GRADLE_MAJOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
 		GRADLE_MINOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-[0-9]+\.([0-9]+).*/\1/'); \
 		if [ "$$GRADLE_MAJOR" -lt 9 ] 2>/dev/null || ([ "$$GRADLE_MAJOR" -eq 9 ] 2>/dev/null && [ "$$GRADLE_MINOR" -lt 1 ] 2>/dev/null); then \
-			echo "Updating Gradle wrapper to 9.1.0 (current: $$GRADLE_MAJOR.$$GRADLE_MINOR)..."; \
-			gradle wrapper --gradle-version=9.1.0 || { echo "Error: 'gradle' command not found. Install Gradle 9.1+ or manually clear: rm -rf ~/.gradle/wrapper/dists/gradle-{8,9.0}*"; exit 1; }; \
+			echo "Updating gradle-wrapper.properties to use Gradle 9.1.0 (current: $$GRADLE_MAJOR.$$GRADLE_MINOR)..."; \
+			sed -i.bak 's|gradle-[0-9][0-9]*\.[0-9][0-9]*[^/]*-bin\.zip|gradle-9.1.0-bin.zip|' gradle/wrapper/gradle-wrapper.properties && rm -f gradle/wrapper/gradle-wrapper.properties.bak; \
 		fi; \
 	elif [ ! -f ./gradlew ]; then \
 		gradle wrapper || true; \
