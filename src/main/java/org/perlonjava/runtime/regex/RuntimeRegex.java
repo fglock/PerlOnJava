@@ -620,9 +620,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (ctx == RuntimeContextType.LIST) {
                         for (int i = 1; i <= captureCount; i++) {
                             String matchedStr = matcher.group(i);
-                            if (matchedStr != null) {
-                                matchedGroups.add(new RuntimeScalar(matchedStr));
-                            }
+                            // Include undef for groups that didn't participate in the match
+                            // This is important for patterns like m{^(.*/)?(.*)}s where
+                            // the optional group returns undef when it doesn't match
+                            matchedGroups.add(new RuntimeScalar(matchedStr));
                         }
                     }
                 }
