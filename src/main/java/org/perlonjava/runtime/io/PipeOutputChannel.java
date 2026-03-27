@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
@@ -149,6 +151,9 @@ public class PipeOutputChannel implements IOHandle {
         // Set working directory to current directory
         String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
+
+        // Copy %ENV to the subprocess environment
+        copyPerlEnvToProcessBuilder(processBuilder);
 
         // Start the process
         process = processBuilder.start();
@@ -382,6 +387,31 @@ public class PipeOutputChannel implements IOHandle {
         } catch (IOException e) {
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
+        }
+    }
+
+    /**
+     * Copies the Perl %ENV hash to the ProcessBuilder environment.
+     * This ensures that changes to %ENV in Perl are reflected in child processes.
+     *
+     * @param processBuilder The ProcessBuilder to update
+     */
+    private void copyPerlEnvToProcessBuilder(ProcessBuilder processBuilder) {
+        try {
+            RuntimeHash envHash = GlobalVariable.getGlobalHash("main::ENV");
+            java.util.Map<String, String> pbEnv = processBuilder.environment();
+
+            // Clear the inherited environment and replace with Perl's %ENV
+            pbEnv.clear();
+
+            for (java.util.Map.Entry<String, RuntimeScalar> entry : envHash.elements.entrySet()) {
+                String value = entry.getValue().toString();
+                if (value != null) {
+                    pbEnv.put(entry.getKey(), value);
+                }
+            }
+        } catch (Exception e) {
+            // If we can't access %ENV, just use inherited environment (default behavior)
         }
     }
 }

@@ -283,6 +283,15 @@ sub _filtered_inc {
         shift @default_inc while @default_inc and $seen{ $default_inc[0] };
     }
 
+    # Convert relative paths to absolute paths so they work in child processes
+    # that may run from a different directory
+    require Cwd;
+    @new_inc = map {
+        # Skip if already absolute or doesn't exist
+        ($_ =~ m{^/} || $_ =~ m{^[A-Za-z]:}) ? $_ :
+        (-e $_) ? Cwd::abs_path($_) // $_ : $_
+    } @new_inc;
+
     return @new_inc;
 }
 
