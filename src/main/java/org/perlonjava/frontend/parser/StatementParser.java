@@ -6,12 +6,14 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.frontend.analysis.ExtractValueVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.VersionHelper;
+import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -704,6 +706,12 @@ public class StatementParser {
                                     break;
                                 }
                             }
+
+                            // Check if a source filter was installed during import()
+                            // If so, we need to rejoin remaining tokens, apply the filter, and re-tokenize
+                            if (FilterUtilCall.wasFilterInstalled()) {
+                                applySourceFilterToRemainingTokens(parser);
+                            }
                         }
                     }
                 }
@@ -1074,5 +1082,62 @@ public class StatementParser {
             return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
         }
         return null;
+    }
+
+    /**
+     * Apply source filters to remaining tokens after a use statement installed a filter.
+     * <p>
+     * This implements the "token rejoin and re-tokenize" approach described in the design doc:
+     * 1. Rejoin remaining tokens back to source text
+     * 2. Apply the installed filters
+     * 3. Re-tokenize the filtered source
+     * 4. Replace the remaining tokens in the parser
+     *
+     * @param parser The Parser instance with tokens to filter
+     */
+    private static void applySourceFilterToRemainingTokens(Parser parser) {
+        int currentPos = parser.tokenIndex;
+
+        // Step 1: Rejoin remaining tokens back to source text
+        // Skip EOF tokens as they contain invalid characters
+        StringBuilder sb = new StringBuilder();
+        for (int i = currentPos; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type != LexerTokenType.EOF) {
+                sb.append(token.text);
+            }
+        }
+        String remainingSource = sb.toString();
+
+        // Step 2: Apply the installed filters
+        String filteredSource = FilterUtilCall.applyFilters(remainingSource);
+
+        // If the source wasn't changed, nothing to do
+        if (filteredSource.equals(remainingSource)) {
+            return;
+        }
+
+        if (CompilerOptions.DEBUG_ENABLED) {
+            parser.ctx.logDebug("Source filter applied. Before: " + remainingSource.length() + " chars, After: " + filteredSource.length() + " chars");
+        }
+
+        // Step 3: Re-tokenize the filtered source
+        Lexer lexer = new Lexer(filteredSource);
+        List<LexerToken> newTokens = lexer.tokenize();
+
+        // Step 4: Replace remaining tokens with filtered tokens
+        // Keep tokens[0..currentPos-1], replace tokens from currentPos onwards with newTokens
+        // Since parser.tokens is final, we modify the list in place
+        int tokensToRemove = parser.tokens.size() - currentPos;
+        for (int i = 0; i < tokensToRemove; i++) {
+            parser.tokens.remove(parser.tokens.size() - 1);  // Remove from end
+        }
+        parser.tokens.addAll(newTokens);
+
+        // Update the ErrorMessageUtil with the new token list
+        parser.ctx.errorUtil.updateTokens(parser.tokens);
+
+        // Clear the filter after applying (it's been consumed)
+        FilterUtilCall.clearFilters();
     }
 }
