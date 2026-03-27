@@ -240,7 +240,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Alias the IO slot: both names point to the same IO object
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
+        // Update both this detached copy AND the global glob's IO
         this.IO = sourceIO.IO;
+        GlobalVariable.getGlobalIO(this.globName).IO = sourceIO.IO;
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
