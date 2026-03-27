@@ -152,10 +152,12 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 - Reference the design doc or issue in commit messages when relevant
 - Use conventional commit format when possible
-- **Include `src/main/java/org/perlonjava/core/Configuration.java` in commits** - This file contains the git commit ID and date that help users identify the exact PerlOnJava version. The build system updates it automatically via `injectGitInfo` task, so always stage it:
+- **Always include `src/main/java/org/perlonjava/core/Configuration.java` in commits and PRs** - This file contains the git commit ID and date that help users identify the exact PerlOnJava version when reporting issues. Running `make` automatically updates this file via the `injectGitInfo` Gradle task. Always stage it before committing:
   ```bash
+  make  # Updates Configuration.java with current commit ID
   git add src/main/java/org/perlonjava/core/Configuration.java
   ```
+  **Why this matters:** Users can run `./jperl -v` to see the commit ID, making it easy to communicate exactly which version they're using when creating bug reports.
 
 ## Available Skills
 
