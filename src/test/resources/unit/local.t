@@ -223,6 +223,60 @@ ok(scalar(@global_array) < 10, 'local array element restored, array size ' . sca
     is(NestedTest::outer(), 0, 'nested sub with our - after local');
 }
 
+# Test for returning local array from subroutine
+# Regression test: the returned array should contain the localized values,
+# not the restored original values
+{
+    our @test_array = ("original1", "original2");
+    
+    sub return_local_array {
+        local @test_array = ("local1", "local2", "local3");
+        return @test_array;
+    }
+    
+    my @result = return_local_array();
+    is(scalar(@result), 3, 'returned local array has correct size');
+    is($result[0], "local1", 'returned local array element 0 is localized value');
+    is($result[1], "local2", 'returned local array element 1 is localized value');
+    is($result[2], "local3", 'returned local array element 2 is localized value');
+    is(scalar(@test_array), 2, 'original array restored after return');
+    is($test_array[0], "original1", 'original array element 0 restored');
+}
+
+# Test for returning modified local array from subroutine
+{
+    our @modify_array = ("a", "b", "c");
+    
+    sub modify_and_return_local {
+        local @modify_array = @modify_array;
+        @modify_array = ("x");  # Modify the localized copy
+        return ("result", @modify_array);
+    }
+    
+    my @result = modify_and_return_local();
+    is($result[0], "result", 'first return value is scalar');
+    is($result[1], "x", 'returned local array contains modified value');
+    is(scalar(@result), 2, 'return list has correct size');
+    is(join(",", @modify_array), "a,b,c", 'original array restored after return');
+}
+
+# Test for returning local hash from subroutine
+{
+    our %test_hash = (orig_key => "orig_value");
+    
+    sub return_local_hash {
+        local %test_hash = (local_key => "local_value");
+        return %test_hash;
+    }
+    
+    my %result = return_local_hash();
+    ok(exists $result{local_key}, 'returned local hash has local key');
+    is($result{local_key}, "local_value", 'returned local hash has local value');
+    ok(!exists $result{orig_key}, 'returned local hash does not have original key');
+    ok(exists $test_hash{orig_key}, 'original hash restored after return');
+    is($test_hash{orig_key}, "orig_value", 'original hash value restored');
+}
+
 done_testing();
 
 __END__
