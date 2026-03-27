@@ -239,18 +239,21 @@ gradlew.bat clean
 make
 ```
 
-The project includes a Gradle wrapper configured for Gradle 9.0+, which supports Java 22 through Java 25+.
+The project includes a Gradle wrapper configured for Gradle 9.0+, which supports Java 22 through Java 26.
 
 ### Java Version Compatibility
+
+Based on [Gradle's official compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html):
 
 | Java Version | Class File Version | Gradle Required |
 |--------------|-------------------|-----------------|
 | Java 22      | 66                | 8.8+            |
 | Java 23      | 67                | 8.10+           |
-| Java 24      | 68                | 8.12+           |
-| Java 25      | 69                | 9.0+            |
+| Java 24      | 68                | 8.14+           |
+| Java 25      | 69                | 9.1.0+          |
+| Java 26      | 70                | 9.4.0+          |
 
-PerlOnJava uses **Gradle 9.0** (configured in `gradle/wrapper/gradle-wrapper.properties`) to support all these versions.
+The Makefile automatically detects Java 25+ and upgrades the Gradle wrapper to 9.1.0 if needed. It also clears any incompatible cached Gradle distributions (8.x and 9.0.x).
 
 ### "JAVA_HOME is not set"
 

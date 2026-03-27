@@ -11,23 +11,23 @@ else
 endif
 
 # Check Java/Gradle compatibility and fix if needed
+# For Java 25+, we need Gradle 9.1.0+ (see https://docs.gradle.org/current/userguide/compatibility.html)
+# Note: On Windows CI, Make uses Git Bash, so we use bash-compatible syntax throughout
+# Note: We modify gradle-wrapper.properties directly because older gradle can't run on Java 25+
 check-java-gradle:
-	@test -f ./gradlew || gradle wrapper
-ifeq ($(OS),Windows_NT)
-	@echo "Checking Java/Gradle compatibility..."
-else
 	@JAVA_MAJOR=$$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'); \
-	GRADLE_VER=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
-	if [ "$$JAVA_MAJOR" -ge 25 ] && [ "$$GRADLE_VER" -lt 9 ]; then \
-		echo ""; \
-		echo "WARNING: Java $$JAVA_MAJOR detected but Gradle wrapper is version $$GRADLE_VER.x"; \
-		echo "Java 25+ requires Gradle 9.0+. Updating wrapper..."; \
-		echo ""; \
-		rm -rf ~/.gradle/wrapper/dists/gradle-$$GRADLE_VER.*; \
-		./gradlew wrapper --gradle-version=9.0 2>/dev/null || gradle wrapper --gradle-version=9.0; \
-		echo "Gradle wrapper updated to 9.0"; \
+	if [ "$$JAVA_MAJOR" -ge 25 ] 2>/dev/null; then \
+		echo "Java $$JAVA_MAJOR detected - ensuring Gradle 9.1+ compatibility..."; \
+		rm -rf ~/.gradle/wrapper/dists/gradle-8.* ~/.gradle/wrapper/dists/gradle-9.0* 2>/dev/null || true; \
+		GRADLE_MAJOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
+		GRADLE_MINOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-[0-9]+\.([0-9]+).*/\1/'); \
+		if [ "$$GRADLE_MAJOR" -lt 9 ] 2>/dev/null || ([ "$$GRADLE_MAJOR" -eq 9 ] 2>/dev/null && [ "$$GRADLE_MINOR" -lt 1 ] 2>/dev/null); then \
+			echo "Updating gradle-wrapper.properties to use Gradle 9.1.0 (current: $$GRADLE_MAJOR.$$GRADLE_MINOR)..."; \
+			sed -i.bak 's|gradle-[0-9][0-9]*\.[0-9][0-9]*[^/]*-bin\.zip|gradle-9.1.0-bin.zip|' gradle/wrapper/gradle-wrapper.properties && rm -f gradle/wrapper/gradle-wrapper.properties.bak; \
+		fi; \
+	elif [ ! -f ./gradlew ]; then \
+		gradle wrapper || true; \
 	fi
-endif
 
 wrapper: check-java-gradle
 
@@ -52,7 +52,7 @@ test: test-unit
 
 # Fast unit tests only (from src/test/resources/unit/ directory)
 # Uses Gradle's testUnitParallel (same as default make build)
-test-unit: wrapper
+test-unit: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat testUnitParallel --parallel
 else
@@ -110,7 +110,7 @@ test-all: test-perl5 test-modules
 test-gradle: test-gradle-parallel
 
 # Fast unit tests via Gradle/JUnit
-test-gradle-unit: wrapper
+test-gradle-unit: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat testUnit --rerun-tasks
 else
@@ -118,7 +118,7 @@ else
 endif
 
 # All tests via Gradle/JUnit
-test-gradle-all: wrapper
+test-gradle-all: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat testAll --rerun-tasks
 else
@@ -126,7 +126,7 @@ else
 endif
 
 # Parallel unit tests via Gradle/JUnit (4 JVMs)
-test-gradle-parallel: wrapper
+test-gradle-parallel: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat testUnitParallel --parallel --rerun-tasks
 else
@@ -141,14 +141,14 @@ else
 	mvn test -Pshard1 & mvn test -Pshard2 & mvn test -Pshard3 & mvn test -Pshard4 & wait
 endif
 
-clean: wrapper
+clean: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat clean
 else
 	./gradlew clean
 endif
 
-deb: wrapper
+deb: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat buildDeb
 else
@@ -165,7 +165,7 @@ sbom: sbom-java sbom-perl
 	@echo "Combined SBOM generated: build/reports/sbom.json"
 
 # Generate Java SBOM using CycloneDX Gradle plugin
-sbom-java: wrapper
+sbom-java: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat cyclonedxBom
 else
