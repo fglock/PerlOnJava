@@ -421,6 +421,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeScalar io) {
+        // Check if the current IO is the selected handle - if so, update it
+        RuntimeIO oldIO = null;
+        if (this.IO.value instanceof RuntimeIO) {
+            oldIO = (RuntimeIO) this.IO.value;
+        }
         // If IO slot is tied (TIED_SCALAR with TieHandle), replace it entirely
         // Otherwise use set() to modify in place, preserving sharing with detached copies
         if (this.IO.type == RuntimeScalarType.TIED_SCALAR) {
@@ -432,6 +437,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // If the IO scalar contains a RuntimeIO, set its glob name
         if (io.value instanceof RuntimeIO runtimeIO) {
             runtimeIO.globName = this.globName;
+            // Update selectedHandle if the old IO was the selected handle
+            if (oldIO != null && oldIO == RuntimeIO.selectedHandle) {
+                RuntimeIO.selectedHandle = runtimeIO;
+            }
         }
         return this;
     }
@@ -439,6 +448,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeGlob setIO(RuntimeIO io) {
         // Set the glob name in the RuntimeIO for proper stringification
         io.globName = this.globName;
+        // Check if the current IO is the selected handle - if so, update it
+        RuntimeIO oldIO = null;
+        if (this.IO.value instanceof RuntimeIO) {
+            oldIO = (RuntimeIO) this.IO.value;
+        }
         // If IO slot is tied (TIED_SCALAR with TieHandle), replace it entirely
         // Otherwise modify in place, preserving sharing with detached copies
         if (this.IO.type == RuntimeScalarType.TIED_SCALAR) {
@@ -446,6 +460,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         } else {
             this.IO.type = RuntimeScalarType.GLOB;  // RuntimeIO is stored as GLOB type
             this.IO.value = io;
+        }
+        // Update selectedHandle if the old IO was the selected handle
+        // This ensures that when STDOUT is redirected, print without explicit
+        // filehandle uses the new handle
+        if (oldIO != null && oldIO == RuntimeIO.selectedHandle) {
+            RuntimeIO.selectedHandle = io;
         }
         return this;
     }
