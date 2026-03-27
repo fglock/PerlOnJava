@@ -249,6 +249,10 @@ sub _new_harness {
 sub _filtered_inc {
     my @inc = grep { !ref } @INC;    #28567
 
+    # PerlOnJava: Filter out jar: paths - these are internal markers for
+    # modules bundled in the JAR and don't exist as filesystem directories
+    @inc = grep { !/^jar:/ } @inc;
+
     if (IS_VMS) {
 
         # VMS has a 255-byte limit on the length of %ENV entries, so
@@ -297,6 +301,8 @@ sub _filtered_inc {
 
         # Avoid using -l for the benefit of Perl 6
         chomp( @inc = `"$perl" -e "print join qq[\\n], \@INC, q[]"` );
+        # PerlOnJava: Filter out jar: paths from default @INC
+        @inc = grep { !/^jar:/ } @inc;
         return @inc;
     }
 }
