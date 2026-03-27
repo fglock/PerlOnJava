@@ -40,33 +40,29 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Creates a detached copy of this glob that has its own IO slot.
+     * Creates a detached copy of this glob that shares the current IO slot reference.
      * Used when assigning a glob to a scalar: `my $fh = *FH`
      * 
-     * <p>This is crucial for `local *GLOB` and multiple filehandle semantics.
-     * When you do:
+     * <p>This is crucial for `local *GLOB` semantics. When you do:
      * <pre>
-     *   my $fh1 = do { local *FH; *FH };  # Creates glob copy with own IO slot
-     *   my $fh2 = do { local *FH; *FH };  # Creates another copy with its own IO slot
-     *   open($fh1, ">", "file1");  # Opens to fh1's IO
-     *   open($fh2, ">", "file2");  # Opens to fh2's IO (independent of fh1)
+     *   local *FH;
+     *   open FH, ...; 
+     *   my $captured = *FH;
+     *   return $captured;
      * </pre>
-     * Each copy gets its own IO slot so that opening files on one copy
-     * doesn't affect other copies.
+     * After the local scope ends, *FH's IO is restored, but $captured should
+     * still have the IO that was opened. This method creates a new RuntimeGlob
+     * that points to the CURRENT IO object, so when local restores the original
+     * glob, the captured copy is unaffected.
      * 
      * <p>Subclasses (like RuntimeStashEntry) should override this to return 
      * the same instance, preserving their special ref() behavior.
      *
-     * @return A new RuntimeGlob with the same globName but its own IO slot.
+     * @return A new RuntimeGlob with the same globName and IO reference.
      */
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
-        // Create a NEW IO slot for the copy, initialized with the current IO value.
-        // This prevents modifications via setIO() from affecting other copies.
-        RuntimeScalar newIO = new RuntimeScalar();
-        newIO.type = this.IO.type;
-        newIO.value = this.IO.value;
-        copy.IO = newIO;
+        copy.IO = this.IO;  // Share the current IO reference
         return copy;
     }
 
@@ -240,9 +236,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Alias the IO slot: both names point to the same IO object
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
-        // Update both this detached copy AND the global glob's IO
         this.IO = sourceIO.IO;
-        GlobalVariable.getGlobalIO(this.globName).IO = sourceIO.IO;
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);

@@ -137,11 +137,6 @@ public class Directory {
 
             if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE) && dirHandle.value instanceof RuntimeGlob glob) {
                 glob.setIO(new RuntimeIO(dirIO));
-                // If this is a named glob, also update the global glob
-                // This ensures that subsequent bareword access to the same name sees the new IO
-                if (glob.globName != null) {
-                    GlobalVariable.getGlobalIO(glob.globName).setIO(new RuntimeIO(dirIO));
-                }
             } else {
                 dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
                 dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
