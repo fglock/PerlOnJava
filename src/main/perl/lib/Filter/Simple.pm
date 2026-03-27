@@ -144,6 +144,13 @@ sub FILTER (&;$) {
 
 sub FILTER_ONLY {
     my $caller = caller;
+    # PerlOnJava fix: @transforms must be lexical, not package-scoped.
+    # In native Perl, filters process source incrementally during parsing,
+    # so each filter completes before the next filter module is loaded.
+    # In PerlOnJava, we tokenize upfront then apply filters, so multiple
+    # filter modules may be loaded before any filter runs. Using a package
+    # variable causes transforms from different modules to accumulate.
+    my @transforms;
     while (@_ > 1) {
         my ($what, $how) = splice(@_, 0, 2);
         fail "Unknown selector: $what"

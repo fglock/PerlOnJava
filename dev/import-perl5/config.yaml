@@ -640,6 +640,17 @@ imports:
   - source: perl5/cpan/Term-ANSIColor/lib/Term/ANSIColor.pm
     target: src/main/perl/lib/Term/ANSIColor.pm
 
+  # Filter::Simple - Simplified source filtering (used by Log::Log4perl :resurrect, etc.)
+  # Protected: has PerlOnJava-specific fix for @transforms scope in FILTER_ONLY
+  - source: perl5/dist/Filter-Simple/lib/Filter/Simple.pm
+    target: src/main/perl/lib/Filter/Simple.pm
+    protected: true
+
+  # Tests for Filter::Simple
+  - source: perl5/dist/Filter-Simple/t
+    target: perl5_t/Filter-Simple
+    type: directory
+
   # Class::Struct - Declare struct-like datatypes as Perl classes
   # Required by File::stat.pm
   - source: perl5/lib/Class/Struct.pm
