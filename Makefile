@@ -1,20 +1,38 @@
-.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 all: build
 
 # CI build - optimized for CI/CD environments
-ci: wrapper
+ci: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	mvn clean test -B
 else
 	./gradlew build --no-daemon --stacktrace
 endif
 
-wrapper:
+# Check Java/Gradle compatibility and fix if needed
+check-java-gradle:
 	@test -f ./gradlew || gradle wrapper
+ifeq ($(OS),Windows_NT)
+	@echo "Checking Java/Gradle compatibility..."
+else
+	@JAVA_MAJOR=$$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'); \
+	GRADLE_VER=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
+	if [ "$$JAVA_MAJOR" -ge 25 ] && [ "$$GRADLE_VER" -lt 9 ]; then \
+		echo ""; \
+		echo "WARNING: Java $$JAVA_MAJOR detected but Gradle wrapper is version $$GRADLE_VER.x"; \
+		echo "Java 25+ requires Gradle 9.0+. Updating wrapper..."; \
+		echo ""; \
+		rm -rf ~/.gradle/wrapper/dists/gradle-$$GRADLE_VER.*; \
+		./gradlew wrapper --gradle-version=9.0 2>/dev/null || gradle wrapper --gradle-version=9.0; \
+		echo "Gradle wrapper updated to 9.0"; \
+	fi
+endif
+
+wrapper: check-java-gradle
 
 # Standard build - incremental compilation with parallel tests (4 JVMs)
-build: wrapper
+build: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat classes testUnitParallel --parallel shadowJar
 else
@@ -22,7 +40,7 @@ else
 endif
 
 # Development build - forces recompilation (use during active development)
-dev: wrapper
+dev: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat clean compileJava shadowJar installDist
 else
