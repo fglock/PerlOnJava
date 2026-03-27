@@ -398,7 +398,10 @@ public class SlowOpcodeHandler {
         // Call GlobalVariable.getGlobalIO() to get the RuntimeGlob
         RuntimeGlob glob = GlobalVariable.getGlobalIO(globName);
 
-        registers[rd] = glob;
+        // Create a detached copy so that `local *GLOB` restoration doesn't affect
+        // values that captured the glob before the local scope ended.
+        // This implements Perl's `do { local *FH; *FH }` semantics correctly.
+        registers[rd] = glob.createDetachedCopy();
         return pc;
     }
 
@@ -421,7 +424,10 @@ public class SlowOpcodeHandler {
         String name = registers[nameReg].toString();
         String globalName = NameNormalizer.normalizeVariableName(name, pkg);
 
-        registers[rd] = GlobalVariable.getGlobalIO(globalName);
+        RuntimeGlob glob = GlobalVariable.getGlobalIO(globalName);
+        // Create a detached copy so that `local *GLOB` restoration doesn't affect
+        // values that captured the glob before the local scope ended.
+        registers[rd] = glob.createDetachedCopy();
         return pc;
     }
 
