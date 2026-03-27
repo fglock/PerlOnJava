@@ -65,6 +65,12 @@ public class CustomFileChannel implements IOHandle {
     private static final int LOCK_UN = 8;  // Unlock
 
     /**
+     * Counter for generating synthetic file descriptor numbers.
+     * Starts at 3 to avoid collision with stdin(0), stdout(1), stderr(2).
+     */
+    private static int nextSyntheticFd = 3;
+
+    /**
      * The underlying Java NIO FileChannel for actual I/O operations
      */
     private final FileChannel fileChannel;
@@ -87,6 +93,12 @@ public class CustomFileChannel implements IOHandle {
     private CharsetDecoderHelper decoderHelper;
 
     /**
+     * Synthetic file descriptor number for this handle.
+     * Java doesn't expose real OS file descriptors, so we track our own.
+     */
+    private final int syntheticFd;
+
+    /**
      * Creates a new CustomFileChannel for the specified file path.
      *
      * @param path    the path to the file to open
@@ -98,6 +110,7 @@ public class CustomFileChannel implements IOHandle {
         this.fileChannel = FileChannel.open(path, options);
         this.isEOF = false;
         this.appendMode = false;
+        this.syntheticFd = nextSyntheticFd++;
     }
 
     /**
@@ -122,6 +135,7 @@ public class CustomFileChannel implements IOHandle {
         }
         this.isEOF = false;
         this.appendMode = false;
+        this.syntheticFd = nextSyntheticFd++;
     }
 
     public Path getFilePath() {
@@ -342,18 +356,16 @@ public class CustomFileChannel implements IOHandle {
     /**
      * Gets the file descriptor number for this channel.
      *
-     * <p>Java's FileChannel does not expose the underlying OS file descriptor.
-     * We return undef to match Perl's behavior for handles without a real fd.
-     * Note: Validity checks should be done in the Java backend, not via fileno().
+     * <p>Since Java doesn't expose real OS file descriptors, we return a synthetic
+     * file descriptor number that is unique per CustomFileChannel instance.
+     * This allows Perl code to use fileno() to check if a handle is valid and
+     * to distinguish between different handles.
      *
-     * @return RuntimeScalar with undef (Java doesn't expose real fds)
+     * @return RuntimeScalar with the synthetic file descriptor number
      */
     @Override
     public RuntimeScalar fileno() {
-        // Java's FileChannel does not expose the underlying OS file descriptor.
-        // Return undef to match Perl's behavior for handles without a real fd.
-        // Note: Validity checks should be done in the Java backend, not via fileno().
-        return RuntimeScalarCache.scalarUndef;
+        return getScalarInt(syntheticFd);
     }
 
     /**

@@ -380,9 +380,18 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * SLOW_LOAD_GLOB: rd = getGlobalIO(name)
+     * SLOW_LOAD_GLOB: rd = getGlobalIO(name).createDetachedCopy()
      * Format: [SLOW_LOAD_GLOB] [rd] [name_idx]
      * Effect: Loads a glob/filehandle from global variables
+     *
+     * <p><b>IMPORTANT:</b> This returns a detached copy of the glob.
+     * This is crucial for the {@code do { local *FH; *FH }} pattern used to create anonymous
+     * filehandles. The detached copy captures the current IO slot, so that when the local
+     * scope ends and restores the global glob, the captured copy retains its IO.
+     *
+     * <p>If we returned the global glob directly, the copy would only be made when the
+     * glob is assigned to a variable (in RuntimeScalar constructor), which happens AFTER
+     * the local scope ends, and by that time the IO would have been restored to the original.
      */
     public static int executeLoadGlob(
             int[] bytecode,
@@ -398,7 +407,8 @@ public class SlowOpcodeHandler {
         // Call GlobalVariable.getGlobalIO() to get the RuntimeGlob
         RuntimeGlob glob = GlobalVariable.getGlobalIO(globName);
 
-        registers[rd] = glob;
+        // Return a detached copy to preserve IO during local scope
+        registers[rd] = glob.createDetachedCopy();
         return pc;
     }
 

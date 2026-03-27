@@ -40,23 +40,33 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Creates a detached copy of this glob that shares the current IO slot reference.
-     * Used when assigning a glob to a scalar: `my $fh = *FH`
+     * Creates a detached copy of this glob that has its own independent IO slot.
      * 
-     * <p>This is crucial for `local *GLOB` semantics. When you do:
+     * <p>This is crucial for the {@code do { local *GLOB; *GLOB }} pattern used to create
+     * anonymous filehandles. When you do:
      * <pre>
-     *   local *FH;
-     *   open FH, ...; 
-     *   my $captured = *FH;
-     *   return $captured;
+     *   my $fh = do { local *FH; open FH, ...; *FH };
      * </pre>
-     * After the local scope ends, *FH's IO is restored, but $captured should
-     * still have the IO that was opened. This method creates a new RuntimeGlob
-     * that points to the CURRENT IO object, so when local restores the original
-     * glob, the captured copy is unaffected.
+     * The returned glob must retain the IO that was opened, even after the local scope
+     * ends and restores the global *FH. This method creates a new RuntimeGlob that:
+     * <ul>
+     *   <li>Has the same globName (for stringification)</li>
+     *   <li>Shares the CURRENT IO RuntimeScalar reference, so that opening a file
+     *       on the original glob also affects this copy</li>
+     * </ul>
      * 
-     * <p>Subclasses (like RuntimeStashEntry) should override this to return 
-     * the same instance, preserving their special ref() behavior.
+     * <p><b>IMPORTANT:</b> The copy shares the same IO RuntimeScalar object as the
+     * original at the time of copying. This means:
+     * <ul>
+     *   <li>If you call {@code setIO()} on the original, it modifies the shared IO in place,
+     *       so the copy sees the change</li>
+     *   <li>When {@code local} restores the original glob's IO reference (via
+     *       {@code this.IO = savedIO}), the copy's IO reference is NOT affected because
+     *       it's a separate field</li>
+     * </ul>
+     * 
+     * <p>Subclasses (like RuntimeStashEntry) should override this to return the same
+     * instance, preserving their special ref() behavior.
      *
      * @return A new RuntimeGlob with the same globName and IO reference.
      */

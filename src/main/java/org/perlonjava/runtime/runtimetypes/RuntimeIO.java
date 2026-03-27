@@ -768,18 +768,37 @@ public class RuntimeIO extends RuntimeScalar {
     /**
      * Extracts a RuntimeIO from various Perl scalar types.
      *
-     * <p>Handles:
+     * <p>This method handles several common filehandle representations:
      * <ul>
-     *   <li>Direct I/O handles</li>
-     *   <li>Glob references (\*STDOUT)</li>
-     *   <li>Globs (*STDOUT)</li>
+     *   <li>Direct I/O handles (RuntimeIO stored directly in the scalar)</li>
+     *   <li>Glob references (\*STDOUT) - dereferences to get the glob's IO slot</li>
+     *   <li>Globs (*STDOUT) - accesses the glob's IO slot directly</li>
+     *   <li>Symbolic names ("STDOUT") - looks up the global handle by name</li>
      * </ul>
      *
+     * <p><b>IMPORTANT for detached glob copies:</b> When a glob is captured via
+     * {@code do { local *FH; *FH }}, the returned glob is a "detached copy" created
+     * by {@link RuntimeGlob#createDetachedCopy()}. This copy has its own IO slot
+     * that is independent of the global *FH after the local scope ends. This method
+     * must extract the IO from the detached copy's own IO slot, NOT from the global
+     * handle looked up by name. The fallback lookup by globName (lines 820-828) should
+     * only be used when the glob's own IO slot is genuinely null/empty, not just
+     * because it contains an empty RuntimeScalar.
+     *
      * @param runtimeScalar the scalar containing or referencing an I/O handle
-     * @return the extracted RuntimeIO
+     * @return the extracted RuntimeIO, or null if no IO handle found
      */
     public static RuntimeIO getRuntimeIO(RuntimeScalar runtimeScalar) {
         RuntimeIO fh = null;
+        boolean ioDebug = System.getenv("JPERL_IO_DEBUG") != null;
+        
+        if (ioDebug) {
+            System.err.println("[JPERL_IO_DEBUG] getRuntimeIO ENTRY: type=" + runtimeScalar.type +
+                " valueClass=" + (runtimeScalar.value != null ? runtimeScalar.value.getClass().getSimpleName() : "null") +
+                " valueId=" + (runtimeScalar.value != null ? System.identityHashCode(runtimeScalar.value) : 0));
+            System.err.flush();
+        }
+        
         // Handle: my $fh2 = \*STDOUT;
         // Handle: my $fh = *STDOUT;
 
@@ -813,11 +832,25 @@ public class RuntimeIO extends RuntimeScalar {
 
         if (runtimeScalar.value instanceof RuntimeGlob runtimeGlob) {
             RuntimeScalar ioScalar = runtimeGlob.getIO();
+            if (ioDebug) {
+                System.err.println("[JPERL_IO_DEBUG] getRuntimeIO: glob=" + runtimeGlob.globName +
+                    " globId=" + System.identityHashCode(runtimeGlob) +
+                    " ioScalar=" + (ioScalar != null ? ioScalar.type + "/" + System.identityHashCode(ioScalar) : "null") +
+                    " ioValue=" + (ioScalar != null ? (ioScalar.value != null ? ioScalar.value.getClass().getSimpleName() + "/" + System.identityHashCode(ioScalar.value) : "null") : "N/A"));
+                System.err.flush();
+            }
             if (ioScalar != null) {
                 fh = ioScalar.getRuntimeIO();
             }
-            // If the glob's IO part is null, try to look up the global handle by name
+            // If the glob's IO part is null, try to look up the global handle by name.
+            // IMPORTANT: This fallback should only be used when the detached copy's own
+            // IO slot genuinely has no IO handle. For the `do { local *FH; *FH }` pattern,
+            // the detached copy's IO slot IS the correct place to look.
             if (fh == null && runtimeGlob.globName != null) {
+                if (ioDebug) {
+                    System.err.println("[JPERL_IO_DEBUG] getRuntimeIO: fallback lookup for " + runtimeGlob.globName);
+                    System.err.flush();
+                }
                 RuntimeGlob globalGlob = GlobalVariable.getGlobalIO(runtimeGlob.globName);
                 if (globalGlob != null) {
                     RuntimeScalar globalIoScalar = globalGlob.getIO();
@@ -828,7 +861,16 @@ public class RuntimeIO extends RuntimeScalar {
             }
         } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
             // Direct I/O handle
+            if (ioDebug) {
+                System.err.println("[JPERL_IO_DEBUG] getRuntimeIO: found direct RuntimeIO id=" + System.identityHashCode(runtimeIO));
+                System.err.flush();
+            }
             fh = runtimeIO;
+        }
+
+        if (ioDebug) {
+            System.err.println("[JPERL_IO_DEBUG] getRuntimeIO EXIT: fh=" + (fh != null ? System.identityHashCode(fh) : "null"));
+            System.err.flush();
         }
 
         if (fh == null) {

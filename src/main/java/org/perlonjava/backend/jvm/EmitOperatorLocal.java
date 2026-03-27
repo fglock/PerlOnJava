@@ -130,8 +130,23 @@ public class EmitOperatorLocal {
             lvalueContext = LValueVisitor.getContext(varToLocal);
         }
 
-        varToLocal.accept(emitterVisitor.with(lvalueContext));
         boolean isTypeglob = varToLocal instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
+        
+        // For local *GLOB, we must NOT create a detached copy - we need to localize the actual
+        // global glob from globalIORefs, so that later accesses via *GLOB see the new IO slot.
+        // This is critical for the `do { local *FH; *FH }` pattern to work correctly.
+        if (isTypeglob && varToLocal instanceof OperatorNode opNode2 && opNode2.operand instanceof IdentifierNode idNode) {
+            String fullName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            mv.visitLdcInsn(fullName);
+            mv.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getGlobalIO",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
+                    false);
+        } else {
+            varToLocal.accept(emitterVisitor.with(lvalueContext));
+        }
+        
         // save the old value
         if (isTypeglob) {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

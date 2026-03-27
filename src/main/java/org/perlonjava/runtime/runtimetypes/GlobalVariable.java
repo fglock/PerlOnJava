@@ -533,6 +533,24 @@ public class GlobalVariable {
     }
 
     /**
+     * Retrieves a detached copy of a global IO reference, wrapped in a RuntimeScalar.
+     *
+     * <p>This method is crucial for the {@code do { local *FH; *FH }} pattern used to create
+     * anonymous filehandles. By creating the detached copy immediately when the glob is
+     * evaluated, we capture the current IO slot BEFORE the local scope ends and restores
+     * the original IO.
+     *
+     * <p>The detached copy has the same globName (for stringification) but its own IO
+     * reference that is independent of the global glob after the copy is made.
+     *
+     * @param key The key of the global IO reference.
+     * @return A RuntimeScalar containing a detached copy of the glob.
+     */
+    public static RuntimeScalar getGlobalIOCopy(String key) {
+        return new RuntimeScalar(getGlobalIO(key));
+    }
+
+    /**
      * Checks if a global IO reference exists.
      *
      * @param key The key of the global IO reference.
