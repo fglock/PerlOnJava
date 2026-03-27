@@ -11,26 +11,23 @@ else
 endif
 
 # Check Java/Gradle compatibility and fix if needed
-# For Java 25+, we need Gradle 9.0+ - this will auto-fix wrapper and clear old caches
+# For Java 25+, we need Gradle 9.1.0+ (see https://docs.gradle.org/current/userguide/compatibility.html)
 check-java-gradle:
 ifeq ($(OS),Windows_NT)
-	@if not exist gradlew gradle wrapper --gradle-version=9.0
+	@if not exist gradlew gradle wrapper --gradle-version=9.1.0
 else
 	@JAVA_MAJOR=$$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'); \
 	if [ "$$JAVA_MAJOR" -ge 25 ]; then \
-		echo "Java $$JAVA_MAJOR detected - ensuring Gradle 9.0+ compatibility..."; \
-		rm -rf ~/.gradle/wrapper/dists/gradle-8.*; \
-		if [ -f ./gradlew ]; then \
-			CURRENT_VER=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
-			if [ "$$CURRENT_VER" -lt 9 ] 2>/dev/null; then \
-				echo "Updating Gradle wrapper from $$CURRENT_VER.x to 9.0..."; \
-				gradle wrapper --gradle-version=9.0 || { echo "Error: 'gradle' command not found. Please install Gradle 9.0+ or run: rm -rf ~/.gradle/wrapper/dists/gradle-8.*"; exit 1; }; \
-			fi; \
-		else \
-			gradle wrapper --gradle-version=9.0 || { echo "Error: 'gradle' command not found. Please install Gradle."; exit 1; }; \
+		echo "Java $$JAVA_MAJOR detected - ensuring Gradle 9.1+ compatibility..."; \
+		rm -rf ~/.gradle/wrapper/dists/gradle-8.* ~/.gradle/wrapper/dists/gradle-9.0*; \
+		GRADLE_MAJOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
+		GRADLE_MINOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-[0-9]+\.([0-9]+).*/\1/'); \
+		if [ "$$GRADLE_MAJOR" -lt 9 ] || ([ "$$GRADLE_MAJOR" -eq 9 ] && [ "$$GRADLE_MINOR" -lt 1 ]); then \
+			echo "Updating Gradle wrapper to 9.1.0 (current: $$GRADLE_MAJOR.$$GRADLE_MINOR)..."; \
+			gradle wrapper --gradle-version=9.1.0 || { echo "Error: 'gradle' command not found. Install Gradle 9.1+ or manually clear: rm -rf ~/.gradle/wrapper/dists/gradle-{8,9.0}*"; exit 1; }; \
 		fi; \
-	else \
-		test -f ./gradlew || gradle wrapper; \
+	elif [ ! -f ./gradlew ]; then \
+		gradle wrapper; \
 	fi
 endif
 
