@@ -544,9 +544,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Returns an integer representation of the typeglob reference.
-     * This is the hash code of the current instance.
+     * This is the unsigned interpretation of the hash code.
+     * Note: This may overflow for hash codes > Integer.MAX_VALUE, but
+     * getDoubleRef() returns the correct unsigned value.
      *
-     * @return The hash code of this instance.
+     * @return The hash code of this instance as unsigned (may overflow).
      */
     public int getIntRef() {
         return this.hashCode();
@@ -554,12 +556,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Returns a double representation of the typeglob reference.
-     * This is the hash code of the current instance, cast to a double.
+     * This is the unsigned interpretation of the hash code, matching what
+     * hex() would return from the stringified address in toStringRef().
      *
-     * @return The hash code of this instance as a double.
+     * @return The hash code as an unsigned value (as double).
      */
     public double getDoubleRef() {
-        return this.hashCode();
+        return Integer.toUnsignedLong(this.hashCode());
     }
 
     /**
