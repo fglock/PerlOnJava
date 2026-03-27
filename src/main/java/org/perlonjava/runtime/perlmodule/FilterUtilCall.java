@@ -33,6 +33,42 @@ public class FilterUtilCall extends PerlModuleBase {
     private static final ThreadLocal<FilterContext> filterContext = ThreadLocal.withInitial(FilterContext::new);
 
     /**
+     * Thread-local flag to track if a filter was installed during the current use statement.
+     * This is used by the parser to know when to rejoin/re-tokenize remaining source.
+     */
+    private static final ThreadLocal<Boolean> filterInstalledDuringUse = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Mark that a filter was installed during the current use statement.
+     * Called by real_import() when a filter is added to the stack.
+     */
+    public static void markFilterInstalled() {
+        filterInstalledDuringUse.set(true);
+    }
+
+    /**
+     * Check if a filter was installed during the current use statement.
+     * Also resets the flag after checking.
+     *
+     * @return true if a filter was installed, false otherwise
+     */
+    public static boolean wasFilterInstalled() {
+        boolean result = filterInstalledDuringUse.get();
+        filterInstalledDuringUse.set(false);  // Reset after checking
+        return result;
+    }
+
+    /**
+     * Check if there are any active filters on the stack.
+     *
+     * @return true if filters are active, false otherwise
+     */
+    public static boolean hasActiveFilters() {
+        FilterContext context = filterContext.get();
+        return context.filterStack.size() > 0;
+    }
+
+    /**
      * Constructor for FilterUtilCall.
      * Note: We don't set %INC here because the Perl module file needs to be loaded
      * to provide filter_add() and filter_read_exact() functions.
@@ -86,6 +122,9 @@ public class FilterUtilCall extends PerlModuleBase {
 
         // Add to the filter stack
         context.filterStack.add(new RuntimeScalar(filterEntry));
+
+        // Mark that a filter was installed (for parser to check after import())
+        markFilterInstalled();
 
         return scalarTrue.getList();
     }
@@ -210,6 +249,14 @@ public class FilterUtilCall extends PerlModuleBase {
             return sourceCode;
         }
 
+        // Debug: show that we're filtering
+        String debugEnv = System.getenv("JPERL_FILTER_DEBUG");
+        boolean debug = debugEnv != null && !debugEnv.isEmpty();
+        if (debug) {
+            System.err.println("[FILTER] applyFilters called with " + sourceCode.length() + " chars");
+            System.err.println("[FILTER] Source: " + sourceCode.substring(0, Math.min(200, sourceCode.length())));
+        }
+
         // Set up the source for filter_read()
         context.sourceLines = sourceCode.split("(?<=\n)", -1);
         context.currentLine = 0;
@@ -243,11 +290,17 @@ public class FilterUtilCall extends PerlModuleBase {
                         String chunk = GlobalVariable.getGlobalVariable("main::_").toString();
                         if (!chunk.isEmpty()) {
                             filteredCode.append(chunk);
+                            if (debug) {
+                                System.err.println("[FILTER] Got chunk: " + chunk);
+                            }
                         }
 
                         // Check status - convert to scalar if it's a list
                         RuntimeScalar statusScalar = result.scalar();
                         int status = statusScalar.getInt();
+                        if (debug) {
+                            System.err.println("[FILTER] Status: " + status);
+                        }
                         if (status <= 0) {
                             continueFiltering = false;
                         }
@@ -264,6 +317,9 @@ public class FilterUtilCall extends PerlModuleBase {
                 }
             }
 
+            if (debug) {
+                System.err.println("[FILTER] Final filtered code: " + filteredCode.toString().substring(0, Math.min(200, filteredCode.length())));
+            }
             return filteredCode.toString();
 
         } finally {

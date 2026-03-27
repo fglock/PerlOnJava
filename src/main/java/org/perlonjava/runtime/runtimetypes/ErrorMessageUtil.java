@@ -12,7 +12,7 @@ import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermo
  * Utility class for generating error messages with context from a list of tokens.
  */
 public class ErrorMessageUtil {
-    private final List<LexerToken> tokens;
+    private List<LexerToken> tokens;
     private final String originalFileName;
     private String fileName;
     private int tokenIndex;
@@ -30,6 +30,16 @@ public class ErrorMessageUtil {
         this.tokens = tokens;
         this.tokenIndex = -1;
         this.lastLineNumber = 1;
+    }
+
+    /**
+     * Updates the token list after source filtering has modified the source.
+     * This is called when a source filter is applied after the initial tokenization.
+     *
+     * @param newTokens the new list of tokens after filtering
+     */
+    public void updateTokens(List<LexerToken> newTokens) {
+        this.tokens = newTokens;
     }
 
     /**

@@ -454,24 +454,33 @@ print "X";  # Should print Y
 
 ## Progress Tracking
 
-### Current Status: Design Complete
+### Current Status: Implementation Complete (Closure Filters)
 
 ### Completed
 - [x] Research Perl source filter semantics
 - [x] Analyze current PerlOnJava implementation  
 - [x] Identify root cause of t/049Unhide.t failure
 - [x] Design token rejoin/re-tokenize solution
+- [x] **Phase 1**: Add filter state tracking to FilterUtilCall.java (2026-03-27)
+  - Added `filterInstalledDuringUse` ThreadLocal flag
+  - Added `markFilterInstalled()`, `wasFilterInstalled()`, `hasActiveFilters()` methods
+  - Modified `real_import()` to mark when filter is installed
+- [x] **Phase 2**: Implement token rejoin and re-tokenize in StatementParser.java (2026-03-27)
+  - Added `applySourceFilterToRemainingTokens()` method
+  - Integrated with `parseUseDeclaration()` to check for filters after import()
+  - Added `updateTokens()` method to ErrorMessageUtil
+  - Fixed EOF token handling (skip EOF tokens when rejoining to avoid garbage characters)
+- [x] **Phase 3**: Test with Log::Log4perl `:resurrect` tag - PASSED
 
-### Next Steps
-1. **Phase 1**: Add filter state tracking to FilterUtilCall.java (~30 min)
-2. **Phase 2**: Implement token rejoin and re-tokenize in StatementParser.java (~2-3 hrs)
-3. **Phase 3**: Test with Log::Log4perl `:resurrect` tag
-4. **Phase 4**: Add method filter support if needed
+### Remaining Work
+- [ ] **Phase 4**: Add method filter support (currently returns original source for method filters)
+- [ ] Add debug environment variable documentation (JPERL_FILTER_DEBUG=1)
 
-### Estimated Total Effort
-~6-10 hours for full implementation
+### Files Modified
+- `src/main/java/org/perlonjava/runtime/perlmodule/FilterUtilCall.java`
+- `src/main/java/org/perlonjava/frontend/parser/StatementParser.java`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ErrorMessageUtil.java`
 
-### Open Questions
-- Line number tracking after re-tokenization - how to maintain accurate error messages?
-- Should we cache filtered source for modules loaded multiple times?
-- How to handle `eval` with filters (probably same approach)?
+### Open Questions (Resolved)
+- Line number tracking after re-tokenization: We update ErrorMessageUtil with new tokens
+- How to handle EOF tokens: Skip them when rejoining (they contain invalid characters)
