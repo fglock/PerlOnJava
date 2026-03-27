@@ -71,6 +71,33 @@ public class CustomFileChannel implements IOHandle {
     private static int nextSyntheticFd = 3;
 
     /**
+     * Pool of recycled file descriptors that can be reused.
+     * When a CustomFileChannel is closed, its fd goes back into this pool.
+     */
+    private static final java.util.Queue<Integer> recycledFds = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    /**
+     * Allocate a synthetic file descriptor.
+     * Prefers recycled fds, otherwise allocates a new one.
+     */
+    private static synchronized int allocateFd() {
+        Integer recycled = recycledFds.poll();
+        if (recycled != null) {
+            return recycled;
+        }
+        return nextSyntheticFd++;
+    }
+
+    /**
+     * Release a synthetic file descriptor back to the pool.
+     */
+    private static void releaseFd(int fd) {
+        if (fd >= 3) {  // Don't recycle stdin/stdout/stderr
+            recycledFds.offer(fd);
+        }
+    }
+
+    /**
      * The underlying Java NIO FileChannel for actual I/O operations
      */
     private final FileChannel fileChannel;
@@ -110,7 +137,7 @@ public class CustomFileChannel implements IOHandle {
         this.fileChannel = FileChannel.open(path, options);
         this.isEOF = false;
         this.appendMode = false;
-        this.syntheticFd = nextSyntheticFd++;
+        this.syntheticFd = allocateFd();
     }
 
     /**
@@ -135,7 +162,7 @@ public class CustomFileChannel implements IOHandle {
         }
         this.isEOF = false;
         this.appendMode = false;
-        this.syntheticFd = nextSyntheticFd++;
+        this.syntheticFd = allocateFd();
     }
 
     public Path getFilePath() {
@@ -232,6 +259,7 @@ public class CustomFileChannel implements IOHandle {
     public RuntimeScalar close() {
         try {
             fileChannel.close();
+            releaseFd(syntheticFd);  // Return fd to pool for reuse
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "close failed");
