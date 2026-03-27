@@ -625,7 +625,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
     - Modified `setDebugInfoLineNumber()` to also call `saveSourceLocation()`
     - This is called during emit when we have correct package context from the subroutine's symbol table
     - The emit-time call overwrites parse-time entries with correct package
-  - See `dev/design/caller_package_context.md` for detailed analysis
+  - See `../design/caller_package_context.md` for detailed analysis
   - No data structure changes, minimal 6-line fix
 
 - [x] Phase 29: Fix caller() returning wrong line numbers (2026-03-17)
@@ -654,7 +654,7 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
   - **ExceptionFormatter.java fix**:
     - Interpreter path now calls `ByteCodeSourceMapper.getPackageAtLocation()` for all frames
     - Ensures consistent package reporting regardless of stack depth
-  - See `dev/design/unified_caller_stack.md` for full analysis
+  - See `../design/unified_caller_stack.md` for full analysis
   - Result: Interpreter and JVM backends now report same package for same source location
 
 - [x] Phase 37: Fix #line directive to update errorUtil.fileName during parsing (2026-03-17)
@@ -699,7 +699,7 @@ The remaining test failures require implementing core Perl features that are cur
 #### Phase 31: DESTROY/Destructor Support (High Impact)
 **Enables**: demolish tests (6 failures), proper object cleanup  
 **Status**: Analysis complete, implementation deferred  
-**Design doc**: `dev/design/object_lifecycle.md`
+**Design doc**: `../design/object_lifecycle.md`
 
 Perl's DESTROY relies on reference counting; Java uses GC. The challenge is detecting
 when an object becomes unreachable while we can still access it to call DESTROY.
@@ -710,7 +710,7 @@ detailed analysis of implementation strategies, challenges, and test cases.
 #### Phase 32: Weak Reference Emulation (High Impact)  
 **Enables**: accessor-weaken tests (20 failures), no-moo.t (5 failures)  
 **Status**: Analysis complete, implementation deferred  
-**Design doc**: `dev/design/object_lifecycle.md`
+**Design doc**: `../design/object_lifecycle.md`
 
 Perl's weak references are tied to reference counting, which Java doesn't have.
 
@@ -754,7 +754,7 @@ The interpreter path was using different package sources for inner vs outer fram
 Fixed by adding `getPackageAtLocation()` to ByteCodeSourceMapper and using it in
 ExceptionFormatter for all frames.
 
-See `dev/design/unified_caller_stack.md` for detailed analysis.
+See `../design/unified_caller_stack.md` for detailed analysis.
 
 #### Phase 35: Mo strict.t - Make $^H Magical (Completed)
 **Enables**: Mo t/strict.t (1 failure) → **FIXED**  
@@ -768,7 +768,7 @@ that didn't communicate with the compiler's strict checking.
 - On read: Returns current strict options from symbol table
 
 **Future consideration**: Refactor to use `$^H` as single source of truth, eliminating
-`strictOptionsStack`. See `dev/design/strict_hints_refactor.md` for analysis.
+`strictOptionsStack`. See `../design/strict_hints_refactor.md` for analysis.
 
 **Result**: Mo tests now 28/28 passing (was 27/28).
 
@@ -824,7 +824,7 @@ which are fundamentally limited by Java's GC model.
 
 ## Related Documents
 
-- `dev/design/cpan_client.md` - jcpan implementation
-- `dev/design/unified_caller_stack.md` - caller() package tracking analysis
+- `cpan_client.md` - jcpan implementation
+- `../design/unified_caller_stack.md` - caller() package tracking analysis
 - `dev/import-perl5/README.md` - Module sync process
 - `dev/import-perl5/config.yaml` - Module import configuration

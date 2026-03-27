@@ -409,7 +409,7 @@ The fix allows CPAN::Meta::YAML to properly parse MYMETA.yml files, enabling CPA
 
 ## Related Documents
 
-- `dev/design/xsloader.md` - XSLoader/Java integration
-- `dev/design/makemaker_perlonjava.md` - ExtUtils::MakeMaker implementation
+- `xsloader.md` - XSLoader/Java integration
+- `makemaker_perlonjava.md` - ExtUtils::MakeMaker implementation
 - `.cognition/skills/port-cpan-module/` - Skill for porting CPAN modules
 - `docs/guides/using-cpan-modules.md` - User documentation

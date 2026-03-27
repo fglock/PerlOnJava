@@ -13,6 +13,12 @@ This directory contains development resources, tools and experimental code for P
     - Architecture decisions and planning documents
     - Feature specifications and roadmaps
 
+- **modules/** - CPAN module porting documentation
+    - Module compatibility guides (Moose, Moo, DateTime)
+    - XS fallback mechanisms and Java XS implementations
+    - jcpan client and MakeMaker documentation
+    - See [modules/README.md](modules/README.md) for module status
+
 - **examples/** - Sample code and usage demonstrations
 
   Mix of working examples and feature concepts for design exploration. Not all examples are guaranteed to run.
@@ -55,12 +61,13 @@ When adding new code or tools:
 1. Place it in the appropriate category directory
 2. Include clear documentation and usage examples
 3. Add relevant tests where applicable
-4. Reference related design documents from the `design/` directory
+4. Reference related design documents from `design/` or `modules/`
 
 ## Development Guidelines
 
 - Keep experimental code separate from production code
 - Document design decisions in the `design/` directory
+- Document module porting work in the `modules/` directory
 - Use the `bench/` directory for performance testing
 - Check `examples/` for implementation patterns
 - Store reusable LLM prompts in `prompts/` directory

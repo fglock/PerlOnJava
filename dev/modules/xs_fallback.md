@@ -751,9 +751,9 @@ modules:
 
 ## Related Documents
 
-- `dev/design/xsloader.md` - XSLoader architecture
-- `dev/design/makemaker_perlonjava.md` - MakeMaker implementation
-- `dev/design/cpan_client.md` - CPAN client support
+- `xsloader.md` - XSLoader architecture
+- `makemaker_perlonjava.md` - MakeMaker implementation
+- `cpan_client.md` - CPAN client support
 - `.cognition/skills/port-cpan-module/` - Module porting skill
 
 ---

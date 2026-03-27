@@ -51,6 +51,8 @@ The design documents cover:
 - **I/O & Signals:** File handles, signal handling, terminal control
 - **Distribution:** Packaging, versioning, platform support
 
+> **Note:** Module porting documentation (CPAN modules, XS fallback, Moose/Moo support) has been moved to [`dev/modules/`](../modules/README.md).
+
 ---
 
 ## Finding What You Need

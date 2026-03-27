@@ -307,5 +307,5 @@ mv.visitJumpInsn(Opcodes.GOTO, applyNoControlFlow);
 
 ## Related Documents
 
-- `dev/design/cpan_client.md` - Main CPAN client documentation
-- `dev/design/xsloader.md` - XSLoader implementation
+- `cpan_client.md` - Main CPAN client documentation
+- `xsloader.md` - XSLoader implementation
