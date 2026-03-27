@@ -51,12 +51,12 @@ public class Whitespace {
                         if (tokenIndex + 1 < tokens.size() && tokens.get(tokenIndex + 1).type == LexerTokenType.IDENTIFIER) {
                             boolean inPod = true;
 
-                            // Skip through pod section until 'cut' or 'end' is found
+                            // Skip through pod section until '=cut' is found
+                            // Note: '=end formatname' only ends a =begin block, not the entire POD section
                             while (tokenIndex < tokens.size() && inPod) {
                                 String podEqual = tokens.get(tokenIndex).text;
                                 String podToken = tokens.get(tokenIndex + 1).text;
-                                if (podEqual.equals("=")
-                                        && (podToken.equals("cut") || podToken.equals("end"))) {
+                                if (podEqual.equals("=") && podToken.equals("cut")) {
                                     inPod = false; // End of pod
                                 }
 
