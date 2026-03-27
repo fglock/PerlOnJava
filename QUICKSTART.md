@@ -42,7 +42,35 @@ make
 
 The `make` command compiles the project and runs the fast unit tests. The complete build with tests typically completes in ~30 seconds.
 
-**Build troubleshooting:** See [Installation Guide](docs/getting-started/installation.md)
+**Build troubleshooting:**
+
+<details>
+<summary><strong>"Unsupported class file major version 69" error (Java 25+)</strong></summary>
+
+If you see this error:
+```
+BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_' Unsupported class file major version 69
+> Unsupported class file major version 69
+```
+
+This means you have Java 25+ but an old cached Gradle version that doesn't support it. Fix by clearing the old Gradle cache:
+
+```bash
+# Linux/macOS
+rm -rf ~/.gradle/wrapper/dists/gradle-8.*
+
+# Windows (PowerShell)
+Remove-Item -Recurse -Force "$env:USERPROFILE\.gradle\wrapper\dists\gradle-8.*"
+
+# Then rebuild
+make clean
+make
+```
+
+The project uses Gradle 9.0+ (configured in the wrapper) which supports Java 22-25+.
+</details>
+
+For more troubleshooting: See [Installation Guide](docs/getting-started/installation.md#troubleshooting)
 
 **Debian/Ubuntu users:** You can also build and install a `.deb` package:
 ```bash

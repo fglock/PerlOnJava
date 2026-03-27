@@ -21,10 +21,11 @@
    - [Common Tasks](#common-tasks)
    - [Available Options](#available-options)
    - [Important Notes](#important-notes)
+10. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
-- Java 22 or higher
-- Maven or Gradle
+- Java 22 or higher (Java 22, 23, 24, 25+ are all supported)
+- Maven or Gradle (Gradle wrapper included - recommended)
 - Optional: JDBC drivers for database connectivity
 
 ## Build Options
@@ -211,3 +212,62 @@ make  # Rebuild to include driver
    ```
 
 **→ See [Configure.pl Reference](../reference/configure.md) for complete documentation**
+
+## Troubleshooting
+
+### "Unsupported class file major version 69" (Java 25+)
+
+**Problem:** When building with Java 25 or later, you see:
+```
+BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_' Unsupported class file major version 69
+> Unsupported class file major version 69
+```
+
+**Cause:** An old cached Gradle version (8.x) doesn't support Java 25. Java 25 uses class file version 69, which requires Gradle 9.0+.
+
+**Solution:** Clear the old Gradle cache and rebuild:
+
+```bash
+# Linux/macOS
+rm -rf ~/.gradle/wrapper/dists/gradle-8.*
+make clean
+make
+
+# Windows (PowerShell)
+Remove-Item -Recurse -Force "$env:USERPROFILE\.gradle\wrapper\dists\gradle-8.*"
+gradlew.bat clean
+make
+```
+
+The project includes a Gradle wrapper configured for Gradle 9.0+, which supports Java 22 through Java 25+.
+
+### Java Version Compatibility
+
+| Java Version | Class File Version | Gradle Required |
+|--------------|-------------------|-----------------|
+| Java 22      | 66                | 8.8+            |
+| Java 23      | 67                | 8.10+           |
+| Java 24      | 68                | 8.12+           |
+| Java 25      | 69                | 9.0+            |
+
+PerlOnJava uses **Gradle 9.0** (configured in `gradle/wrapper/gradle-wrapper.properties`) to support all these versions.
+
+### "JAVA_HOME is not set"
+
+Make sure you have a JDK installed and JAVA_HOME is set:
+
+```bash
+# Linux/macOS (add to ~/.bashrc or ~/.zshrc)
+export JAVA_HOME=/path/to/jdk
+
+# Windows (System Properties > Environment Variables)
+set JAVA_HOME=C:\path\to\jdk
+```
+
+### Build Takes Too Long
+
+Use `make dev` instead of `make` for faster builds during development - it skips tests:
+
+```bash
+make dev  # Compiles only, no tests
+```
