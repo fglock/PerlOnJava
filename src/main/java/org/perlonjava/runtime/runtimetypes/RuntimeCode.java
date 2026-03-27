@@ -2186,9 +2186,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Replace lazy {@link ScalarSpecialVariable} references ($1, $&amp;, etc.) in a return list
-     * with concrete {@link RuntimeScalar} copies.  Must be called BEFORE {@link RegexState#restore()}
-     * so that the values reflect the subroutine's regex state, not the caller's.
+     * Replace lazy {@link ScalarSpecialVariable} references ($1, $&amp;, etc.) and
+     * {@link RuntimeArray} references in a return list with concrete copies.
+     * Must be called BEFORE {@link RegexState#restore()} and local variable restoration
+     * so that the values reflect the subroutine's state, not the caller's.
+     *
+     * <p>This is critical for returning localized arrays (e.g., {@code local @ARGV}).
+     * Without this, the array reference in the return list would point to the restored
+     * (original) values after the local scope exits.</p>
      */
     public static void materializeSpecialVarsInResult(RuntimeList result) {
         List<RuntimeBase> elems = result.elements;
@@ -2200,6 +2205,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 concrete.type = resolved.type;
                 concrete.value = resolved.value;
                 elems.set(i, concrete);
+            } else if (elem instanceof RuntimeArray arr) {
+                // Copy array elements to ensure independence from local restoration.
+                // Replace the RuntimeArray reference with a new RuntimeArray containing copies.
+                RuntimeArray copy = new RuntimeArray();
+                for (RuntimeScalar arrElem : arr.elements) {
+                    copy.elements.add(arrElem == null ? null : new RuntimeScalar(arrElem));
+                }
+                elems.set(i, copy);
+            } else if (elem instanceof RuntimeHash hash) {
+                // Copy hash elements for the same reason as arrays
+                RuntimeHash copy = new RuntimeHash();
+                for (var entry : hash.elements.entrySet()) {
+                    copy.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                }
+                elems.set(i, copy);
             }
         }
     }
