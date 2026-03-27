@@ -60,6 +60,17 @@ Example format at the end of a design doc:
 - Keep docs updated as implementation progresses
 - Reference related docs and skills at the end
 
+### Unimplemented Features
+
+PerlOnJava does **not** implement the following Perl features:
+
+| Feature | Impact |
+|---------|--------|
+| `weaken` / `isweak` | Weak references don't work; modules using `Scalar::Util::weaken` for cleanup (e.g., Moo's `no Moo`) will fail |
+| `DESTROY` | Object destructors never called; DEMOLISH patterns and cleanup code won't run |
+| `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
+| `threads` | Perl threads not supported; use Java threading via inline Java if needed |
+
 ### Testing
 
 **ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
