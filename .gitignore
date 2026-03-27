@@ -89,3 +89,4 @@ Image-ExifTool-*
 xxx/
 *.jfr
 report.txt
+exiftool_results.json
