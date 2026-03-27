@@ -355,6 +355,15 @@ public class EmitVariable {
                         "getGlobalIO",
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                         false);
+                // Create a detached copy so that `local *GLOB` restoration doesn't affect
+                // values that captured the glob before the local scope ended.
+                // This implements Perl's `do { local *FH; *FH }` semantics correctly.
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
+                        "createDetachedCopy",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
+                        false);
                 return;
             }
 

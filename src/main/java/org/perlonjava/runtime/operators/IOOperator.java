@@ -382,6 +382,12 @@ public class IOOperator {
                 System.err.flush();
             }
             targetGlob.setIO(fh);
+            
+            // If this is a named glob (e.g., *main::SAVEERR), also update the global glob
+            // This ensures that subsequent bareword access to the same name sees the new IO
+            if (targetGlob.globName != null) {
+                GlobalVariable.getGlobalIO(targetGlob.globName).setIO(fh);
+            }
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();

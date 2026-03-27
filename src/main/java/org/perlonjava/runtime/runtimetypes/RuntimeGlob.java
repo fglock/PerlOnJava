@@ -40,29 +40,33 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Creates a detached copy of this glob that shares the current IO slot reference.
+     * Creates a detached copy of this glob that has its own IO slot.
      * Used when assigning a glob to a scalar: `my $fh = *FH`
      * 
-     * <p>This is crucial for `local *GLOB` semantics. When you do:
+     * <p>This is crucial for `local *GLOB` and multiple filehandle semantics.
+     * When you do:
      * <pre>
-     *   local *FH;
-     *   open FH, ...; 
-     *   my $captured = *FH;
-     *   return $captured;
+     *   my $fh1 = do { local *FH; *FH };  # Creates glob copy with own IO slot
+     *   my $fh2 = do { local *FH; *FH };  # Creates another copy with its own IO slot
+     *   open($fh1, ">", "file1");  # Opens to fh1's IO
+     *   open($fh2, ">", "file2");  # Opens to fh2's IO (independent of fh1)
      * </pre>
-     * After the local scope ends, *FH's IO is restored, but $captured should
-     * still have the IO that was opened. This method creates a new RuntimeGlob
-     * that points to the CURRENT IO object, so when local restores the original
-     * glob, the captured copy is unaffected.
+     * Each copy gets its own IO slot so that opening files on one copy
+     * doesn't affect other copies.
      * 
      * <p>Subclasses (like RuntimeStashEntry) should override this to return 
      * the same instance, preserving their special ref() behavior.
      *
-     * @return A new RuntimeGlob with the same globName and IO reference.
+     * @return A new RuntimeGlob with the same globName but its own IO slot.
      */
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
-        copy.IO = this.IO;  // Share the current IO reference
+        // Create a NEW IO slot for the copy, initialized with the current IO value.
+        // This prevents modifications via setIO() from affecting other copies.
+        RuntimeScalar newIO = new RuntimeScalar();
+        newIO.type = this.IO.type;
+        newIO.value = this.IO.value;
+        copy.IO = newIO;
         return copy;
     }
 
