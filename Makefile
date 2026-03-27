@@ -12,24 +12,21 @@ endif
 
 # Check Java/Gradle compatibility and fix if needed
 # For Java 25+, we need Gradle 9.1.0+ (see https://docs.gradle.org/current/userguide/compatibility.html)
+# Note: On Windows CI, Make uses Git Bash, so we use bash-compatible syntax throughout
 check-java-gradle:
-ifeq ($(OS),Windows_NT)
-	@if not exist gradlew gradle wrapper --gradle-version=9.1.0
-else
 	@JAVA_MAJOR=$$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'); \
-	if [ "$$JAVA_MAJOR" -ge 25 ]; then \
+	if [ "$$JAVA_MAJOR" -ge 25 ] 2>/dev/null; then \
 		echo "Java $$JAVA_MAJOR detected - ensuring Gradle 9.1+ compatibility..."; \
-		rm -rf ~/.gradle/wrapper/dists/gradle-8.* ~/.gradle/wrapper/dists/gradle-9.0*; \
+		rm -rf ~/.gradle/wrapper/dists/gradle-8.* ~/.gradle/wrapper/dists/gradle-9.0* 2>/dev/null || true; \
 		GRADLE_MAJOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-([0-9]+)\..*/\1/'); \
 		GRADLE_MINOR=$$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties 2>/dev/null | sed -E 's/.*gradle-[0-9]+\.([0-9]+).*/\1/'); \
-		if [ "$$GRADLE_MAJOR" -lt 9 ] || ([ "$$GRADLE_MAJOR" -eq 9 ] && [ "$$GRADLE_MINOR" -lt 1 ]); then \
+		if [ "$$GRADLE_MAJOR" -lt 9 ] 2>/dev/null || ([ "$$GRADLE_MAJOR" -eq 9 ] 2>/dev/null && [ "$$GRADLE_MINOR" -lt 1 ] 2>/dev/null); then \
 			echo "Updating Gradle wrapper to 9.1.0 (current: $$GRADLE_MAJOR.$$GRADLE_MINOR)..."; \
 			gradle wrapper --gradle-version=9.1.0 || { echo "Error: 'gradle' command not found. Install Gradle 9.1+ or manually clear: rm -rf ~/.gradle/wrapper/dists/gradle-{8,9.0}*"; exit 1; }; \
 		fi; \
 	elif [ ! -f ./gradlew ]; then \
-		gradle wrapper; \
+		gradle wrapper || true; \
 	fi
-endif
 
 wrapper: check-java-gradle
 
