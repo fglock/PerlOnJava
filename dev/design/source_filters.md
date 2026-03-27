@@ -475,6 +475,37 @@ print "X";  # Should print Y
 ### Remaining Work
 - [ ] **Phase 4**: Add method filter support (currently returns original source for method filters)
 - [ ] Add debug environment variable documentation (JPERL_FILTER_DEBUG=1)
+- [ ] **Phase 5**: Fix FILTER_ONLY @transforms issue in Java instead of patching Filter::Simple (see below)
+
+### Known Issues
+
+#### FILTER_ONLY @transforms Scope Issue (2026-03-27)
+
+**Problem**: When multiple filter modules using `FILTER_ONLY` are loaded in sequence, the second filter's `$multitransform` closure incorrectly includes transforms from the first module.
+
+**Root Cause**: In Filter::Simple, `@transforms` is a package variable. In native Perl, this works because filters process source incrementally - each filter completes before the next filter module is loaded. In PerlOnJava, we tokenize upfront then apply filters, so multiple filter modules may be loaded before any filter runs, causing `@transforms` to accumulate transforms from different modules.
+
+**Current Fix**: Patched `Filter::Simple.pm` to make `@transforms` lexical in `FILTER_ONLY`:
+```perl
+sub FILTER_ONLY {
+    my $caller = caller;
+    my @transforms;  # Made lexical instead of package-scoped
+    ...
+}
+```
+
+**TODO - Proper Java-side Fix**: The ideal solution would be to fix this in PerlOnJava's module loading code:
+1. Before loading a module that may use `FILTER_ONLY`, save `@Filter::Simple::transforms`
+2. Clear `@Filter::Simple::transforms` 
+3. After module loading completes, restore the saved value
+
+This would allow using unmodified upstream Filter::Simple. The challenge is detecting which modules will use `FILTER_ONLY` before loading them. Possible approaches:
+- Clear `@Filter::Simple::transforms` before every `require` (may have side effects)
+- Track filter module loading depth and isolate transforms per level
+- Hook into Filter::Simple's FILTER_ONLY to auto-reset before each call
+
+**Files affected by current fix**:
+- `src/main/perl/lib/Filter/Simple.pm` (marked as `protected: true` in config.yaml)
 
 ### Files Modified
 - `src/main/java/org/perlonjava/runtime/perlmodule/FilterUtilCall.java`
