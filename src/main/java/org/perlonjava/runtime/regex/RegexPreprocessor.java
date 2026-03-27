@@ -55,6 +55,7 @@ public class RegexPreprocessor {
     static int captureGroupCount;
     static boolean deferredUnicodePropertyEncountered;
     static boolean inlinePFlagEncountered;
+    static boolean branchResetEncountered;
 
     static void markDeferredUnicodePropertyEncountered() {
         deferredUnicodePropertyEncountered = true;
@@ -66,6 +67,10 @@ public class RegexPreprocessor {
 
     static boolean hadInlinePFlag() {
         return inlinePFlagEncountered;
+    }
+
+    static boolean hadBranchReset() {
+        return branchResetEncountered;
     }
 
     /**
@@ -82,6 +87,7 @@ public class RegexPreprocessor {
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
+        branchResetEncountered = false;
 
         // First, escape invalid quantifier braces (Perl compatibility)
         // DISABLED: Causes test regressions - needs more work
@@ -1153,6 +1159,9 @@ public class RegexPreprocessor {
      * @return New offset after processing the branch reset group
      */
     private static int handleBranchReset(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
+        // Mark that this pattern uses branch reset
+        branchResetEncountered = true;
+        
         // Save the starting group count
         int startGroupCount = captureGroupCount;
 

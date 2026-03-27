@@ -97,6 +97,30 @@ The runner:
 - Has a 300s timeout per test
 - Reports pass/fail counts in format: `passed/total`
 - Saves results to `test_results_YYYYMMDD_HHMMSS.txt`
+- Sets required environment variables automatically (see below)
+
+#### Running Tests Directly (without perl_test_runner.pl)
+
+If you run tests directly with `./jperl`, you may need to set these environment variables:
+
+```bash
+# For tests that use unimplemented features (re/pat.t, op/pack.t, etc.)
+# Without this, unimplemented features cause fatal errors
+export JPERL_UNIMPLEMENTED=warn
+
+# For memory-intensive tests (re/pat.t, op/repeat.t, op/list.t)
+# Increases JVM stack size to prevent StackOverflowError
+export JPERL_OPTS="-Xss256m"
+
+# Skip tests with 300KB+ strings that crash the JVM
+export PERL_SKIP_BIG_MEM_TESTS=1
+
+# Example: running re/pat.t directly
+cd perl5_t/t
+JPERL_UNIMPLEMENTED=warn JPERL_OPTS="-Xss256m" PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/pat.t
+```
+
+The perl_test_runner.pl sets these automatically based on the test file being run.
 
 ### Git Workflow
 

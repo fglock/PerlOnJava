@@ -2211,6 +2211,27 @@ public class IOOperator {
                     break;
                 default:
                     // Try to look up as a global filehandle
+                    // First, try the current package if no :: qualifier is present
+                    if (!fileName.contains("::")) {
+                        // Use RuntimeCode.getCurrentPackage() which uses caller() to determine
+                        // the current package - this works for both JVM-compiled and interpreter code
+                        String currentPkg = RuntimeCode.getCurrentPackage();
+                        // Remove trailing "::" for consistent naming
+                        if (currentPkg.endsWith("::")) {
+                            currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
+                        }
+                        if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
+                            String currentPkgName = currentPkg + "::" + fileName;
+                            RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
+                            if (currentGlob != null) {
+                                sourceHandle = currentGlob.getRuntimeIO();
+                                if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                                    break;  // Found it in current package
+                                }
+                            }
+                        }
+                    }
+                    // Fall back to main:: or fully qualified name
                     String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
                     RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
                     if (glob != null) {

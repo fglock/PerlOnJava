@@ -81,6 +81,15 @@ public class FileSpec extends PerlModuleBase {
         String quotedSeparator = Matcher.quoteReplacement(File.separator);
         String canonPath = path.replaceAll("[/\\\\]+", quotedSeparator)
                 .replaceAll(Pattern.quote(File.separator) + "\\." + Pattern.quote(File.separator), quotedSeparator);
+        
+        // Remove leading ./ unless the path is exactly "./"
+        // This matches Perl's File::Spec::Unix behavior
+        if (!canonPath.equals("." + File.separator)) {
+            while (canonPath.startsWith("." + File.separator)) {
+                canonPath = canonPath.substring(2);
+            }
+        }
+        
         return new RuntimeScalar(canonPath).getList();
     }
 

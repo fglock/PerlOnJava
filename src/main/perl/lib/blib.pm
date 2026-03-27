@@ -82,6 +82,15 @@ sub import
    if (-d $blib && -d $blib_arch && -d $blib_lib)
     {
      unshift(@INC,$blib_arch,$blib_lib);
+     # PerlOnJava: Also set PERL5LIB so child processes can find modules.
+     # This is needed because PerlOnJava can't use fork() to share address space.
+     my $sep = $^O eq 'MSWin32' ? ';' : ':';
+     my $new_perl5lib = join($sep, $blib_arch, $blib_lib);
+     if (exists $ENV{PERL5LIB} && defined $ENV{PERL5LIB} && $ENV{PERL5LIB} ne '') {
+         $ENV{PERL5LIB} = $new_perl5lib . $sep . $ENV{PERL5LIB};
+     } else {
+         $ENV{PERL5LIB} = $new_perl5lib;
+     }
      warn "Using $blib\n" if $Verbose;
      return;
     }
