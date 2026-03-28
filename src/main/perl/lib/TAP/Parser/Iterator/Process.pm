@@ -361,6 +361,10 @@ handle based should return an empty list.
 
 sub get_select_handles {
     my $self = shift;
+    # Only return handles if we're using select-based reading (open3 mode)
+    # When sel is undef, we're using simple open() fallback which doesn't
+    # support select - the handles won't have valid filenos
+    return unless $self->{sel};
     return grep $_, ( $self->{out}, $self->{err} );
 }
 
