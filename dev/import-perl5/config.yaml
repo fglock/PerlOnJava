@@ -420,8 +420,15 @@ imports:
     type: directory
 
   # Test::Harness - Test harness for running tests (needed by CPAN make test)
+  # Protected because we filter out jar: paths from @INC for child processes
   - source: perl5/cpan/Test-Harness/lib/Test/Harness.pm
     target: src/main/perl/lib/Test/Harness.pm
+    protected: true
+
+  # TAP::Parser::Iterator::Process - Protected because we handle missing fork
+  - source: perl5/cpan/Test-Harness/lib/TAP/Parser/Iterator/Process.pm
+    target: src/main/perl/lib/TAP/Parser/Iterator/Process.pm
+    protected: true
 
   # TAP - Test Anything Protocol modules (required by Test::Harness)
   - source: perl5/cpan/Test-Harness/lib/TAP
@@ -531,8 +538,10 @@ imports:
     target: src/main/perl/lib/Getopt/Std.pm
 
   # Pod::Perldoc - Look up Perl documentation (for jcpan -h)
+  # Protected because we added case-insensitive Pod/ directory search for JAR paths
   - source: perl5/cpan/Pod-Perldoc/lib/Pod/Perldoc.pm
     target: src/main/perl/lib/Pod/Perldoc.pm
+    protected: true
   - source: perl5/cpan/Pod-Perldoc/lib/Pod/Perldoc
     target: src/main/perl/lib/Pod/Perldoc
     type: directory
