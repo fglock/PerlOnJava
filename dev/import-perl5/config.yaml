@@ -420,8 +420,15 @@ imports:
     type: directory
 
   # Test::Harness - Test harness for running tests (needed by CPAN make test)
+  # Protected because we filter out jar: paths from @INC for child processes
   - source: perl5/cpan/Test-Harness/lib/Test/Harness.pm
     target: src/main/perl/lib/Test/Harness.pm
+    protected: true
+
+  # TAP::Parser::Iterator::Process - Protected because we handle missing fork
+  - source: perl5/cpan/Test-Harness/lib/TAP/Parser/Iterator/Process.pm
+    target: src/main/perl/lib/TAP/Parser/Iterator/Process.pm
+    protected: true
 
   # TAP - Test Anything Protocol modules (required by Test::Harness)
   - source: perl5/cpan/Test-Harness/lib/TAP
@@ -531,8 +538,10 @@ imports:
     target: src/main/perl/lib/Getopt/Std.pm
 
   # Pod::Perldoc - Look up Perl documentation (for jcpan -h)
+  # Protected because we added case-insensitive Pod/ directory search for JAR paths
   - source: perl5/cpan/Pod-Perldoc/lib/Pod/Perldoc.pm
     target: src/main/perl/lib/Pod/Perldoc.pm
+    protected: true
   - source: perl5/cpan/Pod-Perldoc/lib/Pod/Perldoc
     target: src/main/perl/lib/Pod/Perldoc
     type: directory
@@ -688,6 +697,46 @@ imports:
   - source: perl5/pod
     target: src/main/perl/lib/pod
     type: directory
+    exclude:
+      # Build artifacts that shouldn't be copied
+      - .gitignore
+      - Makefile
+      - Makefile.SH
+      - buildtoc
+      - perlmodlib.PL
+      - rofftoc
+      - roffitall
+      - splitman
+      - splitpod
+      # Broken symlinks pointing to ../README.* (don't exist in target)
+      - perlaix.pod
+      - perlamiga.pod
+      - perlandroid.pod
+      - perlbs2000.pod
+      - perlcn.pod
+      - perlcygwin.pod
+      - perlfreebsd.pod
+      - perlhaiku.pod
+      - perlhpux.pod
+      - perlhurd.pod
+      - perlirix.pod
+      - perljp.pod
+      - perlko.pod
+      - perllinux.pod
+      - perlmacosx.pod
+      - perlopenbsd.pod
+      - perlos2.pod
+      - perlos390.pod
+      - perlos400.pod
+      - perlplan9.pod
+      - perlqnx.pod
+      - perlriscos.pod
+      - perlsolaris.pod
+      - perlsynology.pod
+      - perltru64.pod
+      - perltw.pod
+      - perlvos.pod
+      - perlwin32.pod
 
   # Add more imports below as needed
   # Example with minimal fields:

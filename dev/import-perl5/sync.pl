@@ -39,6 +39,14 @@ sub parse_yaml {
             elsif ($line =~ /^\s+protected:\s*(.+)/) {
                 $current_import->{protected} = ($1 =~ /true|yes|1/i) ? 1 : 0;
             }
+            elsif ($line =~ /^\s+exclude:\s*$/) {
+                # Start of exclude list
+                $current_import->{exclude} = [];
+            }
+            elsif ($line =~ /^\s+-\s+(.+)/ && $current_import->{exclude}) {
+                # Exclude list item
+                push @{$current_import->{exclude}}, $1;
+            }
         }
     }
     push @imports, $current_import if $current_import;
@@ -51,7 +59,8 @@ sub parse_yaml {
 sub apply_patch {
     my ($target, $patch_file) = @_;
     
-    my $cmd = "patch -p0 '$target' < '$patch_file'";
+    # --no-backup-if-mismatch prevents creating .orig files
+    my $cmd = "patch --no-backup-if-mismatch -p0 '$target' < '$patch_file'";
     print "  Applying patch: $patch_file\n";
     
     my $result = system($cmd);
@@ -64,7 +73,7 @@ sub apply_patch {
 
 # Copy a directory recursively using rsync
 sub copy_directory {
-    my ($source, $target, $project_root, $protected_files) = @_;
+    my ($source, $target, $project_root, $protected_files, $exclude_patterns) = @_;
     
     # Build rsync command with exclusions for protected files
     my $cmd = "rsync -a";
@@ -85,6 +94,14 @@ sub copy_directory {
                     print "  Excluding protected file: $rel_path\n";
                 }
             }
+        }
+    }
+    
+    # Add explicit exclude patterns from config
+    if ($exclude_patterns && @$exclude_patterns) {
+        for my $pattern (@$exclude_patterns) {
+            $cmd .= " --exclude='$pattern'";
+            print "  Excluding pattern: $pattern\n";
         }
     }
     
@@ -167,8 +184,8 @@ sub main {
                 };
             }
             
-            # Copy directory using rsync (with protected file exclusions)
-            unless (copy_directory($source, $target, $project_root, \@protected_files)) {
+            # Copy directory using rsync (with protected file exclusions and explicit excludes)
+            unless (copy_directory($source, $target, $project_root, \@protected_files, $import->{exclude})) {
                 $error_count++;
                 next;
             }
