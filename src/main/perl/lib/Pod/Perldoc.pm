@@ -1968,6 +1968,8 @@ sub searchfor {
         or ( $ret = $self->check_file("$dir/pod",$s))
         or ( $ret = $self->check_file("$dir/pods","$s.pod"))
         or ( $ret = $self->check_file("$dir/pods",$s))
+        or ( $ret = $self->check_file("$dir/Pod","$s.pod"))
+        or ( $ret = $self->check_file("$dir/Pod",$s))
     ) {
         DEBUG > 1 and print "  Found $ret\n";
         return $ret;
