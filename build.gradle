@@ -326,6 +326,7 @@ sourceSets {
             srcDir 'src/main/resources'
             include '**/*.pm'
             include '**/*.pl'
+            include '**/*.pod'
             include 'bin/**'
             include 'META-INF/services/**'
         }
@@ -341,6 +342,7 @@ sourceSets {
 tasks.named('processResources', Copy) {
     from(sourceSets.main.resources.srcDirs) {
         include '**/*.pm'
+        include '**/*.pod'
         include 'bin/**'
         include 'META-INF/services/**'
     }

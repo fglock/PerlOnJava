@@ -683,6 +683,12 @@ imports:
     target: perl5_t/Test-Harness
     type: directory
 
+  # Perl core documentation (perlfunc.pod, perlop.pod, etc.)
+  # Required by jperldoc for -f (function) lookups
+  - source: perl5/pod
+    target: src/main/perl/lib/pod
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
