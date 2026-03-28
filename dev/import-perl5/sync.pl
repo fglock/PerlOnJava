@@ -59,7 +59,8 @@ sub parse_yaml {
 sub apply_patch {
     my ($target, $patch_file) = @_;
     
-    my $cmd = "patch -p0 '$target' < '$patch_file'";
+    # --no-backup-if-mismatch prevents creating .orig files
+    my $cmd = "patch --no-backup-if-mismatch -p0 '$target' < '$patch_file'";
     print "  Applying patch: $patch_file\n";
     
     my $result = system($cmd);
