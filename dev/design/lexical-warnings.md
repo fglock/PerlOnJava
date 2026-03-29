@@ -939,7 +939,7 @@ The following documents were superseded by this one and have been deleted:
 
 ## Progress Tracking
 
-### Status: Phase 1 Complete (2026-03-29)
+### Status: Phase 2 Complete (2026-03-29)
 
 ### Completed
 - [x] Design document created
@@ -958,9 +958,25 @@ The following documents were superseded by this one and have been deleted:
     - Updated `snapShot()` and `copyFlagsFrom()` to copy fatal stack
     - Added `enableFatalWarningCategory()`, `disableFatalWarningCategory()`, `isFatalWarningCategory()`
     - Added `getWarningBitsString()` for caller()[9] support
+- [x] Phase 2: Two-variant operator methods (2026-03-29)
+  - Added `getNumberWarn(String operation)` to `RuntimeScalar.java`:
+    - Centralizes undef check and warning emission
+    - Correctly handles tied scalars (single FETCH)
+    - Returns scalarZero for UNDEF after emitting warning
+  - Added warn variants to `MathOperators.java`:
+    - `addWarn()` (both scalar,int and scalar,scalar)
+    - `subtractWarn()` (both variants)
+    - `multiplyWarn()`
+    - `divideWarn()`
+    - `modulusWarn()`
+    - `powWarn()`
+    - `unaryMinusWarn()`
+  - Refactored existing operators to remove inline warnings (fast path)
+  - Added warn operator entries to `OperatorHandler.java`:
+    - `+_warn`, `-_warn`, `*_warn`, `/_warn`, `%_warn`, `**_warn`, `unaryMinus_warn`
+  - Emitter already uses `OperatorHandler.getWarn()` based on `isWarningCategoryEnabled("uninitialized")`
 
 ### Next Steps
-1. Implement Phase 2: Two-variant operator methods (add vs addWarn pattern)
-2. Implement Phase 3: Per-closure warning bits storage for JVM backend
-3. Implement Phase 4: Per-closure warning bits storage for interpreter
-4. Continue with remaining phases (5-8)
+1. Implement Phase 3: Per-closure warning bits storage for JVM backend
+2. Implement Phase 4: Per-closure warning bits storage for interpreter
+3. Continue with remaining phases (5-8)
