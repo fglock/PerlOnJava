@@ -1019,9 +1019,7 @@ The following documents were superseded by this one and have been deleted:
     - `warnings::fatal_enabled_at_level`, `warnings::warnif_at_level`
 
 ### Next Steps
-1. Phase 7: Complete block-scoped FATAL warnings (requires per-scope warning bits)
-2. Phase 8: $^W interaction
-3. (Future) Consider per-call-site warning bits for full Perl 5 parity
+1. (Future) Consider per-call-site warning bits for full Perl 5 parity
 
 ### Phase 7-8 Progress (2026-03-29)
 - [x] Added `warnWithCategory()` to WarnDie.java:
@@ -1045,3 +1043,35 @@ The following documents were superseded by this one and have been deleted:
 Block-scoped `use warnings FATAL` inside a subroutine/program doesn't work because
 warning bits are captured per-class at compile time, not per-scope. This would require
 per-call-site warning bits for full parity.
+
+### Phase 8: $^W Interaction (2026-03-29)
+- [x] Added `isWarnFlagSet()` helper in Warnings.java:
+  - Checks if `$^W` global variable is set to a true value
+  - `$^W` is stored as `main::` + char(23) using Perl's special variable encoding
+- [x] Updated `warnif()` to fall back to `$^W`:
+  - If category is NOT enabled in lexical warnings, check `$^W`
+  - If `$^W` is true, issue warning
+  - This allows `$^W` to work with modules using `warnings::warnif()`
+- [x] Updated `warnIfAtLevel()` with same `$^W` fallback logic
+
+**$^W interaction works for:**
+- File-scope code without `use warnings` or `no warnings`
+- Module code calling `warnings::warnif()` when caller has `$^W = 1`
+
+**Known limitation:**
+Block-scoped `no warnings` doesn't override `$^W` for `warnif()` calls because
+our warning bits are per-class, not per-scope. This differs from Perl 5 where
+`no warnings` takes precedence over `$^W`. However, file-scope `no warnings`
+at the class level does correctly suppress warnings.
+
+**Test results:**
+```perl
+# Works correctly:
+$^W = 0; warnings::warnif("cat", "msg");  # No warning
+$^W = 1; warnings::warnif("cat", "msg");  # Warning issued
+use warnings; warnings::warnif("cat", "msg");  # Warning issued (file-scope)
+
+# Known limitation:
+$^W = 1;
+{ no warnings; warnings::warnif("cat", "msg"); }  # Warning issued (differs from Perl 5)
+```

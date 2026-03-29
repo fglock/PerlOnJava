@@ -78,6 +78,18 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
+     * Checks if the $^W global warning flag is set.
+     * $^W is stored using Perl's internal encoding: "main::" + Character.toString('W' - 'A' + 1).
+     * 
+     * @return true if $^W is set to a true value, false otherwise
+     */
+    public static boolean isWarnFlagSet() {
+        // $^W is stored as main:: + character code 23 (W - 'A' + 1 = 87 - 65 + 1 = 23)
+        String varName = "main::" + Character.toString('W' - 'A' + 1);
+        return GlobalVariable.getGlobalVariable(varName).getBoolean();
+    }
+
+    /**
      * Registers custom warning categories (used by warnings::register).
      *
      * @param args The arguments - category names to register.
@@ -372,15 +384,19 @@ public class Warnings extends PerlModuleBase {
         
         // Check warning bits from caller's scope
         String bits = getWarningBitsAtLevel(0);
-        if (bits == null) {
+        
+        // Check if category is enabled in lexical warnings
+        boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        
+        if (!categoryEnabled) {
+            // Category not enabled via lexical warnings - fall back to $^W
+            if (isWarnFlagSet()) {
+                WarnDie.warn(message, new RuntimeScalar(""));
+            }
             return new RuntimeScalar().getList();
         }
         
-        // Check if category is enabled
-        if (!WarningFlags.isEnabledInBits(bits, category)) {
-            return new RuntimeScalar().getList();
-        }
-        
+        // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
         if (WarningFlags.isFatalInBits(bits, category)) {
             WarnDie.die(message, new RuntimeScalar(""));
@@ -410,15 +426,19 @@ public class Warnings extends PerlModuleBase {
         
         // Check warning bits at specified level
         String bits = getWarningBitsAtLevel(level);
-        if (bits == null) {
+        
+        // Check if category is enabled in lexical warnings
+        boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        
+        if (!categoryEnabled) {
+            // Category not enabled via lexical warnings - fall back to $^W
+            if (isWarnFlagSet()) {
+                WarnDie.warn(message, new RuntimeScalar(""));
+            }
             return new RuntimeScalar().getList();
         }
         
-        // Check if category is enabled
-        if (!WarningFlags.isEnabledInBits(bits, category)) {
-            return new RuntimeScalar().getList();
-        }
-        
+        // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
         if (WarningFlags.isFatalInBits(bits, category)) {
             WarnDie.die(message, new RuntimeScalar(""));
