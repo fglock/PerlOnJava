@@ -740,6 +740,99 @@ public class MathOperators {
         return arg1;
     }
 
+    // ========== WARN VARIANTS FOR COMPOUND ASSIGNMENT ==========
+    // These are called when 'use warnings "uninitialized"' is in effect
+
+    /**
+     * Compound assignment: += with uninitialized value warnings.
+     */
+    public static RuntimeScalar addAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=");
+            if (result != null) {
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        RuntimeScalar result = addWarn(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: -= with uninitialized value warnings.
+     */
+    public static RuntimeScalar subtractAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=");
+            if (result != null) {
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        RuntimeScalar result = subtractWarn(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: *= with uninitialized value warnings.
+     */
+    public static RuntimeScalar multiplyAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=");
+            if (result != null) {
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        RuntimeScalar result = multiplyWarn(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: /= with uninitialized value warnings.
+     */
+    public static RuntimeScalar divideAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=");
+            if (result != null) {
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        RuntimeScalar result = divideWarn(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: %= with uninitialized value warnings.
+     */
+    public static RuntimeScalar modulusAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=");
+            if (result != null) {
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        RuntimeScalar result = modulusWarn(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
     /**
      * Performs integer division operation on two RuntimeScalars.
      * This is used when "use integer" pragma is in effect.

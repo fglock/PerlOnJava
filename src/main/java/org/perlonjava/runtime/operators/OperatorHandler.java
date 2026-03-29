@@ -58,6 +58,12 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("*=", "multiplyAssign", "org/perlonjava/runtime/operators/MathOperators");
         put("/=", "divideAssign", "org/perlonjava/runtime/operators/MathOperators");
         put("%=", "modulusAssign", "org/perlonjava/runtime/operators/MathOperators");
+        // Warn variants for compound assignment (when 'use warnings "uninitialized"' is in effect)
+        put("+=_warn", "addAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("-=_warn", "subtractAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("*=_warn", "multiplyAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("/=_warn", "divideAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("%=_warn", "modulusAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
 
         // Bitwise
         put("&", "bitwiseAnd", "org/perlonjava/runtime/operators/BitwiseOperators");
