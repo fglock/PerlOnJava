@@ -60,17 +60,8 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert string type to number if necessary
-        // This also fetches tied scalars
-        arg1 = arg1.getNumber();
-        
-        // Check for uninitialized value and generate warning
-        // After getNumber(), UNDEF becomes scalarZero which has type INTEGER
-        // So we check for identity with the cached zero value
-        if (arg1 == RuntimeScalarCache.scalarZero) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in addition (+)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("addition (+)");
 
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
@@ -160,19 +151,9 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert to number first (handles tied scalars with single fetch)
-        // Then check for uninitialized values (scalarZero from UNDEF conversion)
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
-        
-        if (arg1 == RuntimeScalarCache.scalarZero) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in addition (+)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (arg2 == RuntimeScalarCache.scalarZero) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in addition (+)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("addition (+)");
+        arg2 = arg2.getNumberWarn("addition (+)");
 
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
@@ -236,14 +217,8 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert to number first (handles tied scalars with single fetch)
-        arg1 = arg1.getNumber();
-        
-        // Check for uninitialized value (scalarZero from UNDEF conversion)
-        if (arg1 == RuntimeScalarCache.scalarZero) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in subtraction (-)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("subtraction (-)");
 
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
@@ -332,19 +307,9 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert to number first (handles tied scalars with single fetch)
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
-        
-        // Check for uninitialized values (scalarZero from UNDEF conversion)
-        if (arg1 == RuntimeScalarCache.scalarZero) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in subtraction (-)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (arg2 == RuntimeScalarCache.scalarZero) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in subtraction (-)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("subtraction (-)");
+        arg2 = arg2.getNumberWarn("subtraction (-)");
 
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
