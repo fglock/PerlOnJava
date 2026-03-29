@@ -453,6 +453,24 @@ public class EmitterMethodCreator implements Opcodes {
             // Add instance field for __SUB__ code reference
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", null, null).visitEnd();
 
+            // Add static field WARNING_BITS for per-closure warning state (caller()[9] support)
+            String warningBits = ctx.symbolTable.getWarningBitsString();
+            cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                    "WARNING_BITS", "Ljava/lang/String;", null, warningBits).visitEnd();
+
+            // Create static initializer to register warning bits with WarningBitsRegistry
+            MethodVisitor clinit = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+            clinit.visitCode();
+            clinit.visitLdcInsn(className.replace('/', '.'));  // Convert to Java class name format
+            clinit.visitLdcInsn(warningBits);
+            clinit.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/WarningBitsRegistry",
+                    "register",
+                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
+            clinit.visitInsn(Opcodes.RETURN);
+            clinit.visitMaxs(2, 0);
+            clinit.visitEnd();
+
             // Add a constructor with parameters for initializing the fields
             // Include ALL env slots (even nulls) so signature matches caller expectations
             StringBuilder constructorDescriptor = new StringBuilder("(");

@@ -17,6 +17,7 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.ForkOpenCompleteException;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.debugger.DebugState;
@@ -1627,6 +1628,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         Throwable t = new Throwable();
         ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+        java.util.ArrayList<String> javaClassNames = extractJavaClassNames(t);
         int stackTraceSize = stackTrace.size();
 
         // Skip the first frame which is the caller() builtin itself
@@ -1731,7 +1733,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(0));
 
                 // Add bitmask (element 9): Compile-time warnings bitmask
-                res.add(RuntimeScalarCache.scalarUndef);
+                // Look up from WarningBitsRegistry using the Java class name for this frame
+                // Note: Warning bits are per-class, not per-call-site. This means all
+                // calls from the same class will share the same warning bits.
+                String warningBits = null;
+                if (frame < javaClassNames.size()) {
+                    String className = javaClassNames.get(frame);
+                    if (className != null) {
+                        warningBits = WarningBitsRegistry.get(className);
+                    }
+                }
+                if (warningBits != null) {
+                    res.add(new RuntimeScalar(warningBits));
+                } else {
+                    res.add(RuntimeScalarCache.scalarUndef);
+                }
 
                 // Add hinthash (element 10): Compile-time %^H hash reference
                 res.add(RuntimeScalarCache.scalarUndef);
@@ -1747,6 +1763,63 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     private static String gotoErrorPrefix(String subroutineName) {
         return "tailcall".equals(subroutineName) ? "Goto u" : "U";
+    }
+
+    /**
+     * Extracts Java class names from a Throwable's stack trace, parallel to
+     * how ExceptionFormatter.formatException produces Perl frames.
+     * This allows caller() to look up warning bits from WarningBitsRegistry.
+     *
+     * @param t The Throwable containing the stack trace
+     * @return List of Java class names, one per Perl frame in same order as formatException
+     */
+    private static java.util.ArrayList<String> extractJavaClassNames(Throwable t) {
+        java.util.ArrayList<String> classNames = new java.util.ArrayList<>();
+        java.util.HashSet<String> seenLocations = new java.util.HashSet<>();
+        
+        // Track interpreter frames similar to ExceptionFormatter
+        var interpreterFrames = InterpreterState.getStack();
+        int interpreterFrameIndex = 0;
+        boolean addedFrameForCurrentLevel = false;
+        
+        for (var element : t.getStackTrace()) {
+            if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
+                    element.getMethodName().equals("parseUseDeclaration")) {
+                // Use statement - no class name for warning bits lookup
+                classNames.add(null);
+            } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.InterpretedCode") &&
+                    element.getMethodName().equals("apply")) {
+                // InterpretedCode.apply marks the END of a Perl call level
+                if (addedFrameForCurrentLevel) {
+                    interpreterFrameIndex++;
+                    addedFrameForCurrentLevel = false;
+                }
+            } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
+                    element.getMethodName().equals("execute")) {
+                // Interpreter frame - use InterpretedCode's class for warning bits lookup
+                if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
+                    var frame = interpreterFrames.get(interpreterFrameIndex);
+                    if (frame != null && frame.code() != null) {
+                        // For interpreter, warning bits come from InterpretedCode.warningBits
+                        // For now, we use the code's identifier as a pseudo-class name
+                        String codeId = "interpreter:" + System.identityHashCode(frame.code());
+                        classNames.add(codeId);
+                        addedFrameForCurrentLevel = true;
+                    }
+                }
+            } else if (element.getClassName().contains("org.perlonjava.anon") ||
+                    element.getClassName().contains("org.perlonjava.runtime.perlmodule")) {
+                // JVM frame - use the actual class name for warning bits lookup
+                // Use source location key to avoid duplicates (same logic as ExceptionFormatter)
+                String locationKey = element.getFileName() + ":" + element.getLineNumber();
+                if (!seenLocations.contains(locationKey)) {
+                    seenLocations.add(locationKey);
+                    classNames.add(element.getClassName());
+                }
+            }
+        }
+        
+        return classNames;
     }
 
     // Method to apply (execute) a subroutine reference

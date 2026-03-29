@@ -975,8 +975,25 @@ The following documents were superseded by this one and have been deleted:
   - Added warn operator entries to `OperatorHandler.java`:
     - `+_warn`, `-_warn`, `*_warn`, `/_warn`, `%_warn`, `**_warn`, `unaryMinus_warn`
   - Emitter already uses `OperatorHandler.getWarn()` based on `isWarningCategoryEnabled("uninitialized")`
+- [x] Phase 3: Per-closure warning bits storage for JVM backend (2026-03-29)
+  - Added `WarningBitsRegistry.java` in `org.perlonjava.runtime`:
+    - ConcurrentHashMap from class name to warning bits string
+    - `register()` method called from class static initializer
+    - `get()` method for caller() lookups
+    - `clear()` method for PerlLanguageProvider.resetAll()
+  - Updated `EmitterMethodCreator.java`:
+    - Added `WARNING_BITS` static final field to generated classes
+    - Added `<clinit>` static initializer to register bits with WarningBitsRegistry
+  - Updated `RuntimeCode.callerWithSub()`:
+    - Added `extractJavaClassNames()` helper to get Java class names from stack trace
+    - Element 9 now looks up warning bits from WarningBitsRegistry
+  - **Known Limitation**: Warning bits are per-class, not per-call-site
+    - Perl 5 tracks warning bits at statement granularity
+    - PerlOnJava tracks at class (closure) granularity
+    - All calls from the same class share the same warning bits
+    - Different closures DO get their own warning bits (correctly)
 
 ### Next Steps
-1. Implement Phase 3: Per-closure warning bits storage for JVM backend
-2. Implement Phase 4: Per-closure warning bits storage for interpreter
-3. Continue with remaining phases (5-8)
+1. Implement Phase 4: Per-closure warning bits storage for interpreter
+2. Continue with remaining phases (5-8)
+3. (Future) Consider per-call-site warning bits for full Perl 5 parity
