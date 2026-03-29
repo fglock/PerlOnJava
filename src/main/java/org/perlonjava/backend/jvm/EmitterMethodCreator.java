@@ -1756,7 +1756,9 @@ public class EmitterMethodCreator implements Opcodes {
                     CompilerFlagNode node = (CompilerFlagNode) stmt;
                     ScopedSymbolTable currentScope = ctx.symbolTable;
                     
-                    // Apply warning flags
+                    // Only apply warning flags for WARNING_BITS capture
+                    // Do NOT apply feature flags or strict options here - they must be
+                    // applied in order during code emission to maintain lexical scoping
                     currentScope.warningFlagsStack.pop();
                     currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
                     
@@ -1767,14 +1769,6 @@ public class EmitterMethodCreator implements Opcodes {
                     // Apply disabled warning flags
                     currentScope.warningDisabledStack.pop();
                     currentScope.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
-                    
-                    // Apply feature flags
-                    currentScope.featureFlagsStack.pop();
-                    currentScope.featureFlagsStack.push(node.getFeatureFlags());
-                    
-                    // Apply strict options
-                    currentScope.strictOptionsStack.pop();
-                    currentScope.strictOptionsStack.push(node.getStrictOptions());
                 }
             }
         }
