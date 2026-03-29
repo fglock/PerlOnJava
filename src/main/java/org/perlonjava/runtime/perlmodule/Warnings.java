@@ -8,6 +8,9 @@ import java.util.Set;
 
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
+ * 
+ * Key methods use caller()[9] to check the warning bits at the caller's scope,
+ * enabling lexical warning control to work correctly across subroutine calls.
  */
 public class Warnings extends PerlModuleBase {
 
@@ -27,17 +30,46 @@ public class Warnings extends PerlModuleBase {
     public static void initialize() {
         Warnings warnings = new Warnings();
         try {
-            warnings.registerMethod("enabled", ";$");
+            warnings.registerMethod("enabled", "enabled", ";$");
+            warnings.registerMethod("fatal_enabled", "fatalEnabled", ";$");
+            warnings.registerMethod("enabled_at_level", "enabledAtLevel", "$$");
+            warnings.registerMethod("fatal_enabled_at_level", "fatalEnabledAtLevel", "$$");
             warnings.registerMethod("import", "useWarnings", ";$");
             warnings.registerMethod("unimport", "noWarnings", ";$");
             warnings.registerMethod("warn", "warn", "$;$");
             warnings.registerMethod("warnif", "warnIf", "$;$");
+            warnings.registerMethod("warnif_at_level", "warnIfAtLevel", "$$$");
             warnings.registerMethod("register_categories", "registerCategories", ";@");
             // Set $VERSION so CPAN.pm can detect our bundled version
             GlobalVariable.getGlobalVariable("warnings::VERSION").set(new RuntimeScalar("1.74"));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Warnings method: " + e.getMessage());
         }
+    }
+
+    /**
+     * Gets the warning bits string from caller() at the specified level.
+     * Level 0 is the immediate caller of the warnings:: function.
+     * 
+     * @param level The stack level (0 = immediate caller)
+     * @return The warning bits string, or null if not available
+     */
+    private static String getWarningBitsAtLevel(int level) {
+        // Add 1 because we're inside a warnings:: function
+        RuntimeList caller = RuntimeCode.caller(
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)), 
+            RuntimeContextType.LIST
+        );
+        if (caller.size() > 9) {
+            RuntimeBase bitsBase = caller.elements.get(9);
+            if (bitsBase instanceof RuntimeScalar) {
+                RuntimeScalar bits = (RuntimeScalar) bitsBase;
+                if (bits.type != RuntimeScalarType.UNDEF) {
+                    return bits.toString();
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -133,26 +165,78 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
-     * Checks if a warning is enabled.
+     * Checks if a warning category is enabled at the caller's scope.
+     * Uses caller()[9] to get the warning bits from the calling scope.
      *
-     * @param args The arguments passed to the method.
+     * @param args The arguments passed to the method (optional category).
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList containing a boolean value.
      */
     public static RuntimeList enabled(RuntimeArray args, int ctx) {
-        if (args.size() > 2) {
-            throw new IllegalStateException("Bad number of arguments for warnings::enabled()");
-        }
-        String category;
-        if (args.size() < 1) {
-            // No category specified - check if warnings are enabled for calling package
-            // Use "all" as the category to check general warning state
-            category = "all";
-        } else {
+        String category = "all";
+        if (args.size() > 0) {
             category = args.get(0).toString();
         }
-        boolean isEnabled = warningManager.isWarningEnabled(category);
+        
+        String bits = getWarningBitsAtLevel(0);
+        boolean isEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         return new RuntimeScalar(isEnabled).getList();
+    }
+
+    /**
+     * Checks if a warning category is enabled at the specified stack level.
+     *
+     * @param args The arguments: level, category
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing a boolean value.
+     */
+    public static RuntimeList enabledAtLevel(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            throw new IllegalStateException("Usage: warnings::enabled_at_level(level, category)");
+        }
+        int level = args.get(0).getInt();
+        String category = args.get(1).toString();
+        
+        String bits = getWarningBitsAtLevel(level);
+        boolean isEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        return new RuntimeScalar(isEnabled).getList();
+    }
+
+    /**
+     * Checks if a warning category is FATAL at the caller's scope.
+     *
+     * @param args The arguments passed to the method (optional category).
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing a boolean value.
+     */
+    public static RuntimeList fatalEnabled(RuntimeArray args, int ctx) {
+        String category = "all";
+        if (args.size() > 0) {
+            category = args.get(0).toString();
+        }
+        
+        String bits = getWarningBitsAtLevel(0);
+        boolean isFatal = bits != null && WarningFlags.isFatalInBits(bits, category);
+        return new RuntimeScalar(isFatal).getList();
+    }
+
+    /**
+     * Checks if a warning category is FATAL at the specified stack level.
+     *
+     * @param args The arguments: level, category
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing a boolean value.
+     */
+    public static RuntimeList fatalEnabledAtLevel(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            throw new IllegalStateException("Usage: warnings::fatal_enabled_at_level(level, category)");
+        }
+        int level = args.get(0).getInt();
+        String category = args.get(1).toString();
+        
+        String bits = getWarningBitsAtLevel(level);
+        boolean isFatal = bits != null && WarningFlags.isFatalInBits(bits, category);
+        return new RuntimeScalar(isFatal).getList();
     }
 
     /**
@@ -172,11 +256,11 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
-     * Issues a warning if the category is enabled.
-     * When called with just a message, checks if the calling package's warning category is enabled.
-     * Also checks ${^WARNING_SCOPE} for runtime warning suppression via "no warnings 'category'".
+     * Issues a warning if the category is enabled at the caller's scope.
+     * Uses caller()[9] to check warning bits from the calling scope.
+     * If the category is FATAL, dies instead of warning.
      *
-     * @param args The arguments passed to the method.
+     * @param args The arguments: category, message OR just message
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList.
      */
@@ -193,10 +277,12 @@ public class Warnings extends PerlModuleBase {
             category = args.get(0).toString();
             message = args.get(1);
         } else {
-            // warnif(message) - check calling package's category
+            // warnif(message) - use calling package as category
             message = args.get(0);
-            // Get the calling package to use as category
-            RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
+            RuntimeList caller = RuntimeCode.caller(
+                new RuntimeList(RuntimeScalarCache.getScalarInt(1)), 
+                RuntimeContextType.LIST
+            );
             if (caller.size() > 0) {
                 category = caller.elements.get(0).toString();
             } else {
@@ -204,19 +290,62 @@ public class Warnings extends PerlModuleBase {
             }
         }
         
-        // Check runtime scope suppression via ${^WARNING_SCOPE}
-        // This allows "no warnings 'Category'" in user code to propagate to warnif() calls
-        RuntimeScalar scopeVar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
-        int scopeId = scopeVar.getInt();
-        if (scopeId > 0 && WarningFlags.isWarningDisabledInScope(scopeId, category)) {
-            // Warning is suppressed by caller's "no warnings"
+        // Check warning bits from caller's scope
+        String bits = getWarningBitsAtLevel(0);
+        if (bits == null) {
             return new RuntimeScalar().getList();
         }
         
-        if (warningManager.isWarningEnabled(category)) {
-            // Use WarnDie.warn to go through $SIG{__WARN__}
+        // Check if category is enabled
+        if (!WarningFlags.isEnabledInBits(bits, category)) {
+            return new RuntimeScalar().getList();
+        }
+        
+        // Check if FATAL - if so, die instead of warn
+        if (WarningFlags.isFatalInBits(bits, category)) {
+            WarnDie.die(message, new RuntimeScalar(""));
+        } else {
             WarnDie.warn(message, new RuntimeScalar(""));
         }
+        
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Issues a warning if the category is enabled at the specified stack level.
+     * If the category is FATAL at that level, dies instead of warning.
+     *
+     * @param args The arguments: level, category, message
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList warnIfAtLevel(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            throw new IllegalStateException("Usage: warnings::warnif_at_level(level, category, message)");
+        }
+        
+        int level = args.get(0).getInt();
+        String category = args.get(1).toString();
+        RuntimeScalar message = args.get(2);
+        
+        // Check warning bits at specified level
+        String bits = getWarningBitsAtLevel(level);
+        if (bits == null) {
+            return new RuntimeScalar().getList();
+        }
+        
+        // Check if category is enabled
+        if (!WarningFlags.isEnabledInBits(bits, category)) {
+            return new RuntimeScalar().getList();
+        }
+        
+        // Check if FATAL - if so, die instead of warn
+        if (WarningFlags.isFatalInBits(bits, category)) {
+            WarnDie.die(message, new RuntimeScalar(""));
+        } else {
+            WarnDie.warn(message, new RuntimeScalar(""));
+        }
+        
         return new RuntimeScalar().getList();
     }
 }

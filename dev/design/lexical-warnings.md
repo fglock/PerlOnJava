@@ -1005,7 +1005,20 @@ The following documents were superseded by this one and have been deleted:
     - Passes to InterpretedCode constructor
   - `extractJavaClassNames()` in RuntimeCode already handles interpreter frames
     - Uses "interpreter:" + System.identityHashCode(frame.code()) as registry key
+- [x] Phase 6: warnings:: functions using caller()[9] (2026-03-29)
+  - Updated `Warnings.java`:
+    - Added `getWarningBitsAtLevel()` helper to get warning bits from caller()
+    - `enabled()` now uses caller()[9] with `WarningFlags.isEnabledInBits()`
+    - `warnif()` now checks caller()[9] and handles FATAL warnings
+    - Added `fatal_enabled()` using `WarningFlags.isFatalInBits()`
+    - Added `enabled_at_level()` for checking at specific stack levels
+    - Added `fatal_enabled_at_level()` for FATAL check at specific levels
+    - Added `warnif_at_level()` for warning at specific stack levels
+  - Registered new methods in initialize():
+    - `warnings::enabled_at_level`, `warnings::fatal_enabled`
+    - `warnings::fatal_enabled_at_level`, `warnings::warnif_at_level`
 
 ### Next Steps
-1. Continue with remaining phases (5-8) as needed
-2. (Future) Consider per-call-site warning bits for full Perl 5 parity
+1. Phase 7: FATAL warnings support (handle `FATAL => 'category'` in use warnings)
+2. Phase 8: $^W interaction
+3. (Future) Consider per-call-site warning bits for full Perl 5 parity
