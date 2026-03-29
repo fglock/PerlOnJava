@@ -57,6 +57,8 @@ public class ScopedSymbolTable {
     public final Stack<BitSet> warningFlagsStack = new Stack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)
     public final Stack<BitSet> warningDisabledStack = new Stack<>();
+    // Stack to track FATAL warning categories for each scope
+    public final Stack<BitSet> warningFatalStack = new Stack<>();
     // Stack to manage feature categories for each scope
     public final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
@@ -88,6 +90,8 @@ public class ScopedSymbolTable {
         warningFlagsStack.push((BitSet) defaultWarnings.clone());
         // Initialize the disabled warnings stack (empty by default)
         warningDisabledStack.push(new BitSet());
+        // Initialize the fatal warnings stack (empty by default)
+        warningFatalStack.push(new BitSet());
         // Initialize the feature categories stack with an empty map for the global scope
         featureFlagsStack.push(0);
         // Initialize the strict options stack with 0 for the global scope
@@ -160,6 +164,8 @@ public class ScopedSymbolTable {
         warningFlagsStack.push((BitSet) warningFlagsStack.peek().clone());
         // Push a copy of the current disabled warnings map onto the stack
         warningDisabledStack.push((BitSet) warningDisabledStack.peek().clone());
+        // Push a copy of the current fatal warnings map onto the stack
+        warningFatalStack.push((BitSet) warningFatalStack.peek().clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         // Push a copy of the current strict options onto the stack
@@ -185,6 +191,7 @@ public class ScopedSymbolTable {
             inSubroutineBodyStack.pop();
             warningFlagsStack.pop();
             warningDisabledStack.pop();
+            warningFatalStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
         }
@@ -558,6 +565,10 @@ public class ScopedSymbolTable {
         st.warningDisabledStack.pop(); // Remove the initial value pushed by enterScope
         st.warningDisabledStack.push((BitSet) this.warningDisabledStack.peek().clone());
 
+        // Clone fatal warnings flags
+        st.warningFatalStack.pop(); // Remove the initial value pushed by enterScope
+        st.warningFatalStack.push((BitSet) this.warningFatalStack.peek().clone());
+
         // Clone feature flags
         st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
@@ -689,6 +700,51 @@ public class ScopedSymbolTable {
         return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
     }
 
+    /**
+     * Enables FATAL mode for a warning category.
+     * When a warning is FATAL, it throws an exception instead of printing a warning.
+     */
+    public void enableFatalWarningCategory(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        if (bitPosition != null) {
+            warningFatalStack.peek().set(bitPosition);
+            // FATAL implies enabled
+            warningFlagsStack.peek().set(bitPosition);
+            warningDisabledStack.peek().clear(bitPosition);
+        }
+    }
+
+    /**
+     * Disables FATAL mode for a warning category (warning will be printed, not thrown).
+     */
+    public void disableFatalWarningCategory(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        if (bitPosition != null) {
+            warningFatalStack.peek().clear(bitPosition);
+        }
+    }
+
+    /**
+     * Checks if a warning category is in FATAL mode.
+     */
+    public boolean isFatalWarningCategory(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        return bitPosition != null && warningFatalStack.peek().get(bitPosition);
+    }
+
+    /**
+     * Gets the current warning bits as a Perl 5 compatible string.
+     * This is used for caller()[9] to return the compile-time warning bits.
+     * Format: each category uses 2 bits - bit 0 = enabled, bit 1 = fatal.
+     *
+     * @return A string of bytes representing the warning bits in Perl 5 format.
+     */
+    public String getWarningBitsString() {
+        BitSet enabled = warningFlagsStack.peek();
+        BitSet fatal = warningFatalStack.peek();
+        return WarningFlags.toWarningBitsString(enabled, fatal, warningBitPositions);
+    }
+
     // Methods for managing features using bit positions
     public void enableFeatureCategory(String feature) {
         if (isNoOpFeature(feature)) {
@@ -751,6 +807,10 @@ public class ScopedSymbolTable {
         // Copy disabled warnings flags
         this.warningDisabledStack.pop();
         this.warningDisabledStack.push((BitSet) source.warningDisabledStack.peek().clone());
+
+        // Copy fatal warnings flags
+        this.warningFatalStack.pop();
+        this.warningFatalStack.push((BitSet) source.warningFatalStack.peek().clone());
 
         // Copy feature flags
         this.featureFlagsStack.pop();

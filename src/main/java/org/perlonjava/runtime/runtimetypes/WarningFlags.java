@@ -2,7 +2,9 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
@@ -62,6 +64,299 @@ public class WarningFlags {
         warningHierarchy.put("non_unicode", new String[]{});
         warningHierarchy.put("surrogate", new String[]{});
         warningHierarchy.put("nonchar", new String[]{});
+    }
+    
+    // ==================== Perl 5 Compatible Bit Offsets ====================
+    // These match the offsets from Perl 5's warnings.h for caller()[9] compatibility.
+    // Each category uses 2 bits: bit 0 = enabled, bit 1 = fatal.
+    
+    /**
+     * Perl 5 compatible category offsets (from warnings.h).
+     * These are used for caller()[9] return value compatibility.
+     */
+    private static final Map<String, Integer> PERL5_OFFSETS;
+    
+    /**
+     * User-defined category offsets (dynamically assigned starting at 128).
+     */
+    private static final ConcurrentHashMap<String, Integer> userCategoryOffsets = 
+        new ConcurrentHashMap<>();
+    
+    /**
+     * Next available offset for user-defined categories.
+     */
+    private static final AtomicInteger nextUserOffset = new AtomicInteger(128);
+    
+    /**
+     * Size of warning bits string in bytes (Perl 5's WARNsize).
+     */
+    public static final int WARN_SIZE = 21;
+    
+    static {
+        // Initialize Perl 5 compatible offsets
+        Map<String, Integer> offsets = new HashMap<>();
+        offsets.put("all", 0);
+        offsets.put("closure", 1);
+        offsets.put("deprecated", 2);
+        offsets.put("exiting", 3);
+        offsets.put("glob", 4);
+        offsets.put("io", 5);
+        offsets.put("closed", 6);
+        offsets.put("exec", 7);
+        offsets.put("layer", 8);
+        offsets.put("newline", 9);
+        offsets.put("pipe", 10);
+        offsets.put("unopened", 11);
+        offsets.put("misc", 12);
+        offsets.put("numeric", 13);
+        offsets.put("once", 14);
+        offsets.put("overflow", 15);
+        offsets.put("pack", 16);
+        offsets.put("portable", 17);
+        offsets.put("recursion", 18);
+        offsets.put("redefine", 19);
+        offsets.put("regexp", 20);
+        offsets.put("severe", 21);
+        offsets.put("debugging", 22);
+        offsets.put("inplace", 23);
+        offsets.put("internal", 24);
+        offsets.put("malloc", 25);
+        offsets.put("signal", 26);
+        offsets.put("substr", 27);
+        offsets.put("syntax", 28);
+        offsets.put("ambiguous", 29);
+        offsets.put("bareword", 30);
+        offsets.put("digit", 31);
+        offsets.put("parenthesis", 32);
+        offsets.put("precedence", 33);
+        offsets.put("printf", 34);
+        offsets.put("prototype", 35);
+        offsets.put("qw", 36);
+        offsets.put("reserved", 37);
+        offsets.put("semicolon", 38);
+        offsets.put("taint", 39);
+        offsets.put("threads", 40);
+        offsets.put("uninitialized", 41);
+        offsets.put("unpack", 42);
+        offsets.put("untie", 43);
+        offsets.put("utf8", 44);
+        offsets.put("void", 45);
+        offsets.put("imprecision", 46);
+        offsets.put("illegalproto", 47);
+        // Perl 5.011003+
+        offsets.put("deprecated::unicode_property_name", 48);
+        // Perl 5.013+
+        offsets.put("non_unicode", 49);
+        offsets.put("nonchar", 50);
+        offsets.put("surrogate", 51);
+        // Perl 5.017+
+        offsets.put("experimental", 52);
+        offsets.put("experimental::regex_sets", 53);
+        // Perl 5.019+
+        offsets.put("syscalls", 54);
+        // Perl 5.021+
+        offsets.put("experimental::re_strict", 55);
+        offsets.put("experimental::refaliasing", 56);
+        offsets.put("locale", 57);
+        offsets.put("missing", 58);
+        offsets.put("redundant", 59);
+        // Perl 5.025+
+        offsets.put("experimental::declared_refs", 60);
+        offsets.put("deprecated::dot_in_inc", 61);
+        // Perl 5.027+
+        offsets.put("shadow", 62);
+        // Perl 5.029+
+        offsets.put("experimental::private_use", 63);
+        offsets.put("experimental::uniprop_wildcards", 64);
+        offsets.put("experimental::vlb", 65);
+        // Perl 5.033+
+        offsets.put("experimental::try", 66);
+        // Perl 5.035+
+        offsets.put("experimental::args_array_with_signatures", 67);
+        offsets.put("experimental::builtin", 68);
+        offsets.put("experimental::defer", 69);
+        offsets.put("experimental::extra_paired_delimiters", 70);
+        offsets.put("scalar", 71);
+        offsets.put("deprecated::version_downgrade", 72);
+        offsets.put("deprecated::delimiter_will_be_paired", 73);
+        // Perl 5.037+
+        offsets.put("experimental::class", 74);
+        // Additional categories
+        offsets.put("deprecated::subsequent_use_version", 75);
+        offsets.put("experimental::keyword_all", 76);
+        offsets.put("experimental::keyword_any", 77);
+        offsets.put("experimental::signature_named_parameters", 78);
+        
+        PERL5_OFFSETS = Collections.unmodifiableMap(offsets);
+    }
+    
+    // ==================== Warning Bits String Methods ====================
+    
+    /**
+     * Gets the Perl 5 compatible bit offset for a category.
+     * Returns -1 if the category is not known.
+     *
+     * @param category The warning category name
+     * @return The bit offset, or -1 if unknown
+     */
+    public static int getPerl5Offset(String category) {
+        Integer offset = PERL5_OFFSETS.get(category);
+        if (offset != null) {
+            return offset;
+        }
+        // Check user-defined categories
+        offset = userCategoryOffsets.get(category);
+        return offset != null ? offset : -1;
+    }
+    
+    /**
+     * Registers a user-defined category and returns its bit offset.
+     * If already registered, returns the existing offset.
+     *
+     * @param category The category name to register
+     * @return The assigned bit offset
+     */
+    public static int registerUserCategoryOffset(String category) {
+        // Check if already in built-in offsets
+        Integer existing = PERL5_OFFSETS.get(category);
+        if (existing != null) {
+            return existing;
+        }
+        // Check or assign user category offset
+        return userCategoryOffsets.computeIfAbsent(category, 
+            k -> nextUserOffset.getAndIncrement());
+    }
+    
+    /**
+     * Converts BitSets to a Perl 5 compatible warning bits string.
+     * Each category uses 2 bits: bit 0 = enabled, bit 1 = fatal.
+     *
+     * @param enabled BitSet of enabled warning categories (by internal bit position)
+     * @param fatal BitSet of fatal warning categories (by internal bit position), may be null
+     * @param categoryToInternalBit Map from category name to internal bit position
+     * @return The Perl 5 compatible warning bits string
+     */
+    public static String toWarningBitsString(BitSet enabled, BitSet fatal,
+                                              Map<String, Integer> categoryToInternalBit) {
+        // Calculate required size
+        int maxOffset = WARN_SIZE * 4; // Default Perl 5 size in categories
+        for (String category : userCategoryOffsets.keySet()) {
+            int offset = userCategoryOffsets.get(category);
+            if (offset >= maxOffset) {
+                maxOffset = offset + 1;
+            }
+        }
+        
+        // Calculate bytes needed (2 bits per category)
+        int numBytes = Math.max(WARN_SIZE, (maxOffset * 2 + 7) / 8);
+        byte[] bytes = new byte[numBytes];
+        
+        if (enabled != null && categoryToInternalBit != null) {
+            for (Map.Entry<String, Integer> entry : categoryToInternalBit.entrySet()) {
+                String category = entry.getKey();
+                int internalBit = entry.getValue();
+                
+                if (internalBit >= 0 && enabled.get(internalBit)) {
+                    int perl5Offset = getPerl5Offset(category);
+                    if (perl5Offset >= 0) {
+                        // Set enabled bit (offset * 2)
+                        int bitPos = perl5Offset * 2;
+                        int byteIndex = bitPos / 8;
+                        int bitInByte = bitPos % 8;
+                        if (byteIndex < numBytes) {
+                            bytes[byteIndex] |= (1 << bitInByte);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (fatal != null && categoryToInternalBit != null) {
+            for (Map.Entry<String, Integer> entry : categoryToInternalBit.entrySet()) {
+                String category = entry.getKey();
+                int internalBit = entry.getValue();
+                
+                if (internalBit >= 0 && fatal.get(internalBit)) {
+                    int perl5Offset = getPerl5Offset(category);
+                    if (perl5Offset >= 0) {
+                        // Set fatal bit (offset * 2 + 1)
+                        int bitPos = perl5Offset * 2 + 1;
+                        int byteIndex = bitPos / 8;
+                        int bitInByte = bitPos % 8;
+                        if (byteIndex < numBytes) {
+                            bytes[byteIndex] |= (1 << bitInByte);
+                        }
+                    }
+                }
+            }
+        }
+        
+        return new String(bytes, StandardCharsets.ISO_8859_1);
+    }
+    
+    /**
+     * Checks if a category is enabled in a warning bits string.
+     *
+     * @param bits The warning bits string (from caller()[9])
+     * @param category The category to check
+     * @return true if the category is enabled
+     */
+    public static boolean isEnabledInBits(String bits, String category) {
+        if (bits == null || category == null) {
+            return false;
+        }
+        
+        int offset = getPerl5Offset(category);
+        if (offset < 0) {
+            // Unknown category - check if it might be a registered user category
+            offset = userCategoryOffsets.get(category) != null ? 
+                     userCategoryOffsets.get(category) : -1;
+            if (offset < 0) {
+                return false;
+            }
+        }
+        
+        int bitPos = offset * 2; // Enabled bit
+        int byteIndex = bitPos / 8;
+        int bitInByte = bitPos % 8;
+        
+        if (byteIndex >= bits.length()) {
+            return false;
+        }
+        
+        return (bits.charAt(byteIndex) & (1 << bitInByte)) != 0;
+    }
+    
+    /**
+     * Checks if a category is fatal in a warning bits string.
+     *
+     * @param bits The warning bits string (from caller()[9])
+     * @param category The category to check
+     * @return true if the category is fatal
+     */
+    public static boolean isFatalInBits(String bits, String category) {
+        if (bits == null || category == null) {
+            return false;
+        }
+        
+        int offset = getPerl5Offset(category);
+        if (offset < 0) {
+            offset = userCategoryOffsets.get(category) != null ? 
+                     userCategoryOffsets.get(category) : -1;
+            if (offset < 0) {
+                return false;
+            }
+        }
+        
+        int bitPos = offset * 2 + 1; // Fatal bit
+        int byteIndex = bitPos / 8;
+        int bitInByte = bitPos % 8;
+        
+        if (byteIndex >= bits.length()) {
+            return false;
+        }
+        
+        return (bits.charAt(byteIndex) & (1 << bitInByte)) != 0;
     }
 
     /**

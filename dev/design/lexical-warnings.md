@@ -939,12 +939,28 @@ The following documents were superseded by this one and have been deleted:
 
 ## Progress Tracking
 
-### Status: Implementation Ready
+### Status: Phase 1 Complete (2026-03-29)
 
 ### Completed
 - [x] Design document created
 - [x] Superseded design documents deleted
+- [x] Phase 1: Infrastructure (2026-03-29)
+  - Created `WarningBitsRegistry.java` - HashMap registry for class name → warning bits
+  - Enhanced `WarningFlags.java`:
+    - Added `PERL5_OFFSETS` map with Perl 5 compatible category offsets
+    - Added `userCategoryOffsets` for `warnings::register` support
+    - Added `toWarningBitsString()` for caller()[9] bits format
+    - Added `isEnabledInBits()` and `isFatalInBits()` utility methods
+    - Added `registerUserCategoryOffset()` for dynamic category allocation
+  - Enhanced `ScopedSymbolTable.java`:
+    - Added `warningFatalStack` for FATAL warnings tracking
+    - Updated `enterScope()`/`exitScope()` to handle fatal stack
+    - Updated `snapShot()` and `copyFlagsFrom()` to copy fatal stack
+    - Added `enableFatalWarningCategory()`, `disableFatalWarningCategory()`, `isFatalWarningCategory()`
+    - Added `getWarningBitsString()` for caller()[9] support
 
 ### Next Steps
-1. Implement Phase 1: Infrastructure
-2. Continue with remaining phases
+1. Implement Phase 2: Two-variant operator methods (add vs addWarn pattern)
+2. Implement Phase 3: Per-closure warning bits storage for JVM backend
+3. Implement Phase 4: Per-closure warning bits storage for interpreter
+4. Continue with remaining phases (5-8)
