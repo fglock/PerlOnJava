@@ -162,7 +162,8 @@ public class OpcodeHandlerExtended {
         RuntimeBase val2 = registers[rs];
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-        RuntimeScalar result = MathOperators.pow(s1, s2);
+        // Use warn variant - it checks at runtime if warnings are enabled
+        RuntimeScalar result = MathOperators.powWarn(s1, s2);
         ((RuntimeScalar) registers[rd]).set(result);
         return pc;
     }
@@ -940,6 +941,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
 
+        // Note: -= does NOT warn for uninitialized values in Perl
         registers[rd] = MathOperators.subtractAssign(s1, s2);
         return pc;
     }
@@ -961,7 +963,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
 
-        registers[rd] = MathOperators.multiplyAssign(s1, s2);
+        registers[rd] = MathOperators.multiplyAssignWarn(s1, s2);
         return pc;
     }
 
@@ -981,7 +983,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
 
-        registers[rd] = MathOperators.divideAssign(s1, s2);
+        registers[rd] = MathOperators.divideAssignWarn(s1, s2);
         return pc;
     }
 
@@ -997,7 +999,7 @@ public class OpcodeHandlerExtended {
         RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
 
-        registers[rd] = MathOperators.modulusAssign(s1, s2);
+        registers[rd] = MathOperators.modulusAssignWarn(s1, s2);
         return pc;
     }
 }

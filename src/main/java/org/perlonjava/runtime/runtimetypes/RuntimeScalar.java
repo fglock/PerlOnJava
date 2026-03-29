@@ -4,6 +4,7 @@ import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.math.BigInteger;
@@ -317,10 +318,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (type == INTEGER || type == DOUBLE) {
             return this;
         }
-        // Check for UNDEF and emit warning
+        // Check for UNDEF and emit warning if warnings are enabled
         if (type == UNDEF) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in " + operation),
-                    scalarEmptyString);
+            if (Warnings.shouldWarn("uninitialized")) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in " + operation),
+                        scalarEmptyString);
+            }
             return scalarZero;
         }
         // For tied scalars, fetch first then check the fetched value

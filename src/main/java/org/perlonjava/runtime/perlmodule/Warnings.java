@@ -90,6 +90,24 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
+     * Checks if warnings should be emitted for a specific category at runtime.
+     * This is used by warn methods (like getNumberWarn) to determine if warnings
+     * are enabled either via lexical warnings or $^W.
+     * 
+     * @param category The warning category to check (e.g., "uninitialized")
+     * @return true if warnings should be emitted, false otherwise
+     */
+    public static boolean shouldWarn(String category) {
+        // First check lexical warnings
+        String bits = getWarningBitsAtLevel(1);
+        if (bits != null && WarningFlags.isEnabledInBits(bits, category)) {
+            return true;
+        }
+        // Fall back to $^W
+        return isWarnFlagSet();
+    }
+
+    /**
      * Registers custom warning categories (used by warnings::register).
      *
      * @param args The arguments - category names to register.
