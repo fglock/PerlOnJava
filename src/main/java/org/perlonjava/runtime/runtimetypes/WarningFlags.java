@@ -463,7 +463,10 @@ public class WarningFlags {
         }
         // Include custom categories registered via warnings::register
         warningSet.addAll(customCategories);
-        return new ArrayList<>(warningSet);
+        // Sort to ensure stable bit positions across runs and when new categories are added
+        List<String> sorted = new ArrayList<>(warningSet);
+        Collections.sort(sorted);
+        return sorted;
     }
 
     /**

@@ -752,6 +752,17 @@ public class ScopedSymbolTable {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             featureFlagsStack.push(featureFlagsStack.pop() | (1 << bitPosition));
+            
+            // Enable the corresponding experimental warning if this is an experimental feature
+            // In Perl 5, experimental warnings are ON by default for experimental features
+            String experimentalWarning = "experimental::" + feature;
+            Integer warnBitPos = warningBitPositions.get(experimentalWarning);
+            if (warnBitPos != null) {
+                // Only enable if not explicitly disabled
+                if (!warningDisabledStack.peek().get(warnBitPos)) {
+                    warningFlagsStack.peek().set(warnBitPos);
+                }
+            }
         }
     }
 
