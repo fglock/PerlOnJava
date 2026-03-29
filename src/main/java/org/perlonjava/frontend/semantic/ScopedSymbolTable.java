@@ -78,16 +78,12 @@ public class ScopedSymbolTable {
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
      */
     public ScopedSymbolTable() {
-        // Initialize the warning categories stack with experimental warnings enabled by default
-        // Experimental warnings are always on by default in Perl
+        // Initialize the warning categories stack with empty warnings by default
+        // This matches Perl behavior where code without explicit 'use warnings'
+        // has no warning bits set. Experimental warnings will be enabled when
+        // the relevant features are used (e.g., 'use feature "try"').
         BitSet defaultWarnings = new BitSet();
-        // Enable all experimental:: warnings by default
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
-            if (entry.getKey().startsWith("experimental::")) {
-                defaultWarnings.set(entry.getValue());
-            }
-        }
-        warningFlagsStack.push((BitSet) defaultWarnings.clone());
+        warningFlagsStack.push(defaultWarnings);
         // Initialize the disabled warnings stack (empty by default)
         warningDisabledStack.push(new BitSet());
         // Initialize the fatal warnings stack (empty by default)
