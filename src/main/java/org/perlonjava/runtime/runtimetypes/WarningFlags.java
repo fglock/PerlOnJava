@@ -41,9 +41,9 @@ public class WarningFlags {
 
     static {
         // Initialize the hierarchy of warning categories
-        warningHierarchy.put("all", new String[]{"closure", "deprecated", "exiting", "experimental", "glob", "imprecision", "io", "locale", "misc", "missing", "numeric", "once", "overflow", "pack", "portable", "recursion", "redefine", "redundant", "regexp", "scalar", "severe", "shadow", "signal", "substr", "syntax", "taint", "threads", "uninitialized", "unpack", "untie", "utf8", "void"});
+        warningHierarchy.put("all", new String[]{"closure", "deprecated", "exiting", "experimental", "glob", "imprecision", "io", "locale", "misc", "missing", "missing_import", "numeric", "once", "overflow", "pack", "portable", "recursion", "redefine", "redundant", "regexp", "scalar", "severe", "shadow", "signal", "substr", "syntax", "taint", "threads", "uninitialized", "unpack", "untie", "utf8", "void", "__future_81", "__future_82", "__future_83"});
         warningHierarchy.put("deprecated", new String[]{"deprecated::apostrophe_as_package_separator", "deprecated::delimiter_will_be_paired", "deprecated::dot_in_inc", "deprecated::goto_construct", "deprecated::missing_import_called_with_args", "deprecated::smartmatch", "deprecated::subsequent_use_version", "deprecated::unicode_property_name", "deprecated::version_downgrade"});
-        warningHierarchy.put("experimental", new String[]{"experimental::args_array_with_signatures", "experimental::bitwise", "experimental::builtin", "experimental::class", "experimental::declared_refs", "experimental::defer", "experimental::extra_paired_delimiters", "experimental::private_use", "experimental::re_strict", "experimental::refaliasing", "experimental::regex_sets", "experimental::try", "experimental::uniprop_wildcards", "experimental::vlb", "experimental::keyword_any", "experimental::keyword_all", "experimental::lexical_subs", "experimental::signature_named_parameters"});
+        warningHierarchy.put("experimental", new String[]{"experimental::args_array_with_signatures", "experimental::bitwise", "experimental::builtin", "experimental::class", "experimental::declared_refs", "experimental::defer", "experimental::enhanced_xx", "experimental::extra_paired_delimiters", "experimental::private_use", "experimental::re_strict", "experimental::refaliasing", "experimental::regex_sets", "experimental::try", "experimental::uniprop_wildcards", "experimental::vlb", "experimental::keyword_any", "experimental::keyword_all", "experimental::lexical_subs", "experimental::signature_named_parameters"});
         warningHierarchy.put("io", new String[]{"io::closed", "io::exec", "io::layer", "io::newline", "io::pipe", "io::syscalls", "io::unopened"});
         warningHierarchy.put("severe", new String[]{"severe::debugging", "severe::inplace", "severe::internal", "severe::malloc"});
         warningHierarchy.put("syntax", new String[]{"syntax::ambiguous", "syntax::bareword", "syntax::digit", "syntax::illegalproto", "syntax::parenthesis", "syntax::precedence", "syntax::printf", "syntax::prototype", "syntax::qw", "syntax::reserved", "syntax::semicolon"});
@@ -102,11 +102,17 @@ public class WarningFlags {
         offsets.put("glob", 4);
         offsets.put("io", 5);
         offsets.put("closed", 6);
+        offsets.put("io::closed", 6);  // Alias
         offsets.put("exec", 7);
+        offsets.put("io::exec", 7);  // Alias
         offsets.put("layer", 8);
+        offsets.put("io::layer", 8);  // Alias
         offsets.put("newline", 9);
+        offsets.put("io::newline", 9);  // Alias
         offsets.put("pipe", 10);
+        offsets.put("io::pipe", 10);  // Alias
         offsets.put("unopened", 11);
+        offsets.put("io::unopened", 11);  // Alias
         offsets.put("misc", 12);
         offsets.put("numeric", 13);
         offsets.put("once", 14);
@@ -118,22 +124,36 @@ public class WarningFlags {
         offsets.put("regexp", 20);
         offsets.put("severe", 21);
         offsets.put("debugging", 22);
+        offsets.put("severe::debugging", 22);  // Alias
         offsets.put("inplace", 23);
+        offsets.put("severe::inplace", 23);  // Alias
         offsets.put("internal", 24);
+        offsets.put("severe::internal", 24);  // Alias
         offsets.put("malloc", 25);
+        offsets.put("severe::malloc", 25);  // Alias
         offsets.put("signal", 26);
         offsets.put("substr", 27);
         offsets.put("syntax", 28);
         offsets.put("ambiguous", 29);
+        offsets.put("syntax::ambiguous", 29);  // Alias
         offsets.put("bareword", 30);
+        offsets.put("syntax::bareword", 30);  // Alias
         offsets.put("digit", 31);
+        offsets.put("syntax::digit", 31);  // Alias
         offsets.put("parenthesis", 32);
+        offsets.put("syntax::parenthesis", 32);  // Alias
         offsets.put("precedence", 33);
+        offsets.put("syntax::precedence", 33);  // Alias
         offsets.put("printf", 34);
+        offsets.put("syntax::printf", 34);  // Alias
         offsets.put("prototype", 35);
+        offsets.put("syntax::prototype", 35);  // Alias
         offsets.put("qw", 36);
+        offsets.put("syntax::qw", 36);  // Alias
         offsets.put("reserved", 37);
+        offsets.put("syntax::reserved", 37);  // Alias
         offsets.put("semicolon", 38);
+        offsets.put("syntax::semicolon", 38);  // Alias
         offsets.put("taint", 39);
         offsets.put("threads", 40);
         offsets.put("uninitialized", 41);
@@ -143,17 +163,22 @@ public class WarningFlags {
         offsets.put("void", 45);
         offsets.put("imprecision", 46);
         offsets.put("illegalproto", 47);
+        offsets.put("syntax::illegalproto", 47);  // Alias
         // Perl 5.011003+
         offsets.put("deprecated::unicode_property_name", 48);
         // Perl 5.013+
         offsets.put("non_unicode", 49);
+        offsets.put("utf8::non_unicode", 49);  // Alias
         offsets.put("nonchar", 50);
+        offsets.put("utf8::nonchar", 50);  // Alias
         offsets.put("surrogate", 51);
+        offsets.put("utf8::surrogate", 51);  // Alias
         // Perl 5.017+
         offsets.put("experimental", 52);
         offsets.put("experimental::regex_sets", 53);
         // Perl 5.019+
         offsets.put("syscalls", 54);
+        offsets.put("io::syscalls", 54);  // Alias
         // Perl 5.021+
         offsets.put("experimental::re_strict", 55);
         offsets.put("experimental::refaliasing", 56);
@@ -185,7 +210,23 @@ public class WarningFlags {
         offsets.put("deprecated::subsequent_use_version", 75);
         offsets.put("experimental::keyword_all", 76);
         offsets.put("experimental::keyword_any", 77);
-        offsets.put("experimental::signature_named_parameters", 78);
+        // Perl 5.043+
+        offsets.put("experimental::enhanced_xx", 78);
+        offsets.put("experimental::signature_named_parameters", 79);
+        offsets.put("missing_import", 80);
+        offsets.put("deprecated::missing_import_called_with_args", 80);  // Alias
+        // Placeholder offsets for future categories (needed for WARN_ALLstring compatibility)
+        // Perl 5's WARN_ALLstring sets all 21 bytes to 0x55, covering offsets 0-83
+        offsets.put("__future_81", 81);
+        offsets.put("__future_82", 82);
+        offsets.put("__future_83", 83);
+        // Aliases for deprecated subcategories (use parent's offset since they don't have their own)
+        offsets.put("deprecated::apostrophe_as_package_separator", 2);
+        offsets.put("deprecated::goto_construct", 2);
+        offsets.put("deprecated::smartmatch", 2);
+        // Additional experimental aliases
+        offsets.put("experimental::bitwise", 52);  // Use experimental's offset
+        offsets.put("experimental::lexical_subs", 52);  // Use experimental's offset
         
         PERL5_OFFSETS = Collections.unmodifiableMap(offsets);
     }

@@ -2,7 +2,7 @@ package warnings;
 our $VERSION = '1.74';
 
 # Number of bytes in a warnings bit mask (required by caller.t tests)
-# Highest offset is 160, so (160 + 2) / 8 = 20.25 -> 21 bytes
+# Matches Perl 5's WARNsize from warnings.h
 our $BYTES = 21;
 
 #
