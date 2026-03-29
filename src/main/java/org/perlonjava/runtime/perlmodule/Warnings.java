@@ -1,10 +1,13 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.HashSet;
 import java.util.Set;
+
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
@@ -55,7 +58,9 @@ public class Warnings extends PerlModuleBase {
      * @return The warning bits string, or null if not available
      */
     private static String getWarningBitsAtLevel(int level) {
-        // Add 1 because we're inside a warnings:: function
+        // Level 0 = the Perl code that called the warnings:: function
+        // We add 1 to skip the Java implementation frame (Warnings.java) that appears
+        // in the caller() stack trace when called from Java code
         RuntimeList caller = RuntimeCode.caller(
             new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)), 
             RuntimeContextType.LIST
@@ -88,7 +93,14 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
-     * Enables a warning category.
+     * Enables warning categories, with support for FATAL/NONFATAL modifiers.
+     * 
+     * Supported syntax:
+     * - use warnings;                      - enable all warnings
+     * - use warnings 'category';           - enable specific category
+     * - use warnings FATAL => 'all';       - enable all as FATAL
+     * - use warnings FATAL => 'category';  - enable category as FATAL
+     * - use warnings NONFATAL => 'all';    - downgrade FATAL to warnings
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -101,22 +113,90 @@ public class Warnings extends PerlModuleBase {
             return new RuntimeScalar().getList();
         }
 
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        
+        // Track current modifier: null = normal, "FATAL" = make fatal, "NONFATAL" = make non-fatal
+        String currentModifier = null;
+        
         for (int i = 1; i < args.size(); i++) {
-            String category = args.get(i).toString();
-            if (category.startsWith("-")) {
-                category = category.substring(1);
-                if (!warningExists(category)) {
+            String arg = args.get(i).toString();
+            
+            // Check for FATAL/NONFATAL modifiers
+            if ("FATAL".equals(arg)) {
+                currentModifier = "FATAL";
+                continue;
+            }
+            if ("NONFATAL".equals(arg)) {
+                currentModifier = "NONFATAL";
+                continue;
+            }
+            
+            // Handle disabled category (with - prefix)
+            if (arg.startsWith("-")) {
+                String category = arg.substring(1);
+                if (!warningExists(category) && !"all".equals(category)) {
                     throw new PerlCompilerException("Unknown warnings category '" + category + "'");
                 }
-                warningManager.disableWarning(category.substring(1));
+                warningManager.disableWarning(category);
+                currentModifier = null;  // Reset modifier after use
+                continue;
+            }
+            
+            // Normal category
+            String category = arg;
+            if (!warningExists(category) && !"all".equals(category) && !"FATAL".equals(category) && !"NONFATAL".equals(category)) {
+                throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+            }
+            
+            // Apply based on current modifier
+            if ("FATAL".equals(currentModifier)) {
+                // Enable as FATAL
+                enableFatalCategory(symbolTable, category);
+            } else if ("NONFATAL".equals(currentModifier)) {
+                // Downgrade from FATAL to normal warning
+                disableFatalCategory(symbolTable, category);
+                warningManager.enableWarning(category);  // Still enable the warning
             } else {
-                if (!warningExists(category)) {
-                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
-                }
+                // Normal enable
                 warningManager.enableWarning(category);
             }
+            
+            currentModifier = null;  // Reset modifier after use
         }
+        
         return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Enables a warning category as FATAL (including subcategories).
+     */
+    private static void enableFatalCategory(ScopedSymbolTable symbolTable, String category) {
+        // Enable the category
+        symbolTable.enableWarningCategory(category);
+        symbolTable.enableFatalWarningCategory(category);
+        
+        // Propagate to subcategories
+        String[] subcategories = WarningFlags.getSubcategories(category);
+        if (subcategories != null) {
+            for (String sub : subcategories) {
+                enableFatalCategory(symbolTable, sub);
+            }
+        }
+    }
+
+    /**
+     * Disables FATAL mode for a warning category (including subcategories).
+     */
+    private static void disableFatalCategory(ScopedSymbolTable symbolTable, String category) {
+        symbolTable.disableFatalWarningCategory(category);
+        
+        // Propagate to subcategories
+        String[] subcategories = WarningFlags.getSubcategories(category);
+        if (subcategories != null) {
+            for (String sub : subcategories) {
+                disableFatalCategory(symbolTable, sub);
+            }
+        }
     }
 
     /**

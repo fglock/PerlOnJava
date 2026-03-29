@@ -16,7 +16,9 @@ import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.CompilerFlagNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.PrintWriter;
@@ -452,6 +454,10 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Add instance field for __SUB__ code reference
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", null, null).visitEnd();
+
+            // Pre-apply CompilerFlagNodes to capture effective warning flags
+            // This ensures that 'use warnings FATAL => "all"' affects WARNING_BITS
+            applyCompilerFlagNodes(ctx, ast);
 
             // Add static field WARNING_BITS for per-closure warning state (caller()[9] support)
             String warningBits = ctx.symbolTable.getWarningBitsString();
@@ -1733,6 +1739,43 @@ public class EmitterMethodCreator implements Opcodes {
             // Print annotations if any
             for (Annotation annotation : method.getAnnotations()) {
                 System.out.println("  @" + annotation.annotationType().getSimpleName());
+            }
+        }
+    }
+
+    /**
+     * Pre-applies CompilerFlagNodes to the symbol table so that warning flags
+     * (including FATAL and disabled) are captured in WARNING_BITS.
+     * This scans the AST for CompilerFlagNode nodes at the top level and applies them.
+     */
+    private static void applyCompilerFlagNodes(EmitterContext ctx, Node ast) {
+        if (ast instanceof BlockNode) {
+            BlockNode block = (BlockNode) ast;
+            for (Node stmt : block.elements) {
+                if (stmt instanceof CompilerFlagNode) {
+                    CompilerFlagNode node = (CompilerFlagNode) stmt;
+                    ScopedSymbolTable currentScope = ctx.symbolTable;
+                    
+                    // Apply warning flags
+                    currentScope.warningFlagsStack.pop();
+                    currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+                    
+                    // Apply fatal warning flags
+                    currentScope.warningFatalStack.pop();
+                    currentScope.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
+                    
+                    // Apply disabled warning flags
+                    currentScope.warningDisabledStack.pop();
+                    currentScope.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+                    
+                    // Apply feature flags
+                    currentScope.featureFlagsStack.pop();
+                    currentScope.featureFlagsStack.push(node.getFeatureFlags());
+                    
+                    // Apply strict options
+                    currentScope.strictOptionsStack.pop();
+                    currentScope.strictOptionsStack.push(node.getStrictOptions());
+                }
             }
         }
     }

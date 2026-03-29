@@ -135,7 +135,11 @@ public class EmitSubroutine {
             newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
         }
         newSymbolTable.warningFlagsStack.pop();
-        newSymbolTable.warningFlagsStack.push(ctx.symbolTable.warningFlagsStack.peek());
+        newSymbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
+        newSymbolTable.warningFatalStack.pop();
+        newSymbolTable.warningFatalStack.push((java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone());
+        newSymbolTable.warningDisabledStack.pop();
+        newSymbolTable.warningDisabledStack.push((java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone());
         newSymbolTable.featureFlagsStack.pop();
         newSymbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
         newSymbolTable.strictOptionsStack.pop();

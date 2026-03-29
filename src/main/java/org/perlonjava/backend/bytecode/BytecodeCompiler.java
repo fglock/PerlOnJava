@@ -280,6 +280,8 @@ public class BytecodeCompiler implements Visitor {
             st.strictOptionsStack.push(st.strictOptionsStack.peek());
             st.featureFlagsStack.push(st.featureFlagsStack.peek());
             st.warningFlagsStack.push((java.util.BitSet) st.warningFlagsStack.peek().clone());
+            st.warningFatalStack.push((java.util.BitSet) st.warningFatalStack.peek().clone());
+            st.warningDisabledStack.push((java.util.BitSet) st.warningDisabledStack.peek().clone());
         }
     }
 
@@ -297,6 +299,8 @@ public class BytecodeCompiler implements Visitor {
                 st.strictOptionsStack.pop();
                 st.featureFlagsStack.pop();
                 st.warningFlagsStack.pop();
+                st.warningFatalStack.pop();
+                st.warningDisabledStack.pop();
             }
         }
     }
@@ -528,6 +532,10 @@ public class BytecodeCompiler implements Visitor {
                 symbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
+                symbolTable.warningFatalStack.pop();
+                symbolTable.warningFatalStack.push((java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone());
+                symbolTable.warningDisabledStack.pop();
+                symbolTable.warningDisabledStack.push((java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone());
             }
         }
 
@@ -5289,6 +5297,10 @@ public class BytecodeCompiler implements Visitor {
             ScopedSymbolTable st = emitterContext.symbolTable;
             st.warningFlagsStack.pop();
             st.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+            st.warningFatalStack.pop();
+            st.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
+            st.warningDisabledStack.pop();
+            st.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
             st.featureFlagsStack.pop();
             st.featureFlagsStack.push(node.getFeatureFlags());
             st.strictOptionsStack.pop();
@@ -5300,6 +5312,10 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.strictOptionsStack.push(node.getStrictOptions());
         symbolTable.warningFlagsStack.pop();
         symbolTable.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+        symbolTable.warningFatalStack.pop();
+        symbolTable.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
+        symbolTable.warningDisabledStack.pop();
+        symbolTable.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
 
         lastResultReg = -1;
     }

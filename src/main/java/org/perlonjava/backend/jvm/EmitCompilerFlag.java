@@ -14,6 +14,14 @@ public class EmitCompilerFlag {
         currentScope.warningFlagsStack.pop();
         currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
 
+        // Set the fatal warning flags
+        currentScope.warningFatalStack.pop();
+        currentScope.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
+
+        // Set the disabled warning flags
+        currentScope.warningDisabledStack.pop();
+        currentScope.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+
         // Set the feature flags
         currentScope.featureFlagsStack.pop();
         currentScope.featureFlagsStack.push(node.getFeatureFlags());

@@ -382,6 +382,16 @@ public class WarningFlags {
     }
 
     /**
+     * Gets the subcategories of a warning category.
+     *
+     * @param category The parent category
+     * @return Array of subcategory names, or null if none
+     */
+    public static String[] getSubcategories(String category) {
+        return warningHierarchy.get(category);
+    }
+
+    /**
      * Registers a custom warning category (used by warnings::register).
      * If "all" warnings are already enabled in the current scope, also enables this category.
      *
