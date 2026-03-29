@@ -1019,7 +1019,64 @@ The following documents were superseded by this one and have been deleted:
     - `warnings::fatal_enabled_at_level`, `warnings::warnif_at_level`
 
 ### Next Steps
-1. (Future) Consider per-call-site warning bits for full Perl 5 parity
+
+#### Phase 9: Per-Call-Site Warning Bits (Future)
+
+**Goal:** Enable block-scoped `use warnings` / `no warnings` to work correctly.
+
+**Current Limitation:**
+Warning bits are captured per-class at compile time. This means:
+```perl
+sub foo {
+    my $x;
+    print $x . "a";  # Uses class-level warning bits
+    {
+        no warnings 'uninitialized';
+        print $x . "b";  # Still uses class-level bits - warns incorrectly!
+    }
+}
+```
+
+**Proposed Solution:**
+Store warning bits per-statement (call-site) rather than per-class.
+
+**Implementation Approach:**
+
+1. **Compile-time: Emit warning bits with each statement**
+   - Each statement that can warn stores its warning bits as a parameter
+   - Example: `concatWarn(a, b, warningBits)` instead of `concatWarn(a, b)`
+   - The `warningBits` is a compile-time constant string
+
+2. **Runtime: Check bits at call site**
+   - Warning operators receive the bits as a parameter
+   - `warnWithCategory()` uses the passed bits instead of looking up caller()
+   - No ThreadLocal or caller() lookup needed for most cases
+
+3. **Alternative: Scope ID approach**
+   - Each scope gets a unique ID at compile time
+   - Store `scopeId → warningBits` mapping in registry
+   - Emit `local ${^WARNING_SCOPE} = scopeId` at scope entry
+   - Runtime looks up bits by current scope ID
+
+**Trade-offs:**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Per-statement bits | Fast, no lookup | Increases bytecode size |
+| Scope ID registry | Smaller bytecode | Runtime lookup overhead |
+
+**Files to Modify:**
+- `EmitOperator.java` - Pass warning bits to warn variants
+- `StringOperators.java` (and others) - Accept bits parameter
+- `WarnDie.java` - Use passed bits instead of caller() lookup
+- `ScopedSymbolTable.java` - Track scope-level warning changes
+
+**Estimated Complexity:** Medium-High
+- Requires changes to operator signatures
+- Need to update all warn-variant operators
+- Must maintain backward compatibility
+
+**Priority:** Low (current implementation handles most use cases)
 
 ### Phase 7-8 Progress (2026-03-29)
 - [x] Added `warnWithCategory()` to WarnDie.java:
