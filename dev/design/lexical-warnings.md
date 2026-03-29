@@ -1019,6 +1019,29 @@ The following documents were superseded by this one and have been deleted:
     - `warnings::fatal_enabled_at_level`, `warnings::warnif_at_level`
 
 ### Next Steps
-1. Phase 7: FATAL warnings support (handle `FATAL => 'category'` in use warnings)
+1. Phase 7: Complete block-scoped FATAL warnings (requires per-scope warning bits)
 2. Phase 8: $^W interaction
 3. (Future) Consider per-call-site warning bits for full Perl 5 parity
+
+### Phase 7-8 Progress (2026-03-29)
+- [x] Added `warnWithCategory()` to WarnDie.java:
+  - Checks if warning category is FATAL in caller's scope
+  - Uses caller()[9] for subroutine frames
+  - Falls back to ThreadLocal context stack for top-level code
+  - Converts warning to die() when FATAL bit is set
+- [x] Added ThreadLocal context stack to WarningBitsRegistry:
+  - `pushCurrent()` / `popCurrent()` track current warning bits during execution
+  - `getCurrent()` retrieves bits for FATAL checks
+- [x] Updated RuntimeCode.apply() to push/pop warning bits
+- [x] Updated InterpretedCode.apply() to push/pop warning bits
+- [x] Updated StringOperators.stringConcatWarnUninitialized() to use warnWithCategory()
+
+**FATAL warnings work for:**
+- File-scope `use warnings FATAL => 'all'`
+- Named subroutines inheriting FATAL from enclosing scope
+- Top-level code execution
+
+**Known limitation:**
+Block-scoped `use warnings FATAL` inside a subroutine/program doesn't work because
+warning bits are captured per-class at compile time, not per-scope. This would require
+per-call-site warning bits for full parity.
