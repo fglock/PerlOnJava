@@ -29,6 +29,11 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("!", "not", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("not", "not", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
+        // Arithmetic warn variants (with uninitialized value warnings)
+        // Used when 'use warnings "uninitialized"' is in effect
+        put("+_warn", "addWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("-_warn", "subtractWarn", "org/perlonjava/runtime/operators/MathOperators");
+
         put("^^", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("xor", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
@@ -389,6 +394,19 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      */
     public static OperatorHandler get(String operator) {
         return operatorHandlers.get(operator);
+    }
+
+    /**
+     * Retrieves the warn variant of an OperatorHandler if available.
+     * For operators like + and -, returns the warn variant (addWarn, subtractWarn)
+     * that includes uninitialized value warning checks.
+     *
+     * @param operator The operator symbol.
+     * @return The warn variant OperatorHandler, or the regular handler if no warn variant exists.
+     */
+    public static OperatorHandler getWarn(String operator) {
+        OperatorHandler warnHandler = operatorHandlers.get(operator + "_warn");
+        return warnHandler != null ? warnHandler : operatorHandlers.get(operator);
     }
 
     /**

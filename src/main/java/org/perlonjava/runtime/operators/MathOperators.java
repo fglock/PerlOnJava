@@ -45,6 +45,49 @@ public class MathOperators {
     }
 
     /**
+     * Adds an integer to a RuntimeScalar with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The RuntimeScalar to add to.
+     * @param arg2 The integer value to add.
+     * @return A new RuntimeScalar representing the sum.
+     */
+    public static RuntimeScalar addWarn(RuntimeScalar arg1, int arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(+", "+");
+            if (result != null) return result;
+        }
+
+        // Convert string type to number if necessary
+        // This also fetches tied scalars
+        arg1 = arg1.getNumber();
+        
+        // Check for uninitialized value and generate warning
+        // After getNumber(), UNDEF becomes scalarZero which has type INTEGER
+        // So we check for identity with the cached zero value
+        if (arg1 == RuntimeScalarCache.scalarZero) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in addition (+)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
+        // Perform addition based on the type of RuntimeScalar
+        if (arg1.type == DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() + arg2);
+        } else {
+            long a = arg1.getLong();
+            try {
+                // Note: do not cache, because the result of addition is mutable - t/comp/fold.t
+                return new RuntimeScalar(Math.addExact(a, arg2));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a + (double) arg2);
+            }
+        }
+    }
+
+    /**
      * Adds two RuntimeScalar objects and returns the result.
      *
      * @param arg1 The first RuntimeScalar to add.
@@ -74,6 +117,63 @@ public class MathOperators {
         // Convert string type to number if necessary
         arg1 = arg1.getNumber();
         arg2 = arg2.getNumber();
+        // Perform addition based on the type of RuntimeScalar
+        if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
+        } else {
+            long a = arg1.getLong();
+            long b = arg2.getLong();
+            try {
+                return getScalarInt(Math.addExact(a, b));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a + (double) b);
+            }
+        }
+    }
+
+    /**
+     * Adds two RuntimeScalar objects with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The first RuntimeScalar to add.
+     * @param arg2 The second RuntimeScalar to add.
+     * @return A new RuntimeScalar representing the sum.
+     */
+    public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            int a = (int) arg1.value;
+            int b = (int) arg2.value;
+            try {
+                return getScalarInt(Math.addExact(a, b));
+            } catch (ArithmeticException ignored) {
+                return new RuntimeScalar((double) a + (double) b);
+            }
+        }
+
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+", "+");
+            if (result != null) return result;
+        }
+
+        // Convert to number first (handles tied scalars with single fetch)
+        // Then check for uninitialized values (scalarZero from UNDEF conversion)
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
+        
+        if (arg1 == RuntimeScalarCache.scalarZero) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in addition (+)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2 == RuntimeScalarCache.scalarZero) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in addition (+)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
@@ -121,6 +221,45 @@ public class MathOperators {
     }
 
     /**
+     * Subtracts an integer from a RuntimeScalar with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The RuntimeScalar to subtract from.
+     * @param arg2 The integer value to subtract.
+     * @return A new RuntimeScalar representing the difference.
+     */
+    public static RuntimeScalar subtractWarn(RuntimeScalar arg1, int arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(-", "-");
+            if (result != null) return result;
+        }
+
+        // Convert to number first (handles tied scalars with single fetch)
+        arg1 = arg1.getNumber();
+        
+        // Check for uninitialized value (scalarZero from UNDEF conversion)
+        if (arg1 == RuntimeScalarCache.scalarZero) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in subtraction (-)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
+        // Perform subtraction based on the type of RuntimeScalar
+        if (arg1.type == DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() - arg2);
+        } else {
+            long a = arg1.getLong();
+            try {
+                return getScalarInt(Math.subtractExact(a, arg2));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a - (double) arg2);
+            }
+        }
+    }
+
+    /**
      * Subtracts one RuntimeScalar from another and returns the result.
      *
      * @param arg1 The RuntimeScalar to subtract from.
@@ -150,6 +289,63 @@ public class MathOperators {
         // Convert string type to number if necessary
         arg1 = arg1.getNumber();
         arg2 = arg2.getNumber();
+        // Perform subtraction based on the type of RuntimeScalar
+        if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
+        } else {
+            long a = arg1.getLong();
+            long b = arg2.getLong();
+            try {
+                return getScalarInt(Math.subtractExact(a, b));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a - (double) b);
+            }
+        }
+    }
+
+    /**
+     * Subtracts one RuntimeScalar from another with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The RuntimeScalar to subtract from.
+     * @param arg2 The RuntimeScalar to subtract.
+     * @return A new RuntimeScalar representing the difference.
+     */
+    public static RuntimeScalar subtractWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            int a = (int) arg1.value;
+            int b = (int) arg2.value;
+            try {
+                return getScalarInt(Math.subtractExact(a, b));
+            } catch (ArithmeticException ignored) {
+                return new RuntimeScalar((double) a - (double) b);
+            }
+        }
+
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-", "-");
+            if (result != null) return result;
+        }
+
+        // Convert to number first (handles tied scalars with single fetch)
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
+        
+        // Check for uninitialized values (scalarZero from UNDEF conversion)
+        if (arg1 == RuntimeScalarCache.scalarZero) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in subtraction (-)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2 == RuntimeScalarCache.scalarZero) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in subtraction (-)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());

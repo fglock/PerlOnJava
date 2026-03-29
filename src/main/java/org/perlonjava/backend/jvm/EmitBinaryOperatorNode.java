@@ -87,8 +87,15 @@ public class EmitBinaryOperatorNode {
             // Binary operators
             case "%", "&", "&.", "binary&", "*", "**", "+", "-", "/",
                  "<<", "<=>", ">>", "^", "^.", "binary^", "|", "|.", "binary|",
-                 "bless", "cmp", "isa", "~~" -> EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
-                    OperatorHandler.get(node.operator));
+                 "bless", "cmp", "isa", "~~" -> {
+                    // Check if uninitialized warnings are enabled at compile time
+                    // Use warn variant for zero-overhead when warnings disabled
+                    boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
+                    OperatorHandler handler = warnUninit
+                            ? OperatorHandler.getWarn(node.operator)
+                            : OperatorHandler.get(node.operator);
+                    EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node, handler);
+                }
 
             default -> throw new PerlCompilerException(node.tokenIndex,
                     "Not implemented operator: " + node.operator, emitterVisitor.ctx.errorUtil);
