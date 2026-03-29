@@ -141,7 +141,7 @@ public class GlobalContext {
 
         // Initialize additional magic scalar variables that tests expect to exist at startup
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8LOCALE"));  // ${^UTF8LOCALE}
-        GlobalVariable.getGlobalVariable(encodeSpecialVar("WARNING_BITS"));  // ${^WARNING_BITS}
+        GlobalVariable.globalVariables.put(encodeSpecialVar("WARNING_BITS"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.WARNING_BITS));  // ${^WARNING_BITS}
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8CACHE")).set(0);  // ${^UTF8CACHE}
         GlobalVariable.getGlobalVariable("main::[").set(0);  // $[ (array base, deprecated)
         GlobalVariable.getGlobalVariable("main::~");  // $~ (current format name)

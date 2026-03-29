@@ -1,8 +1,7 @@
 package warnings;
 our $VERSION = '1.74';
 
-# Number of bytes in a warnings bit mask
-# This is (highest_offset + 2) / 8, rounded up
+# Number of bytes in a warnings bit mask (required by caller.t tests)
 # Highest offset is 160, so (160 + 2) / 8 = 20.25 -> 21 bytes
 our $BYTES = 21;
 

@@ -360,6 +360,50 @@ public class WarningFlags {
     }
 
     /**
+     * Sets the warning flags in a ScopedSymbolTable from a warning bits string.
+     * This is the reverse of toWarningBitsString - it parses the Perl 5 compatible
+     * warning bits string and sets the corresponding flags in the symbol table.
+     *
+     * @param symbolTable The symbol table to update
+     * @param bits The warning bits string (format used by ${^WARNING_BITS})
+     */
+    public static void setWarningBitsFromString(ScopedSymbolTable symbolTable, String bits) {
+        if (symbolTable == null || bits == null) {
+            return;
+        }
+        
+        // Clear all warning flags first
+        symbolTable.warningFlagsStack.peek().clear();
+        symbolTable.warningFatalStack.peek().clear();
+        
+        // For each known category, check if it's enabled/fatal in the bits string
+        for (String category : getWarningList()) {
+            int offset = getPerl5Offset(category);
+            if (offset >= 0) {
+                // Check enabled bit (offset * 2)
+                int enabledBitPos = offset * 2;
+                int enabledByteIndex = enabledBitPos / 8;
+                int enabledBitInByte = enabledBitPos % 8;
+                
+                if (enabledByteIndex < bits.length() && 
+                    (bits.charAt(enabledByteIndex) & (1 << enabledBitInByte)) != 0) {
+                    symbolTable.enableWarningCategory(category);
+                }
+                
+                // Check fatal bit (offset * 2 + 1)
+                int fatalBitPos = offset * 2 + 1;
+                int fatalByteIndex = fatalBitPos / 8;
+                int fatalBitInByte = fatalBitPos % 8;
+                
+                if (fatalByteIndex < bits.length() && 
+                    (bits.charAt(fatalByteIndex) & (1 << fatalBitInByte)) != 0) {
+                    symbolTable.enableFatalWarningCategory(category);
+                }
+            }
+        }
+    }
+
+    /**
      * Constructs a WarningFlags object associated with a ScopedSymbolTable.
      */
     public WarningFlags() {
