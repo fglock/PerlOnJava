@@ -992,8 +992,20 @@ The following documents were superseded by this one and have been deleted:
     - PerlOnJava tracks at class (closure) granularity
     - All calls from the same class share the same warning bits
     - Different closures DO get their own warning bits (correctly)
+- [x] Phase 4: Per-closure warning bits storage for interpreter (2026-03-29)
+  - Added `warningBitsString` field to `InterpretedCode.java`:
+    - Stores Perl 5 compatible warning bits string
+    - Passed from BytecodeCompiler using symbolTable.getWarningBitsString()
+  - Updated constructors in `InterpretedCode.java`:
+    - Main constructor accepts warningBitsString parameter
+    - Registers with WarningBitsRegistry using "interpreter:" + identityHashCode key
+    - withCapturedVars() copies warningBitsString to new instance
+  - Updated `BytecodeCompiler.buildInterpretedCode()`:
+    - Extracts warningBitsString from emitterContext.symbolTable
+    - Passes to InterpretedCode constructor
+  - `extractJavaClassNames()` in RuntimeCode already handles interpreter frames
+    - Uses "interpreter:" + System.identityHashCode(frame.code()) as registry key
 
 ### Next Steps
-1. Implement Phase 4: Per-closure warning bits storage for interpreter
-2. Continue with remaining phases (5-8)
-3. (Future) Consider per-call-site warning bits for full Perl 5 parity
+1. Continue with remaining phases (5-8) as needed
+2. (Future) Consider per-call-site warning bits for full Perl 5 parity

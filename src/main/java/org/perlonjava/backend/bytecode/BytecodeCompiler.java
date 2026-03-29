@@ -577,10 +577,12 @@ public class BytecodeCompiler implements Visitor {
         int strictOptions = 0;
         int featureFlags = 0;
         BitSet warningFlags = new BitSet();
+        String warningBitsString = null;
         if (emitterContext != null && emitterContext.symbolTable != null) {
             strictOptions = emitterContext.symbolTable.strictOptionsStack.peek();
             featureFlags = emitterContext.symbolTable.featureFlagsStack.peek();
             warningFlags = (BitSet) emitterContext.symbolTable.warningFlagsStack.peek().clone();
+            warningBitsString = emitterContext.symbolTable.getWarningBitsString();
         }
 
         // Populate debug source lines if in debug mode
@@ -608,7 +610,8 @@ public class BytecodeCompiler implements Visitor {
                 warningFlags,
                 symbolTable.getCurrentPackage(),
                 evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
-                evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags
+                evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
+                warningBitsString
         );
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
