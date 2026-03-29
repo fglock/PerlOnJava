@@ -232,9 +232,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
+        // Push warning bits for FATAL warnings support
+        // This allows runtime code to check current warning context
+        if (warningBitsString != null) {
+            WarningBitsRegistry.pushCurrent(warningBitsString);
+        }
         try {
             return BytecodeInterpreter.execute(this, args, callContext);
         } finally {
+            if (warningBitsString != null) {
+                WarningBitsRegistry.popCurrent();
+            }
             RuntimeCode.popArgs();
         }
     }
@@ -243,9 +251,16 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
+        // Push warning bits for FATAL warnings support
+        if (warningBitsString != null) {
+            WarningBitsRegistry.pushCurrent(warningBitsString);
+        }
         try {
             return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
         } finally {
+            if (warningBitsString != null) {
+                WarningBitsRegistry.popCurrent();
+            }
             RuntimeCode.popArgs();
         }
     }

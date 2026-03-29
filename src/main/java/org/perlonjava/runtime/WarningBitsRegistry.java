@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -12,12 +14,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * Interpreter Backend: InterpretedCode registers bits in constructor.
  * 
  * At runtime, caller() looks up warning bits by class name.
+ * 
+ * Additionally, a ThreadLocal stack tracks the "current" warning bits
+ * for runtime code that needs to check FATAL warnings.
  */
 public class WarningBitsRegistry {
     
     // Map from fully-qualified class name to warning bits string
     private static final ConcurrentHashMap<String, String> registry = 
         new ConcurrentHashMap<>();
+    
+    // ThreadLocal stack of warning bits for the current execution context
+    // This allows runtime code to find warning bits even at top-level (no subroutine frame)
+    private static final ThreadLocal<Deque<String>> currentBitsStack = 
+        ThreadLocal.withInitial(ArrayDeque::new);
     
     /**
      * Registers the warning bits for a class.
@@ -48,11 +58,46 @@ public class WarningBitsRegistry {
     }
     
     /**
-     * Clears all registered warning bits.
+     * Pushes warning bits onto the current context stack.
+     * Called when entering a subroutine or code block with warning settings.
+     *
+     * @param bits The warning bits string
+     */
+    public static void pushCurrent(String bits) {
+        if (bits != null) {
+            currentBitsStack.get().push(bits);
+        }
+    }
+    
+    /**
+     * Pops warning bits from the current context stack.
+     * Called when exiting a subroutine or code block.
+     */
+    public static void popCurrent() {
+        Deque<String> stack = currentBitsStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+    
+    /**
+     * Gets the current warning bits from the context stack.
+     * Used by runtime code to check FATAL warnings.
+     *
+     * @return The current warning bits string, or null if stack is empty
+     */
+    public static String getCurrent() {
+        Deque<String> stack = currentBitsStack.get();
+        return stack.isEmpty() ? null : stack.peek();
+    }
+    
+    /**
+     * Clears all registered warning bits and the current context stack.
      * Called by PerlLanguageProvider.resetAll() during reinitialization.
      */
     public static void clear() {
         registry.clear();
+        currentBitsStack.get().clear();
     }
     
     /**

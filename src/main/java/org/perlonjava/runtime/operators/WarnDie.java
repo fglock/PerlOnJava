@@ -2,7 +2,6 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -210,14 +209,19 @@ public class WarnDie {
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
                                                 String fileName, int lineNumber) {
         // Check if the warning category is FATAL in the caller's scope
-        // We try multiple caller levels to find a frame with warning bits
-        // (different runtime paths may have different stack depths)
+        // First try the caller() approach for subroutine frames
         String warningBits = null;
         for (int level = 0; level <= 3; level++) {
             warningBits = getWarningBitsFromCaller(level);
             if (warningBits != null) {
                 break;
             }
+        }
+        
+        // If no bits from caller(), check the current context stack
+        // This handles top-level code where caller() returns empty
+        if (warningBits == null) {
+            warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCurrent();
         }
         
         if (warningBits != null && WarningFlags.isFatalInBits(warningBits, category)) {

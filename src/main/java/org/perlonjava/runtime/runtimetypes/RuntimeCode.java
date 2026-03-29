@@ -1867,8 +1867,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called");
             }
-            // Cast the value to RuntimeCode and call apply()
-            return code.apply(a, callContext);
+            // Look up warning bits for the code's class and push to context stack
+            // This enables FATAL warnings to work even at top-level (no caller frame)
+            String warningBits = getWarningBitsForCode(code);
+            if (warningBits != null) {
+                WarningBitsRegistry.pushCurrent(warningBits);
+            }
+            try {
+                // Cast the value to RuntimeCode and call apply()
+                return code.apply(a, callContext);
+            } finally {
+                if (warningBits != null) {
+                    WarningBitsRegistry.popCurrent();
+                }
+            }
         }
 
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
@@ -1939,6 +1951,38 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /**
+     * Gets the warning bits string for a RuntimeCode.
+     * For InterpretedCode, uses the stored warningBitsString field.
+     * For JVM-compiled code, looks up in WarningBitsRegistry by class name.
+     *
+     * @param code The RuntimeCode to get warning bits for
+     * @return The warning bits string, or null if not available
+     */
+    private static String getWarningBitsForCode(RuntimeCode code) {
+        // For InterpretedCode, use the stored field directly
+        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpCode) {
+            return interpCode.warningBitsString;
+        }
+        
+        // For JVM-compiled code, look up by class name in the registry
+        // The methodHandle's class is the generated class that has WARNING_BITS field
+        if (code.methodHandle != null) {
+            // Get the declaring class of the method handle
+            try {
+                // The type contains the declaring class as the first parameter type for instance methods
+                // For our generated apply methods, we use the class that was loaded
+                String className = code.methodHandle.type().parameterType(0).getName();
+                return WarningBitsRegistry.get(className);
+            } catch (Exception e) {
+                // If we can't get the class name, fall back to null
+                return null;
+            }
+        }
+        
+        return null;
+    }
+
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
@@ -1975,8 +2019,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (code.defined()) {
-                // Cast the value to RuntimeCode and call apply()
-                return code.apply(subroutineName, a, callContext);
+                // Look up warning bits for the code's class and push to context stack
+                String warningBits = getWarningBitsForCode(code);
+                if (warningBits != null) {
+                    WarningBitsRegistry.pushCurrent(warningBits);
+                }
+                try {
+                    // Cast the value to RuntimeCode and call apply()
+                    return code.apply(subroutineName, a, callContext);
+                } finally {
+                    if (warningBits != null) {
+                        WarningBitsRegistry.popCurrent();
+                    }
+                }
             }
 
             // Does AUTOLOAD exist?
@@ -2062,8 +2117,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (code.defined()) {
-                // Cast the value to RuntimeCode and call apply()
-                return code.apply(subroutineName, a, callContext);
+                // Look up warning bits for the code's class and push to context stack
+                String warningBits = getWarningBitsForCode(code);
+                if (warningBits != null) {
+                    WarningBitsRegistry.pushCurrent(warningBits);
+                }
+                try {
+                    // Cast the value to RuntimeCode and call apply()
+                    return code.apply(subroutineName, a, callContext);
+                } finally {
+                    if (warningBits != null) {
+                        WarningBitsRegistry.popCurrent();
+                    }
+                }
             }
 
             // Does AUTOLOAD exist?
@@ -2366,6 +2432,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
+            
+            // Push warning bits for FATAL warnings support
+            String warningBits = getWarningBitsForCode(this);
+            if (warningBits != null) {
+                WarningBitsRegistry.pushCurrent(warningBits);
+            }
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -2378,6 +2450,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
+                if (warningBits != null) {
+                    WarningBitsRegistry.popCurrent();
+                }
                 popArgs();
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
@@ -2456,6 +2531,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
+            
+            // Push warning bits for FATAL warnings support
+            String warningBits = getWarningBitsForCode(this);
+            if (warningBits != null) {
+                WarningBitsRegistry.pushCurrent(warningBits);
+            }
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -2468,6 +2549,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
+                if (warningBits != null) {
+                    WarningBitsRegistry.popCurrent();
+                }
                 popArgs();
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
