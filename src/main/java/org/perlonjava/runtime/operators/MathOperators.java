@@ -328,13 +328,14 @@ public class MathOperators {
 
     /**
      * Multiplies two RuntimeScalar objects and returns the result.
+     * Fast path - no warning checks.
      *
      * @param arg1 The first RuntimeScalar to multiply.
      * @param arg2 The second RuntimeScalar to multiply.
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
-        // Fast path: both INTEGER - skip blessedId check, getDefinedBoolean(), getNumber()
+        // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
             int b = (int) arg2.value;
@@ -351,17 +352,6 @@ public class MathOperators {
         if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*", "*");
             if (result != null) return result;
-        }
-
-        // Check for uninitialized values and generate warnings
-        // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
-                    RuntimeScalarCache.scalarEmptyString);
         }
 
         // Convert string type to number if necessary
@@ -383,7 +373,55 @@ public class MathOperators {
     }
 
     /**
+     * Multiplies two RuntimeScalar objects with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The first RuntimeScalar to multiply.
+     * @param arg2 The second RuntimeScalar to multiply.
+     * @return A new RuntimeScalar representing the product.
+     */
+    public static RuntimeScalar multiplyWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
+        if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            int a = (int) arg1.value;
+            int b = (int) arg2.value;
+            try {
+                return getScalarInt(Math.multiplyExact(a, b));
+            } catch (ArithmeticException ignored) {
+                return new RuntimeScalar((double) a * (double) b);
+            }
+        }
+
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*", "*");
+            if (result != null) return result;
+        }
+
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("multiplication (*)");
+        arg2 = arg2.getNumberWarn("multiplication (*)");
+
+        // Perform multiplication based on the type of RuntimeScalar
+        if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+        } else {
+            long a = arg1.getLong();
+            long b = arg2.getLong();
+            try {
+                return getScalarInt(Math.multiplyExact(a, b));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a * (double) b);
+            }
+        }
+    }
+
+    /**
      * Divides one RuntimeScalar by another and returns the result.
+     * Fast path - no warning checks.
      *
      * @param arg1 The RuntimeScalar to divide.
      * @param arg2 The RuntimeScalar to divide by.
@@ -396,17 +434,6 @@ public class MathOperators {
         if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(/", "/");
             if (result != null) return result;
-        }
-
-        // Check for uninitialized values and generate warnings
-        // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
-        if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
-                    RuntimeScalarCache.scalarEmptyString);
         }
 
         // Convert string type to number if necessary
@@ -429,7 +456,44 @@ public class MathOperators {
     }
 
     /**
+     * Divides one RuntimeScalar by another with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The RuntimeScalar to divide.
+     * @param arg2 The RuntimeScalar to divide by.
+     * @return A new RuntimeScalar representing the quotient.
+     * @throws PerlCompilerException if division by zero occurs.
+     */
+    public static RuntimeScalar divideWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(/", "/");
+            if (result != null) return result;
+        }
+
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("division (/)");
+        arg2 = arg2.getNumberWarn("division (/)");
+        double divisor = arg2.getDouble();
+        // Check for division by zero
+        if (divisor == 0.0) {
+            throw new PerlCompilerException("Illegal division by zero");
+        }
+        // Perform division
+        double result = arg1.getDouble() / divisor;
+
+        // Fix negative zero to positive zero
+        if (result == 0.0 && Double.doubleToRawLongBits(result) == Double.doubleToRawLongBits(-0.0)) {
+            result = 0.0;
+        }
+
+        return new RuntimeScalar(result);
+    }
+
+    /**
      * Computes the modulus of one RuntimeScalar by another and returns the result.
+     * Fast path - no warning checks.
      *
      * @param arg1 The RuntimeScalar to divide.
      * @param arg2 The RuntimeScalar to divide by.
@@ -442,6 +506,65 @@ public class MathOperators {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(%", "%");
             if (result != null) return result;
         }
+
+        if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
+            // Use double arithmetic when either argument is a double
+            double dividend = arg1.getDouble();
+            double divisor = arg2.getDouble();
+
+            // Handle division by zero
+            if (divisor == 0.0) {
+                throw new PerlCompilerException("Division by zero in modulus operation");
+            }
+
+            // Calculate modulus using double precision
+            double result = truncate(dividend) % truncate(divisor);
+
+            // Adjust result for Perl-style modulus behavior
+            // In Perl, the result has the same sign as the divisor
+            if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
+                result += divisor;
+            }
+            return new RuntimeScalar(result);
+        }
+
+        // Use long arithmetic to handle large integers (beyond int range)
+        long dividend = arg1.getLong();
+        long divisor = arg2.getLong();
+        long result = dividend % divisor;
+
+        // Adjust result for Perl-style modulus behavior
+        // In Perl, the result has the same sign as the divisor
+        if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
+            result += divisor;
+        }
+
+        // Return as int if it fits, otherwise as long
+        if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
+            return new RuntimeScalar((int) result);
+        }
+        return new RuntimeScalar(result);
+    }
+
+    /**
+     * Computes the modulus of one RuntimeScalar by another with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The RuntimeScalar to divide.
+     * @param arg2 The RuntimeScalar to divide by.
+     * @return A new RuntimeScalar representing the modulus.
+     */
+    public static RuntimeScalar modulusWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(%", "%");
+            if (result != null) return result;
+        }
+
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("modulus (%)");
+        arg2 = arg2.getNumberWarn("modulus (%)");
 
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             // Use double arithmetic when either argument is a double
@@ -761,6 +884,7 @@ public class MathOperators {
 
     /**
      * Raises a RuntimeScalar to the power of another RuntimeScalar.
+     * Fast path - no warning checks.
      *
      * @param arg1 The base RuntimeScalar.
      * @param arg2 The exponent RuntimeScalar.
@@ -774,16 +898,28 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Check for uninitialized values and generate warnings
-        // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
-                    RuntimeScalarCache.scalarEmptyString);
+        return new RuntimeScalar(Math.pow(arg1.getDouble(), arg2.getDouble()));
+    }
+
+    /**
+     * Raises a RuntimeScalar to the power of another RuntimeScalar with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param arg1 The base RuntimeScalar.
+     * @param arg2 The exponent RuntimeScalar.
+     * @return A new RuntimeScalar representing the power.
+     */
+    public static RuntimeScalar powWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = blessedId(arg1);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(**", "**");
+            if (result != null) return result;
         }
-        if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
-                    RuntimeScalarCache.scalarEmptyString);
-        }
+
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("exponentiation (**)");
+        arg2 = arg2.getNumberWarn("exponentiation (**)");
 
         return new RuntimeScalar(Math.pow(arg1.getDouble(), arg2.getDouble()));
     }
@@ -839,6 +975,10 @@ public class MathOperators {
         }
     }
 
+    /**
+     * Unary minus operator.
+     * Fast path - no warning checks.
+     */
     public static RuntimeScalar unaryMinus(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
@@ -879,6 +1019,47 @@ public class MathOperators {
             }
         }
         return subtract(getScalarInt(0), runtimeScalar);
+    }
+
+    /**
+     * Unary minus operator with uninitialized value warnings.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     */
+    public static RuntimeScalar unaryMinusWarn(RuntimeScalar runtimeScalar) {
+        // Check if object is eligible for overloading
+        int blessId = blessedId(runtimeScalar);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(neg", "neg", MathOperators::unaryMinusWarn);
+            if (result != null) return result;
+        }
+
+        if (runtimeScalar.isString()) {
+            String input = runtimeScalar.toString();
+            if (input.length() < 2) {
+                if (input.isEmpty()) {
+                    return getScalarInt(0);
+                }
+                if (input.equals("-")) {
+                    return new RuntimeScalar("+");
+                }
+                if (input.equals("+")) {
+                    return new RuntimeScalar("-");
+                }
+            }
+            // Check if string has non-numeric trailing characters (not purely numeric)
+            if (!input.matches("^\\s*[-+]?\\d+(\\.\\d+)?([eE][-+]?\\d+)?\\s*$")) {
+                // String is not purely numeric
+                if (input.startsWith("-")) {
+                    return new RuntimeScalar("+" + input.substring(1));
+                } else if (input.startsWith("+")) {
+                    return new RuntimeScalar("-" + input.substring(1));
+                } else if (input.matches("^[_A-Za-z].*")) {
+                    return new RuntimeScalar("-" + input);
+                }
+            }
+        }
+        // Use subtractWarn to check for uninitialized values
+        return subtractWarn(getScalarInt(0), runtimeScalar);
     }
 
     public static RuntimeScalar integer(RuntimeScalar arg1) {

@@ -33,6 +33,11 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         // Used when 'use warnings "uninitialized"' is in effect
         put("+_warn", "addWarn", "org/perlonjava/runtime/operators/MathOperators");
         put("-_warn", "subtractWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("*_warn", "multiplyWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("/_warn", "divideWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("%_warn", "modulusWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("**_warn", "powWarn", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("unaryMinus_warn", "unaryMinusWarn", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
         put("^^", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("xor", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
