@@ -12,12 +12,10 @@ Some scenarios where this pays off:
 
 **JDBC database access.** Perl's DBI works with PerlOnJava's JDBC backend. Connect to PostgreSQL, MySQL, Oracle, or any database with a JDBC driver — no DBD compilation required, no driver version mismatches.
 
-```perl
-use DBI;
-my $dbh = DBI->connect("jdbc:postgresql://localhost/mydb", $user, $pass);
-my $sth = $dbh->prepare("SELECT * FROM users WHERE active = ?");
-$sth->execute(1);
-```
+    use DBI;
+    my $dbh = DBI->connect("jdbc:postgresql://localhost/mydb", $user, $pass);
+    my $sth = $dbh->prepare("SELECT * FROM users WHERE active = ?");
+    $sth->execute(1);
 
 **Container deployments.** One Docker image with OpenJDK and your Perl code. You don't need a Perl installation, cpanm in your Dockerfile, or XS modules that compiled fine on your laptop.
 
@@ -25,13 +23,11 @@ $sth->execute(1);
 
 ## The 30-Second Version
 
-```bash
-git clone https://github.com/fglock/PerlOnJava.git
-cd PerlOnJava && make
+    git clone https://github.com/fglock/PerlOnJava.git
+    cd PerlOnJava && make
 
-./jcpan Moo
-./jperl -MMoo -e 'print "Moo version: $Moo::VERSION\n"'
-```
+    ./jcpan Moo
+    ./jperl -MMoo -e 'print "Moo version: $Moo::VERSION\n"'
 
 That's it. Moo is installed. No cpanm, no local::lib dance.
 
@@ -45,29 +41,25 @@ PerlOnJava distributes as a single 23MB JAR file. Inside, you get:
 
 When you run `./jperl script.pl`, there's no second download, no dependency resolution. The standard library is there.
 
-```perl
-# These all work out of the box
-use JSON;
-use HTTP::Tiny;
-use Digest::SHA qw(sha256_hex);
-use Archive::Tar;
-use DBI;
+    # These all work out of the box
+    use JSON;
+    use HTTP::Tiny;
+    use Digest::SHA qw(sha256_hex);
+    use Archive::Tar;
+    use DBI;
 
-my $response = HTTP::Tiny->new->get('https://api.example.com/data');
-my $data = decode_json($response->{content});
-print sha256_hex($data->{token}), "\n";
-```
+    my $response = HTTP::Tiny->new->get('https://api.example.com/data');
+    my $data = decode_json($response->{content});
+    print sha256_hex($data->{token}), "\n";
 
 ## Installing Additional Modules
 
 The bundled modules cover common use cases, but CPAN has over 200,000 distributions. For everything else, there's `jcpan`:
 
-```bash
-./jcpan Moo                    # Install a module
-./jcpan -f Some::Module        # Force install (skip failing tests)  
-./jcpan -t DateTime            # Run a module's test suite
-./jcpan                        # Interactive CPAN shell
-```
+    ./jcpan Moo                    # Install a module
+    ./jcpan -f Some::Module        # Force install (skip failing tests)  
+    ./jcpan -t DateTime            # Run a module's test suite
+    ./jcpan                        # Interactive CPAN shell
 
 Modules install to `~/.perlonjava/lib/`, which is automatically in `@INC`.
 
@@ -89,13 +81,11 @@ XS modules contain C code that gets compiled to native machine code. Since PerlO
 
 For popular XS modules, PerlOnJava includes **Java implementations** of the XS functions:
 
-| Module | Implementation |
-|--------|----------------|
-| DateTime | java.time APIs |
-| JSON | fastjson2 library |
-| Digest::MD5/SHA | Java MessageDigest |
-| DBI | JDBC backend |
-| Compress::Zlib | java.util.zip |
+- **DateTime** — java.time APIs
+- **JSON** — fastjson2 library
+- **Digest::MD5/SHA** — Java MessageDigest
+- **DBI** — JDBC backend
+- **Compress::Zlib** — java.util.zip
 
 When you `use DateTime`, PerlOnJava's XSLoader detects the Java implementation and loads it automatically. You get the module's full API, backed by Java libraries.
 
@@ -107,58 +97,52 @@ DateTime is a good stress test. It has a deep dependency tree — Specio, Params
 
 Here's what happens when you install and test it:
 
-```bash
-$ ./jcpan -t DateTime
-...
-t/00-report-prereqs.t .... ok
-t/00load.t ............... ok
-t/01sanity.t ............. ok
-...
-t/19leap-second.t ........ ok
-t/20infinite.t ........... ok
-...
-All tests successful.
-Files=51, Tests=3589, 78 wallclock secs
-Result: PASS
-```
+    $ ./jcpan -t DateTime
+    ...
+    t/00-report-prereqs.t .... ok
+    t/00load.t ............... ok
+    t/01sanity.t ............. ok
+    ...
+    t/19leap-second.t ........ ok
+    t/20infinite.t ........... ok
+    ...
+    All tests successful.
+    Files=51, Tests=3589, 78 wallclock secs
+    Result: PASS
 
 3,589 tests, all passing. The Java XS implementation handles Rata Die conversions (the internal date representation), leap years, leap seconds, and timezone arithmetic. Under the hood, it's using `java.time.JulianFields` — the same code that powers Java's date/time library.
 
-```perl
-use DateTime;
+    use DateTime;
 
-my $dt = DateTime->new(
-    year      => 2026,
-    month     => 3,
-    day       => 28,
-    hour      => 14,
-    minute    => 30,
-    time_zone => 'America/New_York'
-);
+    my $dt = DateTime->new(
+        year      => 2026,
+        month     => 3,
+        day       => 28,
+        hour      => 14,
+        minute    => 30,
+        time_zone => 'America/New_York'
+    );
 
-print $dt->strftime('%Y-%m-%d %H:%M %Z'), "\n";
-# Output: 2026-03-28 14:30 EDT
+    print $dt->strftime('%Y-%m-%d %H:%M %Z'), "\n";
+    # Output: 2026-03-28 14:30 EDT
 
-$dt->add(months => 1);
-print $dt->ymd, "\n";
-# Output: 2026-04-28
-```
+    $dt->add(months => 1);
+    print $dt->ymd, "\n";
+    # Output: 2026-04-28
 
 ## The Other Tools
 
 `jcpan` isn't the only addition. PerlOnJava now includes:
 
 **jperldoc** — Read module documentation:
-```bash
-./jperldoc DateTime
-./jperldoc Moo::Role
-```
+
+    ./jperldoc DateTime
+    ./jperldoc Moo::Role
 
 **jprove** — Run test suites:
-```bash
-./jprove t/*.t
-./jprove -v t/specific_test.t
-```
+
+    ./jprove t/*.t
+    ./jprove -v t/specific_test.t
 
 These are the standard Perl tools, running on the JVM.
 
@@ -170,13 +154,11 @@ These are the standard Perl tools, running on the JVM.
 
 **Long-running programs can be significantly faster.** After warmup (~10,000 iterations through hot code paths), the JIT compiler optimizes aggressively. Here's a real benchmark — closure calls in a tight loop:
 
-```
-$ time perl dev/bench/benchmark_closure.pl
-timethis 5000:  7 wallclock secs ( 7.49 usr ) @ 667/s
+    $ time perl dev/bench/benchmark_closure.pl
+    timethis 5000:  7 wallclock secs ( 7.49 usr ) @ 667/s
 
-$ time ./jperl dev/bench/benchmark_closure.pl  
-timethis 5000:  4 wallclock secs ( 3.54 usr ) @ 1411/s
-```
+    $ time ./jperl dev/bench/benchmark_closure.pl  
+    timethis 5000:  4 wallclock secs ( 3.54 usr ) @ 1411/s
 
 PerlOnJava runs this benchmark **2.1x faster** than native Perl. The JVM's C2 compiler inlines calls and unrolls loops.
 
@@ -204,29 +186,27 @@ The project includes a **Dockerfile** for containerized deployments and a **Debi
 
 ## Getting Started
 
-```bash
-# Clone and build
-git clone https://github.com/fglock/PerlOnJava.git
-cd PerlOnJava
-make
+    # Clone and build
+    git clone https://github.com/fglock/PerlOnJava.git
+    cd PerlOnJava
+    make
 
-# Run some Perl
-./jperl -E 'say "Hello from the JVM"'
+    # Run some Perl
+    ./jperl -E 'say "Hello from the JVM"'
 
-# Install a module
-./jcpan Moo
+    # Install a module
+    ./jcpan Moo
 
-# Use it
-./jperl -MMoo -E '
-    package Point {
-        use Moo;
-        has x => (is => "ro");
-        has y => (is => "ro");
-    }
-    my $p = Point->new(x => 3, y => 4);
-    say "Point: (", $p->x, ", ", $p->y, ")"
-'
-```
+    # Use it
+    ./jperl -MMoo -E '
+        package Point {
+            use Moo;
+            has x => (is => "ro");
+            has y => (is => "ro");
+        }
+        my $p = Point->new(x => 3, y => 4);
+        say "Point: (", $p->x, ", ", $p->y, ")"
+    '
 
 The project is at [github.com/fglock/PerlOnJava](https://github.com/fglock/PerlOnJava), licensed under the Artistic License 2.0. Issues and contributions welcome.
 
