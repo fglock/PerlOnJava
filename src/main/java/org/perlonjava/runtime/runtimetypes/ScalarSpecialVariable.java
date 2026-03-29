@@ -247,6 +247,17 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
+     * Converts the special variable to a number with uninitialized warnings.
+     *
+     * @param operation The operation name for the warning message.
+     * @return The numeric value of the special variable.
+     */
+    @Override
+    public RuntimeScalar getNumberWarn(String operation) {
+        return this.getValueAsScalar().getNumberWarn(operation);
+    }
+
+    /**
      * Retrieves the integer representation of the special variable.
      *
      * @return The integer value of the special variable.
