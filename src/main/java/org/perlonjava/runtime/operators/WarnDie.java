@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -190,6 +191,67 @@ public class WarnDie {
         stderrIO.write(finalMessage.toString());
 
         return new RuntimeScalar();
+    }
+
+    /**
+     * Issues a warning message with category checking for FATAL warnings.
+     * If the warning category is FATAL in the caller's scope, this will throw
+     * an exception (via die()) instead of printing a warning.
+     *
+     * @param message  The warning message to be issued.
+     * @param where    Additional context or location information.
+     * @param category The warning category (e.g., "uninitialized", "numeric").
+     * @return A RuntimeBase representing the result of the warning operation.
+     */
+    public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category) {
+        return warnWithCategory(message, where, category, null, 0);
+    }
+
+    public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
+                                                String fileName, int lineNumber) {
+        // Check if the warning category is FATAL in the caller's scope
+        // We try multiple caller levels to find a frame with warning bits
+        // (different runtime paths may have different stack depths)
+        String warningBits = null;
+        for (int level = 0; level <= 3; level++) {
+            warningBits = getWarningBitsFromCaller(level);
+            if (warningBits != null) {
+                break;
+            }
+        }
+        
+        if (warningBits != null && WarningFlags.isFatalInBits(warningBits, category)) {
+            // Warning is FATAL - convert to die()
+            return die(message, where, fileName, lineNumber);
+        }
+        
+        // Not FATAL - issue as regular warning
+        return warn(message, where, fileName, lineNumber);
+    }
+
+    /**
+     * Gets warning bits from the caller at the specified level.
+     * This looks up the call stack to find the Perl code's warning bits.
+     *
+     * @param level The stack level (0 = immediate caller)
+     * @return The warning bits string, or null if not available
+     */
+    private static String getWarningBitsFromCaller(int level) {
+        // Use RuntimeCode.caller() to get the caller's warning bits
+        RuntimeList caller = RuntimeCode.caller(
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level)), 
+            RuntimeContextType.LIST
+        );
+        if (caller.size() > 9) {
+            RuntimeBase bitsBase = caller.elements.get(9);
+            if (bitsBase instanceof RuntimeScalar) {
+                RuntimeScalar bits = (RuntimeScalar) bitsBase;
+                if (bits.type != RuntimeScalarType.UNDEF) {
+                    return bits.toString();
+                }
+            }
+        }
+        return null;
     }
 
     /**
