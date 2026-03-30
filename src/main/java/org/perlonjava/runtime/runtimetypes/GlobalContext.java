@@ -227,6 +227,7 @@ public class GlobalContext {
         Base.initialize();
         Symbol.initialize();
         ScalarUtil.initialize();
+        OverloadModule.initialize();  // overload::StrVal, overload::AddrRef (bypass overloaded "")
         Strict.initialize();
         IntegerPragma.initialize();
         BytesPragma.initialize();

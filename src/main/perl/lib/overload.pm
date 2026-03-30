@@ -110,8 +110,18 @@ sub Method {
 }
 
 sub AddrRef {
-    no overloading;
-    "$_[0]";
+    # PerlOnJava: no overloading pragma is not yet implemented,
+    # so we construct the string using ref() and Scalar::Util functions
+    # which have Java built-ins that bypass overload dispatch.
+    require Scalar::Util;
+    my $addr = Scalar::Util::refaddr($_[0]);
+    if (defined $addr) {
+        my $class = Scalar::Util::blessed($_[0]);
+        my $type = Scalar::Util::reftype($_[0]) || 'SCALAR';
+        my $hex = sprintf("0x%x", $addr);
+        return defined $class ? "$class=$type($hex)" : "$type($hex)";
+    }
+    return "$_[0]";
 }
 
 *StrVal = *AddrRef;
