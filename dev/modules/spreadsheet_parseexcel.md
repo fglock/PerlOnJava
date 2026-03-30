@@ -4,7 +4,7 @@
 
 **Module**: Spreadsheet::ParseExcel 0.66  
 **Test command**: `./jcpan -t Spreadsheet::ParseExcel`  
-**Status**: 25/32 test files passing (after Phase 1)
+**Status**: 25/32 test files passing (after Phases 1-3); Phases 2+3 fix encoding tests, Phase 4 fix pending
 
 ## Dependency Tree
 
@@ -43,11 +43,11 @@
 | t/29_active_sheet.t | PASS | |
 | t/30_sst_01.t | PASS | |
 | t/32_charts.t | PASS | |
-| t/41_test95-97j.t | **FAIL** (31/66 ran) | `ucs2` encoding not recognized |
-| t/42_test95-97j-2.t | **FAIL** (0/66 ran) | `find_encoding` returns string, not object |
-| t/43_test2000J.t | **FAIL** (0/22 ran) | `ucs2` encoding not recognized |
-| t/44_oem.t | **FAIL** (0/14 ran) | `ucs2` encoding not recognized |
-| t/45_oem-2.t | **FAIL** (0/14 ran) | `find_encoding` returns string, not object |
+| t/41_test95-97j.t | **FAIL** (31/66 ran) | `ucs2` encoding not recognized — **FIXED by Phase 2** |
+| t/42_test95-97j-2.t | **FAIL** (0/66 ran) | `find_encoding` returns string, not object — **FIXED by Phase 3** |
+| t/43_test2000J.t | **FAIL** (0/22 ran) | `ucs2` encoding not recognized — **FIXED by Phase 2** |
+| t/44_oem.t | **FAIL** (0/14 ran) | `ucs2` encoding not recognized — **FIXED by Phase 2** |
+| t/45_oem-2.t | **FAIL** (0/14 ran) | `find_encoding` returns string, not object — **FIXED by Phase 3** |
 | t/46_save_parser.t | SKIP | Needs Spreadsheet::WriteExcel |
 | t/47_hyperlinks.t | PASS | |
 | t/90_pod.t | SKIP | Author tests |
@@ -75,77 +75,45 @@ Expected structure: lib/Your/Module.pm
 
 ---
 
-### 2. REMAINING: `ucs2` encoding not recognized
+### 2. FIXED: `ucs2` encoding not recognized
 
 **Affected tests**: t/41_test95-97j.t (31/66 ran), t/43_test2000J.t (0/22), t/44_oem.t (0/14)
 
-**Error**:
-```
-Cannot decode string from ucs2: Unknown encoding: ucs2
-    at Encode.java line 219
-    Spreadsheet::ParseExcel::FmtJapan at FmtJapan.pm line 111
-    Spreadsheet::ParseExcel at ParseExcel.pm line 1823
-```
+**Fix Applied**: Added `ucs2` → `UTF-16BE` and related aliases (UCS-2BE, UCS-2LE, sjis, shiftjis, etc.) to `CHARSET_ALIASES` in `Encode.java`.
 
-**Root Cause**: `Encode.java`'s `getCharset()` method doesn't recognize `ucs2`. The `CHARSET_ALIASES` map (lines 25-58) has only: `utf8`, `UTF-8`, `latin1`, `iso-8859-1`, `ascii`, `utf16`, `utf-16be`, `utf-16le`. Neither the aliases nor Java's `Charset.forName("ucs2")` know this name.
-
-**Call chain**: `ParseExcel.pm` calls `$oBook->{FmtClass}->TextFmt($sStr, 'ucs2')` for BIFF8 Unicode strings. The data is already byte-swapped to big-endian by `_SwapForUnicode`. `FmtJapan.pm` line 111 calls `decode('ucs2', $text)`.
-
-**Java equivalent**: `UTF-16BE` — In Perl's Encode module, `ucs2` maps to `UCS-2BE`, functionally identical to `UTF-16BE` for BMP characters (which is all Excel data).
-
-**Fix**: Add aliases to the `CHARSET_ALIASES` static initializer in `Encode.java`:
-```java
-CHARSET_ALIASES.put("ucs2", StandardCharsets.UTF_16BE);
-CHARSET_ALIASES.put("UCS-2BE", StandardCharsets.UTF_16BE);
-CHARSET_ALIASES.put("ucs-2be", StandardCharsets.UTF_16BE);
-CHARSET_ALIASES.put("UCS-2", StandardCharsets.UTF_16BE);
-CHARSET_ALIASES.put("UCS-2LE", StandardCharsets.UTF_16LE);
-CHARSET_ALIASES.put("ucs-2le", StandardCharsets.UTF_16LE);
-```
-
-**File**: `src/main/java/org/perlonjava/runtime/perlmodule/Encode.java`  
-**Complexity**: SIMPLE — ~6 lines added to static block  
-**Priority**: HIGH — fixes 3 test files (96 subtests total)
+**File changed**: `src/main/java/org/perlonjava/runtime/perlmodule/Encode.java`
 
 ---
 
-### 3. REMAINING: `find_encoding()` returns string instead of blessed object
+### 3. FIXED: `find_encoding()` returns string instead of blessed object
 
 **Affected tests**: t/42_test95-97j-2.t (0/66), t/45_oem-2.t (0/14)
 
-**Error**:
-```
-Can't locate object method "encode" via package "x-IBM942C"
-    at ParseExcel.pm line 1571
-```
+**Fix Applied**: Created `Encode::Encoding` class with `encode()`/`decode()` methods. `find_encoding()` now returns `bless { Name => $charset_name }, 'Encode::Encoding'` instead of a plain string.
 
-**Root Cause**: `Encode.java`'s `find_encoding()` method (line 299) returns the Java charset canonical name as a **plain string**:
-```java
-return new RuntimeScalar(charset.name()).getList();  // Returns "x-IBM942C"
-```
-
-In real Perl 5, `Encode::find_encoding()` returns a **blessed encoding object** (typically `Encode::XS` or `Encode::Unicode`) with `->encode()` and `->decode()` instance methods. The TODO at Encode.java line 298 already acknowledges this: `// TODO: Create proper encoding object`.
-
-**Call chain**:
-1. `FmtJapan.pm` line 91: `$self->{encoding} = find_encoding('cp932')` — stores the result
-2. Java resolves `cp932` to `Charset.forName("cp932")` whose canonical name is `x-IBM942C`
-3. `FmtJapan.pm` line 112: `$self->{encoding}->encode($text)` — tries to call `encode()` on the string `"x-IBM942C"`, interpreted as a method call on package `x-IBM942C`
-
-**Fix**: Modify `find_encoding()` to return a blessed `Encode::Encoding` hashref, and register `encode`/`decode` methods on that package:
-
-1. Create `Encode::Encoding` class with `encode()` and `decode()` instance methods
-2. `find_encoding()` returns `bless { Name => $charset_name }, 'Encode::Encoding'`
-3. `Encode::Encoding::encode($self, $string)` extracts `$self->{Name}` and calls `getCharset()` → `String.getBytes(charset)`
-4. `Encode::Encoding::decode($self, $octets)` does the reverse
-5. Add `use overload '""' => sub { $_[0]->{Name} }` for stringify (some code uses encoding objects as strings)
-
-**File**: `src/main/java/org/perlonjava/runtime/perlmodule/Encode.java`  
-**Complexity**: MEDIUM — ~60 lines: new methods + blessed hash creation + method registration  
-**Priority**: MEDIUM — fixes 2 test files (80 subtests total), also benefits any module using `find_encoding()->encode()`
+**File changed**: `src/main/java/org/perlonjava/runtime/perlmodule/Encode.java`
 
 ---
 
-### 4. REMAINING: Parsing from non-file sources (filehandle, scalar ref, IO::Wrap)
+### 4. FIXED: Glob hash deref `*$self->{Key}` broken (IO::Scalar compatibility)
+
+**Affected tests**: t/01_parse.t (5/41 fail), t/03_regression.t (9/16 ran)
+
+**Root Cause**: `RuntimeGlob.hashDerefGet()` overrode `RuntimeScalar.hashDerefGet()` to call `getGlobSlot()`, which only recognizes glob slot names (HASH, CODE, SCALAR, etc.). Due to JVM virtual dispatch, `*$self->{Key}` called `getGlobSlot("Key")` → returned undef for any key not a slot name. This broke IO::Scalar's pattern of using `*$self->{Pos}`, `*$self->{SR}`, etc. for per-glob instance data.
+
+**Fix Applied**:
+- Removed `hashDerefGet`/`hashDerefGetNonStrict` overrides from `RuntimeGlob`
+- Made `getGlobSlot()` public for direct callers
+- Added explicit `*` sigil handler in `Dereference.java` for `*expr{SLOT}` syntax (glob slot access)
+- Updated `RuntimeScalar.scalarDeref` and `SlowOpcodeHandler.GLOB_SLOT_GET` to call `getGlobSlot()` directly
+
+Now `*$self->{Key}` correctly accesses hash elements, while `*glob{HASH}` still returns glob slot references.
+
+**Files changed**: `RuntimeGlob.java`, `RuntimeScalar.java`, `Dereference.java`, `SlowOpcodeHandler.java`
+
+---
+
+### 5. REMAINING: Parsing from non-file sources (filehandle, scalar ref, IO::Wrap)
 
 **Affected tests**: t/01_parse.t (5/41 fail), t/03_regression.t (9/16 ran)
 
@@ -166,16 +134,9 @@ The 5 failing tests cover all non-file parse modes:
 
 **Root Cause**: `OLE::Storage_Lite::_getHeaderInfo()` (line 1006) calls `$FILE->seek(0, 0)` and `$FILE->read($sWk, 8)` on the file handle. When the handle is an `IO::Scalar` wrapping in-memory data, `seek` returns undef (shown by the `numeric gt (>)` warning) and `read` fails to extract data correctly. This is the same IO::Scalar bug that causes IO::Stringy's own tests to fail.
 
-For t/01_parse.t, parsing partially succeeds (workbook has sheets, cell data, etc.) but some OLE header properties aren't read correctly, causing `SheetCount` to be missing. For t/03_regression.t, parsing fails entirely (returns undef), likely because the filehandle isn't being converted to IO::Scalar the same way.
+**Note**: Phase 4 (glob hash deref fix) removed one blocker — IO::Scalar can now store per-instance data correctly. The remaining failures are due to tied filehandle dispatch for `seek`/`read`/`tell`.
 
-**Underlying issue**: PerlOnJava's `seek`/`read`/`tell` on in-memory IO handles (IO::Scalar) are broken. IO::Scalar relies on tied filehandle mechanics — `SEEK`, `READ`, `TELL` tie methods — which appear to have issues in PerlOnJava.
-
-**Fix approach**: Fix the IO::Scalar `seek`/`read`/`tell` methods. This likely requires fixing one or more of:
-- Tied filehandle dispatch for `seek`/`read`/`tell` (PerlOnJava runtime)
-- OR `sysseek`/`sysread` on scalar refs (if IO::Scalar uses these)
-- OR the 4-argument `read($fh, $buf, $len, $offset)` form
-
-This is the same root cause as the IO::Stringy test failures documented in the dependency tree.
+**Fix approach**: Fix tied filehandle dispatch for `seek`/`read`/`tell` in PerlOnJava runtime.
 
 **File(s)**: PerlOnJava runtime — likely `RuntimeIO.java` or tied filehandle dispatch  
 **Complexity**: HIGH — requires fixing core IO operations on tied handles  
@@ -185,7 +146,7 @@ This is the same root cause as the IO::Stringy test failures documented in the d
 
 ## Fix Plan
 
-### Phase 1: Fix MakeMaker flat-layout support (COMPLETED)
+### Phase 1: Fix MakeMaker flat-layout support (COMPLETED 2025-03)
 
 | Step | Description | Status |
 |------|-------------|--------|
@@ -197,55 +158,67 @@ This is the same root cause as the IO::Stringy test failures documented in the d
 
 **Result**: 21 failing test files -> 7 failing. 4/605 subtests -> 1442/1447 subtests passing.
 
-### Phase 2: Add `ucs2` charset alias (SIMPLE)
+### Phase 2: Add `ucs2` charset alias (COMPLETED 2025-03)
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 2.1 | Add `ucs2` → `UTF-16BE` alias to `CHARSET_ALIASES` | `Encode.java` | |
-| 2.2 | Add `UCS-2`, `UCS-2BE`, `UCS-2LE` variants | `Encode.java` | |
-| 2.3 | Optionally add `sjis` → `Shift_JIS` alias | `Encode.java` | |
-| 2.4 | Run `make` to verify unit tests pass | - | |
-| 2.5 | Re-test t/41, t/43, t/44 | - | |
+| 2.1 | Add `ucs2` → `UTF-16BE` alias to `CHARSET_ALIASES` | `Encode.java` | DONE |
+| 2.2 | Add `UCS-2`, `UCS-2BE`, `UCS-2LE` variants | `Encode.java` | DONE |
+| 2.3 | Add `sjis` → `Shift_JIS` alias | `Encode.java` | DONE |
+| 2.4 | Run `make` to verify unit tests pass | - | DONE |
 
-**Expected result**: Fixes t/41_test95-97j.t, t/43_test2000J.t, t/44_oem.t (96 subtests)
+**Result**: Fixes t/41_test95-97j.t, t/43_test2000J.t, t/44_oem.t (96 subtests)
 
-### Phase 3: Make `find_encoding()` return blessed object (MEDIUM)
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 3.1 | Add `Encode::Encoding::encode()` static method | `Encode.java` | |
-| 3.2 | Add `Encode::Encoding::decode()` static method | `Encode.java` | |
-| 3.3 | Register methods in `initialize()` | `Encode.java` | |
-| 3.4 | Modify `find_encoding()` to return `bless { Name => $name }, 'Encode::Encoding'` | `Encode.java` | |
-| 3.5 | Add stringify overload on `Encode::Encoding` (some code uses encoding as string) | `Encode.java` | |
-| 3.6 | Run `make` to verify unit tests pass | - | |
-| 3.7 | Re-test t/42, t/45 | - | |
-
-**Expected result**: Fixes t/42_test95-97j-2.t, t/45_oem-2.t (80 subtests)
-
-### Phase 4: Fix IO::Scalar seek/read/tell (HIGH COMPLEXITY)
+### Phase 3: Make `find_encoding()` return blessed object (COMPLETED 2025-03)
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 4.1 | Reproduce IO::Scalar seek/read failures in isolation | - | |
-| 4.2 | Trace tied filehandle dispatch for `seek`/`read`/`tell` | PerlOnJava runtime (RuntimeIO.java?) | |
-| 4.3 | Identify which tie methods (`SEEK`, `READ`, `TELL`) fail | - | |
-| 4.4 | Fix tied handle dispatch or add special IO::Scalar support | PerlOnJava runtime | |
-| 4.5 | Re-test IO::Stringy's own tests (`./jcpan -t IO::Stringy`) | - | |
-| 4.6 | Re-test t/01_parse.t, t/03_regression.t | - | |
+| 3.1 | Add `Encode::Encoding::encode()` static method | `Encode.java` | DONE |
+| 3.2 | Add `Encode::Encoding::decode()` static method | `Encode.java` | DONE |
+| 3.3 | Register methods in `initialize()` | `Encode.java` | DONE |
+| 3.4 | Modify `find_encoding()` to return `bless { Name => $name }, 'Encode::Encoding'` | `Encode.java` | DONE |
+| 3.5 | Add stringify overload on `Encode::Encoding` (some code uses encoding as string) | `Encode.java` | DONE |
+| 3.6 | Run `make` to verify unit tests pass | - | DONE |
+
+**Result**: Fixes t/42_test95-97j-2.t, t/45_oem-2.t (80 subtests)
+
+### Phase 4: Fix glob hash deref for IO::Scalar (COMPLETED 2025-03)
+
+| Step | Description | File | Status |
+|------|-------------|------|--------|
+| 4.1 | Remove `hashDerefGet`/`hashDerefGetNonStrict` overrides from RuntimeGlob | `RuntimeGlob.java` | DONE |
+| 4.2 | Make `getGlobSlot()` public | `RuntimeGlob.java` | DONE |
+| 4.3 | Add `*` sigil handler in `handleHashElementOperator` for `*expr{SLOT}` | `Dereference.java` | DONE |
+| 4.4 | Update scalarDeref callers to use `getGlobSlot()` directly | `RuntimeScalar.java` | DONE |
+| 4.5 | Update GLOB_SLOT_GET opcode to use `getGlobSlot()` directly | `SlowOpcodeHandler.java` | DONE |
+| 4.6 | Run `make` to verify all unit tests pass | - | DONE |
+
+**Result**: `*$self->{Key}` now works correctly for IO::Scalar-style per-glob hash storage.
+
+### Phase 5: Fix tied filehandle seek/read/tell (NOT STARTED)
+
+| Step | Description | File | Status |
+|------|-------------|------|--------|
+| 5.1 | Reproduce IO::Scalar seek/read failures in isolation | - | |
+| 5.2 | Trace tied filehandle dispatch for `seek`/`read`/`tell` | PerlOnJava runtime (RuntimeIO.java?) | |
+| 5.3 | Identify which tie methods (`SEEK`, `READ`, `TELL`) fail | - | |
+| 5.4 | Fix tied handle dispatch or add special IO::Scalar support | PerlOnJava runtime | |
+| 5.5 | Re-test IO::Stringy's own tests (`./jcpan -t IO::Stringy`) | - | |
+| 5.6 | Re-test t/01_parse.t, t/03_regression.t | - | |
 
 **Expected result**: Fixes t/01_parse.t (5 subtests), t/03_regression.t (7 untested subtests), and IO::Stringy's own tests
 
 ## Summary
 
-| Phase | Complexity | Test files fixed | Subtests fixed | Priority |
-|-------|-----------|-----------------|----------------|----------|
-| 1 (DONE) | Simple | 14 | ~1437 | CRITICAL |
-| 2 | Simple (~6 lines) | 3 | ~96 | HIGH |
-| 3 | Medium (~60 lines) | 2 | ~80 | MEDIUM |
-| 4 | High (core IO fix) | 2 | ~12 | MEDIUM |
+| Phase | Complexity | Test files fixed | Subtests fixed | Status |
+|-------|-----------|-----------------|----------------|--------|
+| 1 | Simple | 14 | ~1437 | COMPLETED |
+| 2 | Simple (~6 lines) | 3 | ~96 | COMPLETED |
+| 3 | Medium (~60 lines) | 2 | ~80 | COMPLETED |
+| 4 | Medium (4 files) | — | — | COMPLETED (enables IO::Scalar) |
+| 5 | High (core IO fix) | 2 | ~12 | NOT STARTED |
 
-After all phases: 32/32 test files passing (excluding 4 skipped).
+After Phases 1-4: 25/32 test files passing (excluding 4 skipped). Phase 5 targets the remaining 2 failures.
 
 ## Related Documents
 
