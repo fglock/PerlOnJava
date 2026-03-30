@@ -132,7 +132,9 @@ public class ConstantFoldingVisitor implements Visitor {
     private static Boolean resolveConstantSubBoolean(String name, String currentPackage) {
         try {
             String fullName = NameNormalizer.normalizeVariableName(name, currentPackage);
-            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            // Use direct map lookup to avoid side effects of getGlobalCodeRef(),
+            // which auto-vivifies empty CODE entries and pins references
+            RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(fullName);
             if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
                 if (code.constantValue != null) {
                     RuntimeList constList = code.constantValue;
@@ -506,7 +508,9 @@ public class ConstantFoldingVisitor implements Visitor {
         }
         try {
             String fullName = NameNormalizer.normalizeVariableName(name, currentPackage);
-            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            // Use direct map lookup to avoid side effects of getGlobalCodeRef(),
+            // which auto-vivifies empty CODE entries and pins references
+            RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(fullName);
             if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
                 if (code.constantValue != null) {
                     RuntimeList constList = code.constantValue;
