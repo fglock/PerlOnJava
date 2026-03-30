@@ -3,6 +3,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
+
 /**
  * This class provides methods for performing bitwise operations on RuntimeScalar objects.
  * It supports operations for both numeric and string types, with specific behavior for each.
@@ -26,6 +28,14 @@ public class BitwiseOperators {
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             long result = ((int) runtimeScalar.value) & ((int) arg2.value);
             return new RuntimeScalar(result);
+        }
+
+        // Check for overloaded '&' operator on blessed objects
+        int blessId = blessedId(runtimeScalar);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(&", "&");
+            if (result != null) return result;
         }
 
         // Fetch tied scalars once to avoid redundant FETCH calls
@@ -85,6 +95,14 @@ public class BitwiseOperators {
             return new RuntimeScalar(result);
         }
 
+        // Check for overloaded '|' operator on blessed objects
+        int blessId = blessedId(runtimeScalar);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(|", "|");
+            if (result != null) return result;
+        }
+
         // Fetch tied scalars once to avoid redundant FETCH calls
         RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
         RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
@@ -134,6 +152,14 @@ public class BitwiseOperators {
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             long result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
             return new RuntimeScalar(result);
+        }
+
+        // Check for overloaded '^' operator on blessed objects
+        int blessId = blessedId(runtimeScalar);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(^", "^");
+            if (result != null) return result;
         }
 
         // Fetch tied scalars once to avoid redundant FETCH calls

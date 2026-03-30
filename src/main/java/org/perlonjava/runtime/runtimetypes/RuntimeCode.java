@@ -1545,7 +1545,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Handle SUPER::method calls
             if (methodName.startsWith("SUPER::")) {
-                method = NextMethod.superMethod(currentSub, methodName);
+                method = NextMethod.superMethod(currentSub, methodName, perlClassName);
             } else if (methodName.contains("::SUPER::")) {
                 // Handle Package::SUPER::method syntax
                 // This is used by Moo to explicitly specify which package's parent to use

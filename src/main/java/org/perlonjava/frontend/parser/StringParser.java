@@ -232,7 +232,20 @@ public class StringParser {
 
         if (!remain.isEmpty()) {
             tokPos--;
-            tokens.get(tokPos).text = remain.toString();  // Put the remaining string back in the tokens list
+            String remainStr = remain.toString();
+            // When a multi-char token (e.g., "/=") has its leading character consumed as a
+            // regex close delimiter, the remainder ("=") may need to be merged with the next
+            // token to reconstruct a binding operator. Example: qr/x/=~ was tokenized as
+            // qr, /, x, /=, ~ — after consuming "/" from "/=", remainder "=" + next "~" = "=~"
+            if ((remainStr.equals("=") || remainStr.equals("!"))
+                    && tokPos + 1 < tokens.size()
+                    && tokens.get(tokPos + 1).text.equals("~")) {
+                remainStr = remainStr + "~";
+                // Neutralize the consumed ~ token so it won't be parsed again
+                tokens.get(tokPos + 1).text = " ";
+                tokens.get(tokPos + 1).type = LexerTokenType.WHITESPACE;
+            }
+            tokens.get(tokPos).text = remainStr;  // Put the remaining string back in the tokens list
         }
         return new ParsedString(index, tokPos, buffers, startDelim, endDelim, ' ', ' ');
     }

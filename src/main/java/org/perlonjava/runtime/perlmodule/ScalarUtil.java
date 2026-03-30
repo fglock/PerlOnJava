@@ -116,7 +116,18 @@ public class ScalarUtil extends PerlModuleBase {
         }
         RuntimeScalar scalar = args.get(0);
         String type = switch (scalar.type) {
-            case REFERENCE -> "REF";
+            case REFERENCE -> {
+                // Inspect the referent to distinguish SCALAR refs from REF (ref-to-ref)
+                if (scalar.value instanceof RuntimeScalar inner) {
+                    yield switch (inner.type) {
+                        case VSTRING -> "VSTRING";
+                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+                        case GLOB -> "GLOB";
+                        default -> "SCALAR";
+                    };
+                }
+                yield "SCALAR";
+            }
             case ARRAYREFERENCE -> "ARRAY";
             case HASHREFERENCE -> "HASH";
             case CODE -> "CODE";
