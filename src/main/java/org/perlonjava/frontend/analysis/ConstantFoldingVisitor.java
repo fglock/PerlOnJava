@@ -473,12 +473,12 @@ public class ConstantFoldingVisitor implements Visitor {
 
     /**
      * Tries to resolve a subroutine name to a constant literal node.
-     * Only inlines scalar constants (single RuntimeScalar element with INTEGER, DOUBLE, or STRING type).
+     * Only inlines scalar constants (single RuntimeScalar element with INTEGER, DOUBLE, STRING, or UNDEF type).
      * List constants, reference constants, and non-scalar values are NOT inlined.
      *
      * @param name       The subroutine name (may or may not include package)
      * @param tokenIndex The token index for the created node
-     * @return A NumberNode or StringNode if the sub is a scalar constant, null otherwise
+     * @return A NumberNode, StringNode, or undef OperatorNode if the sub is a scalar constant, null otherwise
      */
     private Node resolveConstantSubValue(String name, int tokenIndex) {
         if (currentPackage == null) {
@@ -501,8 +501,10 @@ public class ConstantFoldingVisitor implements Visitor {
                                 return new NumberNode(String.valueOf(scalar.getDouble()), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.STRING) {
                                 return new StringNode(scalar.toString(), tokenIndex);
+                            } else if (scalar.type == RuntimeScalarType.UNDEF) {
+                                return new OperatorNode("undef", null, tokenIndex);
                             }
-                            // UNDEF, REFERENCE, etc. are NOT inlined
+                            // REFERENCE, GLOB, CODE, etc. are NOT inlined
                         }
                     }
                     // List constants (size > 1) are NOT inlined

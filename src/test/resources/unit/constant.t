@@ -109,4 +109,9 @@ is((FALSY || 'fallback'), 'fallback', 'constant || with false LHS');
     is($result, 100, 'constant folding works in eval');
 }
 
+# Undef constant
+use constant UNDEF_CONST => undef;
+ok(!defined(UNDEF_CONST), 'undef constant is undefined');
+is((UNDEF_CONST // 'default'), 'default', 'undef constant folds with //');
+
 done_testing();
