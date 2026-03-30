@@ -176,14 +176,23 @@ to auto-generate the correct calling convention:
 | `"**"` | `sub CORE::X { CORE::X($_[0], $_[1]) }` | `accept`, `pipe` |
 | Other complex | Generate case-by-case or `sub CORE::X { CORE::X(@_) }` | Various |
 
-### Implementation: Java-side code generation
+### Implementation: Java-side `PerlSubroutine` lambdas (Option A)
 
-**Where:** New static method `CoreSubroutineGenerator.generateWrapper(name)` in
-`src/main/java/org/perlonjava/runtime/CoreSubroutineGenerator.java`
+Rather than generating Perl source and compiling it, we create `RuntimeCode` objects
+directly in Java. Each wrapper is a `PerlSubroutine` lambda that unpacks `@_` and
+calls the existing Java operator methods from the `OperatorHandler` table.
+
+**Where:** `src/main/java/org/perlonjava/runtime/CoreSubroutineGenerator.java`
 
 **When:** Called lazily on first `\&CORE::X` reference for a given operator (not at
 startup). Each wrapper is generated at most once; subsequent references find the
 already-installed CODE ref in `GlobalVariable.globalCodeRefs`.
+
+**Why Java lambdas instead of Perl source:**
+- No parser/compiler recursion risk (no eval inside parser)
+- Direct calls to existing operator Java methods — same ones in `OperatorHandler`
+- Prototype set directly on `RuntimeCode.prototype` field
+- Zero compilation overhead — just object construction
 
 **How:**
 
@@ -211,44 +220,82 @@ public class CoreSubroutineGenerator {
 
     /**
      * Generate a wrapper for a single CORE:: function on demand.
-     * Returns true if wrapper was created, false if not applicable.
+     * Creates a RuntimeCode with a PerlSubroutine lambda that calls
+     * the operator's Java implementation directly.
      */
     public static boolean generateWrapper(String operatorName) {
         if (NO_SUB_KEYWORDS.contains(operatorName)) {
-            return false;  // can't take reference
-        }
-        if (BAREWORD_ONLY.contains(operatorName)) {
-            return false;  // can't use & syntax
+            return false;
         }
 
         String fullName = "CORE::" + operatorName;
-        // Check if already generated
         if (GlobalVariable.isGlobalCodeRefDefined(fullName)) {
-            return true;
+            return true;  // already generated
         }
 
         String prototype = ParserTables.CORE_PROTOTYPES.get(operatorName);
         if (prototype == null) {
-            return false;  // syntax-only keyword
-        }
-
-        String wrapperCode = generateWrapperCode(operatorName, prototype);
-        if (wrapperCode == null) {
             return false;
         }
 
-        // Compile and install the wrapper
-        // Use the existing eval/compile infrastructure
-        PerlCompiler.eval(wrapperCode, ...);
+        // Tier 2: create stub that dies when called through reference
+        if (BAREWORD_ONLY.contains(operatorName)) {
+            return generateBarewordOnlyWrapper(operatorName, prototype);
+        }
+
+        PerlSubroutine sub = buildSubroutine(operatorName, prototype);
+        if (sub == null) return false;
+
+        RuntimeCode code = new RuntimeCode(sub, prototype);
+        code.packageName = "CORE";
+        code.subName = operatorName;
+        GlobalVariable.getGlobalCodeRef(fullName)
+            .set(new RuntimeScalar(code));
         return true;
     }
 
-    private static String generateWrapperCode(String name, String prototype) {
-        // Generate Perl source for the wrapper based on prototype
-        // ... (see prototype→template mapping above)
+    /**
+     * Build a PerlSubroutine lambda based on the operator's prototype.
+     * Dispatches on prototype pattern to create the right arg-unpacking.
+     */
+    private static PerlSubroutine buildSubroutine(String name, String proto) {
+        return switch (proto) {
+            // Zero-arg: time, fork, wantarray, getlogin, ...
+            case "" -> (args, ctx) -> callOperator(name, ctx);
+
+            // Unary with $_ default: abs, chr, hex, int, length, ...
+            case "_" -> (args, ctx) -> {
+                RuntimeScalar arg = args.size() > 0
+                    ? args.get(0) : getDefaultScalar();
+                return callOperator(name, arg, ctx);
+            };
+
+            // Optional scalar: rand, chdir, exit, sleep, caller, ...
+            case ";$" -> (args, ctx) -> {
+                RuntimeScalar arg = args.size() > 0
+                    ? args.get(0) : new RuntimeScalar();
+                return callOperator(name, arg, ctx);
+            };
+
+            // Two required scalars: rename, link, crypt, atan2, ...
+            case "$$" -> (args, ctx) ->
+                callOperator(name, args.get(0), args.get(1), ctx);
+
+            // Flat list: die, warn, chmod, chown, kill, ...
+            case "@" -> (args, ctx) ->
+                callOperatorList(name, args, ctx);
+
+            // ... more patterns ...
+
+            default -> null;  // unsupported prototype
+        };
     }
 }
 ```
+
+The `callOperator()` methods use the `OperatorHandler` table to dispatch
+to the correct Java static method (e.g., `StringOperators.length()`,
+`MathOperators.abs()`, `Directory.chdir()`).
 
 ### Parser changes
 
@@ -265,22 +312,7 @@ if (!CoreSubroutineGenerator.generateWrapper(opName)) {
     throw new PerlCompilerException(
         "Can't take reference of CORE::" + opName);
 }
-// After generating the wrapper, rewrite as \&CORE::opName
-// which now resolves to the generated sub
-```
-
-Alternatively (and more simply), intercept in `RuntimeCode.createCodeReference()`
-at runtime when the name starts with `CORE::`:
-
-```java
-// In createCodeReference(), before "not found" error:
-if (name.startsWith("CORE::")) {
-    String opName = name.substring(6);
-    if (CoreSubroutineGenerator.generateWrapper(opName)) {
-        // Retry lookup - wrapper is now installed
-        return createCodeReference(name);
-    }
-}
+// Fall through — the normal \&name path will find the installed sub
 ```
 
 ## Phases
