@@ -339,7 +339,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`Forcing main package`**: Identifiers starting with `::` are in `main` package.
 - ✅  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are supported.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
-- ❌  **CORE operator references**: Taking a reference to a `CORE` operator is not implemented: `BEGIN { *shove = \&CORE::push; } shove @array, 1,2,3;`
+- ✅  **CORE operator references**: `\&CORE::X` returns callable CODE refs for built-in functions with correct prototypes: `my $r = \&CORE::length; $r->("hello")`
 
 ---
 

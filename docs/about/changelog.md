@@ -14,6 +14,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
 - Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`.
 - Add operators: `flock`, `syscall`, `fcntl`, `ioctl`. 
+- Add `\&CORE::X` subroutine references: built-in functions can be used as first-class code refs (e.g., `\&CORE::push`, `\&CORE::length`) with correct prototypes and glob aliasing.
 - Support for forking patterns with `exec`:
         my $pid = open FH, "-|"; if ($pid) {...} else { exec @cmd }
         my $pid = open FH, "-|"; unless ($pid) { exec @cmd } ...

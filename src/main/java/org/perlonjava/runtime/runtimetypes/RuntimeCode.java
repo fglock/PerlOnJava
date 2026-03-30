@@ -2273,6 +2273,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
 
+        // Lazily generate CORE:: subroutine wrappers on first reference
+        if (name.startsWith("CORE::") && codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode rc && !rc.defined()) {
+            String opName = name.substring(6);
+            if (org.perlonjava.runtime.CoreSubroutineGenerator.generateWrapper(opName)) {
+                codeRef = GlobalVariable.getGlobalCodeRef(name);
+            }
+        }
+
         // Check if this is a constant subroutine
         if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode) {
             // Mark this as a symbolic reference created by \&{string} pattern

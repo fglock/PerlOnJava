@@ -339,17 +339,8 @@ public class ParsePrimary {
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 parser.parsingTakeReference = false;
 
-                // Special case for \&{CORE::push} take a reference to an operator
-                if (operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
-                    if (operatorNode.operand instanceof IdentifierNode identifierNode && identifierNode.name.startsWith("CORE::")) {
-                        // TODO implement take reference to operator
-                        //
-                        // ./jperl -e '  BEGIN { *shove = sub (\@@) { CORE::push(@{$_[0]}, @_[1..$#_]) } } shove @array, 1,2,3; print "[@array]\n" '
-                        //        [1 2 3]
-                        //
-                        throw new PerlCompilerException("Not implemented: take reference of operator `\\&" + identifierNode.name + "`");
-                    }
-                }
+                // \&CORE::push etc. — the wrapper is generated lazily at runtime
+                // by CoreSubroutineGenerator (called from RuntimeCode.createCodeReference)
 
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
 
