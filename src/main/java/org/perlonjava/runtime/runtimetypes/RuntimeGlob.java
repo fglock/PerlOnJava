@@ -73,6 +73,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
         copy.IO = this.IO;  // Share the current IO reference
+        // Detached copies get their own hash/array/scalar slots so that
+        // patterns like \do { local *FH } have per-instance storage.
+        // This is used by IO::Scalar which stores state via *$self->{Key}.
+        copy.hashSlot = new RuntimeHash();
         return copy;
     }
 
@@ -316,33 +320,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Retrieves a reference or value associated with a specific key from a global variable.
+     * Get a typeglob slot (CODE, SCALAR, ARRAY, HASH, IO, FORMAT).
+     * This implements the *glob{SLOT} syntax for accessing glob slots by name.
+     * Note: This is NOT the same as *glob->{Key} which accesses the glob's hash slot.
+     * The two operations are distinguished at the compiler level.
      *
-     * <p>This method implements the dereferencing operation for a glob hash, allowing access
-     * to various global entities such as CODE, IO, SCALAR, ARRAY, and HASH based on the
-     * provided index. It returns a reference or value corresponding to the key.
-     *
-     * @param index The scalar representing the key to dereference.
-     * @return A RuntimeScalar representing the dereferenced value or reference. If the key
+     * @param index The scalar representing the slot name to access.
+     * @return A RuntimeScalar representing the slot value or reference. If the slot name
      * is not recognized, an empty RuntimeScalar is returned.
      */
-    @Override
-    public RuntimeScalar hashDerefGet(RuntimeScalar index) {
-        return getGlobSlot(index);
-    }
-
-    @Override
-    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
-        // For typeglobs, slot access doesn't need symbolic reference resolution
-        // Just access the slot directly
-        return getGlobSlot(index);
-    }
-
-    /**
-     * Get a typeglob slot (CODE, SCALAR, ARRAY, HASH, IO, FORMAT).
-     * This is the common implementation for both strict and non-strict contexts.
-     */
-    private RuntimeScalar getGlobSlot(RuntimeScalar index) {
+    public RuntimeScalar getGlobSlot(RuntimeScalar index) {
         return switch (index.toString()) {
             case "CODE" -> {
                 // Only return CODE ref if it's in the stash (globalCodeRefs).
@@ -409,11 +396,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(); // Return undef if array doesn't exist
             }
             case "HASH" -> {
-                // For anonymous globs (null globName), use local hashSlot
+                // Prefer local hashSlot (for detached copies and anonymous globs)
+                if (this.hashSlot != null) {
+                    yield this.hashSlot.createReference();
+                }
                 if (this.globName == null) {
-                    if (this.hashSlot == null) {
-                        this.hashSlot = new RuntimeHash();
-                    }
+                    this.hashSlot = new RuntimeHash();
                     yield this.hashSlot.createReference();
                 }
                 // Only return reference if hash exists (has elements or was explicitly created)
@@ -433,14 +421,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Get the hash slot for this glob.
-     * For anonymous globs (null globName), uses the local hashSlot field.
-     * For named globs, retrieves from GlobalVariable.
+     * Prefers the local hashSlot if it has been set (for detached copies and anonymous globs).
+     * For named globs without a local hashSlot, retrieves from GlobalVariable.
      */
     public RuntimeHash getGlobHash() {
+        if (this.hashSlot != null) {
+            return this.hashSlot;
+        }
         if (this.globName == null) {
-            if (this.hashSlot == null) {
-                this.hashSlot = new RuntimeHash();
-            }
+            this.hashSlot = new RuntimeHash();
             return this.hashSlot;
         }
         return GlobalVariable.getGlobalHash(this.globName);
