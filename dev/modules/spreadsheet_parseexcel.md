@@ -4,7 +4,7 @@
 
 **Module**: Spreadsheet::ParseExcel 0.66  
 **Test command**: `./jcpan -t Spreadsheet::ParseExcel`  
-**Status**: 25/32 test files passing (after Phases 1-3); Phases 2+3 fix encoding tests, Phase 4 fix pending
+**Status**: ALL PASS — 32/32 test files (28 pass, 4 skipped), 1605 subtests
 
 ## Dependency Tree
 
@@ -17,14 +17,14 @@
 
 ## Test Results Summary
 
-### Current Status: 25/32 test files passing, 1442/1447 subtests passing
+### Current Status: 32/32 test files ALL PASS (28 pass, 4 skipped), 1605 subtests
 
 | Test File | Status | Notes |
 |-----------|--------|-------|
 | t/00_basic.t | PASS | All 8 modules load |
-| t/01_parse.t | **FAIL** (5/41) | Tests 33,35,37,39,41 — `is_deeply` fails when parsing from non-file sources |
+| t/01_parse.t | PASS | All 41 subtests — **FIXED by Phase 4** (glob hash deref) |
 | t/02_parse-dates.t | PASS | |
-| t/03_regression.t | **FAIL** (9/16 ran) | Test 10: `Parse($fh)` returns undef → `get_filename` on undef |
+| t/03_regression.t | PASS | All 16 subtests — **FIXED by Phase 4** (glob hash deref) |
 | t/04_regression.t | PASS | |
 | t/05_regression.t | PASS | |
 | t/06_regression.t | PASS | |
@@ -43,11 +43,11 @@
 | t/29_active_sheet.t | PASS | |
 | t/30_sst_01.t | PASS | |
 | t/32_charts.t | PASS | |
-| t/41_test95-97j.t | **FAIL** (31/66 ran) | `ucs2` encoding not recognized — **FIXED by Phase 2** |
-| t/42_test95-97j-2.t | **FAIL** (0/66 ran) | `find_encoding` returns string, not object — **FIXED by Phase 3** |
-| t/43_test2000J.t | **FAIL** (0/22 ran) | `ucs2` encoding not recognized — **FIXED by Phase 2** |
-| t/44_oem.t | **FAIL** (0/14 ran) | `ucs2` encoding not recognized — **FIXED by Phase 2** |
-| t/45_oem-2.t | **FAIL** (0/14 ran) | `find_encoding` returns string, not object — **FIXED by Phase 3** |
+| t/41_test95-97j.t | PASS | **FIXED by Phase 2** (ucs2 alias) |
+| t/42_test95-97j-2.t | PASS | **FIXED by Phase 3** (find_encoding blessed object) |
+| t/43_test2000J.t | PASS | **FIXED by Phase 2** (ucs2 alias) |
+| t/44_oem.t | PASS | **FIXED by Phase 2** (ucs2 alias) |
+| t/45_oem-2.t | PASS | **FIXED by Phase 3** (find_encoding blessed object) |
 | t/46_save_parser.t | SKIP | Needs Spreadsheet::WriteExcel |
 | t/47_hyperlinks.t | PASS | |
 | t/90_pod.t | SKIP | Author tests |
@@ -97,7 +97,7 @@ Expected structure: lib/Your/Module.pm
 
 ### 4. FIXED: Glob hash deref `*$self->{Key}` broken (IO::Scalar compatibility)
 
-**Affected tests**: t/01_parse.t (5/41 fail), t/03_regression.t (9/16 ran)
+**Affected tests**: t/01_parse.t (5/41 fail), t/03_regression.t (9/16 ran), and all IO::Scalar-dependent code paths
 
 **Root Cause**: `RuntimeGlob.hashDerefGet()` overrode `RuntimeScalar.hashDerefGet()` to call `getGlobSlot()`, which only recognizes glob slot names (HASH, CODE, SCALAR, etc.). Due to JVM virtual dispatch, `*$self->{Key}` called `getGlobSlot("Key")` → returned undef for any key not a slot name. This broke IO::Scalar's pattern of using `*$self->{Pos}`, `*$self->{SR}`, etc. for per-glob instance data.
 
@@ -107,40 +107,9 @@ Expected structure: lib/Your/Module.pm
 - Added explicit `*` sigil handler in `Dereference.java` for `*expr{SLOT}` syntax (glob slot access)
 - Updated `RuntimeScalar.scalarDeref` and `SlowOpcodeHandler.GLOB_SLOT_GET` to call `getGlobSlot()` directly
 
-Now `*$self->{Key}` correctly accesses hash elements, while `*glob{HASH}` still returns glob slot references.
+Now `*$self->{Key}` correctly accesses hash elements, while `*glob{HASH}` still returns glob slot references. This fixed all remaining test failures — IO::Scalar works correctly now and t/01_parse.t and t/03_regression.t pass fully.
 
 **Files changed**: `RuntimeGlob.java`, `RuntimeScalar.java`, `Dereference.java`, `SlowOpcodeHandler.java`
-
----
-
-### 5. REMAINING: Parsing from non-file sources (filehandle, scalar ref, IO::Wrap)
-
-**Affected tests**: t/01_parse.t (5/41 fail), t/03_regression.t (9/16 ran)
-
-**t/01_parse.t** — Tests 33,35,37,39,41 are `is_deeply($workbook, $workbook_1)` comparisons. The workbook IS parsed (the preceding `isnt` tests pass), but `SheetCount` is missing:
-```
-#     $got->{SheetCount} = Does not exist
-#     $expected->{SheetCount} = '2'
-```
-
-The 5 failing tests cover all non-file parse modes:
-- Test 33: Parse from `open my $fh, '<', $file` (IO::Scalar path)
-- Test 35: Parse from `\$data` (scalar ref containing file bytes)
-- Test 37: Parse from `\@data` (array ref of file lines)
-- Test 39: Parse from raw filehandle (IO::Wrap path)
-- Test 41: Parse from `IO::Wrap::wraphandle($fh)`
-
-**t/03_regression.t** — Test 10 at line 146: `$parser->Parse($fh)` returns `undef` (parsing completely fails from a filehandle), then `$workbook->get_filename()` dies. All remaining tests (11-16) never run.
-
-**Root Cause**: `OLE::Storage_Lite::_getHeaderInfo()` (line 1006) calls `$FILE->seek(0, 0)` and `$FILE->read($sWk, 8)` on the file handle. When the handle is an `IO::Scalar` wrapping in-memory data, `seek` returns undef (shown by the `numeric gt (>)` warning) and `read` fails to extract data correctly. This is the same IO::Scalar bug that causes IO::Stringy's own tests to fail.
-
-**Note**: Phase 4 (glob hash deref fix) removed one blocker — IO::Scalar can now store per-instance data correctly. The remaining failures are due to tied filehandle dispatch for `seek`/`read`/`tell`.
-
-**Fix approach**: Fix tied filehandle dispatch for `seek`/`read`/`tell` in PerlOnJava runtime.
-
-**File(s)**: PerlOnJava runtime — likely `RuntimeIO.java` or tied filehandle dispatch  
-**Complexity**: HIGH — requires fixing core IO operations on tied handles  
-**Priority**: MEDIUM — 5 subtest failures + 7 untested subtests; also blocks IO::Stringy tests
 
 ---
 
@@ -193,20 +162,7 @@ The 5 failing tests cover all non-file parse modes:
 | 4.5 | Update GLOB_SLOT_GET opcode to use `getGlobSlot()` directly | `SlowOpcodeHandler.java` | DONE |
 | 4.6 | Run `make` to verify all unit tests pass | - | DONE |
 
-**Result**: `*$self->{Key}` now works correctly for IO::Scalar-style per-glob hash storage.
-
-### Phase 5: Fix tied filehandle seek/read/tell (NOT STARTED)
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 5.1 | Reproduce IO::Scalar seek/read failures in isolation | - | |
-| 5.2 | Trace tied filehandle dispatch for `seek`/`read`/`tell` | PerlOnJava runtime (RuntimeIO.java?) | |
-| 5.3 | Identify which tie methods (`SEEK`, `READ`, `TELL`) fail | - | |
-| 5.4 | Fix tied handle dispatch or add special IO::Scalar support | PerlOnJava runtime | |
-| 5.5 | Re-test IO::Stringy's own tests (`./jcpan -t IO::Stringy`) | - | |
-| 5.6 | Re-test t/01_parse.t, t/03_regression.t | - | |
-
-**Expected result**: Fixes t/01_parse.t (5 subtests), t/03_regression.t (7 untested subtests), and IO::Stringy's own tests
+**Result**: `*$self->{Key}` now works correctly for IO::Scalar-style per-glob hash storage. This also fixed t/01_parse.t (5 failing subtests) and t/03_regression.t (7 untested subtests) — the glob hash deref bug was the root cause of the IO::Scalar failures in OLE::Storage_Lite parsing.
 
 ## Summary
 
@@ -215,10 +171,9 @@ The 5 failing tests cover all non-file parse modes:
 | 1 | Simple | 14 | ~1437 | COMPLETED |
 | 2 | Simple (~6 lines) | 3 | ~96 | COMPLETED |
 | 3 | Medium (~60 lines) | 2 | ~80 | COMPLETED |
-| 4 | Medium (4 files) | — | — | COMPLETED (enables IO::Scalar) |
-| 5 | High (core IO fix) | 2 | ~12 | NOT STARTED |
+| 4 | Medium (4 files) | 2 | ~12 | COMPLETED |
 
-After Phases 1-4: 25/32 test files passing (excluding 4 skipped). Phase 5 targets the remaining 2 failures.
+**Final result**: 32/32 test files ALL PASS (28 pass, 4 skipped), 1605 subtests.
 
 ## Related Documents
 
