@@ -62,14 +62,15 @@ print $r->("hello"), "\n";      # prints 5
 | `CORE::GLOBAL::` overrides | **Works** | `ParsePrimary.java:153-208` |
 | `&CORE::__SUB__` | **Works** | `Variable.java:606-610` |
 
-### What doesn't work (this feature)
+### What now works (this feature — implemented 2026-03-30)
 
-| Feature | Current behaviour |
-|---------|------------------|
-| `\&CORE::push` | Throws `"Not implemented: take reference of operator"` |
-| `my $r = \&CORE::length; $r->(...)` | Same error |
-| `*alias = \&CORE::func` | Same error |
-| `&CORE::func(args)` (ampersand call) | Error for most builtins |
+| Feature | Status |
+|---------|--------|
+| `\&CORE::push`, `\&CORE::length`, etc. | **Works** — returns CODE ref |
+| `my $r = \&CORE::length; $r->(...)` | **Works** — callable through ref |
+| `*alias = \&CORE::func` | **Works** — glob aliasing |
+| `prototype(\&CORE::func)` | **Works** — returns correct prototype |
+| Tier 2: `\&CORE::chomp` | **Works** — returns ref, dies on call |
 
 ### Relevant code locations
 
@@ -463,13 +464,44 @@ Two comprehensive test files already exist in the tree:
 
 ## Progress Tracking
 
-### Current Status: Design complete, implementation not started
+### Current Status: Phase 1-3 implemented (2026-03-30)
 
 ### Completed
 - [x] Design document (2025-03-30)
+- [x] Phase 1: Core infrastructure + simple builtins (2026-03-30)
+  - Created `CoreSubroutineGenerator.java` with lazy wrapper generation
+  - Removed parser throw in `ParsePrimary.java`, let `\&CORE::X` flow through
+  - Added lazy CORE:: generation hook in `RuntimeCode.createCodeReference()`
+  - Supported prototype patterns: `""`, `"_"`, `";$"`, `"$$"`, `"$$$"`, `"@"`, `"$@"`, `"_;$"`
+- [x] Phase 2: List operators and array-ref prototypes (2026-03-30)
+  - Implemented `\@@` (push, unshift, splice) with array-ref dereferencing
+  - Implemented `;\@` (pop, shift)
+  - All pass tests
+- [x] Phase 3: I/O, complex prototypes, and Tier 2 (2026-03-30)
+  - I/O operators dispatched through varargs pattern
+  - Tier 2 (bareword-only) wrappers: carry prototype, die with correct error
+  - Generic varargs fallback handles remaining complex prototypes
+
+### Files Changed
+- **Created:** `src/main/java/org/perlonjava/runtime/CoreSubroutineGenerator.java`
+- **Created:** `src/test/resources/unit/core_subroutine_refs.t` (29 tests)
+- **Modified:** `src/main/java/org/perlonjava/frontend/parser/ParsePrimary.java` (removed throw)
+- **Modified:** `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` (lazy generation hook)
+
+### Architecture Notes
+- **Approach:** Java PerlSubroutine lambdas (Option A) — no Perl source generation
+- **Hook point:** `RuntimeCode.createCodeReference()` checks for CORE:: prefix on undefined code refs
+- **Key insight:** `getGlobalCodeRef()` creates empty CODE-type scalars; must check `RuntimeCode.defined()` not just scalar type
+- **Lazy generation:** Wrappers are created on first `\&CORE::X` reference, cached in global code refs
+
+### Known Limitations
+- `chroot` not implemented (no Java method exists)
+- `evalbytes` not implemented
+- Context propagation for some functions (e.g., `reverse` in scalar vs list context through ref)
+- `\&CORE::X` for Tier 3 keywords (print, eval, etc.) returns a valid-looking ref but calling fails
 
 ### Next Steps
-1. Implement Phase 1: CoreSubroutineGenerator + simple builtins
-2. Hook into ParsePrimary.java
-3. Add unit tests
-4. Implement Phase 2: list operators
+1. Phase 4: CORE::GLOBAL:: integration (verify overrides don't affect wrappers)
+2. Add more operator mappings to callUnary/callVarargs as needed
+3. Progressive enablement of `perl5_t/t/op/coresubs.t` and `perl5_t/t/op/coreamp.t`
+4. Test module compatibility (Tie::StdHandle patterns)
