@@ -26,9 +26,17 @@ public class FindDeclarationVisitor implements Visitor {
      * Stores the found operator node when located
      */
     private OperatorNode operatorNode = null;
+    /**
+     * When true, do not descend into BlockNode children.
+     * Used by findOperator to avoid finding 'my' declarations inside
+     * do-blocks/if-blocks that have their own scope.
+     */
+    private boolean stopAtBlockNode = false;
 
     /**
      * Static factory method to find a specific operator within an AST node.
+     * Does not descend into BlockNode or SubroutineNode children, since
+     * declarations inside those are scoped to their own blocks.
      *
      * @param blockNode    The AST node to search within
      * @param operatorName The name of the operator to find
@@ -37,6 +45,7 @@ public class FindDeclarationVisitor implements Visitor {
     public static OperatorNode findOperator(Node blockNode, String operatorName) {
         FindDeclarationVisitor visitor = new FindDeclarationVisitor();
         visitor.operatorName = operatorName;
+        visitor.stopAtBlockNode = true;
         blockNode.accept(visitor);
         return visitor.operatorNode;
     }
@@ -68,9 +77,13 @@ public class FindDeclarationVisitor implements Visitor {
     /**
      * Visits a block node and searches through its elements.
      * Stops searching once an operator is found.
+     * When stopAtBlockNode is true, does not descend (blocks create their own scope).
      */
     @Override
     public void visit(BlockNode node) {
+        if (stopAtBlockNode) {
+            return;
+        }
         if (!containsLocalOperator) {
             for (Node element : node.elements) {
                 if (element != null) {
@@ -146,7 +159,11 @@ public class FindDeclarationVisitor implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        node.block.accept(this);
+        // Do NOT descend into subroutine bodies.
+        // Variables declared with 'my' inside an anonymous sub are scoped to
+        // that sub and must not be hoisted to the outer scope.
+        // Similarly, 'local' and 'defer' inside a sub are handled by the
+        // sub's own scope management, not the enclosing block.
     }
 
     @Override

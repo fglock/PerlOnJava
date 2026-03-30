@@ -9,7 +9,8 @@ import java.util.Map;
  * and a string value (error message).
  * 
  * When set to a number, it stores the errno and looks up the message.
- * When set to a string, it stores 0 as errno and the string as message.
+ * When set to a string (known errno message), it looks up the errno code.
+ * When set to an unknown string, it stores 0 as errno and the string as message.
  */
 public class ErrnoVariable extends RuntimeScalar {
     
@@ -18,49 +19,63 @@ public class ErrnoVariable extends RuntimeScalar {
     
     // Map of errno numbers to messages (POSIX standard messages)
     private static final Map<Integer, String> ERRNO_MESSAGES = new HashMap<>();
+    // Reverse map of messages to errno numbers
+    private static final Map<String, Integer> MESSAGE_TO_ERRNO = new HashMap<>();
     
     static {
         // Standard POSIX errno values and messages
-        ERRNO_MESSAGES.put(1, "Operation not permitted");
-        ERRNO_MESSAGES.put(2, "No such file or directory");
-        ERRNO_MESSAGES.put(3, "No such process");
-        ERRNO_MESSAGES.put(4, "Interrupted system call");
-        ERRNO_MESSAGES.put(5, "Input/output error");
-        ERRNO_MESSAGES.put(6, "No such device or address");
-        ERRNO_MESSAGES.put(7, "Argument list too long");
-        ERRNO_MESSAGES.put(8, "Exec format error");
-        ERRNO_MESSAGES.put(9, "Bad file descriptor");
-        ERRNO_MESSAGES.put(10, "No child processes");
-        ERRNO_MESSAGES.put(11, "Resource temporarily unavailable");
-        ERRNO_MESSAGES.put(12, "Cannot allocate memory");
-        ERRNO_MESSAGES.put(13, "Permission denied");
-        ERRNO_MESSAGES.put(14, "Bad address");
-        ERRNO_MESSAGES.put(15, "Block device required");
-        ERRNO_MESSAGES.put(16, "Device or resource busy");
-        ERRNO_MESSAGES.put(17, "File exists");
-        ERRNO_MESSAGES.put(18, "Invalid cross-device link");
-        ERRNO_MESSAGES.put(19, "No such device");
-        ERRNO_MESSAGES.put(20, "Not a directory");
-        ERRNO_MESSAGES.put(21, "Is a directory");
-        ERRNO_MESSAGES.put(22, "Invalid argument");
-        ERRNO_MESSAGES.put(23, "Too many open files in system");
-        ERRNO_MESSAGES.put(24, "Too many open files");
-        ERRNO_MESSAGES.put(25, "Inappropriate ioctl for device");
-        ERRNO_MESSAGES.put(26, "Text file busy");
-        ERRNO_MESSAGES.put(27, "File too large");
-        ERRNO_MESSAGES.put(28, "No space left on device");
-        ERRNO_MESSAGES.put(29, "Illegal seek");
-        ERRNO_MESSAGES.put(30, "Read-only file system");
-        ERRNO_MESSAGES.put(31, "Too many links");
-        ERRNO_MESSAGES.put(32, "Broken pipe");
-        ERRNO_MESSAGES.put(33, "Numerical argument out of domain");
-        ERRNO_MESSAGES.put(34, "Numerical result out of range");
-        ERRNO_MESSAGES.put(35, "Resource deadlock avoided");
-        ERRNO_MESSAGES.put(36, "File name too long");
-        ERRNO_MESSAGES.put(37, "No locks available");
-        ERRNO_MESSAGES.put(38, "Function not implemented");
-        ERRNO_MESSAGES.put(39, "Directory not empty");
-        ERRNO_MESSAGES.put(40, "Too many levels of symbolic links");
+        addErrno(1, "Operation not permitted");
+        addErrno(2, "No such file or directory");
+        addErrno(3, "No such process");
+        addErrno(4, "Interrupted system call");
+        addErrno(5, "Input/output error");
+        addErrno(6, "No such device or address");
+        addErrno(7, "Argument list too long");
+        addErrno(8, "Exec format error");
+        addErrno(9, "Bad file descriptor");
+        addErrno(10, "No child processes");
+        addErrno(11, "Resource temporarily unavailable");
+        addErrno(12, "Cannot allocate memory");
+        addErrno(13, "Permission denied");
+        addErrno(14, "Bad address");
+        addErrno(15, "Block device required");
+        addErrno(16, "Device or resource busy");
+        addErrno(17, "File exists");
+        addErrno(18, "Invalid cross-device link");
+        addErrno(19, "No such device");
+        addErrno(20, "Not a directory");
+        addErrno(21, "Is a directory");
+        addErrno(22, "Invalid argument");
+        addErrno(23, "Too many open files in system");
+        addErrno(24, "Too many open files");
+        addErrno(25, "Inappropriate ioctl for device");
+        addErrno(26, "Text file busy");
+        addErrno(27, "File too large");
+        addErrno(28, "No space left on device");
+        addErrno(29, "Illegal seek");
+        addErrno(30, "Read-only file system");
+        addErrno(31, "Too many links");
+        addErrno(32, "Broken pipe");
+        addErrno(33, "Numerical argument out of domain");
+        addErrno(34, "Numerical result out of range");
+        addErrno(35, "Resource deadlock avoided");
+        addErrno(36, "File name too long");
+        addErrno(37, "No locks available");
+        addErrno(38, "Function not implemented");
+        addErrno(39, "Directory not empty");
+        addErrno(40, "Too many levels of symbolic links");
+        addErrno(48, "Address already in use");
+        addErrno(49, "Cannot assign requested address");
+        addErrno(61, "Connection refused");
+        addErrno(111, "Connection refused");
+        // Additional messages used in PerlOnJava code
+        addErrno(5, "I/O error");
+        addErrno(21, "Is a directory");
+    }
+    
+    private static void addErrno(int code, String msg) {
+        ERRNO_MESSAGES.put(code, msg);
+        MESSAGE_TO_ERRNO.putIfAbsent(msg, code);
     }
     
     public ErrnoVariable() {
@@ -83,8 +98,9 @@ public class ErrnoVariable extends RuntimeScalar {
     
     /**
      * Set errno from a string value.
-     * If the string is a number, treat it as errno.
-     * Otherwise, set errno to 0 and use the string as the message.
+     * If the string is a known errno message, looks up and stores the errno code.
+     * If the string is a number, treats it as errno code.
+     * Otherwise, stores 0 as errno with the string as message.
      */
     @Override
     public RuntimeScalar set(String value) {
@@ -96,13 +112,22 @@ public class ErrnoVariable extends RuntimeScalar {
             return this;
         }
         
+        // Check if the string is a known errno message (reverse lookup)
+        Integer code = MESSAGE_TO_ERRNO.get(value);
+        if (code != null) {
+            this.errno = code;
+            this.message = value;
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = code;
+            return this;
+        }
+        
         // Try to parse as integer
         try {
             int num = Integer.parseInt(value.trim());
             return set(num);
         } catch (NumberFormatException e) {
-            // Not a number - store as message with errno 0
-            // This is legacy behavior for code that sets $! = "message"
+            // Not a number and not a known message - store as message with errno 0
             this.errno = 0;
             this.message = value;
             this.type = RuntimeScalarType.STRING;
@@ -175,3 +200,4 @@ public class ErrnoVariable extends RuntimeScalar {
         set(0);
     }
 }
+

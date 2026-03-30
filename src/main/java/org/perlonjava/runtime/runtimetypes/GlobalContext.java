@@ -52,6 +52,10 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
         GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int) (System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
+        // Initialize $^W based on -w flag
+        if (compilerOptions.warnFlag) {
+            GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).set(1);    // initialize $^W = 1 for -w flag
+        }
 
         // Initialize $^X - the name used to execute the current copy of Perl
         // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher
@@ -137,7 +141,7 @@ public class GlobalContext {
 
         // Initialize additional magic scalar variables that tests expect to exist at startup
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8LOCALE"));  // ${^UTF8LOCALE}
-        GlobalVariable.getGlobalVariable(encodeSpecialVar("WARNING_BITS"));  // ${^WARNING_BITS}
+        GlobalVariable.globalVariables.put(encodeSpecialVar("WARNING_BITS"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.WARNING_BITS));  // ${^WARNING_BITS}
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8CACHE")).set(0);  // ${^UTF8CACHE}
         GlobalVariable.getGlobalVariable("main::[").set(0);  // $[ (array base, deprecated)
         GlobalVariable.getGlobalVariable("main::~");  // $~ (current format name)

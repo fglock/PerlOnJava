@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
@@ -13,6 +14,7 @@ import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TernaryOperatorNode;
 import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import static org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops;
 
@@ -159,6 +161,37 @@ public class EmitLogicalOperator {
      * @param getBoolean     The method name to convert the result to a boolean.
      */
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
+        // Constant folding: if LHS is a compile-time constant, eliminate the branch entirely.
+        // This matches Perl's behavior where e.g. `1 && expr` is folded to `expr` at compile time,
+        // enabling patterns like `my $c = 1 && my $d = 42`.
+        // Fold the LHS first to handle nested constant expressions like `1 && 2 && expr`.
+        Node foldedLHS = ConstantFoldingVisitor.foldConstants(node.left);
+        RuntimeScalar constantLHS = ConstantFoldingVisitor.getConstantValue(foldedLHS);
+        if (constantLHS != null) {
+            boolean testResult = "getDefinedBoolean".equals(getBoolean)
+                    ? constantLHS.getDefinedBoolean()
+                    : constantLHS.getBoolean();
+            // IFEQ (&&): short-circuits when LHS is false → result is LHS
+            // IFNE (||, //): short-circuits when LHS is true/defined → result is LHS
+            boolean shortCircuits = (compareOpcode == Opcodes.IFEQ) ? !testResult : testResult;
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                // VOID context: only emit code for side effects
+                if (!shortCircuits) {
+                    // RHS has side effects — emit it in VOID context (it handles its own stack)
+                    node.right.accept(emitterVisitor);
+                }
+                // Short-circuit in VOID: nothing to emit — constant has no side effects
+                return;
+            }
+            // Non-VOID context: emit the surviving operand
+            if (shortCircuits) {
+                foldedLHS.accept(emitterVisitor);
+            } else {
+                node.right.accept(emitterVisitor);
+            }
+            return;
+        }
+
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int callerContext = emitterVisitor.ctx.contextType;
 

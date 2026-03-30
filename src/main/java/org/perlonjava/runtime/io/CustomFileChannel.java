@@ -461,6 +461,12 @@ public class CustomFileChannel implements IOHandle {
 
             return new RuntimeScalar(result);
         } catch (IOException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.toLowerCase().contains("is a directory")) {
+                // Treat EISDIR as EOF - don't set $!
+                // This matches platforms that can "read directories as plain files"
+                return new RuntimeScalar("");
+            }
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
         }

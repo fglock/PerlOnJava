@@ -3,6 +3,8 @@ package org.perlonjava.runtime.runtimetypes;
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.math.BigInteger;
@@ -302,6 +304,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DUALVAR -> ((DualVar) this.value).numericValue();
             default -> Overload.numify(this);
         };
+    }
+
+    /**
+     * Converts scalar to number with uninitialized value warning.
+     * Called when 'use warnings "uninitialized"' is in effect.
+     *
+     * @param operation The operation name for the warning message (e.g., "addition (+)")
+     * @return A RuntimeScalar representing the numeric value
+     */
+    public RuntimeScalar getNumberWarn(String operation) {
+        // Fast path for defined numeric types
+        if (type == INTEGER || type == DOUBLE) {
+            return this;
+        }
+        // Check for UNDEF and emit warning if warnings are enabled
+        if (type == UNDEF) {
+            if (Warnings.shouldWarn("uninitialized")) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in " + operation),
+                        scalarEmptyString);
+            }
+            return scalarZero;
+        }
+        // For tied scalars, fetch first then check the fetched value
+        if (type == TIED_SCALAR) {
+            return this.tiedFetch().getNumberWarn(operation);
+        }
+        // All other types are defined, just convert to number
+        return getNumberLarge();
     }
 
     /**

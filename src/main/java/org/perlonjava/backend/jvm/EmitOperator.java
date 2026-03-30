@@ -32,8 +32,12 @@ public class EmitOperator {
             throw new PerlCompilerException(node.getIndex(), "Node must be OperatorNode or BinaryOperatorNode", emitterVisitor.ctx.errorUtil);
         }
 
-        // Invoke the method for the operator.
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        // Check if uninitialized warnings are enabled at compile time
+        // Use warn variant for zero-overhead when warnings disabled
+        boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
+        OperatorHandler operatorHandler = warnUninit 
+                ? OperatorHandler.getWarn(operator)
+                : OperatorHandler.get(operator);
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }
@@ -60,8 +64,12 @@ public class EmitOperator {
     }
 
     static void emitOperatorWithKey(String operator, Node node, EmitterVisitor emitterVisitor) {
-        // Invoke the method for the operator.
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        // Check if uninitialized warnings are enabled at compile time
+        // Use warn variant for zero-overhead when warnings disabled
+        boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
+        OperatorHandler operatorHandler = warnUninit 
+                ? OperatorHandler.getWarn(operator)
+                : OperatorHandler.get(operator);
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }

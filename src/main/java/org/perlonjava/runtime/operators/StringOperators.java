@@ -329,8 +329,8 @@ public class StringOperators {
         
         // Now check definedness on the resolved values (no additional FETCH)
         if (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         
         // Get string values from resolved scalars

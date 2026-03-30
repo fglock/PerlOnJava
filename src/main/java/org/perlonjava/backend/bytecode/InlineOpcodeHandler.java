@@ -1059,6 +1059,7 @@ public class InlineOpcodeHandler {
         if (isImmutableProxy(registers[rd])) {
             registers[rd] = ensureMutableScalar(registers[rd]);
         }
+        // Note: += does NOT warn for uninitialized values in Perl
         MathOperators.addAssign((RuntimeScalar) registers[rd], (RuntimeScalar) registers[rs]);
         return pc;
     }

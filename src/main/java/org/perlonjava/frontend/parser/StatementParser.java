@@ -727,8 +727,12 @@ public class StatementParser {
 
         // return the current compiler flags
         // If warningScopeId > 0, this node needs to emit runtime code for local ${^WARNING_SCOPE}
+        java.util.BitSet fatalFlags = (java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone();
+        java.util.BitSet disabledFlags = (java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone();
         CompilerFlagNode result = new CompilerFlagNode(
                 (java.util.BitSet) ctx.symbolTable.warningFlagsStack.getLast().clone(),
+                fatalFlags,
+                disabledFlags,
                 ctx.symbolTable.featureFlagsStack.getLast(),
                 ctx.symbolTable.strictOptionsStack.getLast(),
                 warningScopeId,

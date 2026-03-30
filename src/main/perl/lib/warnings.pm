@@ -1,6 +1,10 @@
 package warnings;
 our $VERSION = '1.74';
 
+# Number of bytes in a warnings bit mask (required by caller.t tests)
+# Matches Perl 5's WARNsize from warnings.h
+our $BYTES = 21;
+
 #
 # Original warnings pragma is part of the Perl core, maintained by the Perl 5 Porters.
 #

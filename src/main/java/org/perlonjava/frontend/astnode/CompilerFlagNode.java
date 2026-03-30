@@ -9,6 +9,8 @@ import org.perlonjava.frontend.analysis.Visitor;
  */
 public class CompilerFlagNode extends AbstractNode {
     private final java.util.BitSet warningFlags;
+    private final java.util.BitSet warningFatalFlags;
+    private final java.util.BitSet warningDisabledFlags;
     private final int featureFlags;
     private final int strictOptions;
     private final int warningScopeId;  // Runtime scope ID for "no warnings" propagation
@@ -22,7 +24,7 @@ public class CompilerFlagNode extends AbstractNode {
      * @param tokenIndex    the index of the token in the source code
      */
     public CompilerFlagNode(java.util.BitSet warningFlags, int featureFlags, int strictOptions, int tokenIndex) {
-        this(warningFlags, featureFlags, strictOptions, 0, tokenIndex);
+        this(warningFlags, null, null, featureFlags, strictOptions, 0, tokenIndex);
     }
 
     /**
@@ -35,7 +37,26 @@ public class CompilerFlagNode extends AbstractNode {
      * @param tokenIndex      the index of the token in the source code
      */
     public CompilerFlagNode(java.util.BitSet warningFlags, int featureFlags, int strictOptions, int warningScopeId, int tokenIndex) {
+        this(warningFlags, null, null, featureFlags, strictOptions, warningScopeId, tokenIndex);
+    }
+
+    /**
+     * Constructs a new CompilerFlagNode with all flag states including fatal and disabled warnings.
+     *
+     * @param warningFlags          the bitmask representing the state of warning flags
+     * @param warningFatalFlags     the bitmask representing FATAL warning flags (may be null)
+     * @param warningDisabledFlags  the bitmask representing disabled warning flags (may be null)
+     * @param featureFlags          the bitmask representing the state of feature flags
+     * @param strictOptions         the bitmask representing the state of strict options
+     * @param warningScopeId        the runtime warning scope ID (0 if not applicable)
+     * @param tokenIndex            the index of the token in the source code
+     */
+    public CompilerFlagNode(java.util.BitSet warningFlags, java.util.BitSet warningFatalFlags, 
+                           java.util.BitSet warningDisabledFlags, int featureFlags, int strictOptions, 
+                           int warningScopeId, int tokenIndex) {
         this.warningFlags = (java.util.BitSet) warningFlags.clone();
+        this.warningFatalFlags = warningFatalFlags != null ? (java.util.BitSet) warningFatalFlags.clone() : new java.util.BitSet();
+        this.warningDisabledFlags = warningDisabledFlags != null ? (java.util.BitSet) warningDisabledFlags.clone() : new java.util.BitSet();
         this.featureFlags = featureFlags;
         this.strictOptions = strictOptions;
         this.warningScopeId = warningScopeId;
@@ -49,6 +70,24 @@ public class CompilerFlagNode extends AbstractNode {
      */
     public java.util.BitSet getWarningFlags() {
         return warningFlags;
+    }
+
+    /**
+     * Returns the bitmask representing FATAL warning flags.
+     *
+     * @return the FATAL warning flags bitmask
+     */
+    public java.util.BitSet getWarningFatalFlags() {
+        return warningFatalFlags;
+    }
+
+    /**
+     * Returns the bitmask representing disabled warning flags.
+     *
+     * @return the disabled warning flags bitmask
+     */
+    public java.util.BitSet getWarningDisabledFlags() {
+        return warningDisabledFlags;
     }
 
     /**

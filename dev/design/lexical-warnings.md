@@ -939,12 +939,196 @@ The following documents were superseded by this one and have been deleted:
 
 ## Progress Tracking
 
-### Status: Implementation Ready
+### Status: Phase 2 Complete (2026-03-29)
 
 ### Completed
 - [x] Design document created
 - [x] Superseded design documents deleted
+- [x] Phase 1: Infrastructure (2026-03-29)
+  - Created `WarningBitsRegistry.java` - HashMap registry for class name → warning bits
+  - Enhanced `WarningFlags.java`:
+    - Added `PERL5_OFFSETS` map with Perl 5 compatible category offsets
+    - Added `userCategoryOffsets` for `warnings::register` support
+    - Added `toWarningBitsString()` for caller()[9] bits format
+    - Added `isEnabledInBits()` and `isFatalInBits()` utility methods
+    - Added `registerUserCategoryOffset()` for dynamic category allocation
+  - Enhanced `ScopedSymbolTable.java`:
+    - Added `warningFatalStack` for FATAL warnings tracking
+    - Updated `enterScope()`/`exitScope()` to handle fatal stack
+    - Updated `snapShot()` and `copyFlagsFrom()` to copy fatal stack
+    - Added `enableFatalWarningCategory()`, `disableFatalWarningCategory()`, `isFatalWarningCategory()`
+    - Added `getWarningBitsString()` for caller()[9] support
+- [x] Phase 2: Two-variant operator methods (2026-03-29)
+  - Added `getNumberWarn(String operation)` to `RuntimeScalar.java`:
+    - Centralizes undef check and warning emission
+    - Correctly handles tied scalars (single FETCH)
+    - Returns scalarZero for UNDEF after emitting warning
+  - Added warn variants to `MathOperators.java`:
+    - `addWarn()` (both scalar,int and scalar,scalar)
+    - `subtractWarn()` (both variants)
+    - `multiplyWarn()`
+    - `divideWarn()`
+    - `modulusWarn()`
+    - `powWarn()`
+    - `unaryMinusWarn()`
+  - Refactored existing operators to remove inline warnings (fast path)
+  - Added warn operator entries to `OperatorHandler.java`:
+    - `+_warn`, `-_warn`, `*_warn`, `/_warn`, `%_warn`, `**_warn`, `unaryMinus_warn`
+  - Emitter already uses `OperatorHandler.getWarn()` based on `isWarningCategoryEnabled("uninitialized")`
+- [x] Phase 3: Per-closure warning bits storage for JVM backend (2026-03-29)
+  - Added `WarningBitsRegistry.java` in `org.perlonjava.runtime`:
+    - ConcurrentHashMap from class name to warning bits string
+    - `register()` method called from class static initializer
+    - `get()` method for caller() lookups
+    - `clear()` method for PerlLanguageProvider.resetAll()
+  - Updated `EmitterMethodCreator.java`:
+    - Added `WARNING_BITS` static final field to generated classes
+    - Added `<clinit>` static initializer to register bits with WarningBitsRegistry
+  - Updated `RuntimeCode.callerWithSub()`:
+    - Added `extractJavaClassNames()` helper to get Java class names from stack trace
+    - Element 9 now looks up warning bits from WarningBitsRegistry
+  - **Known Limitation**: Warning bits are per-class, not per-call-site
+    - Perl 5 tracks warning bits at statement granularity
+    - PerlOnJava tracks at class (closure) granularity
+    - All calls from the same class share the same warning bits
+    - Different closures DO get their own warning bits (correctly)
+- [x] Phase 4: Per-closure warning bits storage for interpreter (2026-03-29)
+  - Added `warningBitsString` field to `InterpretedCode.java`:
+    - Stores Perl 5 compatible warning bits string
+    - Passed from BytecodeCompiler using symbolTable.getWarningBitsString()
+  - Updated constructors in `InterpretedCode.java`:
+    - Main constructor accepts warningBitsString parameter
+    - Registers with WarningBitsRegistry using "interpreter:" + identityHashCode key
+    - withCapturedVars() copies warningBitsString to new instance
+  - Updated `BytecodeCompiler.buildInterpretedCode()`:
+    - Extracts warningBitsString from emitterContext.symbolTable
+    - Passes to InterpretedCode constructor
+  - `extractJavaClassNames()` in RuntimeCode already handles interpreter frames
+    - Uses "interpreter:" + System.identityHashCode(frame.code()) as registry key
+- [x] Phase 6: warnings:: functions using caller()[9] (2026-03-29)
+  - Updated `Warnings.java`:
+    - Added `getWarningBitsAtLevel()` helper to get warning bits from caller()
+    - `enabled()` now uses caller()[9] with `WarningFlags.isEnabledInBits()`
+    - `warnif()` now checks caller()[9] and handles FATAL warnings
+    - Added `fatal_enabled()` using `WarningFlags.isFatalInBits()`
+    - Added `enabled_at_level()` for checking at specific stack levels
+    - Added `fatal_enabled_at_level()` for FATAL check at specific levels
+    - Added `warnif_at_level()` for warning at specific stack levels
+  - Registered new methods in initialize():
+    - `warnings::enabled_at_level`, `warnings::fatal_enabled`
+    - `warnings::fatal_enabled_at_level`, `warnings::warnif_at_level`
 
 ### Next Steps
-1. Implement Phase 1: Infrastructure
-2. Continue with remaining phases
+
+#### Phase 9: Per-Call-Site Warning Bits (Future)
+
+**Goal:** Enable block-scoped `use warnings` / `no warnings` to work correctly.
+
+**Current Limitation:**
+Warning bits are captured per-class at compile time. This means:
+```perl
+sub foo {
+    my $x;
+    print $x . "a";  # Uses class-level warning bits
+    {
+        no warnings 'uninitialized';
+        print $x . "b";  # Still uses class-level bits - warns incorrectly!
+    }
+}
+```
+
+**Proposed Solution:**
+Store warning bits per-statement (call-site) rather than per-class.
+
+**Implementation Approach:**
+
+1. **Compile-time: Emit warning bits with each statement**
+   - Each statement that can warn stores its warning bits as a parameter
+   - Example: `concatWarn(a, b, warningBits)` instead of `concatWarn(a, b)`
+   - The `warningBits` is a compile-time constant string
+
+2. **Runtime: Check bits at call site**
+   - Warning operators receive the bits as a parameter
+   - `warnWithCategory()` uses the passed bits instead of looking up caller()
+   - No ThreadLocal or caller() lookup needed for most cases
+
+3. **Alternative: Scope ID approach**
+   - Each scope gets a unique ID at compile time
+   - Store `scopeId → warningBits` mapping in registry
+   - Emit `local ${^WARNING_SCOPE} = scopeId` at scope entry
+   - Runtime looks up bits by current scope ID
+
+**Trade-offs:**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Per-statement bits | Fast, no lookup | Increases bytecode size |
+| Scope ID registry | Smaller bytecode | Runtime lookup overhead |
+
+**Files to Modify:**
+- `EmitOperator.java` - Pass warning bits to warn variants
+- `StringOperators.java` (and others) - Accept bits parameter
+- `WarnDie.java` - Use passed bits instead of caller() lookup
+- `ScopedSymbolTable.java` - Track scope-level warning changes
+
+**Estimated Complexity:** Medium-High
+- Requires changes to operator signatures
+- Need to update all warn-variant operators
+- Must maintain backward compatibility
+
+**Priority:** Low (current implementation handles most use cases)
+
+### Phase 7-8 Progress (2026-03-29)
+- [x] Added `warnWithCategory()` to WarnDie.java:
+  - Checks if warning category is FATAL in caller's scope
+  - Uses caller()[9] for subroutine frames
+  - Falls back to ThreadLocal context stack for top-level code
+  - Converts warning to die() when FATAL bit is set
+- [x] Added ThreadLocal context stack to WarningBitsRegistry:
+  - `pushCurrent()` / `popCurrent()` track current warning bits during execution
+  - `getCurrent()` retrieves bits for FATAL checks
+- [x] Updated RuntimeCode.apply() to push/pop warning bits
+- [x] Updated InterpretedCode.apply() to push/pop warning bits
+- [x] Updated StringOperators.stringConcatWarnUninitialized() to use warnWithCategory()
+
+**FATAL warnings work for:**
+- File-scope `use warnings FATAL => 'all'`
+- Named subroutines inheriting FATAL from enclosing scope
+- Top-level code execution
+
+**Known limitation:**
+Block-scoped `use warnings FATAL` inside a subroutine/program doesn't work because
+warning bits are captured per-class at compile time, not per-scope. This would require
+per-call-site warning bits for full parity.
+
+### Phase 8: $^W Interaction (2026-03-29)
+- [x] Added `isWarnFlagSet()` helper in Warnings.java:
+  - Checks if `$^W` global variable is set to a true value
+  - `$^W` is stored as `main::` + char(23) using Perl's special variable encoding
+- [x] Updated `warnif()` to fall back to `$^W`:
+  - If category is NOT enabled in lexical warnings, check `$^W`
+  - If `$^W` is true, issue warning
+  - This allows `$^W` to work with modules using `warnings::warnif()`
+- [x] Updated `warnIfAtLevel()` with same `$^W` fallback logic
+
+**$^W interaction works for:**
+- File-scope code without `use warnings` or `no warnings`
+- Module code calling `warnings::warnif()` when caller has `$^W = 1`
+
+**Known limitation:**
+Block-scoped `no warnings` doesn't override `$^W` for `warnif()` calls because
+our warning bits are per-class, not per-scope. This differs from Perl 5 where
+`no warnings` takes precedence over `$^W`. However, file-scope `no warnings`
+at the class level does correctly suppress warnings.
+
+**Test results:**
+```perl
+# Works correctly:
+$^W = 0; warnings::warnif("cat", "msg");  # No warning
+$^W = 1; warnings::warnif("cat", "msg");  # Warning issued
+use warnings; warnings::warnif("cat", "msg");  # Warning issued (file-scope)
+
+# Known limitation:
+$^W = 1;
+{ no warnings; warnings::warnif("cat", "msg"); }  # Warning issued (differs from Perl 5)
+```

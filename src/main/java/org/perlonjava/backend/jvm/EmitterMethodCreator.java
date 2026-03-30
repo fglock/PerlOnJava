@@ -16,7 +16,9 @@ import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.CompilerFlagNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.PrintWriter;
@@ -452,6 +454,28 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Add instance field for __SUB__ code reference
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", null, null).visitEnd();
+
+            // Pre-apply CompilerFlagNodes to capture effective warning flags
+            // This ensures that 'use warnings FATAL => "all"' affects WARNING_BITS
+            applyCompilerFlagNodes(ctx, ast);
+
+            // Add static field WARNING_BITS for per-closure warning state (caller()[9] support)
+            String warningBits = ctx.symbolTable.getWarningBitsString();
+            cw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                    "WARNING_BITS", "Ljava/lang/String;", null, warningBits).visitEnd();
+
+            // Create static initializer to register warning bits with WarningBitsRegistry
+            MethodVisitor clinit = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+            clinit.visitCode();
+            clinit.visitLdcInsn(className.replace('/', '.'));  // Convert to Java class name format
+            clinit.visitLdcInsn(warningBits);
+            clinit.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/WarningBitsRegistry",
+                    "register",
+                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
+            clinit.visitInsn(Opcodes.RETURN);
+            clinit.visitMaxs(2, 0);
+            clinit.visitEnd();
 
             // Add a constructor with parameters for initializing the fields
             // Include ALL env slots (even nulls) so signature matches caller expectations
@@ -1715,6 +1739,37 @@ public class EmitterMethodCreator implements Opcodes {
             // Print annotations if any
             for (Annotation annotation : method.getAnnotations()) {
                 System.out.println("  @" + annotation.annotationType().getSimpleName());
+            }
+        }
+    }
+
+    /**
+     * Pre-applies CompilerFlagNodes to the symbol table so that warning flags
+     * (including FATAL and disabled) are captured in WARNING_BITS.
+     * This scans the AST for CompilerFlagNode nodes at the top level and applies them.
+     */
+    private static void applyCompilerFlagNodes(EmitterContext ctx, Node ast) {
+        if (ast instanceof BlockNode) {
+            BlockNode block = (BlockNode) ast;
+            for (Node stmt : block.elements) {
+                if (stmt instanceof CompilerFlagNode) {
+                    CompilerFlagNode node = (CompilerFlagNode) stmt;
+                    ScopedSymbolTable currentScope = ctx.symbolTable;
+                    
+                    // Only apply warning flags for WARNING_BITS capture
+                    // Do NOT apply feature flags or strict options here - they must be
+                    // applied in order during code emission to maintain lexical scoping
+                    currentScope.warningFlagsStack.pop();
+                    currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+                    
+                    // Apply fatal warning flags
+                    currentScope.warningFatalStack.pop();
+                    currentScope.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
+                    
+                    // Apply disabled warning flags
+                    currentScope.warningDisabledStack.pop();
+                    currentScope.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+                }
             }
         }
     }

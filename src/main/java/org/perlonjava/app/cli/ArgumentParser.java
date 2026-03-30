@@ -324,8 +324,8 @@ public class ArgumentParser {
                     return index;
 
                 case 'w':
-                    // enable many useful warnings
-                    parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", null, false));
+                    // enable many useful warnings by setting $^W = 1
+                    parsedArgs.warnFlag = true;
                     break;
                 case 'W':
                     // enable all warnings

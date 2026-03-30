@@ -57,6 +57,8 @@ public class ScopedSymbolTable {
     public final Stack<BitSet> warningFlagsStack = new Stack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)
     public final Stack<BitSet> warningDisabledStack = new Stack<>();
+    // Stack to track FATAL warning categories for each scope
+    public final Stack<BitSet> warningFatalStack = new Stack<>();
     // Stack to manage feature categories for each scope
     public final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
@@ -76,18 +78,16 @@ public class ScopedSymbolTable {
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
      */
     public ScopedSymbolTable() {
-        // Initialize the warning categories stack with experimental warnings enabled by default
-        // Experimental warnings are always on by default in Perl
+        // Initialize the warning categories stack with empty warnings by default
+        // This matches Perl behavior where code without explicit 'use warnings'
+        // has no warning bits set. Experimental warnings will be enabled when
+        // the relevant features are used (e.g., 'use feature "try"').
         BitSet defaultWarnings = new BitSet();
-        // Enable all experimental:: warnings by default
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
-            if (entry.getKey().startsWith("experimental::")) {
-                defaultWarnings.set(entry.getValue());
-            }
-        }
-        warningFlagsStack.push((BitSet) defaultWarnings.clone());
+        warningFlagsStack.push(defaultWarnings);
         // Initialize the disabled warnings stack (empty by default)
         warningDisabledStack.push(new BitSet());
+        // Initialize the fatal warnings stack (empty by default)
+        warningFatalStack.push(new BitSet());
         // Initialize the feature categories stack with an empty map for the global scope
         featureFlagsStack.push(0);
         // Initialize the strict options stack with 0 for the global scope
@@ -160,6 +160,8 @@ public class ScopedSymbolTable {
         warningFlagsStack.push((BitSet) warningFlagsStack.peek().clone());
         // Push a copy of the current disabled warnings map onto the stack
         warningDisabledStack.push((BitSet) warningDisabledStack.peek().clone());
+        // Push a copy of the current fatal warnings map onto the stack
+        warningFatalStack.push((BitSet) warningFatalStack.peek().clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         // Push a copy of the current strict options onto the stack
@@ -185,6 +187,7 @@ public class ScopedSymbolTable {
             inSubroutineBodyStack.pop();
             warningFlagsStack.pop();
             warningDisabledStack.pop();
+            warningFatalStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
         }
@@ -558,6 +561,10 @@ public class ScopedSymbolTable {
         st.warningDisabledStack.pop(); // Remove the initial value pushed by enterScope
         st.warningDisabledStack.push((BitSet) this.warningDisabledStack.peek().clone());
 
+        // Clone fatal warnings flags
+        st.warningFatalStack.pop(); // Remove the initial value pushed by enterScope
+        st.warningFatalStack.push((BitSet) this.warningFatalStack.peek().clone());
+
         // Clone feature flags
         st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
@@ -689,6 +696,51 @@ public class ScopedSymbolTable {
         return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
     }
 
+    /**
+     * Enables FATAL mode for a warning category.
+     * When a warning is FATAL, it throws an exception instead of printing a warning.
+     */
+    public void enableFatalWarningCategory(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        if (bitPosition != null) {
+            warningFatalStack.peek().set(bitPosition);
+            // FATAL implies enabled
+            warningFlagsStack.peek().set(bitPosition);
+            warningDisabledStack.peek().clear(bitPosition);
+        }
+    }
+
+    /**
+     * Disables FATAL mode for a warning category (warning will be printed, not thrown).
+     */
+    public void disableFatalWarningCategory(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        if (bitPosition != null) {
+            warningFatalStack.peek().clear(bitPosition);
+        }
+    }
+
+    /**
+     * Checks if a warning category is in FATAL mode.
+     */
+    public boolean isFatalWarningCategory(String category) {
+        Integer bitPosition = warningBitPositions.get(category);
+        return bitPosition != null && warningFatalStack.peek().get(bitPosition);
+    }
+
+    /**
+     * Gets the current warning bits as a Perl 5 compatible string.
+     * This is used for caller()[9] to return the compile-time warning bits.
+     * Format: each category uses 2 bits - bit 0 = enabled, bit 1 = fatal.
+     *
+     * @return A string of bytes representing the warning bits in Perl 5 format.
+     */
+    public String getWarningBitsString() {
+        BitSet enabled = warningFlagsStack.peek();
+        BitSet fatal = warningFatalStack.peek();
+        return WarningFlags.toWarningBitsString(enabled, fatal, warningBitPositions);
+    }
+
     // Methods for managing features using bit positions
     public void enableFeatureCategory(String feature) {
         if (isNoOpFeature(feature)) {
@@ -700,6 +752,17 @@ public class ScopedSymbolTable {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             featureFlagsStack.push(featureFlagsStack.pop() | (1 << bitPosition));
+            
+            // Enable the corresponding experimental warning if this is an experimental feature
+            // In Perl 5, experimental warnings are ON by default for experimental features
+            String experimentalWarning = "experimental::" + feature;
+            Integer warnBitPos = warningBitPositions.get(experimentalWarning);
+            if (warnBitPos != null) {
+                // Only enable if not explicitly disabled
+                if (!warningDisabledStack.peek().get(warnBitPos)) {
+                    warningFlagsStack.peek().set(warnBitPos);
+                }
+            }
         }
     }
 
@@ -751,6 +814,10 @@ public class ScopedSymbolTable {
         // Copy disabled warnings flags
         this.warningDisabledStack.pop();
         this.warningDisabledStack.push((BitSet) source.warningDisabledStack.peek().clone());
+
+        // Copy fatal warnings flags
+        this.warningFatalStack.pop();
+        this.warningFatalStack.push((BitSet) source.warningFatalStack.peek().clone());
 
         // Copy feature flags
         this.featureFlagsStack.pop();

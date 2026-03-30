@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -1547,6 +1548,20 @@ public class CompileAssignment {
                     bytecodeCompiler.lastResultReg = rhsReg;
                     
                     return;
+                }
+
+                // Handle constant-folded logical operators: e.g. `1 && my $x = val` → `my $x = val`
+                // Perl constant-folds logical ops with constant LHS at compile time.
+                if (leftBin.operator.equals("&&") || leftBin.operator.equals("and") ||
+                        leftBin.operator.equals("||") || leftBin.operator.equals("or") ||
+                        leftBin.operator.equals("//")) {
+                    Node foldedLeft = ConstantFoldingVisitor.foldConstants(node.left);
+                    if (foldedLeft != node.left) {
+                        // Operator was folded - recursively handle assignment with folded LHS
+                        BinaryOperatorNode newNode = new BinaryOperatorNode("=", foldedLeft, node.right, node.tokenIndex);
+                        compileAssignmentOperator(bytecodeCompiler, newNode);
+                        return;
+                    }
                 }
 
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());

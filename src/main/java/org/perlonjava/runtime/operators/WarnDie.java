@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.perlmodule.Universal;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.*;
@@ -190,6 +191,86 @@ public class WarnDie {
         stderrIO.write(finalMessage.toString());
 
         return new RuntimeScalar();
+    }
+
+    /**
+     * Issues a warning message with category checking.
+     * - If the warning category is not enabled in the caller's scope, suppresses the warning.
+     * - If the warning category is suppressed at runtime (via "no warnings"), suppresses it.
+     * - If the warning category is FATAL in the caller's scope, throws an exception instead.
+     *
+     * @param message  The warning message to be issued.
+     * @param where    Additional context or location information.
+     * @param category The warning category (e.g., "uninitialized", "numeric").
+     * @return A RuntimeBase representing the result of the warning operation.
+     */
+    public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category) {
+        return warnWithCategory(message, where, category, null, 0);
+    }
+
+    public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
+                                                String fileName, int lineNumber) {
+        // Get the warning bits for the current Perl execution context.
+        // We scan the Java call stack for the nearest Perl frame (org.perlonjava.anon* or perlmodule)
+        // and look up its warning bits in WarningBitsRegistry.
+        String warningBits = getWarningBitsFromCurrentContext();
+        
+        // If no bits from direct stack scan, check the current context stack (pushed on sub entry)
+        if (warningBits == null) {
+            warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCurrent();
+        }
+        
+        // If warning bits are available, check if this category is enabled
+        if (warningBits != null) {
+            if (WarningFlags.isEnabledInBits(warningBits, category)) {
+                // Category is lexically enabled - check for FATAL
+                if (WarningFlags.isFatalInBits(warningBits, category)) {
+                    return die(message, where, fileName, lineNumber);
+                }
+                // Fall through to emit warning
+            } else if (!Warnings.isWarnFlagSet()) {
+                // Category not lexically enabled AND $^W not set - suppress
+                return new RuntimeScalar();
+            }
+            // If $^W is set, fall through to emit warning even if not lexically enabled
+        } else {
+            // No bits from caller - fall back to $^W global flag
+            if (!Warnings.isWarnFlagSet()) {
+                return new RuntimeScalar();
+            }
+        }
+        
+        // Check if the category is suppressed at runtime via "no warnings" in current scope
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar();
+        }
+        
+        // Issue as regular warning
+        return warn(message, where, fileName, lineNumber);
+    }
+
+    /**
+     * Gets warning bits by scanning the Java call stack for Perl frames.
+     * This looks for org.perlonjava.anon* and perlmodule classes, which are
+     * JVM-compiled Perl code, and returns the first found warning bits.
+     * This is more reliable than using caller() which may skip frames.
+     *
+     * @return The warning bits string, or null if not available
+     */
+    private static String getWarningBitsFromCurrentContext() {
+        Throwable t = new Throwable();
+        for (StackTraceElement element : t.getStackTrace()) {
+            String className = element.getClassName();
+            if (className.contains("org.perlonjava.anon") ||
+                    className.contains("org.perlonjava.runtime.perlmodule")) {
+                // Found a Perl frame - look up its warning bits
+                String bits = org.perlonjava.runtime.WarningBitsRegistry.get(className);
+                if (bits != null) {
+                    return bits;
+                }
+            }
+        }
+        return null;
     }
 
     /**

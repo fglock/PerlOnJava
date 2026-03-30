@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.BitSet;
@@ -67,6 +68,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final int strictOptions;        // Strict flags at compile time
     public final int featureFlags;         // Feature flags at compile time
     public final BitSet warningFlags;      // Warning flags at compile time
+    public final String warningBitsString; // Perl 5 compatible warning bits string (for caller()[9])
     public final String compilePackage;    // Package at compile time (for eval STRING name resolution)
 
     // Debug information (optional)
@@ -101,7 +103,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            int strictOptions, int featureFlags, BitSet warningFlags) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-                strictOptions, featureFlags, warningFlags, "main", null, null);
+                strictOptions, featureFlags, warningFlags, "main", null, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -114,7 +116,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-                strictOptions, featureFlags, warningFlags, compilePackage, null, null);
+                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -126,7 +128,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            int strictOptions, int featureFlags, BitSet warningFlags,
                            String compilePackage,
                            List<Map<String, Integer>> evalSiteRegistries,
-                           List<int[]> evalSitePragmaFlags) {
+                           List<int[]> evalSitePragmaFlags,
+                           String warningBitsString) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -143,9 +146,15 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         this.strictOptions = strictOptions;
         this.featureFlags = featureFlags;
         this.warningFlags = warningFlags;
+        this.warningBitsString = warningBitsString;
         this.compilePackage = compilePackage;
         if (this.packageName == null && compilePackage != null) {
             this.packageName = compilePackage;
+        }
+        // Register with WarningBitsRegistry for caller()[9] support
+        if (warningBitsString != null) {
+            String registryKey = "interpreter:" + System.identityHashCode(this);
+            WarningBitsRegistry.register(registryKey, warningBitsString);
         }
     }
 
@@ -223,9 +232,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
+        // Push warning bits for FATAL warnings support
+        // This allows runtime code to check current warning context
+        if (warningBitsString != null) {
+            WarningBitsRegistry.pushCurrent(warningBitsString);
+        }
         try {
             return BytecodeInterpreter.execute(this, args, callContext);
         } finally {
+            if (warningBitsString != null) {
+                WarningBitsRegistry.popCurrent();
+            }
             RuntimeCode.popArgs();
         }
     }
@@ -234,9 +251,16 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
+        // Push warning bits for FATAL warnings support
+        if (warningBitsString != null) {
+            WarningBitsRegistry.pushCurrent(warningBitsString);
+        }
         try {
             return BytecodeInterpreter.execute(this, args, callContext, subroutineName);
         } finally {
+            if (warningBitsString != null) {
+                WarningBitsRegistry.popCurrent();
+            }
             RuntimeCode.popArgs();
         }
     }
@@ -274,7 +298,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.warningFlags,
                 this.compilePackage,
                 this.evalSiteRegistries,
-                this.evalSitePragmaFlags
+                this.evalSitePragmaFlags,
+                this.warningBitsString
         );
         copy.prototype = this.prototype;
         copy.attributes = this.attributes;

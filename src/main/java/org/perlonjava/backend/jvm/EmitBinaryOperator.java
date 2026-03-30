@@ -205,9 +205,18 @@ public class EmitBinaryOperator {
     static void handleCompoundAssignment(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Compound assignment operators like `+=`, `-=`, etc.
         // These now have proper overload support via MathOperators.*Assign() methods
+        
+        // Operators that SHOULD warn for uninitialized: * / ** << >> x &
+        // Operators that should NOT warn: + - . | ^ && ||
+        boolean shouldUseWarnVariant = switch (node.operator) {
+            case "*=", "/=", "%=", "**=", "<<=", ">>=", "x=", "&=" -> true;
+            default -> false;
+        };
 
         // Check if we have an operator handler for this compound operator
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
+        OperatorHandler operatorHandler = shouldUseWarnVariant 
+                ? OperatorHandler.getWarn(node.operator)
+                : OperatorHandler.get(node.operator);
 
         if (operatorHandler != null) {
             // Use the new *Assign methods which check for compound overloads first
@@ -279,8 +288,13 @@ public class EmitBinaryOperator {
             // perform the operation
             // Note: operands are already on the stack (left DUPped, then right)
             String baseOperator = node.operator.substring(0, node.operator.length() - 1);
-            // Get the operator handler for the base operator and call it directly
-            OperatorHandler baseOpHandler = OperatorHandler.get(baseOperator);
+            // Get the operator handler for the base operator, use warn variant only for certain ops
+            OperatorHandler baseOpHandler = shouldUseWarnVariant
+                    ? OperatorHandler.getWarn(baseOperator)
+                    : OperatorHandler.get(baseOperator);
+            if (baseOpHandler == null) {
+                baseOpHandler = OperatorHandler.get(baseOperator);
+            }
             if (baseOpHandler != null) {
                 mv.visitMethodInsn(
                         baseOpHandler.methodType(),

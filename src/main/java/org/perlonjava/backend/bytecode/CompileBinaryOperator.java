@@ -1,8 +1,10 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 public class CompileBinaryOperator {
     static void visitBinaryOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
@@ -377,6 +379,37 @@ public class CompileBinaryOperator {
         }
 
         // Handle short-circuit operators specially - don't compile right operand yet!
+        // But first, try constant folding: if LHS is a compile-time constant, eliminate the branch.
+        if (node.operator.equals("&&") || node.operator.equals("and") ||
+                node.operator.equals("||") || node.operator.equals("or") ||
+                node.operator.equals("//")) {
+            Node foldedLHS = ConstantFoldingVisitor.foldConstants(node.left);
+            RuntimeScalar constantLHS = ConstantFoldingVisitor.getConstantValue(foldedLHS);
+            if (constantLHS != null) {
+                boolean testResult;
+                if (node.operator.equals("//")) {
+                    testResult = constantLHS.getDefinedBoolean();
+                } else {
+                    testResult = constantLHS.getBoolean();
+                }
+                // For &&/and: true → emit RHS, false → emit LHS
+                // For ||/or: true → emit LHS, false → emit RHS
+                // For //: defined → emit LHS, undef → emit RHS
+                boolean emitLHS;
+                if (node.operator.equals("&&") || node.operator.equals("and")) {
+                    emitLHS = !testResult;
+                } else {
+                    emitLHS = testResult;
+                }
+                if (emitLHS) {
+                    bytecodeCompiler.compileNode(foldedLHS, -1, bytecodeCompiler.currentCallContext);
+                } else {
+                    bytecodeCompiler.compileNode(node.right, -1, bytecodeCompiler.currentCallContext);
+                }
+                return;
+            }
+        }
+
         if (node.operator.equals("&&") || node.operator.equals("and")) {
             int rd = bytecodeCompiler.allocateOutputRegister();
 

@@ -245,6 +245,19 @@ public class PerlLanguageProvider {
         // can see and modify the enclosing scope's compile-time hints
         if (savedCurrentScope != null) {
             globalSymbolTable.setStrictOptions(savedCurrentScope.getStrictOptions());
+            // Inherit warning flags so ${^WARNING_BITS} returns correct values in BEGIN blocks
+            if (!savedCurrentScope.warningFlagsStack.isEmpty()) {
+                globalSymbolTable.warningFlagsStack.pop();
+                globalSymbolTable.warningFlagsStack.push((java.util.BitSet) savedCurrentScope.warningFlagsStack.peek().clone());
+            }
+            if (!savedCurrentScope.warningDisabledStack.isEmpty()) {
+                globalSymbolTable.warningDisabledStack.pop();
+                globalSymbolTable.warningDisabledStack.push((java.util.BitSet) savedCurrentScope.warningDisabledStack.peek().clone());
+            }
+            if (!savedCurrentScope.warningFatalStack.isEmpty()) {
+                globalSymbolTable.warningFatalStack.pop();
+                globalSymbolTable.warningFatalStack.push((java.util.BitSet) savedCurrentScope.warningFatalStack.peek().clone());
+            }
         }
 
         EmitterContext ctx = new EmitterContext(

@@ -70,6 +70,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         if (variableId == Id.HINTS) {
             return;
         }
+        // WARNING_BITS doesn't need lvalue - it always reads/writes from the symbol table
+        if (variableId == Id.WARNING_BITS) {
+            return;
+        }
         throw new PerlCompilerException("Modification of a read-only value attempted");
     }
 
@@ -97,6 +101,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             }
             // Return a scalar with the hints value
             return getScalarInt(hints);
+        }
+        if (variableId == Id.WARNING_BITS) {
+            // ${^WARNING_BITS} - Set warning bits from a string
+            // This is used by Test::Builder to restore warning state in eval blocks
+            ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+            if (symbolTable != null) {
+                String bits = value.toString();
+                WarningFlags.setWarningBitsFromString(symbolTable, bits);
+            }
+            return value;
         }
         return super.set(value);
     }
@@ -235,6 +249,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     // $> - Effective user ID (lazy evaluation to avoid JNA overhead at startup)
                     yield NativeUtils.geteuid(0);
                 }
+                case WARNING_BITS -> {
+                    // ${^WARNING_BITS} - Compile-time warning bits
+                    // Always read from the current scope's symbol table
+                    ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+                    if (symbolTable != null) {
+                        String bits = symbolTable.getWarningBitsString();
+                        yield new RuntimeScalar(bits);
+                    }
+                    yield scalarUndef;
+                }
             };
             return result;
         } catch (IllegalStateException e) {
@@ -244,6 +268,17 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
     public RuntimeScalar getNumber() {
         return this.getValueAsScalar().getNumber();
+    }
+
+    /**
+     * Converts the special variable to a number with uninitialized warnings.
+     *
+     * @param operation The operation name for the warning message.
+     * @return The numeric value of the special variable.
+     */
+    @Override
+    public RuntimeScalar getNumberWarn(String operation) {
+        return this.getValueAsScalar().getNumberWarn(operation);
     }
 
     /**
@@ -423,6 +458,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         EFFECTIVE_GID, // $) - Effective group ID (lazy, JNA call only on access)
         REAL_UID, // $< - Real user ID (lazy, JNA call only on access)
         EFFECTIVE_UID, // $> - Effective user ID (lazy, JNA call only on access)
+        WARNING_BITS, // ${^WARNING_BITS} - Compile-time warning bits
     }
 
     private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {

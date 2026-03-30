@@ -14,6 +14,14 @@ public class EmitCompilerFlag {
         currentScope.warningFlagsStack.pop();
         currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
 
+        // Set the fatal warning flags
+        currentScope.warningFatalStack.pop();
+        currentScope.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
+
+        // Set the disabled warning flags
+        currentScope.warningDisabledStack.pop();
+        currentScope.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+
         // Set the feature flags
         currentScope.featureFlagsStack.pop();
         currentScope.featureFlagsStack.push(node.getFeatureFlags());
@@ -23,6 +31,17 @@ public class EmitCompilerFlag {
         currentScope.strictOptionsStack.push(node.getStrictOptions());
 
         EmitterContext.fixupContext(ctx);
+
+        // Emit runtime code to update per-call-site warning bits.
+        // This allows caller()[9] to return accurate warning bits for the current
+        // statement, not just the class-level bits captured at compilation time.
+        MethodVisitor mv = ctx.mv;
+        String newBits = currentScope.getWarningBitsString();
+        mv.visitLdcInsn(newBits);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/WarningBitsRegistry",
+                "setCallSiteBits",
+                "(Ljava/lang/String;)V", false);
 
         // Emit runtime code for warning scope if needed
         int warningScopeId = node.getWarningScopeId();
