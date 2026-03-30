@@ -750,6 +750,29 @@ public class EmitOperator {
             return;
         }
 
+        // For join, check if `no overloading` is active and use joinNoOverload variant
+        if (node.operator.equals("join")) {
+            ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+            boolean noOverloading = symbolTable != null &&
+                    symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+            if (noOverloading) {
+                OperatorHandler operatorHandler = OperatorHandler.get("joinNoOverload");
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        operatorHandler.className(),
+                        operatorHandler.methodName(),
+                        operatorHandler.descriptor(),
+                        false);
+
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    handleVoidContext(emitterVisitor);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    handleScalarContext(emitterVisitor, node);
+                }
+                return;
+            }
+        }
+
         emitOperator(node, emitterVisitor);
     }
 
@@ -866,6 +889,24 @@ public class EmitOperator {
         }
 
         ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+
+        // Check if `no overloading` is active - use stringConcatNoOverload variant
+        boolean noOverloading = symbolTable != null &&
+                symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+        if (noOverloading) {
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/StringOperators",
+                    "stringConcatNoOverload",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            }
+            return;
+        }
+
         boolean warnUninitialized = symbolTable != null && symbolTable.isWarningCategoryEnabled("uninitialized");
         if (warnUninitialized) {
             emitterVisitor.ctx.mv.visitMethodInsn(

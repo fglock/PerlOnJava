@@ -164,6 +164,7 @@ public class Builtin extends PerlModuleBase {
             case HASHREFERENCE -> "HASH";
             case CODE -> "CODE";
             case GLOB, GLOBREFERENCE -> "GLOB";
+            case REGEX -> "REGEXP";
             default -> null;
         };
 

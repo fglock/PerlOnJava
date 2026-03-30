@@ -832,6 +832,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    /**
+     * Convert to string without triggering overload dispatch.
+     * Used by {@code no overloading} pragma to bypass the {@code ""} overload.
+     * For blessed references, returns the raw "Class=TYPE(0xADDR)" string directly.
+     */
+    public String toStringNoOverload() {
+        if (type == STRING || type == BYTE_STRING) {
+            return (String) this.value;
+        }
+        return switch (type) {
+            case INTEGER -> Integer.toString((int) value);
+            case DOUBLE -> ScalarUtils.formatLikePerl((double) value);
+            case STRING, BYTE_STRING -> (String) value;
+            case UNDEF -> "";
+            case VSTRING -> (String) value;
+            case BOOLEAN -> (boolean) value ? "1" : "";
+            case GLOB -> value == null ? "" : value.toString();
+            case JAVAOBJECT -> value.toString();
+            case TIED_SCALAR -> this.tiedFetch().toStringNoOverload();
+            case DUALVAR -> ((DualVar) this.value).stringValue().toStringNoOverload();
+            case CODE -> toStringRef();
+            default -> {
+                if (type == REGEX) yield value.toString();
+                yield toStringRef();
+            }
+        };
+    }
+
     public String toStringRef() {
         String ref = switch (type) {
             case UNDEF -> "SCALAR(0x" + scalarUndef.hashCode() + ")";

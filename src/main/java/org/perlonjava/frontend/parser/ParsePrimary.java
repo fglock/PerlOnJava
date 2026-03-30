@@ -141,7 +141,7 @@ public class ParsePrimary {
             operatorEnabled = switch (operator) {
                 case "all" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_all");
                 case "any" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_any");
-                case "say", "fc", "state", "evalbytes" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                case "say", "fc", "state", "evalbytes", "isa" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
                 case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                 case "__CLASS__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
                 case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");

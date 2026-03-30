@@ -297,9 +297,16 @@ public class NextMethod {
         }
     }
 
-    static RuntimeScalar superMethod(RuntimeScalar currentSub, String methodName) {
+    static RuntimeScalar superMethod(RuntimeScalar currentSub, String methodName, String fallbackPackage) {
         RuntimeScalar method;
-        String packageName = ((RuntimeCode) currentSub.value).packageName;
+        String packageName;
+        if (currentSub.value != null) {
+            packageName = ((RuntimeCode) currentSub.value).packageName;
+        } else {
+            // At package level (outside any subroutine), currentSub.value is null.
+            // Fall back to using the invocant's class name as the calling package.
+            packageName = fallbackPackage;
+        }
         method = InheritanceResolver.findMethodInHierarchy(
                 methodName.substring(7),    // method name without SUPER:: prefix
                 packageName,

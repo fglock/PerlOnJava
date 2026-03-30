@@ -897,6 +897,19 @@ public class Disassemble {
                         sb.append("JOIN r").append(rd).append(" = join(r").append(separatorReg)
                                 .append(", r").append(listReg).append(")\n");
                         break;
+                    case Opcodes.JOIN_NO_OVERLOAD:
+                        rd = interpretedCode.bytecode[pc++];
+                        separatorReg = interpretedCode.bytecode[pc++];
+                        listReg = interpretedCode.bytecode[pc++];
+                        sb.append("JOIN_NO_OVERLOAD r").append(rd).append(" = joinNoOverload(r").append(separatorReg)
+                                .append(", r").append(listReg).append(")\n");
+                        break;
+                    case Opcodes.CONCAT_NO_OVERLOAD:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs1 = interpretedCode.bytecode[pc++];
+                        rs2 = interpretedCode.bytecode[pc++];
+                        sb.append("CONCAT_NO_OVERLOAD r").append(rd).append(" = r").append(rs1).append(" . r").append(rs2).append("\n");
+                        break;
                     case Opcodes.SELECT:
                         rd = interpretedCode.bytecode[pc++];
                         listReg = interpretedCode.bytecode[pc++];

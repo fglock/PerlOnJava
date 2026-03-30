@@ -261,6 +261,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
 
         put("x", "repeat", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("join", "join", "org/perlonjava/runtime/operators/StringOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("joinNoOverload", "joinNoOverload", "org/perlonjava/runtime/operators/StringOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("split", "split", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;");
 
         put("..", "createRange", "org/perlonjava/runtime/runtimetypes/PerlRange", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/PerlRange;");

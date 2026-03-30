@@ -800,6 +800,45 @@ public class InlineOpcodeHandler {
     }
 
     /**
+     * String join without overload dispatch: rd = joinNoOverload(separator, list)
+     * Format: JOIN_NO_OVERLOAD rd separatorReg listReg
+     * Used when 'no overloading' is in effect at compile time.
+     */
+    public static int executeJoinNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int separatorReg = bytecode[pc++];
+        int listReg = bytecode[pc++];
+
+        RuntimeBase separatorBase = registers[separatorReg];
+        RuntimeScalar separator = (separatorBase instanceof RuntimeScalar)
+                ? (RuntimeScalar) separatorBase
+                : separatorBase.scalar();
+
+        RuntimeBase list = registers[listReg];
+
+        registers[rd] = StringOperators.joinNoOverload(separator, list);
+        return pc;
+    }
+
+    /**
+     * String concatenation without overload dispatch: rd = stringConcatNoOverload(rs1, rs2)
+     * Format: CONCAT_NO_OVERLOAD rd rs1 rs2
+     * Used when 'no overloading' is in effect at compile time.
+     */
+    public static int executeConcatNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase concatLeft = registers[rs1];
+        RuntimeBase concatRight = registers[rs2];
+        registers[rd] = StringOperators.stringConcatNoOverload(
+                concatLeft instanceof RuntimeScalar ? (RuntimeScalar) concatLeft : concatLeft.scalar(),
+                concatRight instanceof RuntimeScalar ? (RuntimeScalar) concatRight : concatRight.scalar()
+        );
+        return pc;
+    }
+
+    /**
      * Select default output filehandle: rd = IOOperator.select(list, SCALAR)
      * Format: SELECT rd listReg
      */

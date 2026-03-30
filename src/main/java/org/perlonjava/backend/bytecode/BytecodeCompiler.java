@@ -370,6 +370,11 @@ public class BytecodeCompiler implements Visitor {
                 && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
     }
 
+    boolean isNoOverloadingEnabled() {
+        return emitterContext != null && emitterContext.symbolTable != null
+                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+    }
+
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
         // Only check if strict vars is enabled
         if (emitterContext == null || emitterContext.symbolTable == null) {
