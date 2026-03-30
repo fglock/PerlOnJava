@@ -160,7 +160,24 @@ public class ConstantFoldingVisitor implements Visitor {
      */
     public static RuntimeScalar getConstantValue(Node node) {
         if (node instanceof NumberNode) {
-            return new RuntimeScalar(((NumberNode) node).value);
+            String value = ((NumberNode) node).value;
+            // Parse NumberNode values as proper numeric types so arithmetic
+            // operations use the correct paths (e.g., double modulus for 13e21 % 4e21).
+            // Mirrors BytecodeCompiler.visit(NumberNode) logic for consistency.
+            try {
+                if (ScalarUtils.isInteger(value)) {
+                    return new RuntimeScalar(Integer.parseInt(value));
+                } else if (value.matches("^-?\\d+$")) {
+                    // Large integer that doesn't fit in int - keep as string
+                    // to preserve precision (32-bit Perl emulation)
+                    return new RuntimeScalar(value);
+                } else {
+                    return new RuntimeScalar(Double.parseDouble(value));
+                }
+            } catch (NumberFormatException e) {
+                // Fallback to string for unusual number formats
+                return new RuntimeScalar(value);
+            }
         } else if (node instanceof StringNode strNode) {
             RuntimeScalar scalar = new RuntimeScalar(strNode.value);
             if (strNode.isVString) {
@@ -644,6 +661,35 @@ public class ConstantFoldingVisitor implements Visitor {
         return null;
     }
 
+    /**
+     * Creates the appropriate AST node from a RuntimeScalar result.
+     * Maps INTEGER/DOUBLE to NumberNode (with Inf/NaN normalization) and STRING to StringNode.
+     * Returns null for types that shouldn't be folded (REFERENCE, CODE, etc.).
+     */
+    private static Node createResultNode(RuntimeScalar result, int tokenIndex) {
+        switch (result.type) {
+            case RuntimeScalarType.INTEGER:
+                return new NumberNode(String.valueOf(result.getInt()), tokenIndex);
+            case RuntimeScalarType.DOUBLE:
+                double d = result.getDouble();
+                String str;
+                if (Double.isInfinite(d)) {
+                    str = d > 0 ? "Infinity" : "-Infinity";
+                } else if (Double.isNaN(d)) {
+                    str = "NaN";
+                } else {
+                    str = String.valueOf(d);
+                }
+                return new NumberNode(str, tokenIndex);
+            case RuntimeScalarType.STRING:
+                return new StringNode(result.toString(), tokenIndex);
+            case RuntimeScalarType.UNDEF:
+                return new OperatorNode("undef", null, tokenIndex);
+            default:
+                return null;
+        }
+    }
+
     private Node foldBinaryOperation(String operator, Node left, Node right, int tokenIndex) {
         RuntimeScalar leftValue = getConstantValue(left);
         RuntimeScalar rightValue = getConstantValue(right);
@@ -658,15 +704,15 @@ public class ConstantFoldingVisitor implements Visitor {
                 // Math operations using MathOperators
                 case "+":
                     result = MathOperators.add(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 case "-":
                     result = MathOperators.subtract(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 case "*":
                     result = MathOperators.multiply(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 case "/":
                     // Don't fold division by zero
@@ -674,7 +720,7 @@ public class ConstantFoldingVisitor implements Visitor {
                         return null;
                     }
                     result = MathOperators.divide(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 case "%":
                     // Don't fold modulo by zero
@@ -682,11 +728,11 @@ public class ConstantFoldingVisitor implements Visitor {
                         return null;
                     }
                     result = MathOperators.modulus(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 case "**":
                     result = MathOperators.pow(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 // String operations
                 case ".":
@@ -705,22 +751,12 @@ public class ConstantFoldingVisitor implements Visitor {
                     }
                     return new StringNode(sb.toString(), tokenIndex);
 
-                // Bitwise operators using BitwiseOperators
-                case "&":
-                    result = BitwiseOperators.bitwiseAnd(leftValue, rightValue);
-                    if (result.isString()) {
-                        return new StringNode(result.toString(), tokenIndex);
-                    } else {
-                        return new NumberNode(result.toString(), tokenIndex);
-                    }
-
-                case "|":
-                    result = BitwiseOperators.bitwiseOr(leftValue, rightValue);
-                    if (result.isString()) {
-                        return new StringNode(result.toString(), tokenIndex);
-                    } else {
-                        return new NumberNode(result.toString(), tokenIndex);
-                    }
+                // Bitwise operators - don't fold because results depend on runtime
+                // integer/string context and PerlOnJava's 32-bit emulation semantics
+                //case "&":
+                //case "|":
+                //case "<<":
+                //case ">>":
 
 //                case "^":
 //                    result = BitwiseOperators.bitwiseXor(leftValue, rightValue);
@@ -740,13 +776,13 @@ public class ConstantFoldingVisitor implements Visitor {
 //                        }
 //                    }
 
-                case "<<":
-                    result = BitwiseOperators.shiftLeft(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                //case "<<":
+                //    result = BitwiseOperators.shiftLeft(leftValue, rightValue);
+                //    return createResultNode(result, tokenIndex);
 
-                case ">>":
-                    result = BitwiseOperators.shiftRight(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+                //case ">>":
+                //    result = BitwiseOperators.shiftRight(leftValue, rightValue);
+                //    return createResultNode(result, tokenIndex);
 
                 // XXX TODO: This must account for Chained operators like `4 < 5 < 3`
 
@@ -827,13 +863,15 @@ public class ConstantFoldingVisitor implements Visitor {
             switch (operator) {
                 case "-":
                 case "unaryMinus":
-                    // Unary minus
+                    // Unary minus - may produce string result (e.g., -"hello" → "-hello")
                     RuntimeScalar result = MathOperators.unaryMinus(value);
-                    return new NumberNode(result.toString(), tokenIndex);
+                    return createResultNode(result, tokenIndex);
 
                 case "!":
-                    // Logical not
-                    return new NumberNode(value.getBoolean() ? "" : "1", tokenIndex);
+                    // Don't fold logical not - Perl's runtime ! returns cached read-only
+                    // values ($PL_sv_yes / $PL_sv_no) with reference identity guarantees.
+                    // Folding would break: \!0 == \$yes, read-only checks, etc.
+                    return null;
 
 //                case "~":
 //                    // Bitwise not using BitwiseOperators

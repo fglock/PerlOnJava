@@ -949,6 +949,11 @@ public class BytecodeCompiler implements Visitor {
         // Remove underscores which Perl allows as digit separators (e.g., 10_000_000)
         String value = node.value.replace("_", "");
 
+        // Normalize Perl-style Inf/NaN to Java-parseable format
+        // (constant folding may produce "Inf"/"-Inf" via RuntimeScalar.toString())
+        if (value.equals("Inf")) value = "Infinity";
+        else if (value.equals("-Inf")) value = "-Infinity";
+
         try {
             // Use ScalarUtils.isInteger() for consistent number parsing with compiler
             boolean isInteger = ScalarUtils.isInteger(value);
