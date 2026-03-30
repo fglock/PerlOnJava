@@ -315,7 +315,10 @@ public class ConstantFoldingVisitor implements Visitor {
 
         // Check if both operands are constants
         if (isConstantNode(foldedLeft) && isConstantNode(foldedRight)) {
-            Node folded = foldBinaryOperation(node.operator, foldedLeft, foldedRight, node.tokenIndex);
+            // Skip arithmetic folding under 'use integer' - the runtime uses different
+            // semantics (truncating division, overflow wrapping, etc.)
+            boolean useInteger = node.getBooleanAnnotation("useInteger");
+            Node folded = foldBinaryOperation(node.operator, foldedLeft, foldedRight, node.tokenIndex, useInteger);
             if (folded != null) {
                 result = folded;
                 isConstant = true;
@@ -690,12 +693,21 @@ public class ConstantFoldingVisitor implements Visitor {
         }
     }
 
-    private Node foldBinaryOperation(String operator, Node left, Node right, int tokenIndex) {
+    private Node foldBinaryOperation(String operator, Node left, Node right, int tokenIndex, boolean useInteger) {
         RuntimeScalar leftValue = getConstantValue(left);
         RuntimeScalar rightValue = getConstantValue(right);
 
         if (leftValue == null || rightValue == null) {
             return null;
+        }
+
+        // Under 'use integer', arithmetic has different semantics (truncating division,
+        // overflow wrapping, signed shifts). Don't fold arithmetic in integer scope.
+        if (useInteger) {
+            switch (operator) {
+                case "+": case "-": case "*": case "/": case "%": case "**":
+                    return null;
+            }
         }
 
         try {

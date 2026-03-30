@@ -6,6 +6,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.ArrayList;
@@ -134,7 +135,16 @@ public class ParseInfix {
             // Validate operator chaining rules (Perl 5.32+)
             validateOperatorChaining(parser, operator, left, right);
 
-            return new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
+            BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
+
+            // Annotate arithmetic nodes with 'use integer' state so constant folding
+            // can skip folding when integer semantics are in effect (division truncation,
+            // overflow wrapping, etc.)
+            if (parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
+                node.setAnnotation("useInteger", true);
+            }
+
+            return node;
         }
 
         switch (token.text) {
