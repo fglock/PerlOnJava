@@ -3,7 +3,7 @@
 > Perl 5 on the JVM — single jar, batteries included
 
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
-[![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
+[![License](https://img.shields.io/badge/license-Artistic_1.0_|_GPL_1+-blue.svg)](LICENSE.md)
 
 PerlOnJava compiles Perl to JVM bytecode. One jar file runs on Linux, macOS, and Windows — just add Java 22+.
 
@@ -51,4 +51,4 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for build instructions, code organiza
 
 ## License
 
-[Artistic License 2.0](LICENSE.md) — Copyright (c) Flavio Glock
+Same terms as Perl 5 — [Artistic License](Artistic) or [GPL v1+](Copying). See [LICENSE.md](LICENSE.md). Copyright (c) Flavio Glock

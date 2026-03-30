@@ -65,11 +65,15 @@ Reference: [Sonatype Requirements](https://central.sonatype.org/publish/requirem
     Perl semantics.</description>
 <url>https://github.com/fglock/PerlOnJava</url>
 
-<!-- License info (MISSING) -->
+<!-- License info - dual licensed same as Perl 5 -->
 <licenses>
     <license>
-        <name>Artistic License 2.0</name>
-        <url>https://www.perlfoundation.org/artistic-license-20.html</url>
+        <name>The Artistic License</name>
+        <url>https://opensource.org/licenses/Artistic-1.0</url>
+    </license>
+    <license>
+        <name>GNU General Public License v1.0 or later</name>
+        <url>https://www.gnu.org/licenses/old-licenses/gpl-1.0.html</url>
     </license>
 </licenses>
 
@@ -158,8 +162,12 @@ Add the following after line 12 (after `<url>`):
 
 <licenses>
     <license>
-        <name>Artistic License 2.0</name>
-        <url>https://www.perlfoundation.org/artistic-license-20.html</url>
+        <name>The Artistic License</name>
+        <url>https://opensource.org/licenses/Artistic-1.0</url>
+    </license>
+    <license>
+        <name>GNU General Public License v1.0 or later</name>
+        <url>https://www.gnu.org/licenses/old-licenses/gpl-1.0.html</url>
     </license>
 </licenses>
 
