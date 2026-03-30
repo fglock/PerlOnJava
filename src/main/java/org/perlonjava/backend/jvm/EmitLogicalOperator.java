@@ -174,14 +174,21 @@ public class EmitLogicalOperator {
             // IFEQ (&&): short-circuits when LHS is false → result is LHS
             // IFNE (||, //): short-circuits when LHS is true/defined → result is LHS
             boolean shortCircuits = (compareOpcode == Opcodes.IFEQ) ? !testResult : testResult;
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                // VOID context: only emit code for side effects
+                if (!shortCircuits) {
+                    // RHS has side effects — emit it in VOID context (it handles its own stack)
+                    node.right.accept(emitterVisitor);
+                }
+                // Short-circuit in VOID: nothing to emit — constant has no side effects
+                return;
+            }
+            // Non-VOID context: emit the surviving operand
             if (shortCircuits) {
-                // Short-circuit: result is the LHS constant
                 foldedLHS.accept(emitterVisitor);
             } else {
-                // No short-circuit: result is the RHS expression
                 node.right.accept(emitterVisitor);
             }
-            EmitOperator.handleVoidContext(emitterVisitor);
             return;
         }
 
