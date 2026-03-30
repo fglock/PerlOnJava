@@ -8,6 +8,7 @@ import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -168,6 +169,12 @@ public class PerlLanguageProvider {
         }
 
         // ast = ConstantFoldingVisitor.foldConstants(ast);
+
+        // Constant folding: inline user-defined constant subs and fold constant expressions.
+        // This runs after parsing (so BEGIN blocks have executed and constants are defined)
+        // and before code emission. The package from the symbol table is used to resolve
+        // bare constant identifiers (e.g., PI from `use constant PI => 3.14`).
+        ast = ConstantFoldingVisitor.foldConstants(ast, ctx.symbolTable.getCurrentPackage());
 
         if (ctx.compilerOptions.parseOnly) {
             // Printing the ast

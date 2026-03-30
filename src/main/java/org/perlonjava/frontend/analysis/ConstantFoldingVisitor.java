@@ -3,9 +3,7 @@ package org.perlonjava.frontend.analysis;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.operators.BitwiseOperators;
 import org.perlonjava.runtime.operators.MathOperators;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,9 +17,12 @@ public class ConstantFoldingVisitor implements Visitor {
 
     private Node result;
     private boolean isConstant;
+    /** Current package name for resolving bare constant identifiers. May be null. */
+    private String currentPackage;
 
     /**
      * Performs constant folding on the given AST node.
+     * Does not resolve user-defined constant subroutines (no package context).
      *
      * @param node The AST node to optimize
      * @return The optimized node (either folded or original)
@@ -33,6 +34,121 @@ public class ConstantFoldingVisitor implements Visitor {
         ConstantFoldingVisitor visitor = new ConstantFoldingVisitor();
         node.accept(visitor);
         return visitor.result;
+    }
+
+    /**
+     * Performs constant folding on the given AST node, with package context
+     * for resolving user-defined constant subroutines (e.g., from {@code use constant}).
+     *
+     * @param node           The AST node to optimize
+     * @param currentPackage The current package name (e.g., "main") for resolving identifiers
+     * @return The optimized node (either folded or original)
+     */
+    public static Node foldConstants(Node node, String currentPackage) {
+        if (node == null) {
+            return null;
+        }
+        ConstantFoldingVisitor visitor = new ConstantFoldingVisitor();
+        visitor.currentPackage = currentPackage;
+        node.accept(visitor);
+        return visitor.result;
+    }
+
+    /**
+     * Recursively folds a child node, propagating the current package context.
+     */
+    private Node foldChild(Node node) {
+        if (node == null) {
+            return null;
+        }
+        if (currentPackage != null) {
+            return foldConstants(node, currentPackage);
+        }
+        return foldConstants(node);
+    }
+
+    /**
+     * Evaluates whether a condition node is a compile-time constant boolean.
+     * Used for dead code elimination in if/unless statements.
+     *
+     * <p>Handles: literal numbers ({@code if (0)}), literal strings ({@code if ("")}),
+     * bare constant sub identifiers ({@code if (WINDOWS)}), and explicit constant
+     * sub calls ({@code if (WINDOWS())}).</p>
+     *
+     * @param condition      The condition node to evaluate
+     * @param currentPackage The current package name for resolving identifiers
+     * @return {@code Boolean.TRUE} if constant true, {@code Boolean.FALSE} if constant false,
+     *         {@code null} if not a compile-time constant
+     */
+    public static Boolean getConstantConditionValue(Node condition, String currentPackage) {
+        // Handle literal numbers (e.g., if (0), if (1))
+        if (condition instanceof NumberNode numNode) {
+            try {
+                double value = Double.parseDouble(numNode.value);
+                return value != 0;
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        // Handle literal strings (e.g., if (""), if ("0"), if ("true"))
+        if (condition instanceof StringNode strNode) {
+            String value = strNode.value;
+            return !value.isEmpty() && !value.equals("0");
+        }
+
+        // Handle bare identifiers that might be constant subroutines (e.g., if (WINDOWS))
+        if (condition instanceof IdentifierNode idNode) {
+            Boolean result = resolveConstantSubBoolean(idNode.name, currentPackage);
+            if (result != null) return result;
+        }
+
+        // Handle explicit subroutine calls like WINDOWS()
+        // AST: BinaryOperatorNode("(", OperatorNode("&", IdentifierNode("WINDOWS")), ListNode())
+        if (condition instanceof BinaryOperatorNode binNode && "(".equals(binNode.operator)) {
+            String subName = null;
+            if (binNode.left instanceof OperatorNode opNode && "&".equals(opNode.operator)
+                    && opNode.operand instanceof IdentifierNode idNode) {
+                subName = idNode.name;
+            } else if (binNode.left instanceof IdentifierNode idNode) {
+                subName = idNode.name;
+            }
+            if (subName != null) {
+                boolean hasNoArgs = binNode.right == null
+                        || (binNode.right instanceof ListNode listNode && listNode.elements.isEmpty());
+                if (hasNoArgs) {
+                    Boolean result = resolveConstantSubBoolean(subName, currentPackage);
+                    if (result != null) return result;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolves a subroutine name to a constant boolean value, if it's a constant sub.
+     */
+    private static Boolean resolveConstantSubBoolean(String name, String currentPackage) {
+        try {
+            String fullName = NameNormalizer.normalizeVariableName(name, currentPackage);
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                if (code.constantValue != null) {
+                    RuntimeList constList = code.constantValue;
+                    if (constList.elements.isEmpty()) {
+                        return false;
+                    }
+                    RuntimeBase firstElement = constList.elements.getFirst();
+                    if (firstElement instanceof RuntimeScalar scalar) {
+                        return scalar.getBoolean();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // If lookup fails, treat as non-constant
+        }
+        return null;
     }
 
     /**
@@ -104,9 +220,40 @@ public class ConstantFoldingVisitor implements Visitor {
             }
         }
 
+        // Handle constant subroutine calls: CONSTANT() or CONSTANT
+        // AST pattern: BinaryOperatorNode("(", OperatorNode("&", IdentifierNode(name)), ListNode())
+        if (node.operator.equals("(") && currentPackage != null) {
+            String constSubName = null;
+            int constTokenIndex = node.tokenIndex;
+
+            if (node.left instanceof OperatorNode opNode && "&".equals(opNode.operator)
+                    && opNode.operand instanceof IdentifierNode idNode) {
+                constSubName = idNode.name;
+                constTokenIndex = idNode.getIndex();
+            } else if (node.left instanceof IdentifierNode idNode) {
+                // Older AST form: BinaryOperatorNode("(", IdentifierNode(name), ListNode())
+                constSubName = idNode.name;
+                constTokenIndex = idNode.getIndex();
+            }
+
+            if (constSubName != null) {
+                // Check if arguments are empty (no-arg call like CONSTANT())
+                boolean hasNoArgs = node.right == null
+                        || (node.right instanceof ListNode listNode && listNode.elements.isEmpty());
+                if (hasNoArgs) {
+                    Node resolved = resolveConstantSubValue(constSubName, constTokenIndex);
+                    if (resolved != null) {
+                        result = resolved;
+                        isConstant = true;
+                        return;
+                    }
+                }
+            }
+        }
+
         // First, recursively fold the operands
-        Node foldedLeft = foldConstants(node.left);
-        Node foldedRight = foldConstants(node.right);
+        Node foldedLeft = foldChild(node.left);
+        Node foldedRight = foldChild(node.right);
 
         // Short-circuit constant folding for logical operators.
         // Only the LHS needs to be constant for these.
@@ -177,7 +324,7 @@ public class ConstantFoldingVisitor implements Visitor {
             return;
         }
 
-        Node foldedOperand = foldConstants(node.operand);
+        Node foldedOperand = foldChild(node.operand);
 
         // Handle unary operators on constants
         if (isConstantNode(foldedOperand)) {
@@ -202,9 +349,9 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        Node foldedCondition = foldConstants(node.condition);
-        Node foldedTrue = foldConstants(node.trueExpr);
-        Node foldedFalse = foldConstants(node.falseExpr);
+        Node foldedCondition = foldChild(node.condition);
+        Node foldedTrue = foldChild(node.trueExpr);
+        Node foldedFalse = foldChild(node.falseExpr);
 
         // If condition is constant, we can eliminate the ternary
         if (isConstantNode(foldedCondition)) {
@@ -234,7 +381,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean changed = false;
 
         for (Node element : node.elements) {
-            Node folded = foldConstants(element);
+            Node folded = foldChild(element);
             if (folded != element) {
                 changed = true;
             }
@@ -256,7 +403,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean allConstant = true;
 
         for (Node element : node.elements) {
-            Node folded = foldConstants(element);
+            Node folded = foldChild(element);
             if (folded != element) {
                 changed = true;
             }
@@ -280,7 +427,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean changed = false;
 
         for (Node element : node.elements) {
-            Node folded = foldConstants(element);
+            Node folded = foldChild(element);
             if (folded != element) {
                 changed = true;
             }
@@ -303,7 +450,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean changed = false;
 
         for (Node element : node.elements) {
-            Node folded = foldConstants(element);
+            Node folded = foldChild(element);
             if (folded != element) {
                 changed = true;
             }
@@ -324,6 +471,49 @@ public class ConstantFoldingVisitor implements Visitor {
                     && "undef".equals(opNode.operator) && opNode.operand == null);
     }
 
+    /**
+     * Tries to resolve a subroutine name to a constant literal node.
+     * Only inlines scalar constants (single RuntimeScalar element with INTEGER, DOUBLE, or STRING type).
+     * List constants, reference constants, and non-scalar values are NOT inlined.
+     *
+     * @param name       The subroutine name (may or may not include package)
+     * @param tokenIndex The token index for the created node
+     * @return A NumberNode or StringNode if the sub is a scalar constant, null otherwise
+     */
+    private Node resolveConstantSubValue(String name, int tokenIndex) {
+        if (currentPackage == null) {
+            return null;
+        }
+        try {
+            String fullName = NameNormalizer.normalizeVariableName(name, currentPackage);
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                if (code.constantValue != null) {
+                    RuntimeList constList = code.constantValue;
+                    // Only inline scalar constants (single element)
+                    if (constList.elements.size() == 1) {
+                        RuntimeBase firstElement = constList.elements.getFirst();
+                        if (firstElement instanceof RuntimeScalar scalar) {
+                            // Only inline simple types, not references
+                            if (scalar.type == RuntimeScalarType.INTEGER) {
+                                return new NumberNode(String.valueOf(scalar.getInt()), tokenIndex);
+                            } else if (scalar.type == RuntimeScalarType.DOUBLE) {
+                                return new NumberNode(String.valueOf(scalar.getDouble()), tokenIndex);
+                            } else if (scalar.type == RuntimeScalarType.STRING) {
+                                return new StringNode(scalar.toString(), tokenIndex);
+                            }
+                            // UNDEF, REFERENCE, etc. are NOT inlined
+                        }
+                    }
+                    // List constants (size > 1) are NOT inlined
+                }
+            }
+        } catch (Exception e) {
+            // If lookup fails, don't fold
+        }
+        return null;
+    }
+
     private Node foldFunctionCall(IdentifierNode function, Node args, int tokenIndex) {
         String funcName = function.name;
 
@@ -335,7 +525,7 @@ public class ConstantFoldingVisitor implements Visitor {
         // First fold all arguments
         List<Node> foldedArgs = new ArrayList<>();
         for (Node arg : argList.elements) {
-            Node folded = foldConstants(arg);
+            Node folded = foldChild(arg);
             if (!isConstantNode(folded)) {
                 return null; // Can't fold if any argument is not constant
             }
@@ -675,6 +865,15 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(IdentifierNode node) {
+        // Try to resolve bare identifiers as constant subroutines (e.g., `PI` from `use constant PI => 3.14`)
+        if (currentPackage != null) {
+            Node resolved = resolveConstantSubValue(node.name, node.getIndex());
+            if (resolved != null) {
+                result = resolved;
+                isConstant = true;
+                return;
+            }
+        }
         result = node;
         isConstant = false;
     }
