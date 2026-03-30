@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -161,6 +162,8 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 }
                 return value;
             case UNDEF:
+                // TODO: Add "Undefined value assigned to typeglob" warning with proper guards
+                // to avoid false positives during module loading
                 return value;
             case STRING:
             case BYTE_STRING:

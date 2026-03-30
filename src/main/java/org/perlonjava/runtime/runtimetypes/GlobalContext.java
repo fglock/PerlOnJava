@@ -49,6 +49,9 @@ public class GlobalContext {
         }
         // $^N - last capture group closed (not yet implemented, but must be read-only)
         GlobalVariable.globalVariables.put(encodeSpecialVar("N"), new RuntimeScalarReadOnly());
+        // $^S - current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
+        GlobalVariable.globalVariables.put("main::" + Character.toString('S' - 'A' + 1),
+                new ScalarSpecialVariable(ScalarSpecialVariable.Id.EVAL_STATE));
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
         GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int) (System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
@@ -169,7 +172,8 @@ public class GlobalContext {
         stdoutFormat.setTemplate("");  // Empty template - can be overridden by user code
 
         // Initialize hashes
-        GlobalVariable.getGlobalHash("main::SIG");
+        // %SIG uses a special hash that auto-qualifies handler names for known signals
+        GlobalVariable.globalHashes.put("main::SIG", new RuntimeSigHash());
         GlobalVariable.getGlobalHash(encodeSpecialVar("H"));
         GlobalVariable.getGlobalHash("main::+").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);  // regex %+
         GlobalVariable.getGlobalHash("main::-").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);  // regex %-

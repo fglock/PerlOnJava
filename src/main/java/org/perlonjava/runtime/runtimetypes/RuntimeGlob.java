@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.Iterator;
 import java.util.Stack;
@@ -208,6 +209,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 return value;
             case UNDEF:
+                // TODO: Add "Undefined value assigned to typeglob" warning with proper guards
+                // to avoid false positives during module loading
                 return value;
             case INTEGER:
             case DOUBLE:
@@ -396,12 +399,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(); // Return undef if array doesn't exist
             }
             case "HASH" -> {
-                // Prefer local hashSlot (for detached copies and anonymous globs)
-                if (this.hashSlot != null) {
-                    yield this.hashSlot.createReference();
-                }
+                // For *glob{HASH} (glob slot access), always use the global hash.
+                // The local hashSlot is only for *glob->{key} (arrow hash deref via getGlobHash()).
                 if (this.globName == null) {
-                    this.hashSlot = new RuntimeHash();
+                    // Anonymous globs use local hashSlot since they have no global name
+                    if (this.hashSlot == null) {
+                        this.hashSlot = new RuntimeHash();
+                    }
                     yield this.hashSlot.createReference();
                 }
                 // Only return reference if hash exists (has elements or was explicitly created)
@@ -411,6 +415,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(); // Return undef if hash doesn't exist
             }
             case "FORMAT" -> GlobalVariable.getGlobalFormatRef(this.globName);
+            case "GLOB" -> {
+                // *glob{GLOB} returns a reference to the glob itself (\*glob)
+                yield this.createReference();
+            }
             default -> new RuntimeScalar();
         };
     }
