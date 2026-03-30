@@ -1733,14 +1733,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(0));
 
                 // Add bitmask (element 9): Compile-time warnings bitmask
-                // Look up from WarningBitsRegistry using the Java class name for this frame
-                // Note: Warning bits are per-class, not per-call-site. This means all
-                // calls from the same class will share the same warning bits.
-                String warningBits = null;
-                if (frame < javaClassNames.size()) {
-                    String className = javaClassNames.get(frame);
-                    if (className != null) {
-                        warningBits = WarningBitsRegistry.get(className);
+                // First try per-call-site bits from callerBitsStack (accurate per-statement)
+                // frame is 1-based here (after skip increment), callerBitsStack is 0-based
+                String warningBits = WarningBitsRegistry.getCallerBitsAtFrame(frame - 1);
+                if (warningBits == null) {
+                    // Fall back to per-class bits
+                    if (frame < javaClassNames.size()) {
+                        String className = javaClassNames.get(frame);
+                        if (className != null) {
+                            warningBits = WarningBitsRegistry.get(className);
+                        }
                     }
                 }
                 if (warningBits != null) {
@@ -1873,10 +1875,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (warningBits != null) {
                 WarningBitsRegistry.pushCurrent(warningBits);
             }
+            // Save caller's call-site warning bits so caller()[9] can retrieve them
+            WarningBitsRegistry.pushCallerBits();
             try {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(a, callContext);
             } finally {
+                WarningBitsRegistry.popCallerBits();
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
@@ -2024,10 +2029,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.pushCurrent(warningBits);
                 }
+                // Save caller's call-site warning bits so caller()[9] can retrieve them
+                WarningBitsRegistry.pushCallerBits();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
+                    WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent();
                     }
@@ -2122,10 +2130,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.pushCurrent(warningBits);
                 }
+                // Save caller's call-site warning bits so caller()[9] can retrieve them
+                WarningBitsRegistry.pushCallerBits();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
+                    WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent();
                     }

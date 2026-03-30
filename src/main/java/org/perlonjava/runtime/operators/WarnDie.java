@@ -222,14 +222,17 @@ public class WarnDie {
         
         // If warning bits are available, check if this category is enabled
         if (warningBits != null) {
-            if (!WarningFlags.isEnabledInBits(warningBits, category)) {
-                // Warning category is not enabled - suppress
+            if (WarningFlags.isEnabledInBits(warningBits, category)) {
+                // Category is lexically enabled - check for FATAL
+                if (WarningFlags.isFatalInBits(warningBits, category)) {
+                    return die(message, where, fileName, lineNumber);
+                }
+                // Fall through to emit warning
+            } else if (!Warnings.isWarnFlagSet()) {
+                // Category not lexically enabled AND $^W not set - suppress
                 return new RuntimeScalar();
             }
-            if (WarningFlags.isFatalInBits(warningBits, category)) {
-                // Warning is FATAL - convert to die()
-                return die(message, where, fileName, lineNumber);
-            }
+            // If $^W is set, fall through to emit warning even if not lexically enabled
         } else {
             // No bits from caller - fall back to $^W global flag
             if (!Warnings.isWarnFlagSet()) {

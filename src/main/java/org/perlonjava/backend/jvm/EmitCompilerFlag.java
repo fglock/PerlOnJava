@@ -32,6 +32,17 @@ public class EmitCompilerFlag {
 
         EmitterContext.fixupContext(ctx);
 
+        // Emit runtime code to update per-call-site warning bits.
+        // This allows caller()[9] to return accurate warning bits for the current
+        // statement, not just the class-level bits captured at compilation time.
+        MethodVisitor mv = ctx.mv;
+        String newBits = currentScope.getWarningBitsString();
+        mv.visitLdcInsn(newBits);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/WarningBitsRegistry",
+                "setCallSiteBits",
+                "(Ljava/lang/String;)V", false);
+
         // Emit runtime code for warning scope if needed
         int warningScopeId = node.getWarningScopeId();
         if (warningScopeId > 0) {

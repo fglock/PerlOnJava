@@ -29,6 +29,19 @@ public class WarningBitsRegistry {
     private static final ThreadLocal<Deque<String>> currentBitsStack = 
         ThreadLocal.withInitial(ArrayDeque::new);
     
+    // ThreadLocal tracking the warning bits at the current call site.
+    // Updated at runtime when 'use warnings' / 'no warnings' pragmas are encountered.
+    // This provides per-statement warning bits (like Perl 5's per-COP bits).
+    private static final ThreadLocal<String> callSiteBits = 
+        ThreadLocal.withInitial(() -> null);
+    
+    // ThreadLocal stack saving caller's call-site bits across subroutine calls.
+    // Each apply() pushes the current callSiteBits before calling the subroutine,
+    // and pops it when the subroutine returns. This allows caller()[9] to return
+    // the correct per-call-site warning bits.
+    private static final ThreadLocal<Deque<String>> callerBitsStack = 
+        ThreadLocal.withInitial(ArrayDeque::new);
+    
     /**
      * Registers the warning bits for a class.
      * Called at class load time (static initializer) for JVM backend,
@@ -98,6 +111,73 @@ public class WarningBitsRegistry {
     public static void clear() {
         registry.clear();
         currentBitsStack.get().clear();
+        callSiteBits.remove();
+        callerBitsStack.get().clear();
+    }
+    
+    /**
+     * Sets the warning bits for the current call site.
+     * Called at runtime when 'use warnings' / 'no warnings' pragmas are encountered.
+     * This provides per-statement granularity for caller()[9].
+     *
+     * @param bits The warning bits string for the current call site
+     */
+    public static void setCallSiteBits(String bits) {
+        callSiteBits.set(bits);
+    }
+    
+    /**
+     * Gets the warning bits for the current call site.
+     *
+     * @return The current call-site warning bits, or null if not set
+     */
+    public static String getCallSiteBits() {
+        return callSiteBits.get();
+    }
+    
+    /**
+     * Saves the current call-site bits onto the caller stack.
+     * Called by RuntimeCode.apply() before entering a subroutine.
+     * This preserves the caller's warning bits so caller()[9] can retrieve them.
+     */
+    public static void pushCallerBits() {
+        String bits = callSiteBits.get();
+        callerBitsStack.get().push(bits != null ? bits : "");
+    }
+    
+    /**
+     * Restores the caller's call-site bits from the caller stack.
+     * Called by RuntimeCode.apply() after a subroutine returns.
+     */
+    public static void popCallerBits() {
+        Deque<String> stack = callerBitsStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+    
+    /**
+     * Gets the caller's warning bits at a given frame depth.
+     * Frame 0 = immediate caller, frame 1 = caller's caller, etc.
+     * Used by caller()[9] for per-call-site warning bits.
+     *
+     * @param frame The frame depth (0 = immediate caller)
+     * @return The warning bits string, or null if not available
+     */
+    public static String getCallerBitsAtFrame(int frame) {
+        Deque<String> stack = callerBitsStack.get();
+        if (stack.isEmpty()) {
+            return null;
+        }
+        // Stack is LIFO: top = most recent caller (frame 0)
+        int index = 0;
+        for (String bits : stack) {
+            if (index == frame) {
+                return bits.isEmpty() ? null : bits;
+            }
+            index++;
+        }
+        return null;
     }
     
     /**
