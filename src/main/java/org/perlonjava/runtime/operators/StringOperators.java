@@ -609,6 +609,88 @@ public class StringOperators {
     }
 
     /**
+     * Join without overload dispatch - used when {@code no overloading} pragma is active.
+     * Calls {@code toStringNoOverload()} on each element instead of {@code toString()}.
+     *
+     * @param runtimeScalar The separator
+     * @param list          The list to join
+     * @return The joined string
+     */
+    public static RuntimeScalar joinNoOverload(RuntimeScalar runtimeScalar, RuntimeBase list) {
+        String delimiter = runtimeScalar.toStringNoOverload();
+
+        boolean isByteString = runtimeScalar.type == BYTE_STRING || delimiter.isEmpty();
+
+        StringBuilder sb = new StringBuilder();
+
+        Iterator<RuntimeScalar> iterator = list.iterator();
+        boolean start = true;
+        while (iterator.hasNext()) {
+            if (start) {
+                start = false;
+            } else {
+                sb.append(delimiter);
+            }
+            RuntimeScalar scalar = iterator.next();
+
+            isByteString = isByteString && scalar.type == BYTE_STRING;
+            sb.append(scalar.toStringNoOverload());
+        }
+        RuntimeScalar res = new RuntimeScalar(sb.toString());
+        if (isByteString) {
+            res.type = BYTE_STRING;
+        }
+        return res;
+    }
+
+    /**
+     * String concatenation without overload dispatch - used when {@code no overloading} is active.
+     * Calls {@code toStringNoOverload()} on both operands instead of {@code toString()}.
+     */
+    public static RuntimeScalar stringConcatNoOverload(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        String aStr = runtimeScalar.toStringNoOverload();
+        String bStr = b.toStringNoOverload();
+
+        if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
+            return new RuntimeScalar(aStr + bStr);
+        }
+
+        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
+            boolean aIsByte = runtimeScalar.type == BYTE_STRING
+                    || runtimeScalar.type == RuntimeScalarType.UNDEF
+                    || (aStr.isEmpty() && runtimeScalar.type != RuntimeScalarType.STRING);
+            boolean bIsByte = b.type == BYTE_STRING
+                    || b.type == RuntimeScalarType.UNDEF
+                    || (bStr.isEmpty() && b.type != RuntimeScalarType.STRING);
+            if (aIsByte && bIsByte) {
+                boolean safe = true;
+                for (int i = 0; safe && i < aStr.length(); i++) {
+                    if (aStr.charAt(i) > 255) {
+                        safe = false;
+                        break;
+                    }
+                }
+                for (int i = 0; safe && i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        safe = false;
+                        break;
+                    }
+                }
+                if (safe) {
+                    byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+                    byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+                    byte[] out = new byte[aBytes.length + bBytes.length];
+                    System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+                    System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+                    return new RuntimeScalar(out);
+                }
+            }
+        }
+
+        return new RuntimeScalar(aStr + bStr);
+    }
+
+    /**
      * Helper method to convert a string to UTF-8 bytes representation.
      * Each byte becomes a character in the result string.
      */

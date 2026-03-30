@@ -30,6 +30,9 @@ public class Strict extends PerlModuleBase {
     // Bitmask for utf8 source code
     public static final int HINT_UTF8 = 0x00800000;
 
+    // Bitmask for `no overloading` pragma
+    public static final int HINT_NO_AMAGIC = 0x00000010;
+
     // Bitmask for `use re` regex modifiers
     public static final int HINT_RE_ASCII = 0x01000000;     // use re '/a'
     public static final int HINT_RE_UNICODE = 0x02000000;   // use re '/u'

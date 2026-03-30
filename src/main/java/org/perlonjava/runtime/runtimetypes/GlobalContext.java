@@ -231,6 +231,7 @@ public class GlobalContext {
         Strict.initialize();
         IntegerPragma.initialize();
         BytesPragma.initialize();
+        OverloadingPragma.initialize();
         Utf8.initialize();
         Feature.initialize();
         Warnings.initialize();

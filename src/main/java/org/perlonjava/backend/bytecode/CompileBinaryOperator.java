@@ -673,7 +673,7 @@ public class CompileBinaryOperator {
         }
 
         int rd = bytecodeCompiler.allocateOutputRegister();
-        bytecodeCompiler.emit(Opcodes.JOIN);
+        bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.JOIN_NO_OVERLOAD : Opcodes.JOIN);
         bytecodeCompiler.emitReg(rd);
         bytecodeCompiler.emitReg(separatorReg);
         bytecodeCompiler.emitReg(listReg);

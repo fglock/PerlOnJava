@@ -1994,6 +1994,20 @@ public class Opcodes {
      */
     public static final short SUBSTR_VAR_NO_WARN = 393;
 
+    /**
+     * String join without overload dispatch: rd = StringOperators.joinNoOverload(separator, list)
+     * Format: JOIN_NO_OVERLOAD rd separatorReg listReg
+     * Used when 'no overloading' is in effect at compile time.
+     */
+    public static final short JOIN_NO_OVERLOAD = 394;
+
+    /**
+     * String concatenation without overload dispatch: rd = StringOperators.stringConcatNoOverload(rs1, rs2)
+     * Format: CONCAT_NO_OVERLOAD rd rs1 rs2
+     * Used when 'no overloading' is in effect at compile time.
+     */
+    public static final short CONCAT_NO_OVERLOAD = 395;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

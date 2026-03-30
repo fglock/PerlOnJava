@@ -1434,6 +1434,14 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeJoin(bytecode, pc, registers);
                             }
 
+                            case Opcodes.JOIN_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeJoinNoOverload(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.CONCAT_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeConcatNoOverload(bytecode, pc, registers);
+                            }
+
                             case Opcodes.SELECT -> {
                                 pc = InlineOpcodeHandler.executeSelect(bytecode, pc, registers);
                             }

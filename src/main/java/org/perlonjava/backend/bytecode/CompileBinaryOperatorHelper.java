@@ -58,7 +58,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "." -> {
-                bytecodeCompiler.emit(Opcodes.CONCAT);
+                bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.CONCAT_NO_OVERLOAD : Opcodes.CONCAT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
