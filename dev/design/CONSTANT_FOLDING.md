@@ -269,10 +269,37 @@ make test-all     # Full regression
 
 ## Progress Tracking
 
-### Current Status: Not started
+### Current Status: Phase 2, 3, 4 complete (2026-03-30)
 
-### Phases
-- [ ] Phase 1: Emit-time constant sub inlining
-- [ ] Phase 2: AST-level constant sub resolution
-- [ ] Phase 3: Enable visitor in compilation pipeline
-- [ ] Phase 4: Extract shared utility (optional cleanup)
+### Completed Phases
+- [x] Phase 2: AST-level constant sub resolution (2026-03-30)
+  - Added `currentPackage` field and `foldConstants(Node, String)` overload to `ConstantFoldingVisitor`
+  - Added `resolveConstantSubValue()` helper for looking up `RuntimeCode.constantValue` from global symbol table
+  - `visit(BinaryOperatorNode)`: resolves `CONSTANT()` calls (both `OperatorNode("&", IdentifierNode)` and bare `IdentifierNode` AST patterns) with empty args
+  - `visit(IdentifierNode)`: resolves bare constant identifiers (e.g., `PI`)
+  - Added `foldChild()` instance method to propagate `currentPackage` through recursive folding
+  - Only inlines scalar constants (INTEGER, DOUBLE, STRING); skips list constants, references, undef
+  - Files: `ConstantFoldingVisitor.java`
+
+- [x] Phase 3: Enable visitor in compilation pipeline (2026-03-30)
+  - Enabled `ConstantFoldingVisitor.foldConstants(ast, currentPackage)` in `PerlLanguageProvider.java` (main script compilation)
+  - Enabled in `RuntimeCode.java` (eval compilation)
+  - Runs after parsing (BEGIN blocks have executed, constants are defined) and before code emission
+  - Files: `PerlLanguageProvider.java`, `RuntimeCode.java`
+
+- [x] Phase 4: Extract shared utility (2026-03-30)
+  - Moved `getConstantConditionValue()` from `EmitStatement.java` and `BytecodeCompiler.java` to `ConstantFoldingVisitor`
+  - Added `resolveConstantSubBoolean()` private helper to deduplicate constant sub boolean resolution
+  - Both `EmitStatement` and `BytecodeCompiler` now call `ConstantFoldingVisitor.getConstantConditionValue()`
+  - Eliminated ~100 lines of duplicated code
+  - Files: `ConstantFoldingVisitor.java`, `EmitStatement.java`, `BytecodeCompiler.java`
+
+### Skipped Phases
+- Phase 1: Emit-time constant sub inlining — redundant after Phase 2+3; the AST-level folding already replaces constant sub calls with literal nodes before emission reaches `EmitSubroutine.handleApplyOperator()`
+
+### Tests Added
+- Extended `src/test/resources/unit/constant.t` from 10 to 31 tests
+- New tests cover: arithmetic folding with constants, cascading folds, string concatenation, dead code elimination, list/reference constant safety, nested expressions, ternary conditions, logical operators, eval context
+
+### Open Questions
+- The `--interpreter` backend cannot run `use constant` due to a pre-existing `exists() slow path not yet implemented` error in `SlowOpcodeHandler.java`. This is unrelated to constant folding but blocks interpreter-mode testing of constant subs.

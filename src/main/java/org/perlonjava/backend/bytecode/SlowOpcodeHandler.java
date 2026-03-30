@@ -815,7 +815,7 @@ public class SlowOpcodeHandler {
     /**
      * SLOW_EXISTS: rd = exists operand
      * Format: [SLOW_EXISTS] [rd] [operandReg]
-     * Effect: rd = exists operand (fallback for non-simple cases)
+     * Effect: rd = exists operand (fallback for non-simple cases like exists &sub)
      */
     public static int executeExists(
             int[] bytecode,
@@ -825,17 +825,22 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int operandReg = bytecode[pc++];
 
-        // For now, throw unsupported - basic exists should use fast path
-        throw new UnsupportedOperationException(
-                "exists() slow path not yet implemented in interpreter. " +
-                        "Use simple hash access: exists $hash{key}"
-        );
+        RuntimeBase operand = registers[operandReg];
+        RuntimeScalar scalar = (operand instanceof RuntimeScalar)
+                ? (RuntimeScalar) operand
+                : operand.scalar();
+
+        // Delegate to the same runtime method the JVM backend uses.
+        // For CODE types, this checks RuntimeCode.defined().
+        // For string types, this looks up in globalCodeRefs.
+        registers[rd] = GlobalVariable.existsGlobalCodeRefAsScalar(scalar);
+        return pc;
     }
 
     /**
      * SLOW_DELETE: rd = delete operand
      * Format: [SLOW_DELETE] [rd] [operandReg]
-     * Effect: rd = delete operand (fallback for non-simple cases)
+     * Effect: rd = delete operand (fallback for non-simple cases like delete &sub)
      */
     public static int executeDelete(
             int[] bytecode,
@@ -845,11 +850,14 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int operandReg = bytecode[pc++];
 
-        // For now, throw unsupported - basic delete should use fast path
-        throw new UnsupportedOperationException(
-                "delete() slow path not yet implemented in interpreter. " +
-                        "Use simple hash access: delete $hash{key}"
-        );
+        RuntimeBase operand = registers[operandReg];
+        RuntimeScalar scalar = (operand instanceof RuntimeScalar)
+                ? (RuntimeScalar) operand
+                : operand.scalar();
+
+        // Delegate to the same runtime method the JVM backend uses.
+        registers[rd] = GlobalVariable.deleteGlobalCodeRefAsScalar(scalar);
+        return pc;
     }
 
     /**

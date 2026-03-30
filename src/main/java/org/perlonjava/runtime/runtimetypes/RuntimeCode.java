@@ -9,6 +9,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.InterpreterFallbackException;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -624,6 +625,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ast = parser.parse(); // Generate the abstract syntax tree (AST)
 
                 // ast = ConstantFoldingVisitor.foldConstants(ast);
+
+                // Constant folding: inline user-defined constant subs and fold constant expressions.
+                ast = ConstantFoldingVisitor.foldConstants(ast, evalCtx.symbolTable.getCurrentPackage());
 
                 // Create a new instance of ErrorMessageUtil, resetting the line counter
                 evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
