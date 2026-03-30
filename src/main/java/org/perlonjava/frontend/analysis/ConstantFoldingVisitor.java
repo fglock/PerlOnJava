@@ -108,6 +108,47 @@ public class ConstantFoldingVisitor implements Visitor {
         Node foldedLeft = foldConstants(node.left);
         Node foldedRight = foldConstants(node.right);
 
+        // Short-circuit constant folding for logical operators.
+        // Only the LHS needs to be constant for these.
+        // This matches Perl's behavior: `1 && expr` folds to `expr`, `0 && expr` folds to `0`, etc.
+        if (isConstantNode(foldedLeft)) {
+            RuntimeScalar leftVal = getConstantValue(foldedLeft);
+            if (leftVal != null) {
+                switch (node.operator) {
+                    case "&&": case "and":
+                        // true && expr → expr; false && expr → false constant
+                        if (leftVal.getBoolean()) {
+                            result = foldedRight;
+                            isConstant = isConstantNode(foldedRight);
+                        } else {
+                            result = foldedLeft;
+                            isConstant = true;
+                        }
+                        return;
+                    case "||": case "or":
+                        // true || expr → true constant; false || expr → expr
+                        if (leftVal.getBoolean()) {
+                            result = foldedLeft;
+                            isConstant = true;
+                        } else {
+                            result = foldedRight;
+                            isConstant = isConstantNode(foldedRight);
+                        }
+                        return;
+                    case "//":
+                        // defined // expr → defined constant; undef // expr → expr
+                        if (leftVal.getDefinedBoolean()) {
+                            result = foldedLeft;
+                            isConstant = true;
+                        } else {
+                            result = foldedRight;
+                            isConstant = isConstantNode(foldedRight);
+                        }
+                        return;
+                }
+            }
+        }
+
         // Check if both operands are constants
         if (isConstantNode(foldedLeft) && isConstantNode(foldedRight)) {
             Node folded = foldBinaryOperation(node.operator, foldedLeft, foldedRight, node.tokenIndex);
@@ -131,7 +172,8 @@ public class ConstantFoldingVisitor implements Visitor {
     public void visit(OperatorNode node) {
         if (node.operand == null) {
             result = node;
-            isConstant = false;
+            // undef is a constant
+            isConstant = "undef".equals(node.operator);
             return;
         }
 
@@ -277,7 +319,9 @@ public class ConstantFoldingVisitor implements Visitor {
     }
 
     private boolean isConstantNode(Node node) {
-        return node instanceof NumberNode || node instanceof StringNode;
+        return node instanceof NumberNode || node instanceof StringNode
+                || (node instanceof OperatorNode opNode
+                    && "undef".equals(opNode.operator) && opNode.operand == null);
     }
 
     private Node foldFunctionCall(IdentifierNode function, Node args, int tokenIndex) {

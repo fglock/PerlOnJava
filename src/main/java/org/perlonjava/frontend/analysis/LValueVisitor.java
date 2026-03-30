@@ -3,6 +3,7 @@ package org.perlonjava.frontend.analysis;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 /**
  * Is this Node assignable (Lvalue) and is it Scalar-like or List-like
@@ -64,8 +65,65 @@ public class LValueVisitor implements Visitor {
                 // XXX TODO - check for lvalue attribute
                 context = RuntimeContextType.SCALAR;
                 break;
+            case "&&":
+            case "and":
+                // Constant folding: `1 && expr` folds to `expr`, `0 && expr` folds to `0`
+                handleLogicalLValue(node, true);
+                break;
+            case "||":
+            case "or":
+                // Constant folding: `0 || expr` folds to `expr`, `1 || expr` folds to `1`
+                handleLogicalLValue(node, false);
+                break;
+            case "//":
+                // Constant folding: `undef // expr` folds to `expr`, `defined // expr` folds to LHS
+                handleDefinedOrLValue(node);
+                break;
             default:
                 context = RuntimeContextType.VOID;  // Not an L-value
+        }
+    }
+
+    /**
+     * Handle lvalue context for && (isAnd=true) and || (isAnd=false) with constant LHS.
+     * Matches Perl's constant folding: if LHS is a compile-time constant, the logical
+     * operator is eliminated and the surviving operand determines lvalue context.
+     */
+    private void handleLogicalLValue(BinaryOperatorNode node, boolean isAnd) {
+        // Fold the LHS first (handles nested constant expressions like `1 && 2 && my $x`)
+        Node foldedLeft = ConstantFoldingVisitor.foldConstants(node.left);
+        RuntimeScalar constVal = ConstantFoldingVisitor.getConstantValue(foldedLeft);
+        if (constVal != null) {
+            boolean lhsTrue = constVal.getBoolean();
+            // For &&: true LHS → RHS survives; false LHS → LHS survives (constant, not lvalue)
+            // For ||: false LHS → RHS survives; true LHS → LHS survives (constant, not lvalue)
+            boolean rhsSurvives = isAnd ? lhsTrue : !lhsTrue;
+            if (rhsSurvives) {
+                node.right.accept(this);
+            } else {
+                context = RuntimeContextType.VOID; // constant is not an lvalue
+            }
+        } else {
+            context = RuntimeContextType.VOID; // non-constant LHS, not an lvalue
+        }
+    }
+
+    /**
+     * Handle lvalue context for // (defined-or) with constant LHS.
+     */
+    private void handleDefinedOrLValue(BinaryOperatorNode node) {
+        Node foldedLeft = ConstantFoldingVisitor.foldConstants(node.left);
+        RuntimeScalar constVal = ConstantFoldingVisitor.getConstantValue(foldedLeft);
+        if (constVal != null) {
+            if (constVal.getDefinedBoolean()) {
+                // LHS is defined → LHS survives (constant, not lvalue)
+                context = RuntimeContextType.VOID;
+            } else {
+                // LHS is undef → RHS survives
+                node.right.accept(this);
+            }
+        } else {
+            context = RuntimeContextType.VOID; // non-constant LHS, not an lvalue
         }
     }
 
