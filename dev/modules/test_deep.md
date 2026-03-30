@@ -374,3 +374,182 @@ In Perl 5, `no overloading` sets `HINT_NO_AMAGIC` at compile time. Ops compiled 
 |-----------|-------------|-------------------|----------------|
 | String interpolation (`"$x"`) | `EmitOperator.handleSubstr()` → `join` | `CompileBinaryOperator.compileJoinBinaryOp()` → `JOIN` opcode | `StringOperators.join()` |
 | Concatenation (`.`) | `EmitOperator.handleConcatOperator()` | `CompileBinaryOperatorHelper` → `CONCAT` opcode | `StringOperators.stringConcat()` |
+
+### Phase 2 Results (Completed 2026-03-30)
+
+`no overloading` pragma implemented. Reverted `overload.pm` workaround to standard Perl 5 `no overloading; "$_[0]"`. Test results identical to Phase 1 (34/42 passing).
+
+Files changed:
+- `Strict.java` — added `HINT_NO_AMAGIC = 0x00000010`
+- `OverloadingPragma.java` (new) — pragma handler for `no overloading` / `use overloading`
+- `GlobalContext.java` — registered `OverloadingPragma.initialize()`
+- `RuntimeScalar.java` — added `toStringNoOverload()`
+- `StringOperators.java` — added `joinNoOverload()`, `stringConcatNoOverload()`
+- `OperatorHandler.java` — registered `joinNoOverload`
+- `EmitOperator.java` — check `HINT_NO_AMAGIC` for join and concat
+- `Opcodes.java` — `JOIN_NO_OVERLOAD` (394), `CONCAT_NO_OVERLOAD` (395)
+- `CompileBinaryOperator.java`, `CompileBinaryOperatorHelper.java` — emit no-overload opcodes
+- `InlineOpcodeHandler.java`, `BytecodeInterpreter.java` — execute no-overload opcodes
+- `Disassemble.java` — disassembly support
+- `overload.pm` — reverted workaround
+
+---
+
+## Phase 3: Overloaded bitwise `&` and `|` operators
+
+### Issue
+**Affected tests**: t/all.t (3 fail), t/any.t (2 fail), t/none.t (5 fail) — **10 failures total**
+
+Test::Deep::Cmp uses `use overload '&' => \&_all, '|' => \&_any` so users can write `re("^wi") & re('ne$')` to combine comparators. PerlOnJava's `BitwiseOperators.bitwiseAnd()` / `bitwiseOr()` / `bitwiseXor()` **never check for overloaded operators**. They immediately stringify both operands and perform native bitwise ops.
+
+**Evidence**:
+```perl
+# Expected: overloaded & combines two regex comparators
+cmp_deeply("wine", re("^wi") & re('ne$'), "pass")  # actual_ok should be 1
+
+# Actual: & stringifies both operands and does bitwise AND on the strings
+# Result: "Test::Deep::Regexp=HASH(0x042 0 &2)" (garbage from bitwise AND on hex strings)
+```
+
+All other binary operators (math: `+`, `-`, `*`, `/`, `%`; comparison: `==`, `<`, `>`, etc.) correctly call `OverloadContext.tryTwoArgumentOverload()`. Only `BitwiseOperators` is missing overload dispatch.
+
+### Fix
+Add overload dispatch to `BitwiseOperators.bitwiseAnd()`, `bitwiseOr()`, and `bitwiseXor()` following the same pattern as `MathOperators.add()`:
+
+```java
+public static RuntimeScalar bitwiseAnd(RuntimeScalar arg1, RuntimeScalar arg2) {
+    int blessId = RuntimeScalarType.blessedId(arg1);
+    int blessId2 = RuntimeScalarType.blessedId(arg2);
+    if (blessId < 0 || blessId2 < 0) {
+        RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(
+            arg1, arg2, blessId, blessId2, "(&", "&");
+        if (result != null) return result;
+    }
+    // ... existing implementation ...
+}
+```
+
+Same pattern for `bitwiseOr` (`(|`, `|`) and `bitwiseXor` (`(^`, `^`).
+
+### Files to change
+- `src/main/java/org/perlonjava/runtime/operators/BitwiseOperators.java`
+
+### Priority: HIGH — 10 test failures, straightforward fix
+
+---
+
+## Phase 4: `SUPER::` at package level (outside any sub)
+
+### Issue
+**Affected tests**: t/ignore.t (4 fail)
+
+`Test::Deep::Ignore` has a package-level statement:
+```perl
+my $Singleton = __PACKAGE__->SUPER::new;
+```
+
+This calls `SUPER::new` outside any subroutine. PerlOnJava resolves `SUPER::` by looking up `currentSub.value.packageName` in `NextMethod.java:302`, but at package level there's no current sub, so `currentSub.value` is null → NPE:
+```
+Cannot read field "packageName" because "currentSub.value" is null
+```
+
+In Perl 5, `SUPER::` at package level resolves relative to the current `package` declaration.
+
+### Fix
+In `NextMethod.superMethod()`, handle the case where `currentSub.value` is null by falling back to the current compile-time package name. Options:
+1. Pass the caller's package name as a fallback parameter
+2. Check `currentSub.value != null` before accessing `packageName`, and fall back to the caller's package from `CallerStack`
+
+### Files to change
+- `src/main/java/org/perlonjava/runtime/runtimetypes/NextMethod.java`
+
+### Priority: HIGH — 4 failures, blocks a commonly-used pattern (`$Singleton = __PACKAGE__->SUPER::new`)
+
+---
+
+## Phase 5: `reftype` returns "REF" instead of "SCALAR" for scalar references
+
+### Issue
+**Affected tests**: t/scalarref.t (1 fail)
+
+`Scalar::Util::reftype(\$x)` returns `"REF"` in PerlOnJava but `"SCALAR"` in Perl 5. All scalar references (`\$x`, `\"str"`, `\42`) are stored as `RuntimeScalarType.REFERENCE` and `reftype()` maps this to `"REF"` unconditionally.
+
+In Perl 5, `reftype` distinguishes:
+- `\$scalar` → `"SCALAR"` (reference to a plain scalar)
+- `\\$ref` → `"REF"` (reference to another reference)
+- `\@array` → `"ARRAY"`, `\%hash` → `"HASH"`, etc.
+
+The logic to distinguish these already exists in `RuntimeScalar.toStringRef()`:
+```java
+case REFERENCE -> {
+    if (value instanceof RuntimeScalar scalar) {
+        typeName = switch (scalar.type) {
+            case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+            case GLOB -> "GLOB";
+            case VSTRING -> "VSTRING";
+            default -> "SCALAR";
+        };
+    }
+}
+```
+
+### Fix
+In `ScalarUtil.reftype()`, replace the flat `case REFERENCE -> "REF"` with logic that inspects the referent's type:
+
+```java
+case REFERENCE -> {
+    if (scalar.value instanceof RuntimeScalar inner) {
+        yield switch (inner.type) {
+            case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+            case GLOB -> "GLOB";
+            case VSTRING -> "VSTRING";
+            default -> "SCALAR";
+        };
+    }
+    yield "REF";
+}
+```
+
+Also update `Builtin.java` reftype for consistency.
+
+### Files to change
+- `src/main/java/org/perlonjava/runtime/perlmodule/ScalarUtil.java`
+- `src/main/java/org/perlonjava/runtime/perlmodule/Builtin.java`
+
+### Priority: MEDIUM — 1 failure, easy fix
+
+---
+
+## Phase 6: `/=` tokenization after regex close delimiter
+
+### Issue
+**Affected tests**: t/regexp.t (no plan), t/regexpref.t (no plan) — **2 test files blocked**
+
+The code `qr/x/=~/\(\?\^/` is mis-tokenized. The lexer greedily combines the `/` closing `qr/x/` with the following `=` to form a `/=` (divide-assign) token. Then `=` is put back into the remain buffer, but it doesn't recombine with `~` to form `=~` (binding operator).
+
+Result: parsed as `qr/x/ = ~(/\(\?\^/ ? ...)` instead of `qr/x/ =~ /\(\?\^/`.
+
+### Fix
+When `parseRawStringWithDelimiter` puts back remain text that starts with `=`, check if combining it with the following character forms a multi-character operator (`=~`, `==`, `=>`). If so, reconstruct the compound token.
+
+Alternative: fix the lexer to not greedily form `/=` after a regex close delimiter, since `/` in that position is unambiguously the regex closing delimiter.
+
+### Files to change
+- `src/main/java/org/perlonjava/frontend/parser/StringParser.java` (remain handling)
+- OR `src/main/java/org/perlonjava/frontend/lexer/Lexer.java` (tokenization)
+
+### Priority: MEDIUM — compile-time error blocks 2 test files from running at all
+
+---
+
+## Remaining Failures Summary (excluding weaken)
+
+| Phase | Issue | Tests | Failures | Priority |
+|-------|-------|-------|----------|----------|
+| 3 | Overloaded `&`/`\|` not dispatched | t/all.t, t/any.t, t/none.t | 10 | HIGH |
+| 4 | `SUPER::` NPE at package level | t/ignore.t | 4 | HIGH |
+| 5 | `reftype(\$x)` returns "REF" not "SCALAR" | t/scalarref.t | 1 | MEDIUM |
+| 6 | `/=` tokenization after regex | t/regexp.t, t/regexpref.t | 2 files blocked | MEDIUM |
+| — | `weaken` unimplemented | t/memory.t | 2 | LOW (known) |
+
+**Expected outcome**: Fixing phases 3-6 should bring Test::Deep to **41/42 passing** (only t/memory.t remaining due to `weaken`).
