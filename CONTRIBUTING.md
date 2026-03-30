@@ -222,4 +222,4 @@ See **[Module Porting Guide](docs/guides/module-porting.md)** for:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Artistic License 2.0.
+By contributing, you agree that your contributions will be licensed under the same terms as Perl 5 (Artistic License or GPL v1+).

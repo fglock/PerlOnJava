@@ -208,7 +208,7 @@ The project includes a **Dockerfile** for containerized deployments and a **Debi
         say "Point: (", $p->x, ", ", $p->y, ")"
     '
 
-The project is at [github.com/fglock/PerlOnJava](https://github.com/fglock/PerlOnJava), licensed under the Artistic License 2.0. Issues and contributions welcome.
+The project is at [github.com/fglock/PerlOnJava](https://github.com/fglock/PerlOnJava), licensed under the same terms as Perl 5 (Artistic License or GPL v1+). Issues and contributions welcome.
 
 ---
 

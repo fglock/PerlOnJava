@@ -121,4 +121,4 @@ Include:
 
 ## License
 
-This project is licensed under the Perl Artistic License 2.0. See [LICENSE](../../LICENSE.md) for details.
+This project is licensed under the same terms as Perl 5 (Artistic License or GPL v1+). See [LICENSE](../../LICENSE.md) for details.

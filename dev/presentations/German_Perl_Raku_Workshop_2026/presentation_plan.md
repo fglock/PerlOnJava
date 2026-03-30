@@ -634,7 +634,7 @@ Object result = perl.eval("process_data($data)");
 
 **Project Information**:
 - **GitHub**: github.com/fglock/PerlOnJava
-- **License**: Artistic License 2.0 (same as Perl)
+- **License**: Same terms as Perl 5 (Artistic License or GPL v1+)
 - **Status**: Production-ready, actively developed
 - **5,621+ commits**, sustained development since 2013
 
