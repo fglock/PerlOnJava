@@ -491,7 +491,25 @@ public class WarningFlags {
         if (!warningHierarchy.containsKey(category)) {
             warningHierarchy.put(category, new String[]{});
         }
-        // Register in the symbol table so it gets a bit position
+        // Add custom category as a subcategory of "all" so that
+        // "use warnings" / "no warnings" properly enable/disable it
+        String[] allSubs = warningHierarchy.get("all");
+        if (allSubs != null) {
+            boolean found = false;
+            for (String s : allSubs) {
+                if (s.equals(category)) { found = true; break; }
+            }
+            if (!found) {
+                String[] newAllSubs = new String[allSubs.length + 1];
+                System.arraycopy(allSubs, 0, newAllSubs, 0, allSubs.length);
+                newAllSubs[allSubs.length] = category;
+                warningHierarchy.put("all", newAllSubs);
+            }
+        }
+        // Assign a Perl5 bit offset so the category can be serialized
+        // to/from warning bits strings (caller()[9])
+        registerUserCategoryOffset(category);
+        // Register in the symbol table so it gets an internal bit position
         ScopedSymbolTable.registerCustomWarningCategory(category);
         
         // If "all" warnings are already enabled, enable this new category too

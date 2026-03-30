@@ -78,6 +78,59 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
+     * Gets the package name from caller() at the specified level.
+     * 
+     * @param level The stack level (0 = immediate caller of the warnings:: function)
+     * @return The package name, or null if not available
+     */
+    private static String getCallerPackageAtLevel(int level) {
+        RuntimeList caller = RuntimeCode.caller(
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)), 
+            RuntimeContextType.LIST
+        );
+        if (caller.size() > 0) {
+            return caller.elements.get(0).toString();
+        }
+        return null;
+    }
+
+    /**
+     * Walks up the call stack past frames in warnings-registered packages to find
+     * the "external caller" whose warning bits should be checked. This implements
+     * Perl 5's _error_loc() behavior: skip frames in any package that has used
+     * warnings::register (i.e., any custom warning category package).
+     * 
+     * @return The warning bits string from the first caller outside registered packages,
+     *         or null if not found
+     */
+    private static String findExternalCallerBits() {
+        for (int level = 0; level < 50; level++) {
+            RuntimeList callerInfo = RuntimeCode.caller(
+                new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)),
+                RuntimeContextType.LIST
+            );
+            if (callerInfo.size() <= 0) break;
+            
+            String pkg = callerInfo.elements.get(0).toString();
+            // Skip frames in any warnings-registered package
+            if (!WarningFlags.isCustomCategory(pkg)) {
+                // Found a caller outside registered packages
+                if (callerInfo.size() > 9) {
+                    RuntimeBase bitsBase = callerInfo.elements.get(9);
+                    if (bitsBase instanceof RuntimeScalar) {
+                        RuntimeScalar bitsScalar = (RuntimeScalar) bitsBase;
+                        if (bitsScalar.type != RuntimeScalarType.UNDEF) {
+                            return bitsScalar.toString();
+                        }
+                    }
+                }
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Checks if the $^W global warning flag is set.
      * $^W is stored using Perl's internal encoding: "main::" + Character.toString('W' - 'A' + 1).
      * 
@@ -283,12 +336,28 @@ public class Warnings extends PerlModuleBase {
      * @return A RuntimeList containing a boolean value.
      */
     public static RuntimeList enabled(RuntimeArray args, int ctx) {
-        String category = "all";
+        String category;
         if (args.size() > 0) {
             category = args.get(0).toString();
+        } else {
+            // No args: use calling package as category (Perl 5 behavior)
+            String pkg = getCallerPackageAtLevel(0);
+            category = (pkg != null) ? pkg : "all";
         }
         
-        String bits = getWarningBitsAtLevel(0);
+        // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar(false).getList();
+        }
+        
+        // For custom (registered) categories, walk past the registered package
+        // to find the external caller's warning bits
+        String bits;
+        if (WarningFlags.isCustomCategory(category)) {
+            bits = findExternalCallerBits();
+        } else {
+            bits = getWarningBitsAtLevel(0);
+        }
         boolean isEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         return new RuntimeScalar(isEnabled).getList();
     }
@@ -320,12 +389,27 @@ public class Warnings extends PerlModuleBase {
      * @return A RuntimeList containing a boolean value.
      */
     public static RuntimeList fatalEnabled(RuntimeArray args, int ctx) {
-        String category = "all";
+        String category;
         if (args.size() > 0) {
             category = args.get(0).toString();
+        } else {
+            // No args: use calling package as category (Perl 5 behavior)
+            String pkg = getCallerPackageAtLevel(0);
+            category = (pkg != null) ? pkg : "all";
         }
         
-        String bits = getWarningBitsAtLevel(0);
+        // Check scope-based runtime suppression first
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar(false).getList();
+        }
+        
+        // For custom categories, walk past the registered package
+        String bits;
+        if (WarningFlags.isCustomCategory(category)) {
+            bits = findExternalCallerBits();
+        } else {
+            bits = getWarningBitsAtLevel(0);
+        }
         boolean isFatal = bits != null && WarningFlags.isFatalInBits(bits, category);
         return new RuntimeScalar(isFatal).getList();
     }
@@ -389,19 +473,23 @@ public class Warnings extends PerlModuleBase {
         } else {
             // warnif(message) - use calling package as category
             message = args.get(0);
-            RuntimeList caller = RuntimeCode.caller(
-                new RuntimeList(RuntimeScalarCache.getScalarInt(1)), 
-                RuntimeContextType.LIST
-            );
-            if (caller.size() > 0) {
-                category = caller.elements.get(0).toString();
-            } else {
-                category = "main";
-            }
+            String pkg = getCallerPackageAtLevel(0);
+            category = (pkg != null) ? pkg : "main";
         }
         
-        // Check warning bits from caller's scope
-        String bits = getWarningBitsAtLevel(0);
+        // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar().getList();
+        }
+        
+        // For custom (registered) categories, walk past the registered package
+        // to find the external caller's warning bits
+        String bits;
+        if (WarningFlags.isCustomCategory(category)) {
+            bits = findExternalCallerBits();
+        } else {
+            bits = getWarningBitsAtLevel(0);
+        }
         
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
