@@ -9,52 +9,54 @@ This document tracks all errors found when running `./jcpan -t Test::Deep` and t
 
 ## Test Results Summary
 
-| Test File | Status | Failed/Total | Error Category |
-|-----------|--------|--------------|----------------|
-| t/00-report-prereqs.t | PASS | 0/all | - |
-| t/all.t | FAIL | 12/27 | StackOverflowError |
-| t/any.t | FAIL | 11/25 | StackOverflowError |
-| t/array.t | PASS | 0/all | - |
-| t/array_each.t | PASS | 0/all | - |
-| t/arraylength.t | FAIL | 1/40 | reftype returns "" not undef |
-| t/bag.t | FAIL | 14/48 | StackOverflowError |
-| t/bagrecursion.t | SKIP | - | - |
-| t/blessed.t | PASS | 0/all | - |
-| t/boolean.t | PASS | 0/all | - |
-| t/cache.t | PASS | 0/all | - |
-| t/circular.t | FAIL | 4/42 | StackOverflowError |
-| t/class.t | PASS | 0/all | - |
-| t/code.t | PASS | 0/all | - |
-| t/deep_utils.t | FAIL | 1/3 | reftype missing REGEXP |
-| t/descend.t | PASS | 0/all | - |
-| t/error.t | PASS | 0/all | - |
-| t/hash.t | PASS | 0/all | - |
-| t/hash_each.t | PASS | 0/all | - |
-| t/hashkeys.t | FAIL | 1/28 | reftype returns "" not undef |
-| t/ignore.t | FAIL | 4/6 | cascade from isa/reftype |
-| t/import.t | PASS | 0/all | - |
-| t/isa.t | FAIL | 0/0 | isa parsed as keyword |
-| t/leaf-wrapper.t | PASS | 0/all | - |
-| t/listmethods.t | PASS | 0/all | - |
-| t/memory.t | FAIL | 2/2 | weaken unimplemented |
-| t/methods.t | PASS | 0/all | - |
-| t/no-clobber-globals.t | PASS | 0/all | - |
-| t/none.t | FAIL | 13/30 | StackOverflowError |
-| t/notest.t | PASS | 0/all | - |
-| t/notest_extra.t | PASS | 0/all | - |
-| t/notest_withtest.t | PASS | 0/all | - |
-| t/number.t | PASS | 0/all | - |
-| t/reftype.t | PASS | 0/all | - |
-| t/regexp.t | FAIL | 0/0 | /= tokenization bug |
-| t/regexpref.t | FAIL | 0/0 | /= tokenization bug |
-| t/rt78288_blessed_object.t | FAIL | 0/0 | isa parsed as keyword |
-| t/scalar.t | FAIL | 1/24 | reftype returns "" not undef |
-| t/scalarref.t | FAIL | 1/21 | reftype returns "" not undef |
-| t/set.t | FAIL | 18/54 | StackOverflowError |
-| t/shallow.t | PASS | 0/all | - |
-| t/string.t | PASS | 0/all | - |
+### Current Status: 41/42 test files passing (after Phases 1-6)
 
-**Passing: 22/41 test files, Failing: 17/41, Skipped: 1/41**
+Only `t/memory.t` fails due to `weaken` being unimplemented.
+
+| Test File | Status | Notes |
+|-----------|--------|-------|
+| t/00-report-prereqs.t | PASS | - |
+| t/all.t | PASS | Fixed: Phase 1 (overload) + Phase 3 (bitwise & overload) |
+| t/any.t | PASS | Fixed: Phase 1 (overload) + Phase 3 (bitwise | overload) |
+| t/array.t | PASS | - |
+| t/array_each.t | PASS | - |
+| t/arraylength.t | PASS | Fixed: Phase 1 (reftype) |
+| t/bag.t | PASS | Fixed: Phase 1 (overload) |
+| t/bagrecursion.t | PASS | - |
+| t/blessed.t | PASS | - |
+| t/boolean.t | PASS | - |
+| t/cache.t | PASS | - |
+| t/circular.t | PASS | Fixed: Phase 1 (overload) |
+| t/class.t | PASS | - |
+| t/code.t | PASS | - |
+| t/deep_utils.t | PASS | Fixed: Phase 1 (reftype REGEXP) |
+| t/descend.t | PASS | - |
+| t/error.t | PASS | - |
+| t/hash.t | PASS | - |
+| t/hash_each.t | PASS | - |
+| t/hashkeys.t | PASS | Fixed: Phase 1 (reftype) |
+| t/ignore.t | PASS | Fixed: Phase 4 (SUPER:: at package level) |
+| t/import.t | PASS | - |
+| t/isa.t | PASS | Fixed: Phase 1 (isa keyword parsing) |
+| t/leaf-wrapper.t | PASS | - |
+| t/listmethods.t | PASS | - |
+| t/memory.t | **FAIL** | `weaken` unimplemented (known limitation) |
+| t/methods.t | PASS | - |
+| t/no-clobber-globals.t | PASS | - |
+| t/none.t | PASS | Fixed: Phase 1 (overload) + Phase 3 (bitwise | overload) |
+| t/notest.t | PASS | - |
+| t/notest_extra.t | PASS | - |
+| t/notest_withtest.t | PASS | - |
+| t/number.t | PASS | - |
+| t/reftype.t | PASS | - |
+| t/regexp.t | PASS | Fixed: Phase 6 (/= tokenization) |
+| t/regexpref.t | PASS | Fixed: Phase 6 (/= tokenization) |
+| t/rt78288_blessed_object.t | PASS | Fixed: Phase 1 (isa keyword parsing) |
+| t/scalar.t | PASS | Fixed: Phase 1 (reftype) |
+| t/scalarref.t | PASS | Fixed: Phase 5 (reftype SCALAR vs REF) |
+| t/set.t | PASS | Fixed: Phase 1 (overload) |
+| t/shallow.t | PASS | - |
+| t/string.t | PASS | - |
 
 ---
 
