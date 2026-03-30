@@ -415,7 +415,12 @@ public class NumberParser {
         while (start < length && Character.isWhitespace(str.charAt(start))) start++;
         while (end > start && Character.isWhitespace(str.charAt(end - 1))) end--;
 
+        // Track whether to emit a "isn't numeric" warning
+        boolean shouldWarn = false;
+
         if (start == end) {
+            // Empty or whitespace-only string: value is 0, but warn if string is non-null
+            shouldWarn = true;
             result = getScalarInt(0);
         }
 
@@ -436,7 +441,6 @@ public class NumberParser {
             int numberEnd = start;
 
             // Check for special values with trailing characters
-            boolean shouldWarn = false;
             String originalStr = str.substring(start, end);
             int specialEnd = start;
 
@@ -555,39 +559,44 @@ public class NumberParser {
                     numberEnd = exponentPos;
                 }
 
-                if (numberEnd == start) return getScalarInt(0);
-
-                try {
-                    String numberStr = str.substring(start, numberEnd);
-                    if (hasDecimal || hasExponent) {
-                        double value = Double.parseDouble(numberStr);
-                        result = new RuntimeScalar(isNegative ? -value : value);
-                    } else {
-                        long value = Long.parseLong(numberStr);
-                        result = getScalarInt(isNegative ? -value : value);
+                if (numberEnd == start) {
+                    // No numeric characters found - value is 0, warn about non-numeric string
+                    shouldWarn = true;
+                    result = getScalarInt(0);
+                } else {
+                    // Trailing non-numeric characters after the number - warn
+                    if (numberEnd < end) {
+                        shouldWarn = true;
                     }
-                } catch (NumberFormatException e) {
+
                     try {
-                        double value = Double.parseDouble(str.substring(start, numberEnd));
-                        result = new RuntimeScalar(isNegative ? -value : value);
-                    } catch (NumberFormatException e2) {
-                        result = getScalarInt(0);
+                        String numberStr = str.substring(start, numberEnd);
+                        if (hasDecimal || hasExponent) {
+                            double value = Double.parseDouble(numberStr);
+                            result = new RuntimeScalar(isNegative ? -value : value);
+                        } else {
+                            long value = Long.parseLong(numberStr);
+                            result = getScalarInt(isNegative ? -value : value);
+                        }
+                    } catch (NumberFormatException e) {
+                        try {
+                            double value = Double.parseDouble(str.substring(start, numberEnd));
+                            result = new RuntimeScalar(isNegative ? -value : value);
+                        } catch (NumberFormatException e2) {
+                            result = getScalarInt(0);
+                        }
                     }
                 }
-            }
-
-            // Generate warning if needed
-            if (shouldWarn) {
-                String warnStr = str.trim();
-                if (warnStr.startsWith("-") || warnStr.startsWith("+")) {
-                    warnStr = warnStr.substring(1);
-                }
-                WarnDie.warn(new RuntimeScalar("Argument \"" + warnStr + "\" isn't numeric"),
-                        RuntimeScalarCache.scalarEmptyString);
             }
         }
 
-        if (result.type != RuntimeScalarType.STRING
+        // Generate warning for non-numeric strings (all cases)
+        if (shouldWarn) {
+            WarnDie.warnWithCategory(new RuntimeScalar("Argument \"" + str + "\" isn't numeric"),
+                    RuntimeScalarCache.scalarEmptyString, "numeric");
+        }
+
+        if (!shouldWarn && result.type != RuntimeScalarType.STRING
                 && result.type != RuntimeScalarType.BYTE_STRING) {
             numificationCache.put(str, result);
         }
