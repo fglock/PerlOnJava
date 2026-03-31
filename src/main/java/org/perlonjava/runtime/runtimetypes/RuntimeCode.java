@@ -131,6 +131,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
 
     /**
+     * Tracks the current eval nesting depth for $^S support.
+     * 0 = not inside any eval, >0 = inside eval (eval STRING or eval BLOCK).
+     * Incremented on eval entry, decremented on eval exit (success or failure).
+     */
+    public static int evalDepth = 0;
+
+    /**
      * Thread-local stack of @_ arrays for each active subroutine call.
      * This allows nested code blocks (like those passed to List::Util::any/all/grep/map)
      * to access the outer subroutine's @_ via $_[0], $_[1], etc.
@@ -1173,6 +1180,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             evalAliasKeys.clear();
 
             // Execute the interpreted code
+            // Track eval depth for $^S support
+            evalDepth++;
             try {
                 result = interpretedCode.apply(args, callContext);
 
@@ -1229,6 +1238,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     return new RuntimeList(new RuntimeScalar());
                 }
+            } finally {
+                evalDepth--;
             }
 
         } finally {
@@ -1911,6 +1922,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Eval STRING must allow next/last/redo to propagate to the enclosing scope.
     // The caller is responsible for handling RuntimeControlFlowList markers.
     public static RuntimeList applyEval(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        evalDepth++;
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
             // Perl clears $@ on successful eval (even if nested evals previously set it).
@@ -1939,6 +1951,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return new RuntimeList();
             }
             return new RuntimeList(new RuntimeScalar());
+        } finally {
+            evalDepth--;
         }
     }
 

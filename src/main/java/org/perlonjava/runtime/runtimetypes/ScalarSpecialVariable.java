@@ -259,6 +259,18 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     }
                     yield scalarUndef;
                 }
+                case EVAL_STATE -> {
+                    // $^S - Current state of the interpreter
+                    // undef = parsing/compiling (BEGIN blocks)
+                    // 1 = inside eval (eval STRING or eval BLOCK)
+                    // 0 = otherwise (normal execution)
+                    String globalPhase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
+                    if ("START".equals(globalPhase)) {
+                        // During BEGIN/UNITCHECK blocks = compilation phase
+                        yield scalarUndef;
+                    }
+                    yield getScalarInt(RuntimeCode.evalDepth > 0 ? 1 : 0);
+                }
             };
             return result;
         } catch (IllegalStateException e) {
@@ -459,6 +471,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         REAL_UID, // $< - Real user ID (lazy, JNA call only on access)
         EFFECTIVE_UID, // $> - Effective user ID (lazy, JNA call only on access)
         WARNING_BITS, // ${^WARNING_BITS} - Compile-time warning bits
+        EVAL_STATE, // $^S - Current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
     }
 
     private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {

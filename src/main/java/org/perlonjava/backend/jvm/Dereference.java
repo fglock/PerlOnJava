@@ -782,6 +782,52 @@ public class Dereference {
                 }
                 return;
             }
+            if (sigil.equals("*")) {
+                /*  *expr{SLOT} - glob slot access (e.g., *{$self}{HASH}, *foo{CODE})
+                 *  BinaryOperatorNode: {
+                 *    OperatorNode: *
+                 *      <expression>
+                 *    HashLiteralNode:
+                 *      StringNode: "HASH" (or CODE, SCALAR, ARRAY, IO, etc.)
+                 *
+                 * This is distinct from *expr->{key} (arrow hash deref on glob),
+                 * which goes through handleArrowHashDeref instead.
+                 */
+                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) *expr{SLOT} ");
+
+                // Evaluate the entire *expr to get the RuntimeGlob.
+                // This uses the existing * sigil handler in EmitVariable, which properly
+                // handles bare names (*FOO), variables (*$var), and blocks (*{expr}).
+                sigilNode.accept(scalarVisitor);
+
+                // Evaluate the key (slot name)
+                ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+                Node nodeZero = nodeRight.elements.getFirst();
+                if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+                    nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+                    nodeZero = nodeRight.elements.getFirst();
+                }
+
+                if (nodeRight.elements.size() == 1) {
+                    nodeZero.accept(scalarVisitor);
+                } else {
+                    // Multiple keys - join with SUBSEP (unusual for glob slot access but handle it)
+                    emitterVisitor.ctx.mv.visitLdcInsn("main::;");
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                            "getGlobalVariable", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/StringOperators",
+                            "join", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                }
+
+                // Call getGlobSlot on the RuntimeGlob
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeGlob", "getGlobSlot",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
         }
 
         // default: call `->{}`

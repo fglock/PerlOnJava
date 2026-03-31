@@ -676,6 +676,9 @@ public class EmitterMethodCreator implements Opcodes {
                 // Start of the try block
                 // --------------------------------
 
+                // Track eval depth for $^S: RuntimeCode.evalDepth++
+                emitEvalDepthIncrement(mv);
+
                 // Set $@ to an empty string if no exception occurs
                 mv.visitLdcInsn("main::@");
                 mv.visitLdcInsn("");
@@ -797,6 +800,9 @@ public class EmitterMethodCreator implements Opcodes {
                     // Materialize return value in local slot and jump to endCatch with empty stack.
                     mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
+                    // Track eval depth for $^S: RuntimeCode.evalDepth--
+                    emitEvalDepthDecrement(mv);
+
                     // Skip the success epilogue that clears $@.
                     // This path represents an eval failure (bad goto/other marker),
                     // so $@ must be preserved.
@@ -814,6 +820,9 @@ public class EmitterMethodCreator implements Opcodes {
                 // --------------------------------
                 mv.visitLabel(tryEnd);
 
+                // Track eval depth for $^S: RuntimeCode.evalDepth--
+                emitEvalDepthDecrement(mv);
+
                 // Clear $@ on successful completion of eval (nested evals may have set it).
                 mv.visitLdcInsn("main::@");
                 mv.visitLdcInsn("");
@@ -827,6 +836,10 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Start of the catch block
                 mv.visitLabel(catchBlock);
+
+                // Track eval depth for $^S: RuntimeCode.evalDepth--
+                // Note: Throwable is on the stack but GETSTATIC/PUTSTATIC don't affect it
+                emitEvalDepthDecrement(mv);
 
                 // The throwable object is on the stack
                 // Catch the throwable
@@ -1772,5 +1785,31 @@ public class EmitterMethodCreator implements Opcodes {
                 }
             }
         }
+    }
+
+    /**
+     * Emits bytecode to increment RuntimeCode.evalDepth (for $^S support).
+     * Stack effect: net 0 (pushes 2, pops 2).
+     */
+    private static void emitEvalDepthIncrement(MethodVisitor mv) {
+        mv.visitFieldInsn(Opcodes.GETSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitInsn(Opcodes.IADD);
+        mv.visitFieldInsn(Opcodes.PUTSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+    }
+
+    /**
+     * Emits bytecode to decrement RuntimeCode.evalDepth (for $^S support).
+     * Stack effect: net 0 (pushes 2, pops 2).
+     */
+    private static void emitEvalDepthDecrement(MethodVisitor mv) {
+        mv.visitFieldInsn(Opcodes.GETSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitInsn(Opcodes.ISUB);
+        mv.visitFieldInsn(Opcodes.PUTSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
     }
 }

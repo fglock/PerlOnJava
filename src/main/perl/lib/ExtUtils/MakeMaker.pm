@@ -221,6 +221,29 @@ sub _install_pure_perl {
                 no_chdir => 1,
             }, 'blib/lib');
         }
+        
+        # Fallback: scan current directory for .pm files (flat layout)
+        # Some CPAN distributions (e.g. Crypt::RC4) have .pm files at the
+        # root level instead of in lib/. Standard MakeMaker handles this via
+        # PMLIBDIRS which defaults to ['lib', $self->{BASEEXT}].
+        # We derive the install subdirectory from the NAME parameter.
+        if (!%pm && $name) {
+            my @parts = split /::/, $name;
+            pop @parts;  # Remove BASEEXT (e.g. Crypt::RC4 -> Crypt)
+            my $parent_dir = @parts ? File::Spec->catdir(@parts) : '';
+            
+            opendir(my $dh, '.') or warn "Cannot opendir .: $!";
+            if ($dh) {
+                while (my $file = readdir($dh)) {
+                    next unless -f $file && $file =~ /\.pm$/i;
+                    my $dest_rel = $parent_dir
+                        ? File::Spec->catfile($parent_dir, $file)
+                        : $file;
+                    $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel);
+                }
+                closedir($dh);
+            }
+        }
     }
     
     if (!%pm) {

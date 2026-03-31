@@ -1191,8 +1191,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Dereferencing a glob as scalar returns the scalar slot
                 // e.g., ${*Foo::VERSION} or ${$glob} where $glob is a glob
                 if (value instanceof RuntimeGlob glob) {
-                    // Use the glob's hashDerefGet method which handles anonymous globs
-                    yield glob.hashDerefGet(new RuntimeScalar("SCALAR"));
+                    // Use the glob's getGlobSlot method which handles anonymous globs
+                    yield glob.getGlobSlot(new RuntimeScalar("SCALAR"));
                 }
                 throw new PerlCompilerException("Not a SCALAR reference");
             }
@@ -1237,8 +1237,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 if (value instanceof RuntimeGlob glob) {
-                    // Use the glob's hashDerefGet method which handles anonymous globs
-                    yield glob.hashDerefGet(new RuntimeScalar("SCALAR"));
+                    // Use the glob's getGlobSlot method which handles anonymous globs
+                    yield glob.getGlobSlot(new RuntimeScalar("SCALAR"));
                 }
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);

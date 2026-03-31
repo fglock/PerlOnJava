@@ -165,6 +165,9 @@ public class ReferenceOperators {
                 blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);
                 break;
+            case FORMAT:
+                str = "FORMAT";
+                break;
             default:
                 return scalarEmptyString;
         }

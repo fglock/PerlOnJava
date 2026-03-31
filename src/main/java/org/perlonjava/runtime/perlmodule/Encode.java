@@ -1,10 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.RuntimeArray;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
@@ -55,6 +52,35 @@ public class Encode extends PerlModuleBase {
         CHARSET_ALIASES.put("UTF16LE", StandardCharsets.UTF_16LE);
         CHARSET_ALIASES.put("utf-16le", StandardCharsets.UTF_16LE);
         CHARSET_ALIASES.put("UTF-16LE", StandardCharsets.UTF_16LE);
+
+        // UCS-2 (Perl's Encode maps "ucs2" to UCS-2BE, equivalent to UTF-16BE for BMP)
+        CHARSET_ALIASES.put("ucs2", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("UCS2", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("ucs-2", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("UCS-2", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("UCS-2BE", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("ucs-2be", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("UCS-2LE", StandardCharsets.UTF_16LE);
+        CHARSET_ALIASES.put("ucs-2le", StandardCharsets.UTF_16LE);
+
+        // Shift_JIS aliases
+        try {
+            Charset shiftJIS = Charset.forName("Shift_JIS");
+            CHARSET_ALIASES.put("sjis", shiftJIS);
+            CHARSET_ALIASES.put("SJIS", shiftJIS);
+            CHARSET_ALIASES.put("shiftjis", shiftJIS);
+            CHARSET_ALIASES.put("shift-jis", shiftJIS);
+        } catch (Exception ignored) {
+            // Shift_JIS may not be available on all JVMs
+        }
+
+        // EUC-JP alias
+        try {
+            Charset eucJP = Charset.forName("EUC-JP");
+            CHARSET_ALIASES.put("euc-jp", eucJP);
+            CHARSET_ALIASES.put("eucjp", eucJP);
+        } catch (Exception ignored) {
+        }
     }
 
     public Encode() {
@@ -100,6 +126,30 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("STOP_AT_PARTIAL", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
+        }
+
+        // Register Encode::Encoding instance methods for find_encoding() objects
+        try {
+            java.lang.invoke.MethodHandle encodeHandle = RuntimeCode.lookup.findStatic(
+                    Encode.class, "encoding_encode", RuntimeCode.methodType);
+            java.lang.invoke.MethodHandle decodeHandle = RuntimeCode.lookup.findStatic(
+                    Encode.class, "encoding_decode", RuntimeCode.methodType);
+            java.lang.invoke.MethodHandle nameHandle = RuntimeCode.lookup.findStatic(
+                    Encode.class, "encoding_name", RuntimeCode.methodType);
+            RuntimeCode encodeCode = new RuntimeCode(encodeHandle, null, null);
+            encodeCode.isStatic = true;
+            RuntimeCode decodeCode = new RuntimeCode(decodeHandle, null, null);
+            decodeCode.isStatic = true;
+            RuntimeCode nameCode = new RuntimeCode(nameHandle, null, null);
+            nameCode.isStatic = true;
+            GlobalVariable.getGlobalCodeRef("Encode::Encoding::encode").set(
+                    new RuntimeScalar(encodeCode));
+            GlobalVariable.getGlobalCodeRef("Encode::Encoding::decode").set(
+                    new RuntimeScalar(decodeCode));
+            GlobalVariable.getGlobalCodeRef("Encode::Encoding::name").set(
+                    new RuntimeScalar(nameCode));
+        } catch (NoSuchMethodException | IllegalAccessException e) {
+            System.err.println("Warning: Missing Encode::Encoding method: " + e.getMessage());
         }
     }
 
@@ -283,7 +333,8 @@ public class Encode extends PerlModuleBase {
 
     /**
      * find_encoding($encoding)
-     * Returns an encoding object for the given encoding name.
+     * Returns a blessed Encode::Encoding object for the given encoding name.
+     * The object supports ->encode($string) and ->decode($octets) methods.
      */
     public static RuntimeList find_encoding(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -294,13 +345,82 @@ public class Encode extends PerlModuleBase {
 
         try {
             Charset charset = getCharset(encodingName);
-            // For now, return the charset name as a string
-            // TODO: Create proper encoding object
-            return new RuntimeScalar(charset.name()).getList();
+            // Create a blessed hash with the charset name
+            RuntimeHash encObj = new RuntimeHash();
+            encObj.put("Name", new RuntimeScalar(charset.name()));
+            RuntimeScalar ref = encObj.createReference();
+            ReferenceOperators.bless(ref, new RuntimeScalar("Encode::Encoding"));
+            return ref.getList();
         } catch (Exception e) {
             // Return undef if encoding not found
             return scalarUndef.getList();
         }
+    }
+
+    /**
+     * Encode::Encoding->encode($string [, $check])
+     * Encodes a string to octets using this encoding.
+     */
+    public static RuntimeList encoding_encode(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            throw new IllegalStateException("Bad number of arguments for Encode::Encoding::encode");
+        }
+
+        RuntimeScalar self = args.get(0);
+        String string = args.get(1).toString();
+
+        // Extract charset name from the blessed hash
+        RuntimeHash hash = (RuntimeHash) self.value;
+        String charsetName = hash.get("Name").toString();
+
+        try {
+            Charset charset = getCharset(charsetName);
+            byte[] bytes = string.getBytes(charset);
+            // Return as byte string (ISO-8859-1 preserves raw bytes)
+            return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1)).getList();
+        } catch (Exception e) {
+            throw new RuntimeException("Cannot encode string with " + charsetName + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Encode::Encoding->decode($octets [, $check])
+     * Decodes octets to a string using this encoding.
+     */
+    public static RuntimeList encoding_decode(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            throw new IllegalStateException("Bad number of arguments for Encode::Encoding::decode");
+        }
+
+        RuntimeScalar self = args.get(0);
+        String octets = args.get(1).toString();
+
+        // Extract charset name from the blessed hash
+        RuntimeHash hash = (RuntimeHash) self.value;
+        String charsetName = hash.get("Name").toString();
+
+        try {
+            Charset charset = getCharset(charsetName);
+            byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+            String decoded = new String(bytes, charset);
+            return new RuntimeScalar(decoded).getList();
+        } catch (Exception e) {
+            throw new RuntimeException("Cannot decode octets with " + charsetName + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Encode::Encoding->name()
+     * Returns the canonical name of this encoding.
+     */
+    public static RuntimeList encoding_name(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            throw new IllegalStateException("Bad number of arguments for Encode::Encoding::name");
+        }
+
+        RuntimeScalar self = args.get(0);
+        RuntimeHash hash = (RuntimeHash) self.value;
+        return hash.get("Name").getList();
     }
 
     /**

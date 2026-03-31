@@ -1253,10 +1253,10 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * GLOB_SLOT_GET: rd = glob.hashDerefGetNonStrict(key, pkg)
+     * GLOB_SLOT_GET: rd = glob.getGlobSlot(key)
      * Format: [GLOB_SLOT_GET] [rd] [globReg] [keyReg]
-     * Effect: Access glob slot (like *X{HASH}) using RuntimeGlob's override.
-     * Uses the runtime current package, which is correct for both regular code and eval STRING.
+     * Effect: Access glob slot (like *X{HASH}) by calling getGlobSlot directly.
+     * Uses the runtime current package for symbolic reference resolution if needed.
      */
     public static int executeGlobSlotGet(
             int[] bytecode,
@@ -1270,15 +1270,19 @@ public class SlowOpcodeHandler {
         RuntimeBase globBase = registers[globReg];
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
 
-        // Use runtime current package — correct for both regular code and eval STRING
-        String pkg = InterpreterState.currentPackage.get().toString();
-
         // Convert to scalar if needed
         RuntimeScalar glob = globBase.scalar();
 
-        // Call hashDerefGetNonStrict which for RuntimeGlob accesses the slot directly
-        // without dereferencing the glob as a hash
-        registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
+        // Call getGlobSlot directly on the RuntimeGlob for *glob{SLOT} access
+        if (glob instanceof RuntimeGlob rg) {
+            registers[rd] = rg.getGlobSlot(key);
+        } else if (glob.type == RuntimeScalarType.GLOB && glob.value instanceof RuntimeGlob rg) {
+            registers[rd] = rg.getGlobSlot(key);
+        } else {
+            // Fallback: use non-strict hash deref for symbolic glob references
+            String pkg = InterpreterState.currentPackage.get().toString();
+            registers[rd] = glob.hashDerefGetNonStrict(key, pkg);
+        }
 
         return pc;
     }
