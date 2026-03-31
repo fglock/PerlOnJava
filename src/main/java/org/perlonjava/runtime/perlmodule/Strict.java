@@ -54,6 +54,9 @@ public class Strict extends PerlModuleBase {
         try {
             strict.registerMethod("import", "useStrict", ";$");
             strict.registerMethod("unimport", "noStrict", ";$");
+            strict.registerMethod("bits", "strictBits", null);
+            strict.registerMethod("all_bits", "strictAllBits", null);
+            strict.registerMethod("all_explicit_bits", "strictAllExplicitBits", null);
             // Set $VERSION so CPAN.pm can detect our bundled version
             GlobalVariable.getGlobalVariable("strict::VERSION").set(new RuntimeScalar("1.14"));
         } catch (NoSuchMethodException e) {
@@ -125,6 +128,67 @@ public class Strict extends PerlModuleBase {
             }
         }
         return new RuntimeScalar().getList();
+    }
+
+    // Combined bitmask for all strict options
+    private static final int ALL_BITS = HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS;
+    // Combined bitmask for all explicit strict options
+    private static final int ALL_EXPLICIT_BITS = HINT_EXPLICIT_STRICT_REFS | HINT_EXPLICIT_STRICT_SUBS | HINT_EXPLICIT_STRICT_VARS;
+
+    /**
+     * Returns the bitmask for the given strict categories.
+     * Called as strict::bits('refs', 'subs', 'vars') from Perl.
+     * When called from the strict package itself, also includes explicit bits.
+     *
+     * @param args The category names.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the integer bitmask.
+     */
+    public static RuntimeList strictBits(RuntimeArray args, int ctx) {
+        int bits = 0;
+        if (args.size() == 0) {
+            bits = ALL_BITS;
+        } else {
+            for (int i = 0; i < args.size(); i++) {
+                String category = args.get(i).toString();
+                switch (category) {
+                    case "refs":
+                        bits |= HINT_STRICT_REFS;
+                        break;
+                    case "subs":
+                        bits |= HINT_STRICT_SUBS;
+                        break;
+                    case "vars":
+                        bits |= HINT_STRICT_VARS;
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unknown 'strict' tag(s) '" + category + "'");
+                }
+            }
+        }
+        return new RuntimeScalar(bits).getList();
+    }
+
+    /**
+     * Returns the combined bitmask for all strict categories (refs | subs | vars).
+     *
+     * @param args Unused.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the integer bitmask 0x602.
+     */
+    public static RuntimeList strictAllBits(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(ALL_BITS).getList();
+    }
+
+    /**
+     * Returns the combined bitmask for all explicit strict categories.
+     *
+     * @param args Unused.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the integer bitmask 0xe0.
+     */
+    public static RuntimeList strictAllExplicitBits(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(ALL_EXPLICIT_BITS).getList();
     }
 
     public static String stringifyStrictOptions(int strictOptions) {
