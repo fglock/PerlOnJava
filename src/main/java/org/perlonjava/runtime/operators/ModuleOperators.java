@@ -797,9 +797,16 @@ public class ModuleOperators {
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {
-                message = "Compilation failed in require: " + err;
+                // Build Perl 5-compatible error: original error + "Compilation failed in require"
+                String fullErr = err;
+                if (!fullErr.endsWith("\n")) {
+                    fullErr += "\n";
+                }
+                message = fullErr + "Compilation failed in require";
                 // Set %INC as undef to mark compilation failure
                 incHash.put(fileName, new RuntimeScalar());
+                // Update $@ so eval{} sees the full message (catchEval preserves $@ for PerlCompilerException)
+                getGlobalVariable("main::@").set(message);
                 throw new PerlCompilerException(message);
             }
         }
