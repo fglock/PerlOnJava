@@ -741,6 +741,14 @@ public class RegexPreprocessor {
         // Remove \G from the pattern string for Java compilation
         if (s.startsWith("\\G", offset)) {
             offset += 2;
+            // Also strip any quantifier that followed \G (e.g. \G? in (\G?[ac])?)
+            // Since \G is a zero-width assertion, \G? is effectively nothing
+            if (offset < length) {
+                char next = s.charAt(offset);
+                if (next == '?' || next == '*' || next == '+') {
+                    offset++;
+                }
+            }
         }
 
         while (offset < length) {
@@ -753,6 +761,15 @@ public class RegexPreprocessor {
                 case '?':
                     // Check if the previous item can be quantified
                     if (!lastWasQuantifiable) {
+                        // Distinguish "Nested quantifiers" from "Quantifier follows nothing":
+                        // If the last char in sb is a quantifier, this is a nested quantifier
+                        if (sb.length() > 0) {
+                            char lc = sb.charAt(sb.length() - 1);
+                            boolean esc = sb.length() >= 2 && sb.charAt(sb.length() - 2) == '\\';
+                            if (!esc && (lc == '*' || lc == '+' || lc == '?' || lc == '}')) {
+                                regexError(s, offset + 1, "Nested quantifiers");
+                            }
+                        }
                         regexError(s, offset + 1, "Quantifier follows nothing");
                     }
 
