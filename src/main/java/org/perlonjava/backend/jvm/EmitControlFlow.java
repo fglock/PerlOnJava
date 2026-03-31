@@ -402,7 +402,6 @@ public class EmitControlFlow {
 
         // Parse the goto argument
         String labelName = null;
-        boolean isDynamic = false;
 
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
@@ -470,111 +469,16 @@ public class EmitControlFlow {
                 }
 
                 // Dynamic label (goto EXPR) - expression evaluated at runtime
-                isDynamic = true;
-                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Dynamic goto with expression");
-
-                // Evaluate the expression to get the label name at runtime
-                arg.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-                int targetSlot = ctx.javaClassInfo.acquireSpillSlot();
-                boolean pooledTarget = targetSlot >= 0;
-                if (!pooledTarget) {
-                    targetSlot = ctx.symbolTable.allocateLocalVariable();
-                }
-                ctx.mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
-
-                // If EXPR evaluates to a CODE reference, treat it like `goto &NAME` (tail call).
-                Label notCodeRef = new Label();
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-                ctx.mv.visitFieldInsn(Opcodes.GETFIELD,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "type",
-                        "I");
-                ctx.mv.visitLdcInsn(RuntimeScalarType.CODE);
-                ctx.mv.visitJumpInsn(Opcodes.IF_ICMPNE, notCodeRef);
-
-                // Build a TAILCALL marker with the coderef and the current @_ array.
-                // Teardown (defer blocks, local variables) happens at returnLabel
-                // before this marker is returned to the caller.
-                ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-                ctx.mv.visitInsn(Opcodes.DUP);
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, 1); // current @_
-                ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-                int tailLineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
-                ctx.mv.visitLdcInsn(tailLineNumber);
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                        "<init>",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;I)V",
-                        false);
-
-                if (pooledTarget) {
-                    ctx.javaClassInfo.releaseSpillSlot();
-                }
-
-                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
-                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-
-                // Otherwise, treat it as a computed label name (dynamic goto).
-                ctx.mv.visitLabel(notCodeRef);
-
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
-                // Convert to string (label name)
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "toString",
-                        "()Ljava/lang/String;",
-                        false);
-
-                // For dynamic goto, create a RuntimeControlFlowList marker
-                // because we can't know at compile-time if the label is local or not.
-                ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-                ctx.mv.visitInsn(Opcodes.DUP_X1);
-                ctx.mv.visitInsn(Opcodes.SWAP);
-
-                ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
-                        "org/perlonjava/runtime/runtimetypes/ControlFlowType",
-                        "GOTO",
-                        "Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;");
-                ctx.mv.visitInsn(Opcodes.SWAP);
-
-                // Push fileName
-                ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-                // Push lineNumber
-                int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
-                ctx.mv.visitLdcInsn(lineNumber);
-
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                        "<init>",
-                        "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
-                        false);
-
-                if (pooledTarget) {
-                    ctx.javaClassInfo.releaseSpillSlot();
-                }
-
-                int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
-                boolean pooledMarker = markerSlot >= 0;
-                if (!pooledMarker) {
-                    markerSlot = ctx.symbolTable.allocateLocalVariable();
-                }
-                ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
-
-                // Jump to returnLabel with the marker
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
-                if (pooledMarker) {
-                    ctx.javaClassInfo.releaseSpillSlot();
-                }
-                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
-                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-                return;
+                // JVM backend can't dispatch dynamic goto labels (the GOTO marker propagates
+                // out of all scopes and silently exits). Fall back to interpreter which
+                // supports GOTO_DYNAMIC with label-to-PC lookup.
+                throw new PerlCompilerException(node.tokenIndex,
+                        "Dynamic goto EXPR requires interpreter fallback", ctx.errorUtil);
             }
         }
 
         // Ensure label is provided for static goto
-        if (labelName == null && !isDynamic) {
+        if (labelName == null) {
             throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
         }
 
