@@ -394,4 +394,27 @@ versionCatalogUpdate {
     keep {
         keepUnusedVersions = true
     }
+    // Pin cyclonedx plugin to current 2.x version.
+    //
+    // cyclonedx 3.x is NOT compatible with this build for four reasons:
+    //   1. schemaVersion changed from string "1.5" to enum "VERSION_15"
+    //   2. outputName/outputFormat properties were removed; output is now
+    //      configured via jsonOutput/xmlOutput file properties, and the
+    //      default path moved from build/reports/bom.json to
+    //      build/reports/cyclonedx/bom.json (breaks the mergeSbom task)
+    //   3. organizationalEntity closure API was removed from the aggregate
+    //      task (CyclonedxAggregateTask)
+    //   4. Gradle 9.x triggers "No XmlService implementation found" at
+    //      runtime due to a missing Maven API dependency in the plugin
+    //
+    // To unpin: upgrade Gradle first, then adapt the cyclonedxBom block
+    // and mergeSbom input path above to the 3.x API. See:
+    //   https://github.com/CycloneDX/cyclonedx-gradle-plugin (v3 README)
+    //
+    // Pin shadow to 9.3.x - shadow 9.4.x introduces a classpath conflict
+    // that triggers "No XmlService implementation found" from the cyclonedx
+    // plugin. Unpin after cyclonedx is upgraded to 3.x.
+    pin {
+        plugins = [libs.plugins.cyclonedx, libs.plugins.shadow]
+    }
 }
