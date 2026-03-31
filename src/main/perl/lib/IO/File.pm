@@ -159,8 +159,16 @@ sub new {
 sub new_tmpfile {
     my $class = shift;
     @_ == 0 or croak "usage: $class->new_tmpfile()";
-    # TODO: Implement actual temporary file creation
-    # For now, return undef to indicate not supported
+    require File::Temp;
+    my $fh = $class->new;
+    my ($tmp_fh, $tmp_name) = File::Temp::tempfile(UNLINK => 1);
+    if (defined $tmp_fh) {
+        close $tmp_fh;
+        if ($fh->open("+> $tmp_name")) {
+            unlink $tmp_name;  # Remove name so file is anonymous (like POSIX tmpfile)
+            return $fh;
+        }
+    }
     return undef;
 }
 
