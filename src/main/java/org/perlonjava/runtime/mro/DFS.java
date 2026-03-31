@@ -48,9 +48,16 @@ public class DFS {
 
         linearizeDFSHelper(className, isaMap, result, visited, currentPath);
 
-        // Add UNIVERSAL only if not already present and this is not UNIVERSAL itself
+        // Add UNIVERSAL and its @ISA hierarchy (e.g., @UNIVERSAL::ISA = 'LASTCHANCE')
         if (!result.contains("UNIVERSAL") && !className.equals("UNIVERSAL")) {
-            result.add("UNIVERSAL");
+            // Populate UNIVERSAL's @ISA into the map so its parents are traversed
+            try {
+                populateIsaMapWithCycleDetection("UNIVERSAL", isaMap, new HashSet<>());
+            } catch (PerlCompilerException e) {
+                // Ignore cycles involving UNIVERSAL
+            }
+            // Use DFS traversal so UNIVERSAL's parents are included in proper order
+            linearizeDFSHelper("UNIVERSAL", isaMap, result, visited, currentPath);
         }
 
         if (DEBUG_DFS) {

@@ -21,9 +21,17 @@ public class C3 {
             Set<String> visiting = new HashSet<>();
             result = linearizeC3Helper(className, isaMap, visiting);
 
-            // Add UNIVERSAL only if not already present and this is not UNIVERSAL itself
+            // Add UNIVERSAL and its @ISA hierarchy (e.g., @UNIVERSAL::ISA = 'LASTCHANCE')
             if (!result.contains("UNIVERSAL") && !className.equals("UNIVERSAL")) {
-                result.add("UNIVERSAL");
+                // Populate UNIVERSAL's @ISA into the map
+                InheritanceResolver.populateIsaMap("UNIVERSAL", isaMap);
+                // Linearize UNIVERSAL's hierarchy using C3
+                List<String> universalHierarchy = linearizeC3Helper("UNIVERSAL", isaMap, new HashSet<>());
+                for (String cls : universalHierarchy) {
+                    if (!result.contains(cls)) {
+                        result.add(cls);
+                    }
+                }
             }
 
             InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
