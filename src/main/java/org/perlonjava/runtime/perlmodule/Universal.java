@@ -132,15 +132,18 @@ public class Universal extends PerlModuleBase {
                 }
         }
 
+        // Perl's can() must NOT consider AUTOLOAD - it should only find
+        // methods that are actually defined in the hierarchy.
+        // See perlobj: "can cannot know whether an object will be able to
+        // provide a method through AUTOLOAD"
         RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
-        if (method != null) {
+        if (method != null && !isAutoloadDispatch(method, methodName, perlClassName)) {
             return method.getList();
         }
 
         String normalizedName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedName);
-            // Only return the code ref if it's actually defined (has a real subroutine)
             if (codeRef.getDefinedBoolean()) {
                 return codeRef.getList();
             }
@@ -154,7 +157,7 @@ public class Universal extends PerlModuleBase {
             String effectiveMethodName = decodedMethodName != null ? decodedMethodName : methodName;
             String effectiveClassName = decodedClassName != null ? decodedClassName : perlClassName;
             method = InheritanceResolver.findMethodInHierarchy(effectiveMethodName, effectiveClassName, null, 0);
-            if (method != null) {
+            if (method != null && !isAutoloadDispatch(method, effectiveMethodName, effectiveClassName)) {
                 return method.getList();
             }
         }
@@ -167,11 +170,45 @@ public class Universal extends PerlModuleBase {
             String effectiveMethodName = methodNameAsOctets != null ? methodNameAsOctets : methodName;
             String effectiveClassName = classNameAsOctets != null ? classNameAsOctets : perlClassName;
             method = InheritanceResolver.findMethodInHierarchy(effectiveMethodName, effectiveClassName, null, 0);
-            if (method != null) {
+            if (method != null && !isAutoloadDispatch(method, effectiveMethodName, effectiveClassName)) {
                 return method.getList();
             }
         }
         return new RuntimeList();
+    }
+
+    /**
+     * Check if a method resolution result was found via AUTOLOAD dispatch
+     * rather than being a directly defined method.
+     * <p>
+     * The AUTOLOAD coderef has autoloadVariableName set (e.g. "Foo::AUTOLOAD").
+     * We detect AUTOLOAD dispatch by checking if the resolved coderef is actually
+     * an AUTOLOAD handler AND the method we asked for is not "AUTOLOAD" itself.
+     * We also verify the coderef came from the AUTOLOAD hierarchy by checking
+     * that the method doesn't actually exist as a direct definition.
+     */
+    private static boolean isAutoloadDispatch(RuntimeScalar method, String methodName, String className) {
+        if (!(method.value instanceof RuntimeCode code)) {
+            return false;
+        }
+        if (code.autoloadVariableName == null) {
+            return false;
+        }
+        // If the method IS "AUTOLOAD", it's a direct lookup, not AUTOLOAD dispatch
+        if ("AUTOLOAD".equals(methodName)) {
+            return false;
+        }
+        // Verify by checking if the method actually exists as a real subroutine
+        // in the class hierarchy. The autoloadVariableName indicates it was
+        // resolved via the AUTOLOAD fallback path.
+        String normalizedName = NameNormalizer.normalizeVariableName(methodName, className);
+        if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
+            RuntimeScalar directRef = GlobalVariable.getGlobalCodeRef(normalizedName);
+            if (directRef.getDefinedBoolean() && directRef != method) {
+                return false; // There's a real method with this name
+            }
+        }
+        return true;
     }
 
     /**
