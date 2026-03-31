@@ -2008,6 +2008,33 @@ public class Opcodes {
      */
     public static final short CONCAT_NO_OVERLOAD = 395;
 
+    /**
+     * Dynamic goto: evaluate register rs to get label name, look up PC in gotoLabelPcs map.
+     * Format: GOTO_DYNAMIC rs
+     * If label not found, throws "Can't find label" error.
+     */
+    public static final short GOTO_DYNAMIC = 396;
+
+    /**
+     * Conditional state variable initialization: if state var not yet initialized, set it and mark initialized.
+     * Format: STATE_INIT_SCALAR rd value_reg name_idx persist_id
+     * rd must already hold a reference to the persistent state scalar (from RETRIEVE_BEGIN_SCALAR).
+     * Only assigns value_reg into rd if the state variable has not been initialized yet.
+     */
+    public static final short STATE_INIT_SCALAR = 397;
+
+    /**
+     * Conditional state array initialization.
+     * Format: STATE_INIT_ARRAY rd value_reg name_idx persist_id
+     */
+    public static final short STATE_INIT_ARRAY = 398;
+
+    /**
+     * Conditional state hash initialization.
+     * Format: STATE_INIT_HASH rd value_reg name_idx persist_id
+     */
+    public static final short STATE_INIT_HASH = 399;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

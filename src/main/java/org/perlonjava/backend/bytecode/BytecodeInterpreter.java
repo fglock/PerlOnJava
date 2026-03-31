@@ -169,6 +169,31 @@ public class BytecodeInterpreter {
                                 pc = offset;  // Registers persist across jump (unlike stack-based!)
                             }
 
+                            case Opcodes.GOTO_DYNAMIC -> {
+                                // Dynamic goto: evaluate register to get label name, look up PC
+                                int rs = bytecode[pc++];
+                                RuntimeScalar target = (RuntimeScalar) registers[rs];
+                                // If target is a CODE reference, treat as goto &sub (tail call)
+                                if (target.type == RuntimeScalarType.CODE) {
+                                    // Create a TAILCALL marker and return it
+                                    RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                                            target, new RuntimeArray(), code.sourceName, code.sourceLine);
+                                    return marker;
+                                }
+                                String labelName = target.toString();
+                                if (code.gotoLabelPcs != null) {
+                                    Integer targetPc = code.gotoLabelPcs.get(labelName);
+                                    if (targetPc != null) {
+                                        pc = targetPc;
+                                        break;
+                                    }
+                                }
+                                // Label not found locally - create GOTO marker and propagate
+                                RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                                        ControlFlowType.GOTO, labelName, code.sourceName, code.sourceLine);
+                                return marker;
+                            }
+
                             case Opcodes.LAST, Opcodes.NEXT, Opcodes.REDO -> {
                                 // Loop control: jump to target PC
                                 // Format: opcode, target (absolute PC as int)
@@ -1519,7 +1544,8 @@ public class BytecodeInterpreter {
                             // Group 5: Closure/Scope (128-131)
                             case Opcodes.RETRIEVE_BEGIN_SCALAR, Opcodes.RETRIEVE_BEGIN_ARRAY,
                                  Opcodes.RETRIEVE_BEGIN_HASH, Opcodes.LOCAL_SCALAR, Opcodes.LOCAL_ARRAY,
-                                 Opcodes.LOCAL_HASH -> {
+                                 Opcodes.LOCAL_HASH, Opcodes.STATE_INIT_SCALAR, Opcodes.STATE_INIT_ARRAY,
+                                 Opcodes.STATE_INIT_HASH -> {
                                 pc = executeScopeOps(opcode, bytecode, pc, registers, code);
                             }
 
@@ -2310,6 +2336,59 @@ public class BytecodeInterpreter {
                 RuntimeHash hash = GlobalVariable.getGlobalHash(fullName);
                 DynamicVariableManager.pushLocalVariable(hash);
                 registers[rd] = GlobalVariable.getGlobalHash(fullName);
+                return pc;
+            }
+            case Opcodes.STATE_INIT_SCALAR -> {
+                // Format: STATE_INIT_SCALAR rd value_reg name_idx persist_id
+                // Retrieves the persistent state variable (non-destructive) and
+                // conditionally assigns value only on first initialization
+                int rd = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                String varName = code.stringPool[nameIdx];
+                // Use undef codeRef for top-level state (interpreter fallback context)
+                RuntimeScalar codeRef = new RuntimeScalar();
+                // Retrieve without removing (unlike RETRIEVE_BEGIN_SCALAR)
+                RuntimeScalar stateVar = StateVariable.retrieveStateScalar(codeRef, varName, persistId);
+                registers[rd] = stateVar;
+                RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
+                if (!isInit.getBoolean()) {
+                    stateVar.set((RuntimeScalar) registers[valueReg]);
+                    StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
+                }
+                return pc;
+            }
+            case Opcodes.STATE_INIT_ARRAY -> {
+                int rd = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                String varName = code.stringPool[nameIdx];
+                RuntimeScalar codeRef = new RuntimeScalar();
+                RuntimeArray stateArr = StateVariable.retrieveStateArray(codeRef, varName, persistId);
+                registers[rd] = stateArr;
+                RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
+                if (!isInit.getBoolean()) {
+                    stateArr.setFromList(((RuntimeBase) registers[valueReg]).getList());
+                    StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
+                }
+                return pc;
+            }
+            case Opcodes.STATE_INIT_HASH -> {
+                int rd = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                int persistId = bytecode[pc++];
+                String varName = code.stringPool[nameIdx];
+                RuntimeScalar codeRef = new RuntimeScalar();
+                RuntimeHash stateHash = StateVariable.retrieveStateHash(codeRef, varName, persistId);
+                registers[rd] = stateHash;
+                RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
+                if (!isInit.getBoolean()) {
+                    stateHash.setFromList(((RuntimeBase) registers[valueReg]).getList());
+                    StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
+                }
                 return pc;
             }
             default -> throw new RuntimeException("Unknown scope opcode: " + opcode);

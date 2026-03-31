@@ -1391,6 +1391,16 @@ public class CompileOperator {
             }
             
             if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;
+            else {
+                // Dynamic goto (goto EXPR) - evaluate expression at runtime
+                // Check if EXPR could be a CODE reference (goto &sub handled above)
+                bc.compileNode(arg, -1, RuntimeContextType.SCALAR);
+                int exprReg = bc.lastResultReg;
+                bc.emit(Opcodes.GOTO_DYNAMIC);
+                bc.emit(exprReg);
+                bc.lastResultReg = -1;
+                return;
+            }
         }
         if (labelStr == null) bc.throwCompilerException("goto must be given label");
         Integer targetPc = bc.gotoLabelPcs.get(labelStr);

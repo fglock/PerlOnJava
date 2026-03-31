@@ -630,6 +630,10 @@ public class BytecodeCompiler implements Visitor {
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
+        // Store goto label map for dynamic goto support (goto $variable)
+        if (!this.gotoLabelPcs.isEmpty()) {
+            code.gotoLabelPcs = new HashMap<>(this.gotoLabelPcs);
+        }
         return code;
     }
 

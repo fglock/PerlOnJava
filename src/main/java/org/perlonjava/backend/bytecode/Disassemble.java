@@ -37,6 +37,9 @@ public class Disassemble {
                         sb.append("GOTO ").append(InterpretedCode.readInt(interpretedCode.bytecode, pc)).append("\n");
                         pc += 1;
                         break;
+                    case Opcodes.GOTO_DYNAMIC:
+                        sb.append("GOTO_DYNAMIC r").append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
                     case Opcodes.LAST:
                         sb.append("LAST ").append(InterpretedCode.readInt(interpretedCode.bytecode, pc)).append("\n");
                         pc += 1;
