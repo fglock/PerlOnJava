@@ -173,11 +173,21 @@ public class BytecodeInterpreter {
                                 // Dynamic goto: evaluate register to get label name, look up PC
                                 int rs = bytecode[pc++];
                                 RuntimeScalar target = (RuntimeScalar) registers[rs];
+                                // Dereference if target is a reference to CODE (e.g., goto \&sub)
+                                if (target.type == RuntimeScalarType.REFERENCE) {
+                                    RuntimeScalar deref = (RuntimeScalar) target.value;
+                                    if (deref.type == RuntimeScalarType.CODE) {
+                                        target = deref;
+                                    }
+                                }
                                 // If target is a CODE reference, treat as goto &sub (tail call)
                                 if (target.type == RuntimeScalarType.CODE) {
-                                    // Create a TAILCALL marker and return it
+                                    // Create a TAILCALL marker - pass current @_ (register 1)
+                                    RuntimeArray currentArgs = (registers[1] instanceof RuntimeArray)
+                                            ? (RuntimeArray) registers[1]
+                                            : new RuntimeArray();
                                     RuntimeControlFlowList marker = new RuntimeControlFlowList(
-                                            target, new RuntimeArray(), code.sourceName, code.sourceLine);
+                                            target, currentArgs, code.sourceName, code.sourceLine);
                                     return marker;
                                 }
                                 String labelName = target.toString();
@@ -1049,11 +1059,12 @@ public class BytecodeInterpreter {
 
                             case Opcodes.GOTO_TAILCALL -> {
                                 // Create TAILCALL marker for goto &sub
-                                // Format: GOTO_TAILCALL rd coderef_reg args_reg context
+                                // Format: GOTO_TAILCALL rd coderef_reg args_reg context evalScopeIdx
                                 int rd = bytecode[pc++];
                                 int coderefReg = bytecode[pc++];
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];  // unused in marker, but consumed
+                                int evalScopeIdx = bytecode[pc++]; // -1 = not in eval
 
                                 // Get coderef
                                 RuntimeBase codeRefBase = registers[coderefReg];
@@ -1079,8 +1090,9 @@ public class BytecodeInterpreter {
                                     callArgs = new RuntimeArray((RuntimeScalar) argsBase);
                                 }
 
-                                // Create TAILCALL marker - caller's trampoline will execute it
-                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0);
+                                // Create TAILCALL marker with eval scope for runtime check
+                                String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;
+                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0, evalScope);
                             }
 
                             case Opcodes.IS_CONTROL_FLOW -> {

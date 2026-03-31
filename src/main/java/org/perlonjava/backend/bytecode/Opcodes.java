@@ -1870,7 +1870,7 @@ public class Opcodes {
 
     /**
      * Create a TAILCALL marker for goto &sub and return it.
-     * Format: GOTO_TAILCALL rd coderef_reg args_reg context
+     * Format: GOTO_TAILCALL rd coderef_reg args_reg context evalScopeIdx
      * Effect: rd = new RuntimeControlFlowList(TAILCALL, coderef, args, context)
      * The caller's CALL/CALL_METHOD trampoline will execute the tail call.
      */
