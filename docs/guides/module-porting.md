@@ -284,6 +284,29 @@ public class Dbi extends PerlModuleBase {
 3. Test both pure Perl and Java implementations
 4. Verify compatibility with original Perl module
 
+### CPAN Smoke Test
+
+Use `dev/tools/cpan_smoke_test.pl` to verify CPAN module compatibility across a curated registry of modules. This helps catch regressions when making changes to PerlOnJava's runtime or module infrastructure.
+
+```bash
+# Quick regression check (known-good modules only)
+perl dev/tools/cpan_smoke_test.pl --quick
+
+# Test all registered modules
+perl dev/tools/cpan_smoke_test.pl
+
+# Test specific modules
+perl dev/tools/cpan_smoke_test.pl Moo DateTime Try::Tiny
+
+# Compare with a previous run to detect regressions
+perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_20250331.dat
+
+# List all registered modules and their status
+perl dev/tools/cpan_smoke_test.pl --list
+```
+
+The script reports pass/fail counts, XS detection (pure-perl, java-xs, xs-required), and flags regressions when compared with a previous run. Run with `perl` (not `jperl`) because it uses fork.
+
 ## Version Compatibility
 
 - Perl version requirements
