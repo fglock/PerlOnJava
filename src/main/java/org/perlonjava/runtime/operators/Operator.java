@@ -684,6 +684,13 @@ public class Operator {
         return new RuntimeScalar(0);
     }
 
+    public static RuntimeScalar setpriority(int ctx, RuntimeBase... args) {
+        // setpriority(WHICH, WHO, PRIORITY) - set process priority
+        // Not available on the JVM; return false and set $!
+        GlobalVariable.setGlobalVariable("main::!", "setpriority() not supported on this platform (Java/JVM)");
+        return RuntimeScalarCache.scalarUndef;
+    }
+
     public static RuntimeList reset(RuntimeList args, int ctx) {
         if (args.isEmpty()) {
             RuntimeRegex.reset();

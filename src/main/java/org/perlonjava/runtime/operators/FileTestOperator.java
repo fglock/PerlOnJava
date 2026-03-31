@@ -323,6 +323,13 @@ public class FileTestOperator {
             return operator.equals("-l") ? scalarFalse : scalarUndef;
         }
 
+        // Handle NUL bytes in filename - Perl warns and treats as non-existent
+        if (filename.indexOf('\0') >= 0) {
+            getGlobalVariable("main::!").set(2); // ENOENT
+            updateLastStat(fileHandle, false, 2);
+            return operator.equals("-l") ? scalarFalse : scalarUndef;
+        }
+
         // Check if it looks like a filehandle name but isn't actually a filehandle
         if (looksLikeFilehandle(filename)) {
             // Try to get it as a global variable (filehandle)

@@ -24,6 +24,7 @@ import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.CoreSubroutineGenerator;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -1860,6 +1861,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Check if it's an unfilled forward declaration (not defined)
             if (!code.defined()) {
+                // Lazily generate CORE:: subroutine wrappers on first call
+                if ("CORE".equals(code.packageName) && code.subName != null) {
+                    boolean generated = CoreSubroutineGenerator.generateWrapper(code.subName);
+                    if (generated) {
+                        // Reload code after wrapper generation
+                        runtimeScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
+                        code = (RuntimeCode) runtimeScalar.value;
+                        if (code.defined()) {
+                            // Fall through to normal execution below
+                        }
+                    }
+                }
+            }
+            if (!code.defined()) {
                 // Try to find AUTOLOAD for this subroutine
                 String subroutineName = code.packageName + "::" + code.subName;
                 if (code.packageName != null && code.subName != null && !subroutineName.isEmpty()) {
@@ -2046,6 +2061,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 code = (RuntimeCode) runtimeScalar.value;
             }
 
+            // Lazily generate CORE:: subroutine wrappers on first call
+            if (!code.defined() && "CORE".equals(code.packageName) && code.subName != null) {
+                if (CoreSubroutineGenerator.generateWrapper(code.subName)) {
+                    runtimeScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
+                    code = (RuntimeCode) runtimeScalar.value;
+                }
+            }
+
             if (code.defined()) {
                 // Look up warning bits for the code's class and push to context stack
                 String warningBits = getWarningBitsForCode(code);
@@ -2145,6 +2168,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+            }
+
+            // Lazily generate CORE:: subroutine wrappers on first call
+            if (!code.defined() && "CORE".equals(code.packageName) && code.subName != null) {
+                if (CoreSubroutineGenerator.generateWrapper(code.subName)) {
+                    runtimeScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
+                    code = (RuntimeCode) runtimeScalar.value;
+                }
             }
 
             if (code.defined()) {
@@ -2464,6 +2495,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Check if subroutine is defined (prefer functional interface over methodHandle)
             if (this.subroutine == null && this.methodHandle == null) {
+                // Lazily generate CORE:: subroutine wrappers on first call
+                if ("CORE".equals(this.packageName) && this.subName != null) {
+                    if (CoreSubroutineGenerator.generateWrapper(this.subName)) {
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef("CORE::" + this.subName);
+                        if (codeRef.type == RuntimeScalarType.CODE) {
+                            RuntimeCode generated = (RuntimeCode) codeRef.value;
+                            if (generated.defined()) {
+                                return generated.apply(a, callContext);
+                            }
+                        }
+                    }
+                }
                 String fullSubName = "";
                 if (this.packageName != null && this.subName != null) {
                     fullSubName = this.packageName + "::" + this.subName;

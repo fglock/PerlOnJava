@@ -2040,6 +2040,20 @@ public class Opcodes {
     // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
     public static final short SMARTMATCH = 400;
 
+    // Missing system operators needed for interpreter fallback of large files (e.g. taint.t)
+    public static final short SYMLINK = 401;
+    public static final short CHROOT = 402;
+    public static final short MKDIR = 403;
+    public static final short MSGCTL = 404;
+    public static final short SHMCTL = 405;
+    public static final short SEMCTL = 406;
+    public static final short EXEC = 407;
+    public static final short FCNTL = 408;
+    public static final short IOCTL = 409;
+    public static final short GETPWENT = 410;
+    public static final short SETPWENT = 411;
+    public static final short ENDPWENT = 412;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

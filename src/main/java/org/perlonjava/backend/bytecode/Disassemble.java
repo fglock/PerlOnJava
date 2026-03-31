@@ -1823,7 +1823,19 @@ public class Disassemble {
                     case Opcodes.GETPRIORITY:
                     case Opcodes.SETPRIORITY:
                     case Opcodes.GETSOCKOPT:
-                    case Opcodes.SETSOCKOPT: {
+                    case Opcodes.SETSOCKOPT:
+                    case Opcodes.SYMLINK:
+                    case Opcodes.CHROOT:
+                    case Opcodes.MKDIR:
+                    case Opcodes.MSGCTL:
+                    case Opcodes.SHMCTL:
+                    case Opcodes.SEMCTL:
+                    case Opcodes.EXEC:
+                    case Opcodes.FCNTL:
+                    case Opcodes.IOCTL:
+                    case Opcodes.GETPWENT:
+                    case Opcodes.SETPWENT:
+                    case Opcodes.ENDPWENT: {
                         rd = interpretedCode.bytecode[pc++];
                         int sysArgsReg = interpretedCode.bytecode[pc++];
                         int sysCtx = interpretedCode.bytecode[pc++];
@@ -1836,6 +1848,18 @@ public class Disassemble {
                             case Opcodes.SETPRIORITY -> "setpriority";
                             case Opcodes.GETSOCKOPT -> "getsockopt";
                             case Opcodes.SETSOCKOPT -> "setsockopt";
+                            case Opcodes.SYMLINK -> "symlink";
+                            case Opcodes.CHROOT -> "chroot";
+                            case Opcodes.MKDIR -> "mkdir";
+                            case Opcodes.MSGCTL -> "msgctl";
+                            case Opcodes.SHMCTL -> "shmctl";
+                            case Opcodes.SEMCTL -> "semctl";
+                            case Opcodes.EXEC -> "exec";
+                            case Opcodes.FCNTL -> "fcntl";
+                            case Opcodes.IOCTL -> "ioctl";
+                            case Opcodes.GETPWENT -> "getpwent";
+                            case Opcodes.SETPWENT -> "setpwent";
+                            case Opcodes.ENDPWENT -> "endpwent";
                             default -> "sys_op_" + opcode;
                         };
                         sb.append(sysName).append(" r").append(rd)

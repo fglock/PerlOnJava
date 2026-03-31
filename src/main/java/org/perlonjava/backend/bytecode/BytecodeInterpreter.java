@@ -1565,7 +1565,11 @@ public class BytecodeInterpreter {
                             case Opcodes.CHOWN, Opcodes.WAITPID, Opcodes.FORK, Opcodes.GETPPID, Opcodes.GETPGRP,
                                  Opcodes.SETPGRP, Opcodes.GETPRIORITY, Opcodes.SETPRIORITY, Opcodes.GETSOCKOPT,
                                  Opcodes.SETSOCKOPT, Opcodes.SYSCALL, Opcodes.SEMGET, Opcodes.SEMOP, Opcodes.MSGGET,
-                                 Opcodes.MSGSND, Opcodes.MSGRCV, Opcodes.SHMGET, Opcodes.SHMREAD, Opcodes.SHMWRITE -> {
+                                 Opcodes.MSGSND, Opcodes.MSGRCV, Opcodes.SHMGET, Opcodes.SHMREAD, Opcodes.SHMWRITE,
+                                 Opcodes.SYMLINK, Opcodes.CHROOT, Opcodes.MKDIR,
+                                 Opcodes.MSGCTL, Opcodes.SHMCTL, Opcodes.SEMCTL,
+                                 Opcodes.EXEC, Opcodes.FCNTL, Opcodes.IOCTL,
+                                 Opcodes.GETPWENT, Opcodes.SETPWENT, Opcodes.ENDPWENT -> {
                                 pc = executeSystemOps(opcode, bytecode, pc, registers);
                             }
 
@@ -2478,6 +2482,42 @@ public class BytecodeInterpreter {
             }
             case Opcodes.SHMWRITE -> {
                 return SlowOpcodeHandler.executeShmwrite(bytecode, pc, registers);
+            }
+            case Opcodes.SYMLINK -> {
+                return MiscOpcodeHandler.execute(Opcodes.SYMLINK, bytecode, pc, registers);
+            }
+            case Opcodes.CHROOT -> {
+                return MiscOpcodeHandler.execute(Opcodes.CHROOT, bytecode, pc, registers);
+            }
+            case Opcodes.MKDIR -> {
+                return MiscOpcodeHandler.execute(Opcodes.MKDIR, bytecode, pc, registers);
+            }
+            case Opcodes.MSGCTL -> {
+                return MiscOpcodeHandler.execute(Opcodes.MSGCTL, bytecode, pc, registers);
+            }
+            case Opcodes.SHMCTL -> {
+                return MiscOpcodeHandler.execute(Opcodes.SHMCTL, bytecode, pc, registers);
+            }
+            case Opcodes.SEMCTL -> {
+                return MiscOpcodeHandler.execute(Opcodes.SEMCTL, bytecode, pc, registers);
+            }
+            case Opcodes.EXEC -> {
+                return MiscOpcodeHandler.execute(Opcodes.EXEC, bytecode, pc, registers);
+            }
+            case Opcodes.FCNTL -> {
+                return MiscOpcodeHandler.execute(Opcodes.FCNTL, bytecode, pc, registers);
+            }
+            case Opcodes.IOCTL -> {
+                return MiscOpcodeHandler.execute(Opcodes.IOCTL, bytecode, pc, registers);
+            }
+            case Opcodes.GETPWENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETPWENT, bytecode, pc, registers);
+            }
+            case Opcodes.SETPWENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.SETPWENT, bytecode, pc, registers);
+            }
+            case Opcodes.ENDPWENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.ENDPWENT, bytecode, pc, registers);
             }
             default -> throw new RuntimeException("Unknown system opcode: " + opcode);
         }

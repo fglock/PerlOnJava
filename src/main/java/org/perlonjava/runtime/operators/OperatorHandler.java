@@ -273,6 +273,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("system", "system", "org/perlonjava/runtime/operators/SystemOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ZI)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("exec", "exec", "org/perlonjava/runtime/operators/SystemOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ZI)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("fork", "fork", "org/perlonjava/runtime/operators/SystemOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("chroot", "chroot", "org/perlonjava/runtime/operators/SystemOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("kill", "kill", "org/perlonjava/runtime/operators/KillOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("umask", "umask", "org/perlonjava/runtime/operators/UmaskOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("wait", "waitForChild", "org/perlonjava/runtime/operators/WaitpidOperator", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
@@ -297,6 +298,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("getpgrp", "getpgrp", "org/perlonjava/runtime/operators/Operator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("setpgrp", "setpgrp", "org/perlonjava/runtime/operators/Operator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("getpriority", "getpriority", "org/perlonjava/runtime/operators/Operator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("setpriority", "setpriority", "org/perlonjava/runtime/operators/Operator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
         put("prototype", "prototype", "org/perlonjava/runtime/runtimetypes/RuntimeCode", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
