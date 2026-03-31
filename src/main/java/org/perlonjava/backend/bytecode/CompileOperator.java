@@ -268,6 +268,7 @@ public class CompileOperator {
         bc.emitReg(patternReg);
         bc.emitReg(replacementReg);
         bc.emitReg(flagsReg);
+        bc.emitReg(1);  // @_ register - pass caller's args for replacement code
         int stringReg;
         if (args.elements.size() > 3) {
             bc.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);

@@ -77,6 +77,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private RegexFlags regexFlags;
     // Replacement string for substitutions
     private RuntimeScalar replacement = null;
+    // Caller's @_ for replacement code evaluation (so $_[0] etc. work in s/// replacement)
+    private RuntimeArray callerArgs = null;
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
@@ -433,6 +435,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         regex.replacement = replacement;
         return new RuntimeScalar(regex);
+    }
+
+    /**
+     * Internal variant of qr// that includes a `replacement` and caller's @_.
+     * This overload passes the caller's @_ so that $_[0] etc. work in s/// replacement.
+     *
+     * @param patternString The regex pattern string.
+     * @param replacement   The replacement string.
+     * @param modifiers     Modifiers for the regex pattern.
+     * @param callerArgs    The caller's @_ array for replacement code evaluation.
+     * @return A RuntimeScalar representing the compiled regex with replacement.
+     */
+    public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers, RuntimeArray callerArgs) {
+        RuntimeScalar result = getReplacementRegex(patternString, replacement, modifiers);
+        RuntimeRegex regex = (RuntimeRegex) result.value;
+        regex.callerArgs = callerArgs;
+        return result;
     }
 
     /**
@@ -920,7 +939,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 String replacementStr;
                 if (replacementIsCode) {
                     // Evaluate the replacement as code
-                    RuntimeList result = RuntimeCode.apply(replacement, new RuntimeArray(), RuntimeContextType.SCALAR);
+                    // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
+                    RuntimeArray args = (regex.callerArgs != null) ? regex.callerArgs : new RuntimeArray();
+                    RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
                     replacementStr = result.toString();
                 } else {
                     // Replace the match with the replacement string

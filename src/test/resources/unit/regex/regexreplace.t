@@ -77,4 +77,36 @@ $string = "test";
 $substituted = $string =~ s/nomatch//r;
 ok($substituted eq "test", "s///r with non-matching empty replacement returns original: got [$substituted]");
 
+###################
+# Tests for @_ access in s/// replacement
+
+sub test_args_in_replacement {
+    my $str = "hello";
+    $str =~ s/hello/$_[0]/;
+    return $str;
+}
+is(test_args_in_replacement("world"), "world", '$_[0] in s/// replacement accesses caller @_');
+
+sub test_args_hash_deref {
+    my $str = "AAA::BBB";
+    my $class = "AAA";
+    $str =~ s/$class/$_[0]->{ns}/;
+    return $str;
+}
+is(test_args_hash_deref({ns => "REPLACEMENT"}), "REPLACEMENT::BBB", '$_[0]->{key} in s/// replacement');
+
+sub test_args_with_e_modifier {
+    my $str = "hello";
+    $str =~ s/hello/$_[0]/e;
+    return $str;
+}
+is(test_args_with_e_modifier("world"), "world", '$_[0] in s///e replacement accesses caller @_');
+
+sub test_args_with_global {
+    my $str = "aaa bbb";
+    $str =~ s/\w+/$_[0]/g;
+    return $str;
+}
+is(test_args_with_global("X"), "X X", '$_[0] in s///g replacement works for all matches');
+
 done_testing();

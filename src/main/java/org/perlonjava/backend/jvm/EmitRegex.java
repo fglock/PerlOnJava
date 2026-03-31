@@ -200,10 +200,14 @@ public class EmitRegex {
         operand.elements.get(1).accept(scalarVisitor);  // Replacement
         operand.elements.get(2).accept(scalarVisitor);  // Flags
 
-        // Create the replacement regex
+        // Push the caller's @_ so $_[0] etc. work in s/// replacement
+        // @_ is at local variable slot 1 in subroutines
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, 1);
+
+        // Create the replacement regex (4-argument version with caller's @_)
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegex", "getReplacementRegex",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledRegex = regexSlot >= 0;
