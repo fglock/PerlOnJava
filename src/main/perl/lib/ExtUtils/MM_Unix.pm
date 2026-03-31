@@ -80,6 +80,50 @@ sub get_version {
     return;
 }
 
+# parse_abstract - extract ABSTRACT from a Perl module's POD
+sub parse_abstract {
+    my($self,$parsefile) = @_;
+    my $result;
+
+    local $/ = "\n";
+    open(my $fh, '<', $parsefile) or die "Could not open '$parsefile': $!";
+    binmode $fh;
+    my $inpod = 0;
+    my $pod_encoding;
+    my $package = $self->{DISTNAME};
+    $package =~ s/-/::/g;
+    while (<$fh>) {
+        $inpod = /^=(?!cut)/ ? 1 : /^=cut/ ? 0 : $inpod;
+        next if !$inpod;
+        s#\r*\n\z##; # handle CRLF input
+
+        if ( /^=encoding\s*(.*)$/i ) {
+            $pod_encoding = $1;
+        }
+
+        if ( /^($package(?:\.pm)? \s+ -+ \s+)(.*)/x ) {
+          $result = $2;
+          next;
+        }
+        next unless $result;
+
+        if ( $result && ( /^\s*$/ || /^\=/ ) ) {
+          last;
+        }
+        $result = join ' ', $result, $_;
+    }
+    close $fh;
+
+    if ( $pod_encoding ) {
+        eval {
+          require Encode;
+          $result = Encode::decode($pod_encoding, $result);
+        }
+    }
+
+    return $result;
+}
+
 # maybe_command - check if a file is an executable command (Unix version)
 sub maybe_command {
     my($self,$file) = @_;

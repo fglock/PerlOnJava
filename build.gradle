@@ -195,6 +195,7 @@ dependencies {
     implementation libs.snakeyaml.engine              // YAML processing
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
+    implementation libs.sqlite.jdbc                    // SQLite JDBC driver
     // JNR-POSIX removed - using Java FFM API for native access (Java 22+)
 
     // Testing dependencies

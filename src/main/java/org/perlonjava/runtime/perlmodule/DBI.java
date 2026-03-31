@@ -203,13 +203,25 @@ public class DBI extends PerlModuleBase {
             sth.put("Type", new RuntimeScalar("st"));
 
             // Add NUM_OF_FIELDS by getting metadata
-            ResultSetMetaData metaData = stmt.getMetaData();
-            int numFields = (metaData != null) ? metaData.getColumnCount() : 0;
+            int numFields = 0;
+            try {
+                ResultSetMetaData metaData = stmt.getMetaData();
+                if (metaData != null) {
+                    numFields = metaData.getColumnCount();
+                }
+            } catch (Exception e) {
+                // Some drivers (e.g. sqlite-jdbc) throw on DDL statements
+            }
             sth.put("NUM_OF_FIELDS", new RuntimeScalar(numFields));
 
             // Add NUM_OF_PARAMS by getting parameter count
-            ParameterMetaData paramMetaData = stmt.getParameterMetaData();
-            int numParams = paramMetaData.getParameterCount();
+            int numParams = 0;
+            try {
+                ParameterMetaData paramMetaData = stmt.getParameterMetaData();
+                numParams = paramMetaData.getParameterCount();
+            } catch (Exception e) {
+                // Some drivers (e.g. sqlite-jdbc) throw on DDL/non-parameterized statements
+            }
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle

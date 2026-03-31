@@ -454,7 +454,13 @@ public class EmitSubroutine {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
 
-            EmitOperator.handleVoidContext(emitterVisitor);
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                mv.visitInsn(Opcodes.POP);
+            }
             return;
         }
 
