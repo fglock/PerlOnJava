@@ -11,6 +11,8 @@ package MIME::Base64;
 # The implementation is in: src/main/java/org/perlonjava/perlmodule/MimeBase64.java
 #
 
+our $VERSION = '3.16';
+
 use XSLoader;
 XSLoader::load( 'MIME::Base64' );
 

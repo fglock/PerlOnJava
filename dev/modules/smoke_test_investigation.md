@@ -78,6 +78,38 @@ correctly through PerlOnJava's process model.
 **Investigation**: Run failing Test::Needs subtests individually and compare
 exit codes with Perl 5.
 
+### P6: Regex engine — `\|` quantifier error in alternations
+
+**Affects**: Template Toolkit (0/247 — all tests fail), potentially other modules
+
+The PerlOnJava regex engine fails to parse `\|\|?` inside a complex alternation
+group. Template::Parser has a large tokenizer regex that includes `&&? | \|\|?`
+as an alternation branch. PerlOnJava emits:
+
+```
+Quantifier follows nothing in regex; marked by <-- HERE in m/... &&? | \|\|? <-- HERE .../
+```
+
+The `?` quantifier after `\|` is valid Perl — it means "match one or two pipe
+characters". The regex engine incorrectly treats `\|` as a zero-width match
+or fails to recognise the escaped pipe as a literal character in this context.
+
+**Reproducer**:
+```bash
+./jperl -e 'my $re = qr/\|\|?/; "||" =~ $re && print "ok\n"'
+# Works in isolation, but fails inside larger alternation groups
+```
+
+**Root cause**: Likely in the regex parser's handling of escaped metacharacters
+inside `(?: ... | ... )` groups, specifically when `\|` appears after `|`
+whitespace in `/x` mode.
+
+**Impact**: Blocks Template Toolkit entirely (all 247 tests fail at parse time).
+Also likely affects any CPAN module with complex `/x` regexes using `\|`.
+
+**Fix**: Investigate the regex compiler in `src/main/java/org/perlonjava/` —
+search for how `\|` is parsed vs `|` in alternation context.
+
 ## Per-Module Investigation
 
 ### Partial Modules (install OK, tests partially fail)
@@ -163,11 +195,12 @@ warning propagation or $SIG{__WARN__} handling.
 **Known issues**: Mostly works. See `dev/modules/log4perl-compatibility.md`.
 **Investigation**: Run full test suite and record specific failures.
 
-#### JSON — untested via jcpan
+#### JSON — CONFIG_FAIL
 
-**Expected behavior**: Should use JSON::PP (bundled) as backend.
-**Investigation**: Run `./jcpan -t JSON`. Key concern: does it correctly
-detect JSON::PP and fall back from JSON::XS?
+**Root cause**: Bundled `src/main/perl/lib/JSON.pm` was missing `$VERSION`.
+CPAN's JSON-4.11 `Makefile.PL` does `use JSON` and checks `$JSON::VERSION`,
+which returned undef causing a fatal "version check failed" error.
+**Fix**: Added `our $VERSION = '4.11'` to bundled JSON.pm. (DONE)
 
 #### Type::Tiny — untested via jcpan
 
@@ -181,11 +214,14 @@ the dependency chain installs cleanly.
 **Investigation**: Run `./jcpan -t List::MoreUtils`. Check that
 List::MoreUtils::XS is skipped gracefully.
 
-#### Template (Template Toolkit) — untested via jcpan
+#### Template (Template Toolkit) — 0/247
 
-**Expected behavior**: Should work without Stash::XS.
-**Investigation**: Run `./jcpan -t Template`. Large module with many deps —
-likely to expose new issues.
+**Blocker**: Template::Stash::XS loading fails (fixed with bundled shim that
+inherits from Template::Stash), but Template::Parser's tokenizer regex triggers
+a PerlOnJava regex engine bug with `\|\|?` in `/x` mode alternations.
+**Fix**: See P6 above. Once the regex bug is fixed, Template should work with
+the pure-Perl stash fallback. The bundled `Template/Stash/XS.pm` shim is
+already in place.
 
 #### Mojolicious — untested via jcpan
 
@@ -247,13 +283,14 @@ as a Java backend or pure-Perl shim.
 
 Based on impact (modules unblocked) and effort:
 
-1. **P1: Clone::PP** — trivial fix, unblocks HTTP::Message → LWP → Plack
-2. **P2: MIME::Base64 $VERSION** — trivial fix, unblocks version checks
-3. **P3: Encode::Locale** — small fix, improves HTTP chain
-4. **P4: PerlIO::encoding stub** — small fix, helps IO::HTML
+1. **P1: Clone::PP** — trivial fix, unblocks HTTP::Message → LWP → Plack **(DONE)**
+2. **P2: MIME::Base64 $VERSION** — trivial fix, unblocks version checks **(DONE)**
+3. **P3: Encode::Locale** — small fix, improves HTTP chain (Encode::Alias coderef form)
+4. **P4: PerlIO::encoding stub** — small fix, helps IO::HTML **(DONE)**
 5. **P5: Exit code handling** — medium effort, helps Test::Needs
-6. **HTML::Entities shim** — medium effort, unblocks Devel::Cover
-7. **IO::Compress::Gzip Java backend** — large effort, unblocks Compress chain
+6. **P6: Regex `\|` in alternations** — medium effort, unblocks Template Toolkit (247 tests)
+7. **HTML::Entities shim** — medium effort, unblocks Devel::Cover
+8. **IO::Compress::Gzip Java backend** — large effort, unblocks Compress chain
 
 ## How to Update This Document
 
@@ -272,15 +309,22 @@ perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_PREVIOUS.dat
 
 ## Progress Tracking
 
-### Current Status: Initial investigation
+### Current Status: P1-P4 implemented, P6 identified
 
 ### Completed
 - [x] Module registry created with 39 modules (2026-03-31)
 - [x] Top-20 CPAN modules identified and added
 - [x] Shared root causes documented
+- [x] P1: Clone::PP created (`src/main/perl/lib/Clone/PP.pm`) — uses Storable::dclone
+- [x] P2: MIME::Base64 $VERSION set in both `.pm` (`3.16`) and `.java` backend
+- [x] P4: PerlIO::encoding stub created (`src/main/perl/lib/PerlIO/encoding.pm`)
+- [x] JSON $VERSION added to bundled `src/main/perl/lib/JSON.pm`
+- [x] Template::Stash::XS shim created (falls back to pure-Perl Template::Stash)
+- [x] Baseline smoke test run for new modules (JSON, Type::Tiny, List::MoreUtils, Template, Mojolicious)
 
 ### Next Steps
-1. Run full smoke test to get baseline pass/fail counts for all 39 modules
-2. Investigate new modules (JSON, Type::Tiny, List::MoreUtils, Template, Mojolicious)
-3. Implement P1 (Clone::PP) — highest impact fix
-4. Re-run smoke test with `--compare` to measure improvement
+1. Fix P6 (regex `\|` in alternations) — unblocks Template Toolkit
+2. Fix P3 (Encode::Locale — Encode::Alias coderef form)
+3. Fix P5 (exit code handling)
+4. Run full smoke test to measure improvement from P1/P2/P4 fixes
+5. Re-run smoke test with `--compare` against baseline
