@@ -3,10 +3,32 @@ use strict;
 use warnings;
 use XSLoader;
 
+our $VERSION = '1.643';
+
 XSLoader::load( 'DBI' );
 
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/perlmodule/DBI.java
+
+# DSN translation: convert Perl DBI DSN format to JDBC URL
+# This wraps the Java-side connect() to support dbi:Driver:... format
+{
+    no warnings 'redefine';
+    my $orig_connect = \&connect;
+    *connect = sub {
+        my ($class, $dsn, $user, $pass, $attr) = @_;
+        $dsn = '' unless defined $dsn;
+        if ($dsn =~ /^dbi:(\w+):(.*)$/i) {
+            my ($driver, $rest) = ($1, $2);
+            my $dbd_class = "DBD::$driver";
+            eval "require $dbd_class";
+            if ($dbd_class->can('_dsn_to_jdbc')) {
+                $dsn = $dbd_class->_dsn_to_jdbc($rest);
+            }
+        }
+        return $orig_connect->($class, $dsn, $user, $pass, $attr);
+    };
+}
 
 # Example:
 #

@@ -5,6 +5,7 @@ fastjson2 = "2.0.61"
 icu4j = "78.3"
 junit-jupiter = "6.1.0-M1"
 snakeyaml-engine = "3.0.1"
+sqlite-jdbc = "3.49.1.0"
 tomlj = "1.1.1"
 
 [libraries]
@@ -17,6 +18,7 @@ junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.re
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 
 [plugins]
