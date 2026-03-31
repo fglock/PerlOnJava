@@ -10,7 +10,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Perl debugger with `-d` command line option
 - Add `defer` feature
 - Lexical warnings with `use warnings` and FATAL support
-- Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
+- Non-local control flow: `last`/`next`/`redo`/`goto LABEL`/`goto $EXPR`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
 - Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`.
 - Add operators: `flock`, `syscall`, `fcntl`, `ioctl`. 

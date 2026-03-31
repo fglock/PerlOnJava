@@ -37,6 +37,9 @@ public class Disassemble {
                         sb.append("GOTO ").append(InterpretedCode.readInt(interpretedCode.bytecode, pc)).append("\n");
                         pc += 1;
                         break;
+                    case Opcodes.GOTO_DYNAMIC:
+                        sb.append("GOTO_DYNAMIC r").append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
                     case Opcodes.LAST:
                         sb.append("LAST ").append(InterpretedCode.readInt(interpretedCode.bytecode, pc)).append("\n");
                         pc += 1;
@@ -2219,6 +2222,26 @@ public class Disassemble {
                             sb.append(interpretedCode.stringPool[pkgIdxA]);
                         }
                         sb.append("\n");
+                        break;
+                    }
+                    case Opcodes.STATE_INIT_SCALAR:
+                    case Opcodes.STATE_INIT_ARRAY:
+                    case Opcodes.STATE_INIT_HASH: {
+                        String name = opcode == Opcodes.STATE_INIT_SCALAR ? "STATE_INIT_SCALAR" :
+                                opcode == Opcodes.STATE_INIT_ARRAY ? "STATE_INIT_ARRAY" : "STATE_INIT_HASH";
+                        int stRd = interpretedCode.bytecode[pc++];
+                        int stVal = interpretedCode.bytecode[pc++];
+                        int stName = interpretedCode.bytecode[pc++];
+                        int stPersist = interpretedCode.bytecode[pc++];
+                        sb.append(name).append(" r").append(stRd).append(", r").append(stVal)
+                                .append(", name=").append(stName).append(", persist=").append(stPersist).append("\n");
+                        break;
+                    }
+                    case Opcodes.SMARTMATCH: {
+                        int smRd = interpretedCode.bytecode[pc++];
+                        int smRs1 = interpretedCode.bytecode[pc++];
+                        int smRs2 = interpretedCode.bytecode[pc++];
+                        sb.append("SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
                         break;
                     }
 

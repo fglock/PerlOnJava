@@ -325,6 +325,31 @@ public class CompileAssignment {
                                 return;
                             }
 
+                            if (leftOp.operator.equals("state")) {
+                                // State variable without BEGIN id: use conditional initialization
+                                // STATE_INIT_SCALAR handles both retrieval (non-destructive) and
+                                // conditional first-time initialization
+                                int persistId = sigilOp.id;
+                                int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                                int reg = bytecodeCompiler.allocateRegister();
+
+                                // Compile RHS (value to conditionally assign)
+                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                                int valueReg = bytecodeCompiler.lastResultReg;
+
+                                // STATE_INIT_SCALAR: retrieves persistent variable and
+                                // only assigns if not yet initialized
+                                bytecodeCompiler.emitWithToken(Opcodes.STATE_INIT_SCALAR, node.getIndex());
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitReg(valueReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(persistId);
+
+                                bytecodeCompiler.registerVariable(varName, reg);
+                                bytecodeCompiler.lastResultReg = reg;
+                                return;
+                            }
+
                             // Regular lexical variable (not captured)
                             // Compile RHS first, before adding variable to scope,
                             // so that `my $x = $x` reads the outer $x on the RHS

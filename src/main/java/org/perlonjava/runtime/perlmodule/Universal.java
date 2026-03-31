@@ -114,6 +114,13 @@ public class Universal extends PerlModuleBase {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
+                if (object.getDefinedBoolean()) {
+                    perlClassName = object.toString();
+                    if (perlClassName.isEmpty()) {
+                        return new RuntimeScalar(false).getList();
+                    }
+                    break;
+                }
                 return new RuntimeScalar(false).getList();
             default:
                 perlClassName = object.toString();
@@ -204,6 +211,13 @@ public class Universal extends PerlModuleBase {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
+                if (object.getDefinedBoolean()) {
+                    perlClassName = object.toString();
+                    if (perlClassName.isEmpty()) {
+                        return new RuntimeScalar(false).getList();
+                    }
+                    break;
+                }
                 return new RuntimeScalar(false).getList();
             default:
                 perlClassName = object.toString();
@@ -287,6 +301,13 @@ public class Universal extends PerlModuleBase {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
+                if (object.getDefinedBoolean()) {
+                    perlClassName = object.toString();
+                    if (perlClassName.isEmpty()) {
+                        throw new PerlCompilerException("Object is not blessed into a package");
+                    }
+                    break;
+                }
                 throw new PerlCompilerException("Object is undefined");
             default:
                 perlClassName = object.toString();

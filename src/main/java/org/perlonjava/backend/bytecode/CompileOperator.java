@@ -1321,6 +1321,17 @@ public class CompileOperator {
             // or left=BlockNode (for &{expr}) and right=args
             if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
                 Node callTarget = callNode.left;
+
+                // Determine eval scope for runtime check (Perl checks undefined sub before eval context)
+                String evalScope = bc.getEvalScopeType();
+                // Encode eval scope as string pool index (-1 = not in eval)
+                int evalScopeIdx = -1;
+                if (evalScope != null && (callTarget instanceof OperatorNode opNode2 && opNode2.operator.equals("&")
+                        || callTarget instanceof BlockNode
+                        || callTarget instanceof OperatorNode opNode3 && opNode3.operator.equals("$"))) {
+                    evalScopeIdx = bc.addToStringPool(evalScope);
+                }
+
                 if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
                     // This is goto &sub - create a TAILCALL marker and return it
                     int outerContext = bc.currentCallContext;
@@ -1334,6 +1345,7 @@ public class CompileOperator {
                     bc.emitReg(codeRefReg);
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
+                    bc.emit(evalScopeIdx);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
                     bc.lastResultReg = -1;
@@ -1362,6 +1374,7 @@ public class CompileOperator {
                     bc.emitReg(codeRefReg);
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
+                    bc.emit(evalScopeIdx);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
                     bc.lastResultReg = -1;
@@ -1383,6 +1396,7 @@ public class CompileOperator {
                     bc.emitReg(codeRefReg);
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
+                    bc.emit(evalScopeIdx);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
                     bc.lastResultReg = -1;
@@ -1391,6 +1405,16 @@ public class CompileOperator {
             }
             
             if (arg instanceof IdentifierNode) labelStr = ((IdentifierNode) arg).name;
+            else {
+                // Dynamic goto (goto EXPR) - evaluate expression at runtime
+                // Check if EXPR could be a CODE reference (goto &sub handled above)
+                bc.compileNode(arg, -1, RuntimeContextType.SCALAR);
+                int exprReg = bc.lastResultReg;
+                bc.emit(Opcodes.GOTO_DYNAMIC);
+                bc.emit(exprReg);
+                bc.lastResultReg = -1;
+                return;
+            }
         }
         if (labelStr == null) bc.throwCompilerException("goto must be given label");
         Integer targetPc = bc.gotoLabelPcs.get(labelStr);

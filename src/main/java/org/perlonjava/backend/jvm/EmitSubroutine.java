@@ -163,6 +163,11 @@ public class EmitSubroutine {
         if (isDeferBlock != null && isDeferBlock) {
             newJavaClassInfo.isInDeferBlock = true;
         }
+
+        // Check if this is an eval block - goto &sub is prohibited
+        if (node.useTryCatch) {
+            newJavaClassInfo.isInEvalBlock = true;
+        }
         
         EmitterContext subCtx =
                 new EmitterContext(

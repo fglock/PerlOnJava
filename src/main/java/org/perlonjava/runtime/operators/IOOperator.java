@@ -189,6 +189,10 @@ public class IOOperator {
             return TieHandle.tiedFileno(tieHandle);
         }
 
+        if (fh == null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+
         return fh.fileno();
     }
 

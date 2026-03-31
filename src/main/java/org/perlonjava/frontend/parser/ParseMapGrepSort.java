@@ -25,7 +25,37 @@ public class ParseMapGrepSort {
         int currentIndex = parser.tokenIndex;
 
         LexerToken nextToken = peek(parser);
-        if (nextToken.type == LexerTokenType.IDENTIFIER && !nextToken.text.equals("{")
+
+        // Check for sort( SUBNAME LIST ) — peek inside parens for the SUBNAME pattern
+        boolean hasSortParen = false;
+        if (nextToken.text.equals("(")) {
+            int saveIdx = parser.tokenIndex;
+            TokenUtils.consume(parser);
+            LexerToken insideToken = peek(parser);
+            if ((insideToken.type == LexerTokenType.IDENTIFIER || insideToken.text.equals("::"))
+                    && !insideToken.text.equals("{")
+                    && !ParserTables.CORE_PROTOTYPES.containsKey(insideToken.text)
+                    && !ParsePrimary.isIsQuoteLikeOperator(insideToken.text)) {
+                // Check that this identifier is followed by a list (not -> or ()  )
+                int identSave = parser.tokenIndex;
+                IdentifierParser.parseSubroutineIdentifier(parser);
+                String afterIdent = peek(parser).text;
+                parser.tokenIndex = identSave;
+                if (!afterIdent.equals("->") && !afterIdent.equals("(") && !afterIdent.equals(")")) {
+                    hasSortParen = true;
+                    nextToken = insideToken;
+                } else {
+                    parser.tokenIndex = saveIdx;
+                    nextToken = peek(parser);
+                }
+            } else {
+                parser.tokenIndex = saveIdx;
+                nextToken = peek(parser);
+            }
+        }
+
+        if ((nextToken.type == LexerTokenType.IDENTIFIER || nextToken.text.equals("::"))
+                && !nextToken.text.equals("{")
                 && !ParserTables.CORE_PROTOTYPES.containsKey(nextToken.text)
                 && !ParsePrimary.isIsQuoteLikeOperator(nextToken.text)) {
             // This could be a subroutine name for comparison (sort mysub LIST)
@@ -38,7 +68,7 @@ public class ParseMapGrepSort {
             if (peek(parser).text.equals("->")) {
                 // This is a method call like "sort MyClass->method" 
                 // Backtrack and parse the whole thing as a list expression
-                parser.tokenIndex = identStart;
+                parser.tokenIndex = hasSortParen ? currentIndex : identStart;
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort method call: " + operand);
             } else {
@@ -47,6 +77,9 @@ public class ParseMapGrepSort {
                         new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex);
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 operand.handle = var;
+                if (hasSortParen) {
+                    TokenUtils.consume(parser, OPERATOR, ")");
+                }
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort identifier: " + operand.handle + " : " + operand);
             }
         } else {

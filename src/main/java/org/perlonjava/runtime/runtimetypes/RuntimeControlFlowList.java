@@ -40,6 +40,20 @@ public class RuntimeControlFlowList extends RuntimeList {
      * @param lineNumber Line number (for error messages)
      */
     public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber) {
+        this(codeRef, args, fileName, lineNumber, null);
+    }
+
+    /**
+     * Constructor for tail call (goto &NAME) with eval scope check.
+     * Perl 5 checks for undefined subroutine FIRST, then checks eval context.
+     *
+     * @param codeRef    The code reference to call
+     * @param args       The arguments to pass
+     * @param fileName   Source file name (for error messages)
+     * @param lineNumber Line number (for error messages)
+     * @param evalScope  The eval scope type ("eval-block", "eval-string", or null if not in eval)
+     */
+    public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber, String evalScope) {
         super();
         // Validate that the code reference is defined before creating the tail call marker
         // This produces the "Goto undefined subroutine" error at the goto site, matching Perl semantics
@@ -56,6 +70,10 @@ public class RuntimeControlFlowList extends RuntimeList {
                         : "";
                 throw new PerlCompilerException("Goto undefined subroutine &" + fullSubName);
             }
+        }
+        // Check eval context AFTER sub validation - Perl 5 checks undefined sub first
+        if (evalScope != null) {
+            throw new PerlCompilerException("Can't goto subroutine from an " + evalScope);
         }
         this.marker = new ControlFlowMarker(codeRef, args, fileName, lineNumber);
         if (DEBUG_TAILCALL) {

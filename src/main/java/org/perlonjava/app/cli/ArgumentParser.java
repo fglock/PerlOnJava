@@ -447,7 +447,7 @@ public class ArgumentParser {
                     index = handleEmbeddedProgram(args, parsedArgs, index, j, arg);
                     return index;
                 default:
-                    System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options)");
+                    System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options).");
                     // System.exit(0);
                     break;
             }
@@ -982,7 +982,7 @@ public class ArgumentParser {
                 System.exit(0);
                 break;
             default:
-                System.err.println("Unrecognized switch: " + arg + "  (-h will show valid options)");
+                System.err.println("Unrecognized switch: " + arg + "  (-h will show valid options).");
                 System.exit(0);
                 break;
         }

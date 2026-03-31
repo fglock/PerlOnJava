@@ -35,6 +35,24 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
     }
 
     /**
+     * Constructs a new RuntimeVecLvalue with a long value (for 64-bit vec).
+     */
+    public RuntimeVecLvalue(RuntimeScalar parent, int offset, int bits, long value) {
+        this.lvalue = parent;
+        this.offset = offset;
+        this.bits = bits;
+
+        // Store long values properly - use DOUBLE for values that don't fit in int
+        if (value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = (int) value;
+        } else {
+            this.type = RuntimeScalarType.DOUBLE;
+            this.value = (double) value;
+        }
+    }
+
+    /**
      * Vivification method (currently empty as vec doesn't require vivification).
      */
     @Override
@@ -54,14 +72,18 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
         this.type = value.type;
         this.value = value.value;
 
-        int newValue = value.getInt();
-
         try {
             // Create arguments for Vec.set method
             RuntimeList args = new RuntimeList(
                     lvalue, new RuntimeScalar(offset), new RuntimeScalar(bits));
             // Use Vec.set to update the parent string
-            Vec.set(args, new RuntimeScalar(newValue));
+            if (bits == 64) {
+                long newValue = value.getLong();
+                Vec.set(args, new RuntimeScalar(newValue));
+            } else {
+                int newValue = value.getInt();
+                Vec.set(args, new RuntimeScalar(newValue));
+            }
         } catch (PerlCompilerException e) {
             throw new RuntimeException("Invalid vec operation: " + e.getMessage());
         }

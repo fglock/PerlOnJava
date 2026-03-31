@@ -37,6 +37,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
 
+    // Goto label map (set by compiler after construction for dynamic goto support)
+    // Maps label name → bytecode PC offset
+    public Map<String, Integer> gotoLabelPcs;
+
     // Pre-created InterpreterFrame to avoid allocation on every call
     // Created lazily on first use (after packageName/subName are set)
     public volatile InterpreterState.InterpreterFrame cachedFrame;

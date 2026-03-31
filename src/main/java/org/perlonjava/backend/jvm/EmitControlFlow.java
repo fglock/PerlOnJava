@@ -219,8 +219,10 @@ public class EmitControlFlow {
      * @param emitterVisitor The visitor handling the bytecode emission
      * @param subNode        The operator node for the subroutine reference (&NAME)
      * @param argsNode       The node representing the arguments
+     * @param tokenIndex     The token index for error reporting
+     * @param evalScope      The eval scope type ("eval-block", "eval-string", or null)
      */
-    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, OperatorNode subNode, Node argsNode) {
+    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, OperatorNode subNode, Node argsNode, int tokenIndex, String evalScope) {
         EmitterContext ctx = emitterVisitor.ctx;
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
@@ -251,8 +253,9 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
 
-        // Create TAILCALL marker. Teardown (defer blocks, local variables) happens
-        // at returnLabel before this marker is returned to the caller.
+        // Create TAILCALL marker with eval scope for runtime check.
+        // Teardown (defer blocks, local variables) happens at returnLabel
+        // before this marker is returned to the caller.
         // The caller's call-site trampoline handles the actual tail call.
 
         ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
@@ -260,12 +263,18 @@ public class EmitControlFlow {
         ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, argsSlot);
         ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-        int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(subNode.tokenIndex) : 0;
+        int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(tokenIndex) : 0;
         ctx.mv.visitLdcInsn(lineNumber);
+        // Push evalScope (null if not in eval)
+        if (evalScope != null) {
+            ctx.mv.visitLdcInsn(evalScope);
+        } else {
+            ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+        }
         ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                 "<init>",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;I)V",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;ILjava/lang/String;)V",
                 false);
 
         if (pooledArgs) {
@@ -289,8 +298,9 @@ public class EmitControlFlow {
      * @param blockNode      The block node containing the expression for the subroutine name
      * @param argsNode       The node representing the arguments
      * @param tokenIndex     The token index for error reporting
+     * @param evalScope      The eval scope type ("eval-block", "eval-string", or null)
      */
-    static void handleGotoSubroutineBlock(EmitterVisitor emitterVisitor, BlockNode blockNode, Node argsNode, int tokenIndex) {
+    static void handleGotoSubroutineBlock(EmitterVisitor emitterVisitor, BlockNode blockNode, Node argsNode, int tokenIndex, String evalScope) {
         EmitterContext ctx = emitterVisitor.ctx;
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto &{expr}): Emitting TAILCALL marker");
@@ -332,7 +342,7 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
 
-        // Create TAILCALL marker
+        // Create TAILCALL marker with eval scope for runtime check
         ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
         ctx.mv.visitInsn(Opcodes.DUP);
         ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
@@ -340,10 +350,16 @@ public class EmitControlFlow {
         ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
         int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(tokenIndex) : 0;
         ctx.mv.visitLdcInsn(lineNumber);
+        // Push evalScope (null if not in eval)
+        if (evalScope != null) {
+            ctx.mv.visitLdcInsn(evalScope);
+        } else {
+            ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+        }
         ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                 "<init>",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;I)V",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;ILjava/lang/String;)V",
                 false);
 
         if (pooledArgs) {
@@ -400,16 +416,27 @@ public class EmitControlFlow {
                 // or left=BlockNode (for &{expr}) and right=args
                 if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
                     Node callTarget = callNode.left;
+
+                    // Determine eval scope for runtime check (Perl checks undefined sub before eval context)
+                    boolean isGotoSub = (callTarget instanceof OperatorNode opNode2 && opNode2.operator.equals("&"))
+                            || callTarget instanceof BlockNode
+                            || (callTarget instanceof OperatorNode opNode3 && opNode3.operator.equals("$"));
+                    String evalScope = null;
+                    if (isGotoSub) {
+                        if (ctx.javaClassInfo.isInEvalBlock) evalScope = "eval-block";
+                        else if (ctx.javaClassInfo.isInEvalString) evalScope = "eval-string";
+                    }
+
                     if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
                         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto &NAME tail call");
-                        handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
+                        handleGotoSubroutine(emitterVisitor, opNode, callNode.right, node.tokenIndex, evalScope);
                         return;
                     }
                     // Handle goto &{expr} - symbolic code dereference
                     // BlockNode contains an expression that evaluates to a subroutine name
                     if (callTarget instanceof BlockNode blockNode) {
                         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto &{expr} tail call");
-                        handleGotoSubroutineBlock(emitterVisitor, blockNode, callNode.right, node.tokenIndex);
+                        handleGotoSubroutineBlock(emitterVisitor, blockNode, callNode.right, node.tokenIndex, evalScope);
                         return;
                     }
                     // Handle goto &$sub - variable code dereference
@@ -420,7 +447,7 @@ public class EmitControlFlow {
                         java.util.List<Node> elements = new java.util.ArrayList<>();
                         elements.add(callTarget);
                         BlockNode blockWrapper = new BlockNode(elements, node.tokenIndex);
-                        handleGotoSubroutineBlock(emitterVisitor, blockWrapper, callNode.right, node.tokenIndex);
+                        handleGotoSubroutineBlock(emitterVisitor, blockWrapper, callNode.right, node.tokenIndex, evalScope);
                         return;
                     }
                 }
@@ -428,13 +455,17 @@ public class EmitControlFlow {
                 // Check if this is a tail call (goto EXPR where EXPR is a coderef)
                 // This handles: goto __SUB__, goto $coderef, etc.
                 if (arg instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
+                    // Determine eval scope for runtime check
+                    String evalScope3 = null;
+                    if (ctx.javaClassInfo.isInEvalBlock) evalScope3 = "eval-block";
+                    else if (ctx.javaClassInfo.isInEvalString) evalScope3 = "eval-string";
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto __SUB__ tail call");
                     // Create a ListNode with @_ as the argument
                     ListNode argsNode = new ListNode(opNode.tokenIndex);
                     OperatorNode atUnderscore = new OperatorNode("@",
                             new IdentifierNode("_", opNode.tokenIndex), opNode.tokenIndex);
                     argsNode.elements.add(atUnderscore);
-                    handleGotoSubroutine(emitterVisitor, opNode, argsNode);
+                    handleGotoSubroutine(emitterVisitor, opNode, argsNode, node.tokenIndex, evalScope3);
                     return;
                 }
 
@@ -485,7 +516,6 @@ public class EmitControlFlow {
                 ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
 
-
                 // Otherwise, treat it as a computed label name (dynamic goto).
                 ctx.mv.visitLabel(notCodeRef);
 
@@ -500,14 +530,14 @@ public class EmitControlFlow {
                 // For dynamic goto, create a RuntimeControlFlowList marker
                 // because we can't know at compile-time if the label is local or not.
                 ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-                ctx.mv.visitInsn(Opcodes.DUP_X1); // Stack: label, RuntimeControlFlowList, RuntimeControlFlowList
-                ctx.mv.visitInsn(Opcodes.SWAP);    // Stack: label, RuntimeControlFlowList, label, RuntimeControlFlowList
+                ctx.mv.visitInsn(Opcodes.DUP_X1);
+                ctx.mv.visitInsn(Opcodes.SWAP);
 
                 ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
                         "org/perlonjava/runtime/runtimetypes/ControlFlowType",
                         "GOTO",
                         "Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;");
-                ctx.mv.visitInsn(Opcodes.SWAP);    // Stack: ..., ControlFlowType, label
+                ctx.mv.visitInsn(Opcodes.SWAP);
 
                 // Push fileName
                 ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
@@ -532,7 +562,7 @@ public class EmitControlFlow {
                 }
                 ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
 
-                // Jump to returnLabel with the marker on stack.
+                // Jump to returnLabel with the marker
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
                 if (pooledMarker) {
                     ctx.javaClassInfo.releaseSpillSlot();

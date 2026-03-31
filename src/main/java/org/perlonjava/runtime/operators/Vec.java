@@ -46,8 +46,8 @@ public class Vec {
             data[i] = (byte) c;
         }
 
-        if (bits <= 0 || bits > 32) {
-            throw new PerlCompilerException("BITS must be between 1 and 32");
+        if (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 16 && bits != 32 && bits != 64) {
+            throw new PerlCompilerException("Illegal number of bits in vec");
         }
 
         // Handle negative offset
@@ -68,12 +68,15 @@ public class Vec {
         ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
         int value = 0;
 
-        if (bits == 32 && byteOffset + 3 < data.length) {
+        if (bits == 32 && byteOffset + 4 <= data.length) {
             value = buffer.getInt(byteOffset);
-        } else if (bits == 16 && byteOffset + 1 < data.length) {
+        } else if (bits == 16 && byteOffset + 2 <= data.length) {
             value = buffer.getShort(byteOffset) & 0xFFFF;
         } else if (bits == 8 && byteOffset < data.length) {
             value = buffer.get(byteOffset) & 0xFF;
+        } else if (bits == 64 && byteOffset + 8 <= data.length) {
+            long longValue = buffer.getLong(byteOffset);
+            return new RuntimeVecLvalue(strScalar, offset, bits, longValue);
         } else {
             for (int i = 0; i < bits; i++) {
                 int byteIndex = byteOffset + (bitOffset + i) / 8;
@@ -109,11 +112,9 @@ public class Vec {
             data[i] = (byte) c;
         }
 
-        if (bits <= 0 || bits > 32) {
-            throw new PerlCompilerException("BITS must be between 1 and 32");
+        if (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 16 && bits != 32 && bits != 64) {
+            throw new PerlCompilerException("Illegal number of bits in vec");
         }
-
-        // Handle negative offset - this should throw an error for lvalue context
         if (offset < 0) {
             throw new PerlCompilerException("Negative offset to vec in lvalue context");
         }
@@ -138,7 +139,10 @@ public class Vec {
         int val = value.getInt();
         ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
 
-        if (bits == 32 && byteOffset + 3 < data.length) {
+        if (bits == 64 && byteOffset + 8 <= data.length) {
+            long longVal = value.getLong();
+            buffer.putLong(byteOffset, longVal);
+        } else if (bits == 32 && byteOffset + 4 <= data.length) {
             buffer.putInt(byteOffset, val);
         } else if (bits == 16 && byteOffset + 1 < data.length) {
             buffer.putShort(byteOffset, (short) val);
