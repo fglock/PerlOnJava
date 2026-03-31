@@ -14,7 +14,7 @@ public class ParserTables {
     // Set of infix operators recognized by the parser.
     public static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "^^", "&", "|.", "^.", "&.",
-            "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=", ">=",
+            "==", "!=", "<=>", "eq", "ne", "cmp", "~~", "<", ">", "<=", ">=",
             "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
             "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",
             "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
@@ -327,7 +327,7 @@ public class ParserTables {
         addOperatorsToMap(10, "&&");
         addOperatorsToMap(11, "|", "^", "|.", "^.");
         addOperatorsToMap(12, "&", "&.");
-        addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp");
+        addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp", "~~");
         addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
         addOperatorsToMap(15, "isa");
         addOperatorsToMap(16, "-d");
