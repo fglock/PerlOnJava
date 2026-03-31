@@ -4,7 +4,9 @@
 
 **Module**: DBIx::Class 0.082844  
 **Test command**: `./jcpan -t DBIx::Class`  
-**Status**: BLOCKED — Makefile.PL fails at `strict::bits()` call
+**Branch**: `feature/dbix-class-support`  
+**PR**: https://github.com/fglock/PerlOnJava/pull/415  
+**Status**: Phase 2 — Installing missing pure-Perl dependencies
 
 ## Dependency Tree
 
@@ -54,104 +56,20 @@ Sub::Util, Dist::CheckConflicts, Eval::Closure.
 
 ---
 
-## Error Categories
-
-### 1. CRITICAL: `strict::bits` not implemented
-
-**Affected**: Makefile.PL via inc::Module::Install, also bundled `vars.pm`  
-**Error**:
-```
-Undefined subroutine &strict::bits called at Makefile.PL line 26.
-```
-
-**Root Cause**: PerlOnJava's `strict.pm` delegates to `Strict.java` which only registers
-`import`/`unimport`. The `bits()` function (and `all_bits`, `all_explicit_bits`) are not
-exposed to Perl code. The bitmask constants exist in Java but aren't callable.
-
-Module::Install's `import()` calls `$^H |= strict::bits(qw(refs subs vars))` to apply
-strict pragmas. PerlOnJava's own `vars.pm` line 23 also calls `strict::bits('vars')`.
-
-**Fix**: Add `bits`, `all_bits`, `all_explicit_bits` to Strict.java, matching the
-reference implementation in `perl5/lib/strict.pm`.
-
-**Files to change**: `src/main/java/org/perlonjava/runtime/perlmodule/Strict.java`
-
----
-
-### 2. HIGH: Missing pure-Perl dependencies
-
-**Affected**: DBIx::Class runtime  
-**Error**: Will manifest as `Can't locate X.pm in @INC` after Phase 1
-
-**Root Cause**: 10 pure-Perl dependencies are not yet installed. All have pure-Perl
-fallbacks or are entirely pure Perl, so they should install via `./jcpan install`
-once the `strict::bits` blocker is cleared.
-
-**Fix**: Install each via `./jcpan install --notest ModuleName`, iterating on any
-failures. Expected install order (respecting transitive deps):
-
-1. Devel::GlobalDestruction (uses `${^GLOBAL_PHASE}`, no XS needed for Perl >= 5.14)
-2. Context::Preserve
-3. Data::Dumper::Concise (trivial wrapper)
-4. Module::Find
-5. Path::Class
-6. Hash::Merge
-7. Config::Any
-8. Class::Accessor::Grouped (optional XS via Class::XSAccessor — PP fallback)
-9. Class::C3::Componentised (depends on Class::C3 + MRO::Compat)
-10. SQL::Abstract + SQL::Abstract::Classic (depends on Moo, Sub::Quote — already installed)
-11. Test::Exception (test dep)
-
----
-
-### 3. HIGH: DBD::SQLite — XS module needs JDBC shim
-
-**Affected**: DBIx::Class test suite  
-**Error**: `Can't locate DBD/SQLite.pm in @INC`
-
-**Root Cause**: DBD::SQLite is an XS module wrapping the C SQLite library. PerlOnJava's
-DBI is JDBC-based and already supports SQLite via `jdbc:sqlite:path`. However, DBIx::Class
-tests use the standard Perl DBI DSN format: `dbi:SQLite:dbname=file`.
-
-**Fix**: Create a minimal `DBD::SQLite` compatibility shim that:
-- Translates `dbi:SQLite:dbname=...` DSNs to `jdbc:sqlite:...`
-- Provides the subset of DBD::SQLite API that DBIx::Class tests use
-- Leverages the existing JDBC SQLite driver (sqlite-jdbc)
-
-**Files to create**: `src/main/perl/lib/DBD/SQLite.pm`
-
----
-
-### 4. MEDIUM: Potential runtime issues in DBIx::Class internals
-
-These may surface after Phases 1-3 are complete:
-
-- **`B::svref_2object`**: Used in `_Util.pm` for `refcount()`. PerlOnJava's B module is
-  incomplete (`$INCOMPLETE = 1`). May need a stub or alternative.
-- **`Storable::nfreeze`**: Used for serialization. PerlOnJava has a bundled Storable —
-  needs verification with DBIC's complex structures.
-- **`weaken`/`isweak`**: PerlOnJava does not implement weak references. DBIC uses these
-  for row object cleanup. May cause memory leaks but shouldn't block functionality.
-
----
-
 ## Fix Plan
 
-### Phase 1: Implement `strict::bits` (CRITICAL)
+### Phase 1: Unblock Makefile.PL (DONE)
 
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 1.1 | Add `strictBits()` Java method returning bitmask OR of categories | Strict.java | |
-| 1.2 | Add `allBits()` returning `REFS \| SUBS \| VARS` (0x602) | Strict.java | |
-| 1.3 | Add `allExplicitBits()` returning explicit bits (0xe0) | Strict.java | |
-| 1.4 | Register `bits`, `all_bits`, `all_explicit_bits` methods | Strict.java | |
-| 1.5 | Verify: `./jperl -e 'print strict::bits("vars")'` prints 1024 | manual test | |
-| 1.6 | Verify: `./jperl -e 'use vars qw($x); print "ok"'` works | manual test | |
-| 1.7 | Run `make` to ensure no regressions | build | |
+Four blockers fixed to get `Makefile.PL` to complete:
 
-**Result**: Unblocks Module::Install and any other CPAN module using `strict::bits`.
+| Blocker | Error | Fix | Status |
+|---------|-------|-----|--------|
+| 1. `strict::bits` missing | `Undefined subroutine &strict::bits` | Added `bits`, `all_bits`, `all_explicit_bits` to Strict.java | DONE |
+| 2. `UNIVERSAL::can` returning AUTOLOAD methods | Module::Install `$self->can('call')` resolved via AUTOLOAD | Added `isAutoloadDispatch()` filter in Universal.java | DONE |
+| 3. `goto &sub` wantarray + eval{} @_ sharing | `Not an ARRAY reference` at AutoInstall.pm line 32 | Fixed tail call trampoline context propagation; eval{} now shares @_ | DONE |
+| 4. `%{+{@a}}` parsing | `Type of arg 1 to keys must be hash or array` | Added +{ check in IdentifierParser.java for hash constructor disambiguation | DONE |
 
-### Phase 2: Install missing pure-Perl dependencies
+### Phase 2: Install missing pure-Perl dependencies (CURRENT)
 
 | Step | Description | Status |
 |------|-------------|--------|
@@ -166,29 +84,39 @@ These may surface after Phases 1-3 are complete:
 | 2.9 | `./jcpan install Class::C3::Componentised` | |
 | 2.10 | `./jcpan install SQL::Abstract::Classic` | |
 | 2.11 | `./jcpan install Test::Exception` | |
-| 2.12 | Re-run `./jcpan -t DBIx::Class` — expect Makefile.PL to succeed | |
+| 2.12 | Re-run `./jcpan -t DBIx::Class` — expect Makefile.PL to succeed and install | |
 
 **Result**: All runtime deps satisfied; DBIx::Class can configure and build.
 
-### Phase 3: Create DBD::SQLite JDBC shim
+### Phase 3: Fix DBI version detection
+
+Makefile.PL reports `DBI ...too old. (undef < 1.57)`. PerlOnJava's DBI is Java-backed
+and may not expose `$DBI::VERSION` correctly. Verify and fix if needed.
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 3.1 | Check `./jperl -e 'use DBI; print $DBI::VERSION'` | |
+| 3.2 | Fix DBI.java to set VERSION if missing | |
+
+### Phase 4: Create DBD::SQLite JDBC shim
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 3.1 | Create `DBD::SQLite` shim translating DSN format | `src/main/perl/lib/DBD/SQLite.pm` | |
-| 3.2 | Ensure sqlite-jdbc driver is on classpath | build config | |
-| 3.3 | Verify: `DBI->connect("dbi:SQLite:dbname=:memory:")` works | manual test | |
-| 3.4 | Run DBIx::Class test subset against in-memory SQLite | manual test | |
+| 4.1 | Create `DBD::SQLite` shim translating DSN format | `src/main/perl/lib/DBD/SQLite.pm` | |
+| 4.2 | Ensure sqlite-jdbc driver is on classpath | build config | |
+| 4.3 | Verify: `DBI->connect("dbi:SQLite:dbname=:memory:")` works | manual test | |
+| 4.4 | Run DBIx::Class test subset against in-memory SQLite | manual test | |
 
 **Result**: DBIx::Class tests can connect to a database and run.
 
-### Phase 4: Fix runtime issues (iterative)
+### Phase 5: Fix runtime issues (iterative)
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 4.1 | Run `./jcpan -t DBIx::Class` and triage failures | | |
-| 4.2 | Stub or fix `B::svref_2object` for `_Util.pm::refcount()` | TBD | |
-| 4.3 | Verify Storable works with DBIC's complex structures | | |
-| 4.4 | Fix additional issues as discovered | TBD | |
+| 5.1 | Run `./jcpan -t DBIx::Class` and triage failures | | |
+| 5.2 | Stub or fix `B::svref_2object` for `_Util.pm::refcount()` | TBD | |
+| 5.3 | Verify Storable works with DBIC's complex structures | | |
+| 5.4 | Fix additional issues as discovered | TBD | |
 
 **Result**: Maximise passing DBIx::Class tests.
 
@@ -196,22 +124,32 @@ These may surface after Phases 1-3 are complete:
 
 | Phase | Complexity | Description | Status |
 |-------|-----------|-------------|--------|
-| 1 | Simple | Implement `strict::bits` in Strict.java | |
-| 2 | Medium | Install ~11 missing pure-Perl deps via jcpan | |
-| 3 | Medium | Create DBD::SQLite JDBC compatibility shim | |
-| 4 | Complex | Fix runtime issues iteratively | |
+| 1 | Medium | Unblock Makefile.PL (4 engine fixes) | DONE |
+| 2 | Medium | Install ~11 missing pure-Perl deps via jcpan | **CURRENT** |
+| 3 | Simple | Fix DBI version detection | |
+| 4 | Medium | Create DBD::SQLite JDBC compatibility shim | |
+| 5 | Complex | Fix runtime issues iteratively | |
 
 ## Progress Tracking
 
-### Current Status: Phase 1 not started
+### Current Status: Phase 2 in progress
 
 ### Completed Phases
-(none yet)
+- [x] Phase 1: Unblock Makefile.PL (2024-03-31)
+  - Blocker 1: Added strict::bits to Strict.java
+  - Blocker 2: Fixed UNIVERSAL::can AUTOLOAD filter in Universal.java
+  - Blocker 3: Fixed goto &sub wantarray propagation (EmitSubroutine.java, Dereference.java) + eval{} @_ sharing (EmitSubroutine.java)
+  - Blocker 4: Fixed +{} hash constructor parsing in IdentifierParser.java
+  - All unit tests pass, Makefile.PL completes successfully
 
 ### Next Steps
-1. Implement `strict::bits` in Strict.java
-2. Re-run `./jcpan -t DBIx::Class` to see next error
-3. Install missing dependencies
+1. Install missing pure-Perl dependencies (Phase 2)
+2. Fix DBI version detection (Phase 3)
+3. Create DBD::SQLite shim (Phase 4)
+
+### Open Questions
+- Does `$DBI::VERSION` report correctly? (Makefile.PL says "undef < 1.57")
+- Will `weaken`/`isweak` absence cause problems beyond memory leaks?
 
 ## Related Documents
 
