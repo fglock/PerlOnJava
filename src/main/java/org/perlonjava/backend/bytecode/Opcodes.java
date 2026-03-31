@@ -2035,6 +2035,11 @@ public class Opcodes {
      */
     public static final short STATE_INIT_HASH = 399;
 
+    // Smartmatch operator (~~)
+    // Format: SMARTMATCH rd rs1 rs2
+    // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
+    public static final short SMARTMATCH = 400;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

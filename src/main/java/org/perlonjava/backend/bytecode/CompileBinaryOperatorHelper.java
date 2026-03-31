@@ -99,6 +99,12 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
+            case "~~" -> {
+                bytecodeCompiler.emit(Opcodes.SMARTMATCH);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
             case "==" -> {
                 bytecodeCompiler.emit(Opcodes.EQ_NUM);
                 bytecodeCompiler.emitReg(rd);
