@@ -148,7 +148,7 @@ public class EmitBlock {
         int lastNonNullIndex = -1;
         for (int i = list.size() - 1; i >= 0; i--) {
             Node elem = list.get(i);
-            if (elem != null && !(elem instanceof AbstractNode && ((AbstractNode) elem).getBooleanAnnotation("compileTimeOnly"))) {
+            if (elem != null && !(elem instanceof AbstractNode ab && (ab.getBooleanAnnotation("compileTimeOnly") || ab.getBooleanAnnotation("noReturnValue")))) {
                 lastNonNullIndex = i;
                 break;
             }

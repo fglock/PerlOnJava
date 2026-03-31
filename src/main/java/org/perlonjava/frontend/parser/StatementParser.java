@@ -855,6 +855,10 @@ public class StatementParser {
             return emptyBlock;
         }
 
+        // Mark package declarations as not producing a return value.
+        // In Perl 5, `package Foo;` is transparent for block return values:
+        // `eval "42; package Foo;"` returns 42, not empty string.
+        packageNode.setAnnotation("noReturnValue", true);
         return packageNode;
     }
 
