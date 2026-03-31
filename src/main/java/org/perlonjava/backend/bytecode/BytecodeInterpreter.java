@@ -948,6 +948,19 @@ public class BytecodeInterpreter {
                                         }
                                     }
                                     if (!handled) {
+                                        // GOTO/TAILCALL markers inside eval should be caught
+                                        // (same as JVM backend's EmitEval: ordinal > 2 means not LAST/NEXT/REDO)
+                                        ControlFlowType cfType = flow.getControlFlowType();
+                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
+                                                && !evalCatchStack.isEmpty()) {
+                                            // Set $@ to the error message
+                                            String errorMsg = flow.marker.buildErrorMessage();
+                                            GlobalVariable.setGlobalVariable("main::@", errorMsg);
+                                            // Jump to eval catch handler
+                                            pc = evalCatchStack.pop();
+                                            RuntimeCode.evalDepth--;
+                                            break;
+                                        }
                                         return result;
                                     }
                                 }
@@ -1032,6 +1045,16 @@ public class BytecodeInterpreter {
                                         }
                                     }
                                     if (!handled) {
+                                        // GOTO/TAILCALL markers inside eval should be caught
+                                        ControlFlowType cfType = flow.getControlFlowType();
+                                        if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
+                                                && !evalCatchStack.isEmpty()) {
+                                            String errorMsg = flow.marker.buildErrorMessage();
+                                            GlobalVariable.setGlobalVariable("main::@", errorMsg);
+                                            pc = evalCatchStack.pop();
+                                            RuntimeCode.evalDepth--;
+                                            break;
+                                        }
                                         return result;
                                     }
                                 }
