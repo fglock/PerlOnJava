@@ -706,6 +706,15 @@ public class SystemOperator {
         // Return undef to indicate failure
         return scalarUndef;
     }
+
+    /**
+     * Stub for chroot() - not supported on the JVM.
+     * Sets $! and returns undef (false) to indicate failure.
+     */
+    public static RuntimeScalar chroot(int ctx, RuntimeBase... args) {
+        setGlobalVariable("main::!", "chroot() not supported on this platform (Java/JVM)");
+        return scalarUndef;
+    }
     
     /**
      * Copies the Perl %ENV hash to the ProcessBuilder environment.

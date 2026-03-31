@@ -135,6 +135,11 @@ public class ParseInfix {
             // Validate operator chaining rules (Perl 5.32+)
             validateOperatorChaining(parser, operator, left, right);
 
+            // Validate that state variables are not initialized in list context
+            if (operator.equals("=")) {
+                validateNoStateInListAssignment(parser, left);
+            }
+
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
 
             // Annotate arithmetic nodes with 'use integer' state so constant folding
@@ -523,5 +528,51 @@ public class ParseInfix {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
         }
+    }
+
+    /**
+     * Validates that state variables are not used in list assignment context.
+     * In Perl 5, constructs like (state $a) = 1 or state ($a, $b) = () are forbidden
+     * with the error "Initialization of state variables in list currently forbidden".
+     *
+     * @param parser The parser instance
+     * @param left   The left-hand side of the assignment
+     */
+    private static void validateNoStateInListAssignment(Parser parser, Node left) {
+        // Case 1: state ($a) = 1 or state ($a, $b) = ()
+        // Left side is OperatorNode("state") with a ListNode operand
+        if (left instanceof OperatorNode opNode && opNode.operator.equals("state")
+                && opNode.operand instanceof ListNode) {
+            throw new PerlCompilerException(
+                    parser.tokenIndex,
+                    "Initialization of state variables in list currently forbidden",
+                    parser.ctx.errorUtil);
+        }
+
+        // Case 2: (state $a) = 1  or  (state $a, state $b) = ()  or  (state $a, $b) = ()
+        // Left side is a ListNode that contains state declarations
+        if (left instanceof ListNode listNode && containsStateDeclaration(listNode)) {
+            throw new PerlCompilerException(
+                    parser.tokenIndex,
+                    "Initialization of state variables in list currently forbidden",
+                    parser.ctx.errorUtil);
+        }
+    }
+
+    /**
+     * Checks if a ListNode contains any state variable declarations,
+     * either directly or nested within parenthesized sub-lists.
+     */
+    private static boolean containsStateDeclaration(ListNode listNode) {
+        for (Node element : listNode.elements) {
+            if (element instanceof OperatorNode opNode && opNode.operator.equals("state")) {
+                return true;
+            }
+            // Check nested lists: (state ($a)) = 1
+            if (element instanceof ListNode nestedList && containsStateDeclaration(nestedList)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

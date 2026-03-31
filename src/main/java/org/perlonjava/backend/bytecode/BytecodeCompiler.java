@@ -2261,8 +2261,9 @@ public class BytecodeCompiler implements Visitor {
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     Integer beginId = RuntimeCode.evalBeginIds.get(sigilOp);
-                    if (beginId != null || op.equals("state")) {
-                        int persistId = beginId != null ? beginId : sigilOp.id;
+                    if (beginId != null) {
+                        // BEGIN-captured variable: use RETRIEVE_BEGIN_* (destructive removal from global storage)
+                        int persistId = beginId;
                         int reg = allocateRegister();
                         int nameIdx = addToStringPool(varName);
 
@@ -2284,6 +2285,62 @@ public class BytecodeCompiler implements Visitor {
                             case "%" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                 emitReg(reg);
+                                emit(nameIdx);
+                                emit(persistId);
+                                registerVariable(varName, reg);
+                            }
+                            default -> throwCompilerException("Unsupported variable type: " + sigil);
+                        }
+
+                        // If this is a declared reference, create a reference to it
+                        if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(reg);
+                            lastResultReg = refReg;
+                        } else {
+                            lastResultReg = reg;
+                        }
+                        return;
+                    }
+                    if (op.equals("state")) {
+                        // State variable without initializer: use STATE_INIT_* (non-destructive)
+                        // This preserves the variable across subroutine calls
+                        int persistId = sigilOp.id;
+                        int reg = allocateRegister();
+                        int nameIdx = addToStringPool(varName);
+
+                        // Allocate a register for the undef/empty initial value
+                        int undefReg = allocateRegister();
+
+                        switch (sigil) {
+                            case "$" -> {
+                                emit(Opcodes.LOAD_UNDEF);
+                                emitReg(undefReg);
+                                emitWithToken(Opcodes.STATE_INIT_SCALAR, node.getIndex());
+                                emitReg(reg);
+                                emitReg(undefReg);
+                                emit(nameIdx);
+                                emit(persistId);
+                                registerVariable(varName, reg);
+                            }
+                            case "@" -> {
+                                emit(Opcodes.NEW_ARRAY);
+                                emitReg(undefReg);
+                                emitWithToken(Opcodes.STATE_INIT_ARRAY, node.getIndex());
+                                emitReg(reg);
+                                emitReg(undefReg);
+                                emit(nameIdx);
+                                emit(persistId);
+                                registerVariable(varName, reg);
+                            }
+                            case "%" -> {
+                                emit(Opcodes.NEW_HASH);
+                                emitReg(undefReg);
+                                emitWithToken(Opcodes.STATE_INIT_HASH, node.getIndex());
+                                emitReg(reg);
+                                emitReg(undefReg);
                                 emit(nameIdx);
                                 emit(persistId);
                                 registerVariable(varName, reg);
@@ -4963,6 +5020,17 @@ public class BytecodeCompiler implements Visitor {
                 emitInt(0);
             }
 
+            // Push loop info so that redo/next/last inside bare blocks work
+            // (Perl 5 allows redo/next/last in bare blocks)
+            // Unlabeled bare blocks are targets for unlabeled redo/next/last;
+            // labeled blocks (like SKIP: { }) are only targeted by matching label.
+            int bodyStartPc = bytecode.size();
+            boolean isUnlabeledTarget = (node.labelName == null);
+            LoopInfo loopInfo = new LoopInfo(
+                    isUnlabeledTarget ? null : node.labelName,
+                    bodyStartPc, true);
+            loopStack.push(loopInfo);
+
             enterScope();
             try {
                 if (node.body != null) {
@@ -4976,10 +5044,32 @@ public class BytecodeCompiler implements Visitor {
                 exitScope();
             }
 
+            // next jumps here (continue point = end of body, before exit)
+            loopInfo.continuePc = bytecode.size();
+
+            // Pop loop info and patch jump targets
+            loopStack.pop();
+            // Patch redo PCs to jump to body start
+            for (int pc2 : loopInfo.redoPcs) {
+                patchJump(pc2, bodyStartPc);
+            }
+            // Patch next PCs to jump to continue point
+            for (int pc2 : loopInfo.nextPcs) {
+                patchJump(pc2, loopInfo.continuePc);
+            }
+            // Patch last (break) PCs - will be patched to end label below
+            // (we need the end PC first)
+
             if (node.labelName != null) {
                 emit(Opcodes.POP_LABELED_BLOCK);
                 int exitPc = bytecode.size();
                 patchJump(exitPcPlaceholder, exitPc);
+            }
+
+            // Patch last (break) PCs to jump past the block
+            int endPc = bytecode.size();
+            for (int pc2 : loopInfo.breakPcs) {
+                patchJump(pc2, endPc);
             }
 
             lastResultReg = outerResultReg;

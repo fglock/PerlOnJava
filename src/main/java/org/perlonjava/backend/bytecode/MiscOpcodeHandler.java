@@ -82,6 +82,18 @@ public class MiscOpcodeHandler {
             case Opcodes.SETPGRP -> Operator.setpgrp(ctx, argsArray);
             case Opcodes.GETPRIORITY -> Operator.getpriority(ctx, argsArray);
             case Opcodes.SETPRIORITY -> new RuntimeScalar(0); // stub - no native impl yet
+            case Opcodes.SYMLINK -> org.perlonjava.runtime.nativ.NativeUtils.symlink(ctx, argsArray);
+            case Opcodes.CHROOT -> SystemOperator.chroot(ctx, argsArray);
+            case Opcodes.MKDIR -> Directory.mkdir(args);
+            case Opcodes.MSGCTL -> new RuntimeScalar(0); // stub
+            case Opcodes.SHMCTL -> new RuntimeScalar(0); // stub
+            case Opcodes.SEMCTL -> new RuntimeScalar(0); // stub
+            case Opcodes.EXEC -> SystemOperator.exec(args, false, ctx);
+            case Opcodes.FCNTL -> IOOperator.fcntl(ctx, argsArray);
+            case Opcodes.IOCTL -> IOOperator.ioctl(ctx, argsArray);
+            case Opcodes.GETPWENT -> ExtendedNativeUtils.getpwent(ctx, argsArray);
+            case Opcodes.SETPWENT -> ExtendedNativeUtils.setpwent(ctx, argsArray);
+            case Opcodes.ENDPWENT -> ExtendedNativeUtils.endpwent(ctx, argsArray);
             case Opcodes.OPENDIR -> Directory.opendir(args);
             case Opcodes.READDIR ->
                     Directory.readdir(args.elements.isEmpty() ? null : (RuntimeScalar) args.elements.get(0), ctx);

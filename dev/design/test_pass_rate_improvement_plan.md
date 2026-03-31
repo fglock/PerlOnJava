@@ -144,7 +144,7 @@ These are tests that start running but crash fatally, blocking all subsequent te
 | Test File | Passed/Total | Blocking Bug | Tests Unblocked |
 |-----------|-------------|--------------|-----------------|
 | op/ref.t | 96/265 | `@UNIVERSAL::ISA` not followed in MRO | **156** |
-| op/state.t | 69/170 | Dynamic `goto $variable` silently exits | **101** |
+| op/state.t | 141/170 | Dynamic `goto $variable` → interpreter fallback + state fixes | **15+14** |
 | op/heredoc.t | 66/138 | Heredoc inside `eval 's//<<~/e'` | **~60** |
 | op/filetest.t | 227/436 | NPE from NUL in filename (`-T "TEST\0"`) | **5** |
 | op/universal.t | 90/142 | `$1` undef after successful regex match | **38** |
@@ -252,7 +252,7 @@ These are small, targeted fixes that each unblock many tests:
 | 1.2 | Null-check in `fileno()` for unopened handles | 8 (fh.t) | Tiny |
 | 1.3 | Null-guard in file test operator for NUL-in-filename | 5 (filetest.t) | Tiny |
 | 1.4 | `@UNIVERSAL::ISA` traversal in MRO | 156 (ref.t) | Small |
-| 1.5 | Fix dynamic `goto $variable` | 101 (state.t) | Small |
+| 1.5 | Fix dynamic `goto $variable` + state var persistence | ~~101~~ **done** (72 gained) | Small |
 | 1.6 | Extend `vec()` to 64-bit widths | 28 (vec.t) | Small |
 | 1.7 | Fix `$1` capture after successful match (state corruption) | 38 (universal.t) | Small |
 | 1.8 | Fix unrecognized-switch error message (add trailing `.`) | ~56 (switches.t) | Tiny |
@@ -326,7 +326,42 @@ These tests are inherently incompatible with PerlOnJava and should not be target
 
 ---
 
-## Tracking
+## Progress Tracking
+
+### Current Status: Phase 1 in progress
+
+### Completed Fixes
+
+#### PR #414: op/state.t — 69/170 → 141/170 (2025-03-31)
+
+Branch: `fix/state-attribute-validation`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| Interpreter: state variable persistence (`STATE_INIT_*` instead of `RETRIEVE_BEGIN_*`) | ~26 | 1.5 |
+| Interpreter: bare block `redo` (add `LoopInfo` push/pop) | (enabler) | 1.5 |
+| JVM backend: dynamic `goto EXPR` triggers interpreter fallback | (enabler) | 1.5 |
+| Parser: "state in list context forbidden" compile error | +46 | New |
+
+Files changed:
+- `src/main/java/org/perlonjava/backend/bytecode/BytecodeCompiler.java` — state var compilation fix + bare block redo
+- `src/main/java/org/perlonjava/backend/jvm/EmitControlFlow.java` — dynamic goto EXPR fallback
+- `src/main/java/org/perlonjava/frontend/parser/ParseInfix.java` — state-in-list validation
+
+Remaining op/state.t failures (15 + 14 blocked):
+- Tests 42-43: `:shared` attribute silently accepted (pre-existing)
+- Tests 62-68: goto + state interaction (pass standalone, fail in full test context)
+- Tests 94, 96, 98, 100: `given`/`when` (incomplete support)
+- Tests 103, 106-107: state in closures/anon subs (state sharing between copies)
+- Tests 157-170: blocked (execution stops at test 156)
+
+### Next Steps
+
+1. Continue Phase 1 quick wins (items 1.1-1.10)
+2. Investigate op/state.t goto+state interaction failures in full test context
+3. Run full test suite to measure overall progress
+
+### Baseline
 
 Update this document as fixes land. Use the test runner to measure progress:
 
