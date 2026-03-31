@@ -400,8 +400,13 @@ public class WarnDie {
      */
     public static RuntimeScalar exit(RuntimeScalar runtimeScalar) {
         int exitCode = runtimeScalar.getInt();
+        // Set $? to the exit code before running END blocks (Perl 5 semantics).
+        // From perlvar: "Inside an END subroutine $? contains the value that
+        // is going to be given to exit(). You can modify $? in an END
+        // subroutine to change the exit status of your program."
+        getGlobalVariable("main::?").set(exitCode);
         try {
-            runEndBlocks();
+            runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
         } catch (Throwable t) {
             RuntimeIO.closeAllHandles();
             String errorMessage = ErrorMessageUtil.stringifyException(t);
@@ -409,7 +414,9 @@ public class WarnDie {
             throw new PerlExitException(1);
         }
         RuntimeIO.closeAllHandles();
-        throw new PerlExitException(exitCode);
+        // Use $? as the final exit code - END blocks may have modified it
+        int finalExitCode = getGlobalVariable("main::?").getInt();
+        throw new PerlExitException(finalExitCode);
     }
 
     /**

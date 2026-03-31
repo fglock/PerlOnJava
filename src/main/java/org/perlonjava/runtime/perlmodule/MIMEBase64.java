@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.util.Base64Util;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 
 import java.nio.charset.StandardCharsets;
 
@@ -18,6 +19,7 @@ public class MIMEBase64 extends PerlModuleBase {
         MIMEBase64 base64 = new MIMEBase64();
         base64.initializeExporter();
         base64.defineExport("EXPORT", "encode_base64", "decode_base64");
+        GlobalVariable.getGlobalVariable("MIME::Base64::VERSION").set(new RuntimeScalar("3.16"));
         try {
             base64.registerMethod("encode_base64", null);
             base64.registerMethod("decode_base64", null);

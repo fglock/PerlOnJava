@@ -84,7 +84,7 @@ public class Encode extends PerlModuleBase {
     }
 
     public Encode() {
-        super("Encode", true);
+        super("Encode", false);  // Don't set %INC - let Encode.pm run via XSLoader
     }
 
     public static void initialize() {
@@ -335,6 +335,8 @@ public class Encode extends PerlModuleBase {
      * find_encoding($encoding)
      * Returns a blessed Encode::Encoding object for the given encoding name.
      * The object supports ->encode($string) and ->decode($octets) methods.
+     * Note: This is the Java fast path for known charsets. The Perl wrapper
+     * in Encode.pm adds Encode::Alias fallback for custom aliases like "locale".
      */
     public static RuntimeList find_encoding(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {

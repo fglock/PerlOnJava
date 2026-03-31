@@ -741,6 +741,14 @@ public class RegexPreprocessor {
         // Remove \G from the pattern string for Java compilation
         if (s.startsWith("\\G", offset)) {
             offset += 2;
+            // Also strip any quantifier that followed \G (e.g. \G? in (\G?[ac])?)
+            // Since \G is a zero-width assertion, \G? is effectively nothing
+            if (offset < length) {
+                char next = s.charAt(offset);
+                if (next == '?' || next == '*' || next == '+') {
+                    offset++;
+                }
+            }
         }
 
         while (offset < length) {
@@ -751,18 +759,18 @@ public class RegexPreprocessor {
                 case '*':
                 case '+':
                 case '?':
-                    // Check if this is at the start or after certain characters
-                    if (offset == 0 || sb.length() == 0) {
-                        regexError(s, offset + 1, "Quantifier follows nothing");
-                    }
-
-                    // Check what the last character was
-                    if (sb.length() > 0) {
-                        char lastChar = sb.charAt(sb.length() - 1);
-                        // Check if quantifier follows |
-                        if (lastChar == '|') {
-                            regexError(s, offset + 1, "Quantifier follows nothing");
+                    // Check if the previous item can be quantified
+                    if (!lastWasQuantifiable) {
+                        // Distinguish "Nested quantifiers" from "Quantifier follows nothing":
+                        // If the last char in sb is a quantifier, this is a nested quantifier
+                        if (sb.length() > 0) {
+                            char lc = sb.charAt(sb.length() - 1);
+                            boolean esc = sb.length() >= 2 && sb.charAt(sb.length() - 2) == '\\';
+                            if (!esc && (lc == '*' || lc == '+' || lc == '?' || lc == '}')) {
+                                regexError(s, offset + 1, "Nested quantifiers");
+                            }
                         }
+                        regexError(s, offset + 1, "Quantifier follows nothing");
                     }
 
                     // Check if this might be a possessive quantifier
@@ -770,15 +778,6 @@ public class RegexPreprocessor {
 
                     // Check if this might be a non-greedy quantifier
                     boolean isNonGreedy = offset + 1 < length && s.charAt(offset + 1) == '?';
-
-                    // Check what the last character was
-                    if (sb.length() > 0) {
-                        char lastChar = sb.charAt(sb.length() - 1);
-                        // Check if quantifier follows |
-                        if (lastChar == '|') {
-                            regexError(s, offset + 1, "Quantifier follows nothing");
-                        }
-                    }
 
                     // Check for nested quantifiers (but not possessive or non-greedy)
                     if (!isPossessive && !isNonGreedy && sb.length() > 0) {
@@ -1036,11 +1035,13 @@ public class RegexPreprocessor {
             } else if (c3 == '<' && c4 == '=') {
                 // Positive lookbehind (?<=...)
                 validateLookbehindLength(s, offset);
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+                sb.append("(?<=");
+                offset = handleRegex(s, offset + 4, sb, regexFlags, true);
             } else if (c3 == '<' && c4 == '!') {
                 // Negative lookbehind (?<!...)
                 validateLookbehindLength(s, offset);
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+                sb.append("(?<!");
+                offset = handleRegex(s, offset + 4, sb, regexFlags, true);
             } else if (c3 == '<' && isAlphabetic(c4)) {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
@@ -1064,16 +1065,20 @@ public class RegexPreprocessor {
                 return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
             } else if (c3 == ':') {
                 // Handle non-capturing group (?:...)
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+                sb.append("(?:");
+                offset = handleRegex(s, offset + 3, sb, regexFlags, true);
             } else if (c3 == '=') {
                 // Positive lookahead (?=...)
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+                sb.append("(?=");
+                offset = handleRegex(s, offset + 3, sb, regexFlags, true);
             } else if (c3 == '!') {
                 // Negative lookahead (?!...)
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+                sb.append("(?!");
+                offset = handleRegex(s, offset + 3, sb, regexFlags, true);
             } else if (c3 == '>') {
                 // Atomic group (?>...) - non-backtracking group
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+                sb.append("(?>");
+                offset = handleRegex(s, offset + 3, sb, regexFlags, true);
             } else if (c3 == '|') {
                 // Handle (?|...) branch reset groups
                 offset = handleBranchReset(s, offset, length, sb, regexFlags);

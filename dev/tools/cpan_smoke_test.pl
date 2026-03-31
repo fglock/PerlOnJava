@@ -53,6 +53,9 @@ my @MODULE_REGISTRY = (
     ['Test::Warn',              'partial',    'pure-perl',         undef, 'Dep test issues with Sub::Uplevel'],
     ['Path::Tiny',              'partial',    'pure-perl',         undef, '1489/1542 subtests'],
     ['namespace::clean',        'known-good', 'pure-perl',         undef, 'Namespace cleanup'],
+    ['Parse::RecDescent',       'partial',    'pure-perl',         undef, 'Recursive descent parser; depends on Text::Balanced'],
+    ['Spreadsheet::WriteExcel', 'partial',    'pure-perl',         undef, 'Write .xls files; unlocks ParseExcel t/46_save_parser.t'],
+    ['Image::ExifTool',         'partial',    'pure-perl',         undef, '590/600 subtests (98%) via dedicated runner'],
 
     # ── Known-good: Java XS implementations ──
     ['DateTime',                'known-good', 'java-xs',           undef, 'Date/time (Java java.time backend)'],
@@ -71,13 +74,22 @@ my @MODULE_REGISTRY = (
     ['Test::Warnings',          'partial',    'pure-perl',         undef, '86/88 subtests'],
     ['Encode::Locale',          'partial',    'pure-perl',         undef, 'Unknown encoding: locale'],
     ['Log::Log4perl',           'partial',    'pure-perl',         undef, 'Mostly works'],
+    ['JSON',                    'partial',    'pure-perl',         undef, 'Wrapper; uses JSON::PP fallback (top-20 CPAN)'],
+    ['Type::Tiny',              'partial',    'pure-perl',         undef, 'Type constraints for Moo/Moose (top-20 CPAN)'],
+    ['List::MoreUtils',         'partial',    'xs-with-pp-fallback', undef, 'Extra list utils; XS in separate dist (top-20 CPAN)'],
+    ['Template',                'partial',    'xs-with-pp-fallback', undef, 'Template Toolkit; Stash::XS optional (top-20 CPAN)'],
+    # ['Mojolicious',             'partial',    'pure-perl',         undef, 'Web framework, zero non-core deps (top-20 CPAN)'],
 
     # ── Blocked: need fixes before they can work ──
     ['Devel::Cover',            'blocked',    'xs-required',       undef, 'Blocked on HTML::Entities dep chain'],
     ['HTTP::Message',           'blocked',    'pure-perl',         undef, 'Blocked on Clone::PP missing'],
-    ['HTML::Parser',            'blocked',    'xs-required',       undef, 'XS module, no Java backend'],
+    ['HTML::Parser',            'blocked',    'xs-required',       undef, 'XS module, has Java backend Phase 1'],
     ['IO::Compress::Gzip',      'blocked',    'xs-required',       undef, 'Needs Compress::Raw::Zlib'],
-    ['Moose',                   'blocked',    'xs-required',       undef, 'Needs B module subroutine names'],
+    # ['Moose',                   'blocked',    'xs-required',       undef, 'Needs B module subroutine names'],
+    # ['Plack',                   'blocked',    'pure-perl',         undef, 'PSGI toolkit; blocked on dep chain (top-20 CPAN)'],
+    ['LWP::UserAgent',          'blocked',    'pure-perl',         undef, 'HTTP client; blocked on HTTP::Message (top-20 CPAN)'],
+    ['DBIx::Class',             'blocked',    'pure-perl',         undef, 'ORM; blocked on DBI (XS) (top-20 CPAN)'],
+    ['DBI',                     'blocked',    'xs-required',       undef, 'DB interface; needs Java backend (top-20 CPAN)'],
 
     # ── XS with PP fallback, need env vars ──
     ['Params::Util',            'partial',    'xs-with-pp-fallback', { PERL_PARAMS_UTIL_PP => 1 }, 'Needs PP env var'],

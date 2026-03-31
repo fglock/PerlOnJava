@@ -252,73 +252,70 @@ sub _install_pure_perl {
     if (!%pm) {
         print "Warning: No installable files found (no .pm, .pl, .dat, etc.).\n";
         print "Expected structure: lib/Your/Module.pm\n\n";
-        return PerlOnJava::MM::Installed->new($args);
+        my $mm = PerlOnJava::MM::Installed->new($args);
+        _create_mymeta($name, $version, $args);
+        _create_install_makefile($name, $version, $args, {}, {}, $mm);
+        return $mm;
     }
     
-    print "\nInstalling to: $INSTALL_BASE\n\n";
+    print "\nWill install to: $INSTALL_BASE\n\n";
     
-    # Install .pm files
-    my $installed = 0;
+    # List files to be installed (deferred to 'make' for proper CPAN.pm dep resolution)
     for my $src (sort keys %pm) {
-        my $dest = $pm{$src};
-        my $dir = dirname($dest);
-        
-        if (!-d $dir) {
-            make_path($dir) or warn "Failed to create $dir: $!\n";
-        }
-        
-        print "  $src -> $dest\n";
-        if (copy($src, $dest)) {
-            $installed++;
-        } else {
-            warn "  Failed to copy: $!\n";
-        }
+        print "  $src -> $pm{$src}\n";
     }
     
-    # Install scripts
+    # Collect share directory files (don't copy yet)
+    my %share_files = _build_share_file_mapping($name, $args);
+    if (%share_files) {
+        print "\nShare files:\n";
+        for my $src (sort keys %share_files) {
+            print "  $src -> $share_files{$src}\n";
+        }
+        %pm = (%pm, %share_files);
+    }
+    
+    # Collect script files
+    my %scripts;
     if ($args->{EXE_FILES} && @{$args->{EXE_FILES}}) {
-        print "\nInstalling scripts:\n";
         my $bin_dir = File::Spec->catdir($INSTALL_BASE, '..', 'bin');
-        make_path($bin_dir) unless -d $bin_dir;
-        
         for my $script (@{$args->{EXE_FILES}}) {
-            my $dest = File::Spec->catfile($bin_dir, basename($script));
-            print "  $script -> $dest\n";
-            copy($script, $dest) or warn "  Failed to copy: $!\n";
+            $scripts{$script} = File::Spec->catfile($bin_dir, basename($script));
+        }
+        print "\nScripts:\n";
+        for my $src (sort keys %scripts) {
+            print "  $src -> $scripts{$src}\n";
         }
     }
-    
-    # Install share directories (File::ShareDir::Install support)
-    $installed += _install_share_dirs($name, $args);
     
     print "\n";
-    print "=" x 60, "\n";
-    print "Installation complete! ($installed files installed)\n";
-    print "=" x 60, "\n\n";
     
     # Create MM object first (needed by postamble)
     my $mm = PerlOnJava::MM::Installed->new($args);
     
-    # Create a stub Makefile to satisfy CPAN.pm's check
-    _create_stub_makefile($name, $version, $args, $mm);
-    
     # Create MYMETA.yml for CPAN.pm dependency resolution
     _create_mymeta($name, $version, $args);
+    
+    # Create Makefile with install commands (actual install deferred to 'make')
+    _create_install_makefile($name, $version, $args, \%pm, \%scripts, $mm);
+    
+    my $total = scalar(keys %pm) + scalar(keys %scripts);
+    print "=" x 60, "\n";
+    print "Configured! $total files will be installed when 'make' runs.\n";
+    print "=" x 60, "\n\n";
     
     return $mm;
 }
 
-sub _install_share_dirs {
+sub _build_share_file_mapping {
     my ($name, $args) = @_;
-    my $installed = 0;
+    my %files;
     
     # Check if File::ShareDir::Install was used
-    return 0 unless @File::ShareDir::Install::DIRS;
+    return %files unless eval { @File::ShareDir::Install::DIRS };
     
     # Convert module name to dist name (My::Module -> My-Module)
     (my $dist_name = $name) =~ s/::/-/g;
-    
-    print "\nInstalling share directories:\n";
     
     for my $def (@File::ShareDir::Install::DIRS) {
         my $type = $def->{type} || 'dist';
@@ -332,7 +329,7 @@ sub _install_share_dirs {
             @src_dirs = ($def->{dir});
         }
         
-        # Handle directory specification (scan and copy all files)
+        # Scan files (don't copy yet - deferred to 'make')
         for my $src_dir (@src_dirs) {
             next unless -d $src_dir;
             
@@ -354,23 +351,14 @@ sub _install_share_dirs {
                     
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^\Q$src_dir\E/?}{};
-                    my $dest = File::Spec->catfile($dest_base, $rel);
-                    my $dest_dir = dirname($dest);
-                    make_path($dest_dir) unless -d $dest_dir;
-                    
-                    if (copy($src, $dest)) {
-                        $installed++;
-                    } else {
-                        warn "  Failed to copy $src: $!\n";
-                    }
+                    $files{$src} = File::Spec->catfile($dest_base, $rel);
                 },
                 no_chdir => 1,
             }, $src_dir);
         }
     }
     
-    print "  Installed $installed share files\n" if $installed;
-    return $installed;
+    return %files;
 }
 
 sub _extract_version {
@@ -393,16 +381,17 @@ sub _extract_version {
     return '0';
 }
 
-sub _create_stub_makefile {
-    my ($name, $version, $args, $mm) = @_;
+sub _create_install_makefile {
+    my ($name, $version, $args, $pm, $scripts, $mm) = @_;
     
-    # Create a minimal Makefile that CPAN.pm can parse
-    # This allows CPAN.pm to proceed through its make/test/install workflow
+    # Create a Makefile that actually installs files when 'make' runs.
+    # This defers installation to after CPAN.pm has resolved and installed
+    # dependencies, enabling proper dependency resolution for any CPAN module.
     # Respect custom MAKEFILE name if provided
     my $makefile = $args->{MAKEFILE} || 'Makefile';
     
     open my $fh, '>', $makefile or do {
-        warn "Note: Could not create stub Makefile: $!\n";
+        warn "Note: Could not create Makefile: $!\n";
         return;
     };
     
@@ -427,10 +416,40 @@ sub _create_stub_makefile {
     my $inst_lib = $args->{INST_LIB} || 'blib/lib';
     my $installsitelib = $args->{INSTALLSITELIB} || $INSTALL_BASE;
     
-    # Minimal Makefile that works with CPAN.pm
+    # Build install commands for module/data/share files
+    my @install_cmds;
+    my %dirs_seen;
+    for my $src (sort keys %$pm) {
+        my $dest = $pm->{$src};
+        my $dir = dirname($dest);
+        unless ($dirs_seen{$dir}++) {
+            push @install_cmds, _shell_mkdir($dir);
+        }
+        push @install_cmds, _shell_cp($src, $dest);
+    }
+    
+    # Build install commands for scripts
+    my @script_cmds;
+    if ($scripts && %$scripts) {
+        my %sdirs;
+        for my $src (sort keys %$scripts) {
+            my $dest = $scripts->{$src};
+            my $dir = dirname($dest);
+            unless ($sdirs{$dir}++) {
+                push @script_cmds, _shell_mkdir($dir);
+            }
+            push @script_cmds, _shell_cp($src, $dest);
+        }
+    }
+    
+    my $install_cmds_str = join("\n", @install_cmds) || "\t\@true";
+    my $script_cmds_str = join("\n", @script_cmds) || "\t\@true";
+    my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
+    
     print $fh <<"MAKEFILE";
-# Stub Makefile for PerlOnJava
-# This module was installed directly without 'make'
+# Makefile generated by PerlOnJava MakeMaker
+# Files are installed during 'make' (not during Makefile.PL)
+# This enables CPAN.pm to resolve dependencies before installation
 
 NAME = $name
 DISTNAME = $distname
@@ -442,9 +461,16 @@ INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_RF = rm -rf
 
-# PerlOnJava installs modules directly - 'all' runs config for share directories
-all: config
-\t\@echo "PerlOnJava: Module already installed"
+all: pm_to_blib config
+\t\@echo "PerlOnJava: $name v$version installed ($file_count files)"
+
+# Copy module and data files to installation directory
+pm_to_blib:
+$install_cmds_str
+
+# Install executable scripts
+install_scripts:
+$script_cmds_str
 
 # Use double-colon for config to allow postamble to add rules
 config::
@@ -452,10 +478,8 @@ config::
 test:
 \t$test_cmd
 
-install: all
-\t\@echo "PerlOnJava: Installing to \$(INSTALLSITELIB)"
-\t\@mkdir -p \$(INSTALLSITELIB)/auto
-\t-\@cp -r \$(INST_LIB)/auto/share \$(INSTALLSITELIB)/auto/ 2>/dev/null || true
+install: all install_scripts
+\t\@echo "PerlOnJava: $name installed to \$(INSTALLSITELIB)"
 
 clean:
 \t\@echo "PerlOnJava: Nothing to clean"
@@ -464,7 +488,7 @@ realclean: clean
 
 distclean: clean
 
-.PHONY: all config test install clean realclean distclean
+.PHONY: all pm_to_blib config test install clean realclean distclean install_scripts
 MAKEFILE
 
     # Call MY::postamble if it exists (File::ShareDir::Install uses this)
@@ -478,6 +502,21 @@ MAKEFILE
     }
 
     close $fh;
+}
+
+# Helper: generate a shell mkdir -p command for Makefile
+sub _shell_mkdir {
+    my ($dir) = @_;
+    $dir =~ s/'/'\\''/g;  # escape single quotes
+    return "\t\@mkdir -p '$dir'";
+}
+
+# Helper: generate a shell cp command for Makefile
+sub _shell_cp {
+    my ($src, $dest) = @_;
+    $src =~ s/'/'\\''/g;
+    $dest =~ s/'/'\\''/g;
+    return "\t\@cp '$src' '$dest'";
 }
 
 sub _create_mymeta {

@@ -1,5 +1,7 @@
 package JSON;
 
+our $VERSION = '4.11';
+
 use Exporter "import";
 use warnings;
 use strict;

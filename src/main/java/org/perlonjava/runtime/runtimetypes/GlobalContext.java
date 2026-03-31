@@ -248,11 +248,11 @@ public class GlobalContext {
         // Deferred to XSLoader::load() for faster startup - only loaded when actually used:
         // UnicodeNormalize.initialize();  // Has XSLoader in Perl file
         // TimeHiRes.initialize();  // Has XSLoader in Perl file
+        // Encode.initialize();  // Has XSLoader in Perl file - deferred for Encode::Alias support
         UnicodeUCD.initialize();  // No XSLoader in Perl file - needed at startup
         TermReadLine.initialize();  // No Perl file - needed at startup
         TermReadKey.initialize();  // No Perl file - needed at startup
         FileTemp.initialize();  // Perl uses eval require - keep for cleanup hooks
-        Encode.initialize();  // Common enough to keep
         // JavaSystem.initialize();  // Only for java:: integration
         PerlIO.initialize();
         IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
