@@ -35,6 +35,18 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
     }
 
     /**
+     * Constructs a new RuntimeVecLvalue with a long value (for 64-bit vec).
+     */
+    public RuntimeVecLvalue(RuntimeScalar parent, int offset, int bits, long value) {
+        this.lvalue = parent;
+        this.offset = offset;
+        this.bits = bits;
+
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = value;
+    }
+
+    /**
      * Vivification method (currently empty as vec doesn't require vivification).
      */
     @Override

@@ -388,6 +388,12 @@ public class FileTestOperator {
         // Handle string filenames
         Path path = resolvePath(filename);
 
+        if (path == null) {
+            getGlobalVariable("main::!").set(2);  // ENOENT
+            updateLastStat(fileHandle, false, 2);
+            return scalarUndef;
+        }
+
         try {
             boolean lstat = operator.equals("-l");
             statForFileTest(fileHandle, path, lstat);
