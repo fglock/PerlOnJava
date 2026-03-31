@@ -3,10 +3,11 @@ use strict;
 use warnings;
 
 our $VERSION = '7.78';
+our $Verbose = 0;
 
 use Exporter 'import';
 our @EXPORT = qw(WriteMakefile prompt);
-our @EXPORT_OK = qw(neatvalue);
+our @EXPORT_OK = qw($VERSION $Verbose neatvalue _sprintf562);
 
 use File::Copy;
 use File::Path qw(make_path);
@@ -587,6 +588,16 @@ sub neatvalue {
     return 'undef' unless defined $val;
     return "'$val'" if $val =~ /\D/;
     return $val;
+}
+
+# Positional sprintf variant: %1$s, %2$s etc.
+# Used by MM_Any.pm and other ExtUtils modules
+sub _sprintf562 {
+    my ($format, @args) = @_;
+    for (my $i = 1; $i <= @args; ++$i) {
+        $format =~ s/%${i}\$s/$args[$i - 1]/g;
+    }
+    $format;
 }
 
 #############################################################################
