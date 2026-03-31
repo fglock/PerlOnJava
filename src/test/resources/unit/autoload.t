@@ -47,9 +47,9 @@ b(789);
 
     package main;
     my $obj = bless {}, "ChildClass";
-    is($obj->somefunc(), "ChildClass::somefunc",
+    X::is($obj->somefunc(), "ChildClass::somefunc",
         "inherited AUTOLOAD sets \$AUTOLOAD with child class name");
-    is($obj->anotherfunc(), "ChildClass::anotherfunc",
+    X::is($obj->anotherfunc(), "ChildClass::anotherfunc",
         "inherited AUTOLOAD works for multiple method calls");
 }
 
