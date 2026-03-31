@@ -451,6 +451,22 @@ public class EmitControlFlow {
                     }
                 }
 
+                // Check if this is goto \&NAME - backslash-reference to a subroutine
+                // The parser produces: OperatorNode("\", OperatorNode("&", ...))
+                // Perl semantics: goto \&sub passes current @_ to the target
+                if (arg instanceof OperatorNode refOp && refOp.operator.equals("\\")) {
+                    String evalScope4 = null;
+                    if (ctx.javaClassInfo.isInEvalBlock) evalScope4 = "eval-block";
+                    else if (ctx.javaClassInfo.isInEvalString) evalScope4 = "eval-string";
+                    if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto \\&NAME tail call");
+                    ListNode argsNode = new ListNode(node.tokenIndex);
+                    OperatorNode atUnderscore = new OperatorNode("@",
+                            new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
+                    argsNode.elements.add(atUnderscore);
+                    handleGotoSubroutine(emitterVisitor, refOp, argsNode, node.tokenIndex, evalScope4);
+                    return;
+                }
+
                 // Check if this is a tail call (goto EXPR where EXPR is a coderef)
                 // This handles: goto __SUB__, goto $coderef, etc.
                 if (arg instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
