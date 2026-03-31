@@ -1490,7 +1490,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
-        } else if (runtimeScalar.type == UNDEF) {
+        } else if (!runtimeScalar.getDefinedBoolean()) {
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {
             perlClassName = runtimeScalar.toString();
