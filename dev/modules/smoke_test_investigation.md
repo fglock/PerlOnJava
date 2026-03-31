@@ -14,9 +14,9 @@ the most modules.
 
 | Category | Count | Description |
 |----------|-------|-------------|
-| known-good | 8 | All or nearly all tests pass |
-| partial | 21 | Installs but has test failures |
-| blocked | 9 | Cannot install or test due to missing deps |
+| known-good | 11 | All or nearly all tests pass |
+| partial | 19 | Installs but has test failures |
+| blocked | 6 | Cannot install or test due to missing deps |
 
 ## Priority: Shared Root Causes
 
@@ -50,14 +50,19 @@ Modules that require `MIME::Base64 >= 2.1` fail at version check.
 
 **Fix**: Set `$MIME::Base64::VERSION` in the Java backend or in a wrapper .pm.
 
-### P3: Encode::Locale — unknown encoding "locale"
+### P3: Encode::Alias — find_encoding bypassed Perl alias system (DONE)
 
 **Affects**: Encode::Locale, HTTP::Message, LWP::UserAgent
 
-PerlOnJava doesn't map the system locale to a Perl encoding name.
+Java `Encode.find_encoding()` completely bypassed the Perl `Encode::Alias` system,
+only checking hardcoded `CHARSET_ALIASES` and `Charset.forName()`.
 
-**Fix**: Map Java's `Charset.defaultCharset()` to the corresponding Perl
-encoding name (e.g., `UTF-8`).
+**Fix**: Modified bundled `src/main/perl/lib/Encode.pm` to wrap `find_encoding`
+with Perl-level alias resolution. Removed `"Encode"` from `preloadedModules` in
+`GlobalContext.java` so XSLoader executes the .pm file. The .pm saves a reference
+to the Java `find_encoding` before overriding it with a wrapper that tries Java
+first, then falls back to `Encode::Alias::find_alias()`. Also added `encodings()`
+method to `Encode.java`.
 
 ### P4: File::Temp close / PerlIO::encoding stub
 
@@ -68,47 +73,60 @@ PerlIO::encoding has no stub.
 
 **Fix**: Add PerlIO::encoding stub; review File::Temp close delegation.
 
-### P5: Exit code handling
+### P5: Exit code handling (DONE)
 
-**Affects**: Test::Needs (200/227), potentially other test harness modules
+**Affects**: Test::Needs (now 227/227 — PASS), potentially other test harness modules
 
-Test scripts that call `exit()` with non-zero codes may not propagate
-correctly through PerlOnJava's process model.
+`WarnDie.exit()` called `runEndBlocks()` which reset `$?` to 0, ignoring END
+block modifications. Also, `require` error messages didn't include
+"Compilation failed" prefix.
 
-**Investigation**: Run failing Test::Needs subtests individually and compare
-exit codes with Perl 5.
+**Fix**: Set `$?` before END blocks, use `runEndBlocks(false)` to skip reset,
+read `$?` back after END blocks for final exit code. Fixed in `WarnDie.java`
+and `ModuleOperators.java`. Test::Needs now passes all 227 tests.
 
-### P6: Regex engine — `\|` quantifier error in alternations
+### P6: Regex engine — `\|` quantifier error in alternations (DONE)
 
-**Affects**: Template Toolkit (0/247 — all tests fail), potentially other modules
+**Affects**: Template Toolkit (was 0/247, now 170/2072 with full test suite)
 
-The PerlOnJava regex engine fails to parse `\|\|?` inside a complex alternation
-group. Template::Parser has a large tokenizer regex that includes `&&? | \|\|?`
-as an alternation branch. PerlOnJava emits:
+Two bugs fixed in `RegexPreprocessor.java`:
+1. **Escaped pipe `\|` with quantifier**: Replaced brittle `sb` character inspection
+   with `lastWasQuantifiable` flag check. Removed duplicate `lastChar == '|'` blocks.
+2. **Lookaheads/lookbehinds/atomic groups**: `(?=...)`, `(?!...)`, `(?<=...)`, `(?<!...)`,
+   `(?>...)`, `(?:...)` were routed through `handleRegularParentheses` which only
+   appended `(` and parsed from `offset+1`, causing `?` to be treated as quantifier.
+   Fixed by appending full group opener and calling `handleRegex` with correct offset.
 
-```
-Quantifier follows nothing in regex; marked by <-- HERE in m/... &&? | \|\|? <-- HERE .../
-```
+### P7: HTML::Parser/HTML::Entities — Java XS backend (DONE — Phase 1)
 
-The `?` quantifier after `\|` is valid Perl — it means "match one or two pipe
-characters". The regex engine incorrectly treats `\|` as a zero-width match
-or fails to recognise the escaped pipe as a literal character in this context.
+**Affects**: HTML::Parser, HTTP::Message, Devel::Cover, any module using HTML::Entities
 
-**Reproducer**:
-```bash
-./jperl -e 'my $re = qr/\|\|?/; "||" =~ $re && print "ok\n"'
-# Works in isolation, but fails inside larger alternation groups
-```
+HTML::Parser is an XS module. HTML::Entities requires `HTML::Parser` to provide
+`decode_entities` and `_decode_entities` as XS-accelerated functions.
 
-**Root cause**: Likely in the regex parser's handling of escaped metacharacters
-inside `(?: ... | ... )` groups, specifically when `\|` appears after `|`
-whitespace in `/x` mode.
+**Fix**: Created `HTMLParser.java` — a single Java XS file matching the original
+`Parser.xs` layout with both `PACKAGE = HTML::Parser` and `PACKAGE = HTML::Entities`.
 
-**Impact**: Blocks Template Toolkit entirely (all 247 tests fail at parse time).
-Also likely affects any CPAN module with complex `/x` regexes using `\|`.
+Phase 1 provides:
+- **HTML::Entities** (fully functional): `decode_entities`, `_decode_entities` (with
+  numeric decimal/hex, named entities, surrogate pairs, prefix expansion),
+  `UNICODE_SUPPORT`, `_probably_utf8_chunk`
+- **HTML::Parser** (basic): `_alloc_pstate`, `parse`/`eof` with basic event-driven
+  parsing, 13 boolean accessors, `handler` registration, tag list methods
 
-**Fix**: Investigate the regex compiler in `src/main/java/org/perlonjava/` —
-search for how `\|` is parsed vs `|` in alternation context.
+Cross-package registration uses direct `GlobalVariable.getGlobalCodeRef()` calls
+since `registerMethod` prefixes with the module name.
+
+**Results**: HTTP::Message → PASS, Devel::Cover → PASS, HTML::Parser 190/415
+
+**Phase 2** (future): Full hparser.c port (~1900 lines), argspec compilation,
+array-ref accumulator handlers (needed for TokeParser/PullParser).
+
+### P8: IO::Compress::Gzip — Java backend (NOT STARTED)
+
+**Affects**: IO::Compress chain, modules needing gzip support
+
+Needs `Compress::Raw::Zlib` (C library). Could implement via `java.util.zip`.
 
 ## Per-Module Investigation
 
@@ -174,10 +192,9 @@ URI::_query, etc.) and encoding edge cases.
 **Investigation**: Compare MIME type database — may be version/platform
 differences in the type mappings.
 
-#### Test::Needs — 200/227
+#### Test::Needs — 227/227 (PASS)
 
-**Known issues**: Exit code handling.
-**Fix**: See P5 above.
+**Fixed**: Exit code handling (P5). All tests pass now.
 
 #### Test::Warnings — 86/88
 
@@ -214,14 +231,12 @@ the dependency chain installs cleanly.
 **Investigation**: Run `./jcpan -t List::MoreUtils`. Check that
 List::MoreUtils::XS is skipped gracefully.
 
-#### Template (Template Toolkit) — 0/247
+#### Template (Template Toolkit) — 170/2072
 
-**Blocker**: Template::Stash::XS loading fails (fixed with bundled shim that
-inherits from Template::Stash), but Template::Parser's tokenizer regex triggers
-a PerlOnJava regex engine bug with `\|\|?` in `/x` mode alternations.
-**Fix**: See P6 above. Once the regex bug is fixed, Template should work with
-the pure-Perl stash fallback. The bundled `Template/Stash/XS.pm` shim is
-already in place.
+**Previously 0/247** (regex bug blocked all tests). After P6 regex fix, tests
+can now run. The full test suite has 2072 subtests, of which 170 pass.
+Remaining failures need investigation — likely a mix of regex edge cases,
+missing features, and test infrastructure issues.
 
 #### Mojolicious — untested via jcpan
 
@@ -232,42 +247,43 @@ socket/async features may not work.
 
 ### Blocked Modules (cannot install/test)
 
-#### HTTP::Message — blocked on Clone::PP
+#### HTTP::Message — PASS (unblocked)
 
-**Blocker**: See P1.
-**Unblocks**: LWP::UserAgent, Plack, Devel::Cover (partially).
+**Previously blocked** on Clone::PP and HTML::Entities.
+**Fixed by**: P1 (Clone::PP) and P7 (HTML::Parser Java XS backend).
+Now passes all tests (243s runtime).
 
-#### Devel::Cover — blocked on HTML::Entities
+#### Devel::Cover — PASS (unblocked)
 
-**Blocker**: HTML::Entities comes from HTML::Parser (XS).
-**Fix path**: Create a pure-Perl HTML::Entities shim with `decode_entities`.
-See `dev/modules/devel_cover.md` for detailed plan.
+**Previously blocked** on HTML::Entities dep chain.
+**Fixed by**: P7 (HTML::Parser Java XS backend). Now passes 1/1 tests.
 
-#### HTML::Parser — XS required
+#### HTML::Parser — 190/415 (partially working)
 
-**Blocker**: No Java XS backend.
-**Action**: Consider implementing key functions (HTML::Entities::decode_entities)
-as a Java backend or pure-Perl shim.
+**Previously blocked**: No Java XS backend.
+**Fixed by**: P7 (HTMLParser.java Phase 1). Basic parsing works.
+190/415 tests pass. Remaining failures likely need Phase 2 (full hparser.c
+port with argspec compilation and accumulator handlers for TokeParser).
 
 #### IO::Compress::Gzip — XS required
 
 **Blocker**: Needs Compress::Raw::Zlib (C library).
 **Action**: Could potentially implement via Java's `java.util.zip`.
 
-#### Moose — XS required
+#### Moose — XS required (skipped from smoke tests)
 
 **Blocker**: Needs B module subroutine name introspection, Class::MOP XS.
 **Action**: Long-term — Moo is the recommended alternative.
 
-#### Plack — blocked on dep chain
+#### Plack — blocked on dep chain (skipped from smoke tests)
 
-**Blocker**: Needs HTTP::Message (blocked on Clone::PP), and other HTTP modules.
-**Unblocked by**: P1 (Clone::PP).
+**Blocker**: Needs HTTP::Message (now fixed), and other HTTP modules.
+HTTP::Message is now unblocked. May be worth re-enabling in smoke tests.
 
-#### LWP::UserAgent — blocked on HTTP::Message
+#### LWP::UserAgent — may be unblocked
 
-**Blocker**: Same as HTTP::Message.
-**Unblocked by**: P1 (Clone::PP).
+HTTP::Message now passes. LWP::UserAgent may work now.
+**Action**: Re-test with `./jcpan -t LWP::UserAgent`.
 
 #### DBIx::Class — blocked on DBI
 
@@ -285,12 +301,12 @@ Based on impact (modules unblocked) and effort:
 
 1. **P1: Clone::PP** — trivial fix, unblocks HTTP::Message → LWP → Plack **(DONE)**
 2. **P2: MIME::Base64 $VERSION** — trivial fix, unblocks version checks **(DONE)**
-3. **P3: Encode::Locale** — small fix, improves HTTP chain (Encode::Alias coderef form)
+3. **P3: Encode::Alias** — Perl-level alias resolution for find_encoding **(DONE)**
 4. **P4: PerlIO::encoding stub** — small fix, helps IO::HTML **(DONE)**
-5. **P5: Exit code handling** — medium effort, helps Test::Needs
-6. **P6: Regex `\|` in alternations** — medium effort, unblocks Template Toolkit (247 tests)
-7. **HTML::Entities shim** — medium effort, unblocks Devel::Cover
-8. **IO::Compress::Gzip Java backend** — large effort, unblocks Compress chain
+5. **P5: Exit code handling** — END blocks now see correct $? **(DONE)**
+6. **P6: Regex `\|` + lookaheads** — two bugs in RegexPreprocessor **(DONE)**
+7. **P7: HTML::Parser Java XS** — Phase 1: entities + basic parser **(DONE)**
+8. **P8: IO::Compress::Gzip Java backend** — large effort, unblocks Compress chain
 
 ## How to Update This Document
 
@@ -309,7 +325,7 @@ perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_PREVIOUS.dat
 
 ## Progress Tracking
 
-### Current Status: P1-P4 implemented, P6 identified
+### Current Status: P1–P7 all completed
 
 ### Completed
 - [x] Module registry created with 39 modules (2026-03-31)
@@ -320,11 +336,41 @@ perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_PREVIOUS.dat
 - [x] P4: PerlIO::encoding stub created (`src/main/perl/lib/PerlIO/encoding.pm`)
 - [x] JSON $VERSION added to bundled `src/main/perl/lib/JSON.pm`
 - [x] Template::Stash::XS shim created (falls back to pure-Perl Template::Stash)
-- [x] Baseline smoke test run for new modules (JSON, Type::Tiny, List::MoreUtils, Template, Mojolicious)
+- [x] P6: Regex preprocessor — lookaheads and escaped pipes fix (2026-03-31)
+- [x] P3: Encode::Alias — find_encoding wrapper + XSLoader deferred load (2026-03-31)
+- [x] P5: exit() lets END blocks modify $? + require shows full error (2026-03-31)
+- [x] P7: HTML::Parser/HTML::Entities Java XS backend Phase 1 (2026-03-31)
+  - Created `HTMLParser.java` with entity decoding + basic HTML parser
+  - Cross-package registration for HTML::Entities namespace
+  - Unblocked HTTP::Message (PASS), Devel::Cover (PASS)
+  - HTML::Parser 190/415 tests passing
+
+### Smoke Test Results (2026-03-31, post P1–P7)
+
+| Module | Status | Tests |
+|--------|--------|-------|
+| Test::Deep | FAIL | 1266/1268 |
+| Try::Tiny | FAIL | 91/94 |
+| Test::Fatal | PASS | 19/19 |
+| MIME::Base32 | PASS | 31/31 |
+| HTML::Tagset | PASS | 33/33 |
+| Path::Tiny | FAIL | 1488/1542 |
+| Spreadsheet::WriteExcel | FAIL | 1124/1189 |
+| Image::ExifTool | PASS | 600/600 |
+| Spreadsheet::ParseExcel | PASS | 1612/1612 |
+| IO::Stringy | PASS | 127/127 |
+| Moo | FAIL | 809/840 |
+| URI | FAIL | 844/947 |
+| Test::Needs | PASS | 227/227 |
+| Test::Warnings | FAIL | 86/88 |
+| Log::Log4perl | FAIL | 715/719 |
+| JSON | FAIL | 23683/24886 |
+| Devel::Cover | PASS | 1/1 |
+| HTTP::Message | PASS | (all) |
+| HTML::Parser | FAIL | 190/415 |
 
 ### Next Steps
-1. Fix P6 (regex `\|` in alternations) — unblocks Template Toolkit
-2. Fix P3 (Encode::Locale — Encode::Alias coderef form)
-3. Fix P5 (exit code handling)
-4. Run full smoke test to measure improvement from P1/P2/P4 fixes
-5. Re-run smoke test with `--compare` against baseline
+1. Investigate remaining HTML::Parser failures (Phase 2: argspec, accumulator handlers)
+2. Fix P8 (IO::Compress::Gzip) — Java backend using java.util.zip
+3. Investigate Template Toolkit remaining failures (170/2072)
+4. Look at near-PASS modules: Test::Deep (1266/1268), Moo (809/840), Log::Log4perl (715/719)
