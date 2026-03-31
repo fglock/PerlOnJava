@@ -2404,6 +2404,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /**
+     * Materialize a block's return value if it contains a lazy special variable proxy.
+     * Must be called BEFORE {@link RegexState#restore()} at block exit so that
+     * regex capture variables ($1, $&amp;, etc.) reflect the block's state, not the
+     * restored caller state.
+     *
+     * <p>Uses {@code RuntimeScalar} parameter/return type (not {@code RuntimeBase})
+     * to preserve JVM stack type information — the verifier needs the narrower type
+     * when downstream code calls {@code RuntimeScalar}-specific methods.</p>
+     *
+     * @param result The block's return value (on the JVM operand stack)
+     * @return A concrete copy if the value was a special variable proxy, otherwise the original
+     */
+    public static RuntimeScalar materializeBlockResult(RuntimeScalar result) {
+        if (result instanceof ScalarSpecialVariable ssv) {
+            RuntimeScalar resolved = ssv.getValueAsScalar();
+            RuntimeScalar concrete = new RuntimeScalar();
+            concrete.type = resolved.type;
+            concrete.value = resolved.value;
+            return concrete;
+        }
+        return result;
+    }
+
     public boolean defined() {
         // Symbolic references created by \&{string} are always considered "defined" to match standard Perl
         if (this.isSymbolicReference) {
