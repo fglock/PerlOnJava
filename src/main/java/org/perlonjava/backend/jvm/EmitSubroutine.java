@@ -433,6 +433,31 @@ public class EmitSubroutine {
         }
         mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
 
+        // Special handling for eval blocks: share @_ with enclosing sub directly.
+        // In Perl 5, eval { } shares @_ with its enclosing sub, so shift/pop inside
+        // eval { } modifies the caller's @_. We achieve this by passing the caller's
+        // RuntimeArray directly instead of expanding @_ into a new array.
+        // Note: use apply() not applyEval() because the eval block's own generated
+        // method already has try/catch handling (useTryCatch=true). Using applyEval
+        // would add a second layer that clears $@ after the block returns.
+        if (node.left instanceof SubroutineNode subNode && subNode.useTryCatch) {
+            mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "apply",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+
+            if (pooledCodeRef) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return;
+        }
+
         int nameSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledName = nameSlot >= 0;
         if (!pooledName) {
@@ -594,7 +619,7 @@ public class EmitSubroutine {
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
             mv.visitLdcInsn("tailcall");
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
-            mv.visitVarInsn(Opcodes.ILOAD, 2);  // context parameter (passed to current sub)
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);  // context of the original call site
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
