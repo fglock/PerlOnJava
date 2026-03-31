@@ -91,6 +91,8 @@ sub _check_prereqs {
     
     for my $module (sort keys %$prereqs) {
         my $version = $prereqs->{$module};
+        # 'perl' is a special key meaning minimum perl version, not a module
+        next if $module eq 'perl';
         my $found = eval "require $module; 1";
         if (!$found) {
             push @missing, "$module (>= $version)";
@@ -492,9 +494,11 @@ sub _create_mymeta {
     };
     
     # Build prerequisites in meta-spec v2 format (nested prereqs structure)
+    # Note: 'perl' is a special key for minimum perl version, not a module dependency
     my $runtime_requires = '';
     if ($args->{PREREQ_PM} && %{$args->{PREREQ_PM}}) {
         for my $mod (sort keys %{$args->{PREREQ_PM}}) {
+            next if $mod eq 'perl';
             my $ver = $args->{PREREQ_PM}{$mod} || 0;
             $runtime_requires .= "        $mod: '$ver'\n";
         }
@@ -503,6 +507,7 @@ sub _create_mymeta {
     my $build_requires = '';
     if ($args->{BUILD_REQUIRES} && %{$args->{BUILD_REQUIRES}}) {
         for my $mod (sort keys %{$args->{BUILD_REQUIRES}}) {
+            next if $mod eq 'perl';
             my $ver = $args->{BUILD_REQUIRES}{$mod} || 0;
             $build_requires .= "        $mod: '$ver'\n";
         }
@@ -511,6 +516,7 @@ sub _create_mymeta {
     my $test_requires = '';
     if ($args->{TEST_REQUIRES} && %{$args->{TEST_REQUIRES}}) {
         for my $mod (sort keys %{$args->{TEST_REQUIRES}}) {
+            next if $mod eq 'perl';
             my $ver = $args->{TEST_REQUIRES}{$mod} || 0;
             $test_requires .= "        $mod: '$ver'\n";
         }
@@ -519,6 +525,7 @@ sub _create_mymeta {
     my $configure_requires = '';
     if ($args->{CONFIGURE_REQUIRES} && %{$args->{CONFIGURE_REQUIRES}}) {
         for my $mod (sort keys %{$args->{CONFIGURE_REQUIRES}}) {
+            next if $mod eq 'perl';
             my $ver = $args->{CONFIGURE_REQUIRES}{$mod} || 0;
             $configure_requires .= "        $mod: '$ver'\n";
         }
