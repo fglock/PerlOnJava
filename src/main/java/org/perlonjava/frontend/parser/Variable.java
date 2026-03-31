@@ -570,7 +570,8 @@ public class Variable {
                     // If we're taking a reference (\&foo), return &$hiddenVar
                     // This becomes \&$hiddenVar which calls createCodeReference
                     // createCodeReference will detect the CODE value and return it directly
-                    if (parser.parsingTakeReference) {
+                    // But if the next token is '(', this is a call, not a reference take
+                    if (parser.parsingTakeReference && !TokenUtils.peek(parser).text.equals("(")) {
                         return new OperatorNode("&", dollarOp, index);
                     }
 
@@ -594,8 +595,11 @@ public class Variable {
         // Reset the flag after parsing
         parser.parsingForLoopVariable = false;
 
-        // If we are parsing a reference (e.g., \&sub), return the node without adding parameters
-        if (parser.parsingTakeReference) {
+        // If we are parsing a reference (e.g., \&sub or defined(&sub)),
+        // return the node without adding parameters.
+        // But if the next token is '(', this is a call like defined(&$sub("args")),
+        // so we should parse the arguments and treat it as a call.
+        if (parser.parsingTakeReference && !peek(parser).text.equals("(")) {
             return node;
         }
 

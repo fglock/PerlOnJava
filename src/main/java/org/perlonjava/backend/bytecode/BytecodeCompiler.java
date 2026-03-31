@@ -844,12 +844,13 @@ public class BytecodeCompiler implements Visitor {
             Node elem = node.elements.get(i);
             if (elem == null) continue;
             if (elem instanceof ListNode ln && ln.elements.isEmpty()) continue;
-            if (elem instanceof AbstractNode an && an.getBooleanAnnotation("compileTimeOnly")) continue;
+            if (elem instanceof AbstractNode an && (an.getBooleanAnnotation("compileTimeOnly") || an.getBooleanAnnotation("noReturnValue"))) continue;
             lastMeaningfulIndex = i;
             break;
         }
         if (lastMeaningfulIndex == -1) lastMeaningfulIndex = numStatements - 1;
 
+        int savedLastResultReg = -1;
         for (int i = 0; i < numStatements; i++) {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
@@ -912,9 +913,23 @@ public class BytecodeCompiler implements Visitor {
 
             compileNode(stmt, stmtTarget, stmtContext);
 
+            // Save lastResultReg after the last meaningful statement so that subsequent
+            // non-meaningful statements (e.g., package declarations with noReturnValue)
+            // don't overwrite it with -1. In Perl 5, `package Foo;` and `sub name { ... }`
+            // are transparent for block return values.
+            if (isLastStatement) {
+                savedLastResultReg = lastResultReg;
+            }
+
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
             recycleTemporaryRegisters();
+        }
+
+        // Use the saved result reg from the last meaningful statement if subsequent
+        // statements (like package declarations) reset lastResultReg to -1
+        if (savedLastResultReg >= 0 && lastResultReg < 0) {
+            lastResultReg = savedLastResultReg;
         }
 
         // Save the last statement's result to the outer register BEFORE exiting scope

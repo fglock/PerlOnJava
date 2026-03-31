@@ -152,4 +152,29 @@ sub hoisted_with_prototype($) {
     return $value * 2;
 }
 
+# defined(&$coderef(args)) should call the coderef and check if result is defined
+{
+    my $sub = sub { return "hello" };
+    my $r;
+    if (defined($r = &$sub("a"))) {
+        pass("defined with &\$coderef(args) assignment works");
+    } else {
+        fail("defined with &\$coderef(args) assignment works");
+    }
+    is($r, "hello", "defined(&\$coderef(args)) correctly calls the coderef");
+
+    # defined(&$sub) without args should still work as reference check
+    if (defined(&mysub_for_defined_test)) {
+        fail("defined(&nonexistent_sub) should return false");
+    } else {
+        pass("defined(&nonexistent_sub) returns false");
+    }
+    sub real_sub_for_defined_test { 42 }
+    if (defined(&real_sub_for_defined_test)) {
+        pass("defined(&existing_sub) returns true");
+    } else {
+        fail("defined(&existing_sub) returns true");
+    }
+}
+
 done_testing();

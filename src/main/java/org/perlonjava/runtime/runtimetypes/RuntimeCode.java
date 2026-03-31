@@ -1373,8 +1373,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
                                 if (autoloadVariableName != null) {
                                     String methodName = method.toString();
-                                    String className = autoloadVariableName.substring(0, autoloadVariableName.lastIndexOf("::"));
-                                    String fullMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+                                    // Use the original calling class (perlClassName), not the class
+                                    // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
+                                    // even when AUTOLOAD is inherited from Base.
+                                    String perlClassName = NameNormalizer.getBlessStr(blessId);
+                                    String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                                     getGlobalVariable(autoloadVariableName).set(fullMethodName);
                                 }
                                 
@@ -1424,8 +1427,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             
                             String autoloadVariableName = code.autoloadVariableName;
                             if (autoloadVariableName != null) {
-                                String className = autoloadVariableName.substring(0, autoloadVariableName.lastIndexOf("::"));
-                                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+                                // Use the original calling class, not where AUTOLOAD was found
+                                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                                 getGlobalVariable(autoloadVariableName).set(fullMethodName);
                             }
                             return code.apply(a, callContext);
@@ -1593,10 +1596,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // The inherited method is an autoloaded subroutine
                 // Set the $AUTOLOAD variable to the name of the method that was called
 
-                // Extract class name from "ClassName::AUTOLOAD"
-                String className = autoloadVariableName.substring(0, autoloadVariableName.lastIndexOf("::"));
-                // Make fully qualified method name
-                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+                // Extract class name from the original calling class (perlClassName),
+                // not from the AUTOLOAD variable name. In Perl, $AUTOLOAD is set to
+                // OriginalClass::method even when AUTOLOAD is inherited from a parent.
+                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                 // Set the $AUTOLOAD variable to the fully qualified name of the method
                 getGlobalVariable(autoloadVariableName).set(fullMethodName);
             }
@@ -2399,6 +2402,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 elems.set(i, copy);
             }
         }
+    }
+
+    /**
+     * Materialize a block's return value if it contains a lazy special variable proxy.
+     * Must be called BEFORE {@link RegexState#restore()} at block exit so that
+     * regex capture variables ($1, $&amp;, etc.) reflect the block's state, not the
+     * restored caller state.
+     *
+     * <p>Uses {@code RuntimeScalar} parameter/return type (not {@code RuntimeBase})
+     * to preserve JVM stack type information — the verifier needs the narrower type
+     * when downstream code calls {@code RuntimeScalar}-specific methods.</p>
+     *
+     * @param result The block's return value (on the JVM operand stack)
+     * @return A concrete copy if the value was a special variable proxy, otherwise the original
+     */
+    public static RuntimeScalar materializeBlockResult(RuntimeScalar result) {
+        if (result instanceof ScalarSpecialVariable ssv) {
+            RuntimeScalar resolved = ssv.getValueAsScalar();
+            RuntimeScalar concrete = new RuntimeScalar();
+            concrete.type = resolved.type;
+            concrete.value = resolved.value;
+            return concrete;
+        }
+        return result;
     }
 
     public boolean defined() {

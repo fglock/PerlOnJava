@@ -55,7 +55,7 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute get replacement regex operation.
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg
      *
      * @param bytecode  The bytecode array
      * @param pc        Current program counter
@@ -67,12 +67,14 @@ public class OpcodeHandlerExtended {
         int patternReg = bytecode[pc++];
         int replacementReg = bytecode[pc++];
         int flagsReg = bytecode[pc++];
+        int argsReg = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
         RuntimeScalar replacement = (RuntimeScalar) registers[replacementReg];
         RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
+        RuntimeArray callerArgs = (registers[argsReg] instanceof RuntimeArray) ? (RuntimeArray) registers[argsReg] : new RuntimeArray();
 
-        registers[rd] = RuntimeRegex.getReplacementRegex(pattern, replacement, flags);
+        registers[rd] = RuntimeRegex.getReplacementRegex(pattern, replacement, flags, callerArgs);
         return pc;
     }
 

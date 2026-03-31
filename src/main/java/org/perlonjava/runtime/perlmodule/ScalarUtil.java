@@ -64,9 +64,14 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for blessed() method");
         }
 
-        int blessId = blessedId(args.get(0));
+        RuntimeScalar scalar = args.get(0);
+        int blessId = blessedId(scalar);
         // Return undef for unblessed references (blessId == 0)
         if (blessId == 0) {
+            // In Perl, qr// objects are implicitly blessed into "Regexp"
+            if (scalar.type == RuntimeScalarType.REGEX) {
+                return new RuntimeScalar("Regexp").getList();
+            }
             return new RuntimeScalar().getList();  // undef
         }
         return new RuntimeScalar(NameNormalizer.getBlessStr(blessId)).getList();

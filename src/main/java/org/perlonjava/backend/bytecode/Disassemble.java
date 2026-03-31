@@ -617,7 +617,8 @@ public class Disassemble {
                         rs1 = interpretedCode.bytecode[pc++];  // pattern
                         rs2 = interpretedCode.bytecode[pc++];  // replacement
                         int rs3 = interpretedCode.bytecode[pc++];  // flags
-                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(")\n");
+                        int callerArgsReg = interpretedCode.bytecode[pc++];  // caller @_
+                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(")\n");
                         break;
                     case Opcodes.SUBSTR_VAR:
                         rd = interpretedCode.bytecode[pc++];

@@ -148,7 +148,7 @@ public class EmitBlock {
         int lastNonNullIndex = -1;
         for (int i = list.size() - 1; i >= 0; i--) {
             Node elem = list.get(i);
-            if (elem != null && !(elem instanceof AbstractNode && ((AbstractNode) elem).getBooleanAnnotation("compileTimeOnly"))) {
+            if (elem != null && !(elem instanceof AbstractNode ab && (ab.getBooleanAnnotation("compileTimeOnly") || ab.getBooleanAnnotation("noReturnValue")))) {
                 lastNonNullIndex = i;
                 break;
             }
@@ -317,6 +317,18 @@ public class EmitBlock {
 
         // Add 'next', 'last' label
         mv.visitLabel(nextLabel);
+
+        // Materialize any special variable proxies (e.g., $1, $&) in the block result
+        // BEFORE restoring regex state, so the values reflect the block's regex matches
+        // rather than the restored caller state.
+        // Only in SCALAR context where we know the stack has a RuntimeScalar.
+        if (regexStateLocal >= 0 && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "materializeBlockResult",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
 
         Local.localTeardown(localRecord, mv);
 
