@@ -93,17 +93,28 @@ public class Symbol extends PerlModuleBase {
     }
 
     /**
-     * Placeholder for the geniosym functionality.
+     * Creates a new anonymous IO handle.
+     * Equivalent to Perl's Symbol::geniosym() — creates an anonymous glob,
+     * initializes its IO slot, and returns a reference to it.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
-     * @return A RuntimeList.
-     * @throws PerlCompilerException if the method is not implemented.
+     * @return A RuntimeList containing a reference to a new anonymous glob with initialized IO.
      */
     public static RuntimeList geniosym(RuntimeArray args, int ctx) {
-        // Placeholder for geniosym functionality
-        // return new RuntimeScalar(new RuntimeGlob("IO" + System.nanoTime())).getList();
-        throw new PerlJavaUnimplementedException("not implemented");
+        // Create a unique anonymous glob (same as gensym)
+        String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter++;
+        RuntimeGlob glob = new RuntimeGlob(globName);
+
+        // Initialize the IO slot (equivalent to Perl's: select(select $sym))
+        // The IO slot is already initialized by RuntimeGlob constructor (this.IO = new RuntimeScalar())
+
+        // Return a reference to the glob
+        RuntimeScalar globRef = new RuntimeScalar();
+        globRef.type = RuntimeScalarType.GLOBREFERENCE;
+        globRef.value = glob;
+
+        return globRef.getList();
     }
 
     /**

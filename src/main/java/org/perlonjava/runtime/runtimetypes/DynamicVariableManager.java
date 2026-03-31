@@ -46,9 +46,13 @@ public class DynamicVariableManager {
 
     public static RuntimeGlob pushLocalVariable(RuntimeGlob variable) {
         // Save the current state of the variable and push it onto the stack.
+        // dynamicSaveState() creates a NEW glob in globalIORefs for the local scope.
         variable.dynamicSaveState();
         variableStack.addLast(variable);
-        return variable;
+        // Return the NEW glob from globalIORefs (installed by dynamicSaveState),
+        // not the old one. This ensures `local *FH` returns the fresh local glob,
+        // so that \do { local *FH } captures a unique glob per call (Perl 5 parity).
+        return GlobalVariable.getGlobalIO(variable.globName);
     }
 
     public static void pushLocalVariable(DynamicState variable) {

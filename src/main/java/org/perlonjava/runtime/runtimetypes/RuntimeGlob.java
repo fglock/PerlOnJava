@@ -753,18 +753,30 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         savedHash.dynamicSaveState();
         savedScalar.dynamicSaveState();
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
-        // Create a NEW IO slot for the local scope.
-        // Any code that captures this glob during local will get this new IO object.
-        this.IO = new RuntimeScalar();
+
+        // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
+        // This matches Perl 5 behavior where `local *FH` replaces the stash entry with a fresh GV.
+        // References captured during the local scope (e.g. \do { local *FH }) will point to the
+        // new glob, which remains valid after the local scope ends and this old glob is restored.
+        RuntimeGlob newGlob = new RuntimeGlob(this.globName);
+        // Give the new glob its own hash/array/scalar slots so that orphaned globs
+        // (captured via \do { local *FH }) have independent per-instance storage.
+        // This is needed by IO::Scalar which stores state via *$self->{Key}.
+        newGlob.hashSlot = new RuntimeHash();
+        GlobalVariable.globalIORefs.put(this.globName, newGlob);
     }
 
     @Override
     public void dynamicRestoreState() {
         GlobSlotSnapshot snap = globSlotStack.pop();
 
-        // Restore the saved IO object reference (not modify in place).
-        // This leaves any captured references pointing to the "local" IO.
+        // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
+
+        // Put this (old) glob back in globalIORefs, replacing the local scope's glob.
+        // Any references captured during the local scope still point to the local glob,
+        // which is now an independent orphaned glob (matching Perl 5 GV behavior).
+        GlobalVariable.globalIORefs.put(snap.globName, this);
 
         GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
         snap.scalar.dynamicRestoreState();

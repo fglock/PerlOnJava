@@ -189,6 +189,14 @@ public class TieOperators {
                 if (scalar.type == TIED_SCALAR) {
                     return ((TieScalar) scalar.value).getSelf();
                 }
+                // Handle tied($$glob_ref) where $$glob_ref evaluates to a GLOB wrapped in a reference.
+                // In Perl 5, tied($$fh) when the glob is tied via tie(*$fh, ...) returns the tied object.
+                if (scalar.type == GLOB) {
+                    RuntimeGlob g = (scalar instanceof RuntimeGlob) ? (RuntimeGlob) scalar : (scalar.value instanceof RuntimeGlob ? (RuntimeGlob) scalar.value : null);
+                    if (g != null && g.IO.type == TIED_SCALAR) {
+                        return ((TieHandle) g.IO.value).getSelf();
+                    }
+                }
             }
             case ARRAYREFERENCE -> {
                 RuntimeArray array = variable.arrayDeref();
@@ -207,6 +215,22 @@ public class TieOperators {
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
                     return ((TieHandle) IO.value).getSelf();
+                }
+            }
+            case GLOB -> {
+                // Handle tied($$glob_ref) where $$glob_ref evaluates to a GLOB.
+                // In Perl 5, tied($$fh) when the glob is tied via tie(*$fh, ...) returns the tied object.
+                RuntimeGlob globFromScalar = null;
+                if (variable instanceof RuntimeGlob g) {
+                    globFromScalar = g;
+                } else if (variable.value instanceof RuntimeGlob g) {
+                    globFromScalar = g;
+                }
+                if (globFromScalar != null) {
+                    RuntimeScalar IO = globFromScalar.IO;
+                    if (IO.type == TIED_SCALAR) {
+                        return ((TieHandle) IO.value).getSelf();
+                    }
                 }
             }
             default -> {
