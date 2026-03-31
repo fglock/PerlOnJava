@@ -206,6 +206,12 @@ public class IdentifierParser {
             if (insideBraces && firstChar == '&' && nextToken.text.equals("{")) {
                 return null; // Force fallback to expression parsing for subroutine call
             }
+            // Special case: + followed by { is unary plus forcing hash constructor when inside braces
+            // %{+{@a}} should be parsed as %{ +{@a} }, not %+{@a} (hash subscript on %+)
+            // This is the canonical Perl idiom for disambiguating hash constructors from blocks
+            if (insideBraces && firstChar == '+' && nextToken.text.equals("{")) {
+                return null; // Force fallback to expression parsing for unary plus + hash constructor
+            }
             // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
             if (firstChar == '\'' && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
                 // This is $'foo which means $main::foo
