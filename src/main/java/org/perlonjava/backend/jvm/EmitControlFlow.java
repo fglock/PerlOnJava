@@ -400,6 +400,21 @@ public class EmitControlFlow {
                 // or left=BlockNode (for &{expr}) and right=args
                 if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
                     Node callTarget = callNode.left;
+
+                    // Check if goto &sub is inside an eval context - prohibited in Perl
+                    boolean isGotoSub = (callTarget instanceof OperatorNode opNode2 && opNode2.operator.equals("&"))
+                            || callTarget instanceof BlockNode
+                            || (callTarget instanceof OperatorNode opNode3 && opNode3.operator.equals("$"));
+                    if (isGotoSub) {
+                        String evalScope = null;
+                        if (ctx.javaClassInfo.isInEvalBlock) evalScope = "eval-block";
+                        else if (ctx.javaClassInfo.isInEvalString) evalScope = "eval-string";
+                        if (evalScope != null) {
+                            emitGotoFromEvalError(emitterVisitor, node, evalScope);
+                            return;
+                        }
+                    }
+
                     if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
                         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto &NAME tail call");
                         handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
@@ -428,6 +443,14 @@ public class EmitControlFlow {
                 // Check if this is a tail call (goto EXPR where EXPR is a coderef)
                 // This handles: goto __SUB__, goto $coderef, etc.
                 if (arg instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
+                    // Check eval context
+                    String evalScope2 = null;
+                    if (ctx.javaClassInfo.isInEvalBlock) evalScope2 = "eval-block";
+                    else if (ctx.javaClassInfo.isInEvalString) evalScope2 = "eval-string";
+                    if (evalScope2 != null) {
+                        emitGotoFromEvalError(emitterVisitor, node, evalScope2);
+                        return;
+                    }
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(goto): Detected goto __SUB__ tail call");
                     // Create a ListNode with @_ as the argument
                     ListNode argsNode = new ListNode(opNode.tokenIndex);
@@ -483,5 +506,42 @@ public class EmitControlFlow {
 
         // Emit the goto instruction
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
+    }
+
+    /**
+     * Emits a die "Can't goto subroutine from an eval-block/eval-string" error.
+     * Called when goto &sub is inside an eval context.
+     */
+    private static void emitGotoFromEvalError(EmitterVisitor emitterVisitor, OperatorNode node, String evalScope) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        String location = "";
+        if (ctx.errorUtil != null) {
+            var loc = ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+            location = " at " + loc.fileName() + " line " + loc.lineNumber();
+        }
+        // Create RuntimeScalar for error message
+        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitLdcInsn("Can't goto subroutine from an " + evalScope);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "<init>", "(Ljava/lang/String;)V", false);
+        // Create RuntimeScalar for location
+        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitLdcInsn(location);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "<init>", "(Ljava/lang/String;)V", false);
+        // Call WarnDie.die(message, where) - returns RuntimeBase but always throws PerlDieException
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/WarnDie",
+                "die",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
+        // die() always throws but JVM verifier needs explicit termination.
+        // Cast result to Throwable and throw it to terminate the code path cleanly.
+        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Throwable");
+        ctx.mv.visitInsn(Opcodes.ATHROW);
     }
 }

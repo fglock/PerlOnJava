@@ -73,6 +73,18 @@ public class JavaClassInfo {
     public boolean isInDeferBlock;
 
     /**
+     * Flag indicating if this method is an eval block (eval { ... }).
+     * goto &sub from eval blocks is prohibited ("Can't goto subroutine from an eval-block").
+     */
+    public boolean isInEvalBlock;
+
+    /**
+     * Flag indicating if this method is compiled for an eval string (eval 'string').
+     * goto &sub from eval strings is prohibited ("Can't goto subroutine from an eval-string").
+     */
+    public boolean isInEvalString;
+
+    /**
      * Counter tracking nesting depth inside finally blocks.
      * Control flow statements (last, next, redo, return, goto) are prohibited in finally blocks.
      * This is a counter rather than a boolean to handle nested finally blocks.

@@ -1321,6 +1321,16 @@ public class CompileOperator {
             // or left=BlockNode (for &{expr}) and right=args
             if (arg instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
                 Node callTarget = callNode.left;
+
+                // Check if goto &sub is inside an eval context - prohibited in Perl
+                String evalScope = bc.getEvalScopeType();
+                if (evalScope != null && (callTarget instanceof OperatorNode opNode2 && opNode2.operator.equals("&")
+                        || callTarget instanceof BlockNode
+                        || callTarget instanceof OperatorNode opNode3 && opNode3.operator.equals("$"))) {
+                    emitGotoFromEvalError(bc, node, evalScope);
+                    return;
+                }
+
                 if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
                     // This is goto &sub - create a TAILCALL marker and return it
                     int outerContext = bc.currentCallContext;
@@ -1406,6 +1416,25 @@ public class CompileOperator {
         Integer targetPc = bc.gotoLabelPcs.get(labelStr);
         if (targetPc != null) { bc.emit(Opcodes.GOTO); bc.emitInt(targetPc); }
         else { bc.emit(Opcodes.GOTO); int patchPc = bc.bytecode.size(); bc.emitInt(0); bc.pendingGotos.add(new Object[]{patchPc, labelStr}); }
+        bc.lastResultReg = -1;
+    }
+
+    /**
+     * Emits a die "Can't goto subroutine from an eval-block/eval-string" error.
+     * This is called when goto &sub is found inside an eval context at compile time.
+     */
+    private static void emitGotoFromEvalError(BytecodeCompiler bc, OperatorNode node, String evalScope) {
+        // Load error message
+        int msgReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_STRING);
+        bc.emitReg(msgReg);
+        bc.emit(bc.addToStringPool("Can't goto subroutine from an " + evalScope));
+        // Load location
+        int locationReg = emitLocationString(bc, node);
+        // Die
+        bc.emitWithToken(Opcodes.DIE, node.getIndex());
+        bc.emitReg(msgReg);
+        bc.emitReg(locationReg);
         bc.lastResultReg = -1;
     }
 }

@@ -616,6 +616,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.errorUtil, // error message utility
                     evalCompilerOptions, // possibly modified for Unicode source
                     ctx.unitcheckBlocks);
+            // Mark as eval string so goto &sub can emit proper error
+            evalCtx.javaClassInfo.isInEvalString = true;
             // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
             // evalCtx.logDebug("evalStringHelper Code: " + code);
 

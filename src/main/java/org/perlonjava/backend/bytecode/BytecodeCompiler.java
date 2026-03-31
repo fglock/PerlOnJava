@@ -99,6 +99,9 @@ public class BytecodeCompiler implements Visitor {
     private boolean isEvalString;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
+    // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
+    // 0 = not in eval block, >0 = inside eval block(s)
+    int evalBlockDepth;
     // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
     private int finallyBlockDepth;
     // Tracks whether any LOCAL_* or PUSH_LOCAL_VARIABLE opcodes are emitted (for DynamicVariableManager optimization)
@@ -495,6 +498,18 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Returns the type of eval scope the compiler is currently inside, or null if not in eval.
+     * Used by goto &sub to emit "Can't goto subroutine from an eval-*" errors.
+     * Does NOT count eval scopes that are outside a sub definition boundary
+     * (e.g., sub { goto &foo } inside eval is fine).
+     */
+    String getEvalScopeType() {
+        if (isEvalString) return "eval-string";
+        if (evalBlockDepth > 0) return "eval-block";
+        return null;
+    }
+
+    /**
      * Compile an AST node to InterpretedCode.
      *
      * @param node The AST node to compile
@@ -542,6 +557,18 @@ public class BytecodeCompiler implements Visitor {
                 symbolTable.warningFatalStack.push((java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone());
                 symbolTable.warningDisabledStack.pop();
                 symbolTable.warningDisabledStack.push((java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone());
+            }
+            // Propagate eval context flags from JVM backend for goto &sub checks
+            if (ctx.javaClassInfo != null) {
+                if (ctx.javaClassInfo.isInEvalBlock) {
+                    evalBlockDepth++;
+                }
+                if (ctx.javaClassInfo.isInEvalString) {
+                    isEvalString = true;
+                }
+                if (ctx.javaClassInfo.isInDeferBlock) {
+                    isInDeferBlock = true;
+                }
             }
         }
 
@@ -816,17 +843,41 @@ public class BytecodeCompiler implements Visitor {
         int localLevelReg = -1;
         boolean needsLocalRestore = false;
         if (!node.getBooleanAnnotation("blockIsSubroutine")) {
+            // Check for scoped package: package Foo { ... }
             boolean hasScopedPackage = !node.elements.isEmpty()
                     && node.elements.get(0) instanceof OperatorNode firstOp
                     && (firstOp.operator.equals("package") || firstOp.operator.equals("class"))
                     && Boolean.TRUE.equals(firstOp.getAnnotation("isScoped"));
+            // Check for non-scoped package inside block: { package Foo; ... }
+            // The runtime package (used by caller()) must be saved/restored on block exit.
+            boolean hasNonScopedPackage = false;
+            if (!hasScopedPackage) {
+                for (Node elem : node.elements) {
+                    if (elem instanceof OperatorNode opNode
+                            && (opNode.operator.equals("package") || opNode.operator.equals("class"))
+                            && !Boolean.TRUE.equals(opNode.getAnnotation("isScoped"))) {
+                        hasNonScopedPackage = true;
+                        break;
+                    }
+                }
+            }
             // Check for both local operators and defer statements - both need scope cleanup
             boolean hasLocalOrDefer = FindDeclarationVisitor.containsLocalOrDefer(node);
-            if (hasScopedPackage || hasLocalOrDefer) {
+            if (hasScopedPackage || hasNonScopedPackage || hasLocalOrDefer) {
                 needsLocalRestore = true;
                 localLevelReg = allocateRegister();
                 emit(Opcodes.GET_LOCAL_LEVEL);
                 emitReg(localLevelReg);
+                // For non-scoped package declarations (e.g., { package Foo; ... }),
+                // save the current package to DVM so POP_LOCAL_LEVEL restores it on block exit.
+                // PUSH_PACKAGE saves the current package value and sets the new one;
+                // since we pass the current package name, it's effectively just a save.
+                if (hasNonScopedPackage) {
+                    String currentPkg = symbolTable.getCurrentPackage();
+                    int pkgIdx = addToStringPool(currentPkg);
+                    emit(Opcodes.PUSH_PACKAGE);
+                    emit(pkgIdx);
+                }
             }
         }
 
@@ -4484,6 +4535,9 @@ public class BytecodeCompiler implements Visitor {
                 this.errorUtil,
                 packedRegistry
         );
+        // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
+        // but named subs are NOT eval strings - clear the flag.
+        subCompiler.isEvalString = false;
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
 
@@ -4581,6 +4635,9 @@ public class BytecodeCompiler implements Visitor {
                 this.errorUtil,
                 parentRegistry  // Pass parent variable registry for nested closure support
         );
+        // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
+        // but anonymous subs are NOT eval strings - clear the flag.
+        subCompiler.isEvalString = false;
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
         
@@ -4658,8 +4715,13 @@ public class BytecodeCompiler implements Visitor {
         int catchTargetPos = bytecode.size();
         emitInt(0); // Placeholder for absolute catch address (4 bytes)
 
+        // Track eval block nesting for "goto &sub from eval" detection
+        evalBlockDepth++;
+
         // Compile the eval block body
         compileNode(node.block, resultReg, currentCallContext);
+
+        evalBlockDepth--;
 
         if (lastResultReg >= 0) {
             emitAliasWithTarget(resultReg, lastResultReg);
