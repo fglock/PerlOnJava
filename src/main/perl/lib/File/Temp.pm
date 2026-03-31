@@ -240,7 +240,7 @@ sub tempfile {
         ($fh, $path) = _mkstemp_perl($template, $suffix);
     }
 
-    return $path unless $open;
+    return wantarray ? (undef, $path) : $path unless $open;
 
     # For Java path, we need to reopen (Java closed the fd)
     # For Perl path, we already have the filehandle

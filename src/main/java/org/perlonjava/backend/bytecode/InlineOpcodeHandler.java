@@ -1285,8 +1285,9 @@ public class InlineOpcodeHandler {
         int nameIdx = bytecode[pc++];
         String name = code.stringPool[nameIdx];
         RuntimeGlob glob = GlobalVariable.getGlobalIO(name);
-        DynamicVariableManager.pushLocalVariable(glob);
-        registers[rd] = glob;
+        // pushLocalVariable returns the NEW glob (installed by dynamicSaveState),
+        // ensuring \do { local *FH } captures a unique glob per call (Perl 5 parity).
+        registers[rd] = DynamicVariableManager.pushLocalVariable(glob);
         return pc;
     }
 
@@ -1297,8 +1298,7 @@ public class InlineOpcodeHandler {
         String pkg = InterpreterState.currentPackage.get().toString();
         String normalizedName = NameNormalizer.normalizeVariableName(nameScalar.toString(), pkg);
         RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
-        DynamicVariableManager.pushLocalVariable(glob);
-        registers[rd] = glob;
+        registers[rd] = DynamicVariableManager.pushLocalVariable(glob);
         return pc;
     }
 

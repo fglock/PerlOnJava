@@ -132,9 +132,9 @@ public class EmitOperatorLocal {
 
         boolean isTypeglob = varToLocal instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
         
-        // For local *GLOB, we must NOT create a detached copy - we need to localize the actual
-        // global glob from globalIORefs, so that later accesses via *GLOB see the new IO slot.
-        // This is critical for the `do { local *FH; *FH }` pattern to work correctly.
+        // For local *GLOB, get the actual global glob from globalIORefs (not a detached copy).
+        // pushLocalVariable(RuntimeGlob) will save state, create a new glob in globalIORefs,
+        // and return the NEW glob. This ensures \do { local *FH } captures a unique glob.
         if (isTypeglob && varToLocal instanceof OperatorNode opNode2 && opNode2.operand instanceof IdentifierNode idNode) {
             String fullName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
             mv.visitLdcInsn(fullName);
