@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file. Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.43.9
+perldelta - what is new for perl v5.43.10
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.43.8 release and the 5.43.9
+This document describes differences between the 5.43.9 release and the 5.43.10
 release.
 
-If you are upgrading from an earlier release such as 5.43.7, first read
-L<perl5438delta>, which describes differences between 5.43.7 and 5.43.8.
+If you are upgrading from an earlier release such as 5.43.8, first read
+L<perl5439delta>, which describes differences between 5.43.8 and 5.43.9.
 
 =head1 Notice
 
@@ -26,15 +26,6 @@ enhancements. Particularly prominent performance optimisations could go
 here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
-
-=head2 Enhanced operation of regular expression patterns under /xx
-
-Experimentally, the C</xx> pattern modifier can allow bracketed
-character classes (I<e.g.>, C<[a-zA-Z]> to extend across multiple lines
-and to contain comments, and to warn you of potential cases where a
-portion of a pattern inadvertently has been treated as a comment instead
-of what you intended.  This behavior is enabled by S<C<use feature
-"enhanced_xx">>.  See L<perlre/E<sol>x and  E<sol>xx>.
 
 =head1 Security
 
@@ -95,11 +86,6 @@ There may well be none in a stable release.
 [ List each enhancement as an =item entry ]
 
 =over 4
-
-=item *
-
-Populating a hash from a list of key/value pairs, when the keys are constant
-string operands known at compile time, is commonly now faster. [GH #24228]
 
 =item *
 
@@ -362,16 +348,31 @@ well.
 
 =item *
 
-Dedicated check functions C<Perl_ck_anonhash> and C<Perl_ck_aassign> have been
-added and are used to hekify some C<OP_CONST> hash keys at compile time.
-[GH #24228]
+When a UTF-8 constant string was used as the hash key in an insert
+operation, such as C<$hash{'über maus'} = 1;>, and the string could
+be converted into a single byte representation, the flag noting the
+original encoding (C<HVhek_WASUTF8>) was not always retained.
+
+When this occurred, the relevant scalars returned by C<keys %hash>
+would not be in the original, expected UTF-8 encoding.
+
+The original encoding is now captured and propagated.
+[GH #24266]
 
 =item *
 
-C<Perl_check_hash_fields_and_hekify>, partly called as a compile-time
-optimization, no longer preemptively converts an NV to a HEK if the
-compile time and run time locales could differ.
-[GH #24252]
+When a constant IV or NV was used as a hash key, such as in
+C<my %hash = ( 42 => 0 );>, and was preemptively stringified
+into a hash key, the fact that the numerical value came first
+was lost. This unintentionally modified deparse output for
+such keys.
+
+The numerical values are now carried across, and flags on the
+key variable reflect the original data type.
+
+Note: This now preserves the form of constant keys supplied
+to tied hashes in list assignments.
+[GH #24302]
 
 =item *
 
@@ -393,25 +394,13 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-On debugging perls, instantiating a class with an array field with an empty
-initializer list would abort with an error:
-
-    class Foo {
-        field @bar = ();
-    }
-    Foo->new();
-
-Error message: C<< perl: inline.h:194: Perl_av_new_alloc: Assertion `size > 0'
-failed. >>
-
-This has been fixed. [GH #24246]
+XXX
 
 =item *
 
-Refassigning to a class field in a method could result in the SV for
-that field being released when the method exited.  The next access to
-that field could result in a crash or an assertion, or if the freed SV
-had been re-used, random data.  Discussed in [GH #24187]
+Resolving a lexical sub for prototype checking during parsing in eval
+could result in finding the wrong sub, resulting in confusing
+errors. [GH #24056][GH #24131]
 
 =back
 
@@ -451,7 +440,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.43.8..HEAD
+  perl Porting/acknowledgements.pl v5.43.9..HEAD
 
 =head1 Reporting Bugs
 
