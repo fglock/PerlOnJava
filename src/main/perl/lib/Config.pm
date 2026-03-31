@@ -125,7 +125,9 @@ $os_name =~ s/\s+/_/g;
     ## useithreads => 'define',
     ## usethreads => 'define',
 
-    # Sizes (Java platform - guaranteed minimums)
+    # Sizes (Java platform - 32-bit integer model)
+    # PerlOnJava uses Java int (32-bit) as the native integer type.
+    # ivsize=4 signals a 32-bit Perl, so tests skip 64-bit-only paths.
     shortsize => '2',
     intsize => '4',
     longsize => '8',
@@ -137,6 +139,21 @@ $os_name =~ s/\s+/_/g;
 
     ivsize => 4,
     lseeksize => 8,
+
+    # Type names (matching a 32-bit Perl on LP64 platform)
+    ivtype => 'int',
+    uvtype => 'unsigned int',
+    nvtype => 'double',
+    i8type => 'signed char',
+    u8type => 'unsigned char',
+    i16type => 'short',
+    u16type => 'unsigned short',
+    i32type => 'int',
+    u32type => 'unsigned int',
+
+    # 64-bit integer support - not enabled (32-bit integer model)
+    # use64bitint and d_quad are left undef so tests correctly skip
+    # 64-bit-only code paths.
     
     # nv_preserves_uv_bits: Number of bits in an unsigned integer that can be
     # preserved in a floating-point number (NV) without loss of precision.
