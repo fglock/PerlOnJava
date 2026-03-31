@@ -53,6 +53,9 @@ my @MODULE_REGISTRY = (
     ['Test::Warn',              'partial',    'pure-perl',         undef, 'Dep test issues with Sub::Uplevel'],
     ['Path::Tiny',              'partial',    'pure-perl',         undef, '1489/1542 subtests'],
     ['namespace::clean',        'known-good', 'pure-perl',         undef, 'Namespace cleanup'],
+    ['Parse::RecDescent',       'partial',    'pure-perl',         undef, 'Recursive descent parser; depends on Text::Balanced'],
+    ['Spreadsheet::WriteExcel', 'partial',    'pure-perl',         undef, 'Write .xls files; unlocks ParseExcel t/46_save_parser.t'],
+    ['Image::ExifTool',         'partial',    'pure-perl',         undef, '590/600 subtests (98%) via dedicated runner'],
 
     # ── Known-good: Java XS implementations ──
     ['DateTime',                'known-good', 'java-xs',           undef, 'Date/time (Java java.time backend)'],
