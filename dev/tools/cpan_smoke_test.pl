@@ -11,6 +11,7 @@
 # Usage:
 #   perl dev/tools/cpan_smoke_test.pl              # Run all modules
 #   perl dev/tools/cpan_smoke_test.pl --quick      # Known-good only
+#   perl dev/tools/cpan_smoke_test.pl --jobs 3     # Run 3 in parallel
 #   perl dev/tools/cpan_smoke_test.pl Moo DateTime # Specific modules
 #   perl dev/tools/cpan_smoke_test.pl --list       # List modules and exit
 #
@@ -165,24 +166,16 @@ if ($compare_file && -f $compare_file) {
 my @results;
 my $total_start = time();
 
-for my $mod (@modules) {
-    my ($name, $category, $xs_status, $env_vars, $notes) = @$mod;
-    my $start = time();
+if ($jobs > 1) {
+    @results = run_parallel(\@modules, $jobs);
+} else {
+    @results = run_sequential(\@modules);
+}
 
-    print "Testing $name ... ";
-    log_msg("\n" . "-" x 70);
-    log_msg("MODULE: $name ($category, $xs_status)");
-
-    my $result = run_jcpan_test($name, $env_vars);
-    $result->{module}    = $name;
-    $result->{category}  = $category;
-    $result->{xs_status} = $xs_status;
-    $result->{notes}     = $notes;
-    $result->{elapsed}   = sprintf('%.1f', time() - $start);
-
-    # Check for regression
-    if ($previous{$name}) {
-        my $prev = $previous{$name};
+# Check for regressions
+for my $result (@results) {
+    if ($previous{$result->{module}}) {
+        my $prev = $previous{$result->{module}};
         if ($result->{status} eq 'FAIL' && $prev->{status} eq 'PASS') {
             $result->{regression} = 'REGRESSED';
         } elsif ($result->{status} eq 'PASS' && $prev->{status} eq 'FAIL') {
@@ -193,25 +186,6 @@ for my $mod (@modules) {
             $result->{regression} = 'IMPROVED';
         }
     }
-
-    push @results, $result;
-
-    # Print inline status
-    my $status_str = $result->{status};
-    if ($result->{pass_count} || $result->{total_count}) {
-        $status_str .= " ($result->{pass_count}/$result->{total_count} subtests)";
-    }
-    if ($result->{regression}) {
-        $status_str .= " [$result->{regression}]";
-    }
-    printf "%s (%.1fs)\n", $status_str, time() - $start;
-
-    log_msg("  Status: $result->{status}");
-    log_msg("  Configure: $result->{configure}") if $result->{configure};
-    log_msg("  Tests: $result->{pass_count}/$result->{total_count} subtests") if defined $result->{total_count};
-    log_msg("  XS needed: $result->{xs_detected}") if $result->{xs_detected};
-    log_msg("  Error: $result->{error}") if $result->{error};
-    log_msg("  Elapsed: $result->{elapsed}s");
 }
 
 my $total_elapsed = sprintf('%.1f', time() - $total_start);
@@ -238,6 +212,190 @@ my @regressions = grep { $_->{regression} && $_->{regression} eq 'REGRESSED' } @
 my @known_good_fails = grep { $_->{category} eq 'known-good' && $_->{status} ne 'PASS' } @results;
 exit(1) if @regressions || @known_good_fails;
 exit(0);
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Test runners
+# ══════════════════════════════════════════════════════════════════════
+
+sub run_sequential {
+    my ($modules) = @_;
+    my @results;
+
+    for my $mod (@$modules) {
+        my ($name, $category, $xs_status, $env_vars, $notes) = @$mod;
+        my $start = time();
+
+        print "Testing $name ... ";
+        log_msg("\n" . "-" x 70);
+        log_msg("MODULE: $name ($category, $xs_status)");
+
+        my $result = run_jcpan_test($name, $env_vars);
+        $result->{module}    = $name;
+        $result->{category}  = $category;
+        $result->{xs_status} = $xs_status;
+        $result->{notes}     = $notes;
+        $result->{elapsed}   = sprintf('%.1f', time() - $start);
+
+        push @results, $result;
+        print_inline_status($result);
+
+        log_msg("  Status: $result->{status}");
+        log_msg("  Configure: $result->{configure}") if $result->{configure};
+        log_msg("  Tests: $result->{pass_count}/$result->{total_count} subtests") if defined $result->{total_count};
+        log_msg("  XS needed: $result->{xs_detected}") if $result->{xs_detected};
+        log_msg("  Error: $result->{error}") if $result->{error};
+        log_msg("  Elapsed: $result->{elapsed}s");
+    }
+
+    return @results;
+}
+
+sub run_parallel {
+    my ($modules, $max_jobs) = @_;
+    my @results;
+    my %children;  # pid => { mod => ..., tmpfile => ... }
+    my $running = 0;
+
+    require File::Temp;
+
+    print "Running $max_jobs jobs in parallel...\n\n";
+    log_msg("Parallel mode: $max_jobs jobs");
+
+    my @queue = @$modules;
+
+    while (@queue || $running > 0) {
+        # Launch jobs up to $max_jobs
+        while (@queue && $running < $max_jobs) {
+            my $mod = shift @queue;
+            my ($name, $category, $xs_status, $env_vars, $notes) = @$mod;
+
+            # Create temp file for child output (module name in filename for debugging)
+            (my $safe_name = $name) =~ s/::/_/g;
+            my $tmpfile = File::Temp::tmpnam() . "_${safe_name}.out";
+
+            my $pid = fork();
+            if (!defined $pid) {
+                warn "fork failed for $name: $!\n";
+                push @results, {
+                    module => $name, category => $category, xs_status => $xs_status,
+                    notes => $notes, status => 'FORK_FAIL', error => "fork: $!",
+                    elapsed => '0', configure => '', pass_count => undef,
+                    total_count => undef, xs_detected => '',
+                };
+                next;
+            }
+
+            if ($pid == 0) {
+                # ── Child process ──
+                my $start = time();
+                my $result = run_jcpan_test($name, $env_vars);
+                $result->{module}    = $name;
+                $result->{category}  = $category;
+                $result->{xs_status} = $xs_status;
+                $result->{notes}     = $notes;
+                $result->{elapsed}   = sprintf('%.1f', time() - $start);
+
+                # Write result to temp file as tab-separated values
+                open my $fh, '>', $tmpfile or exit(1);
+                print $fh join("\t",
+                    $result->{module}      // '',
+                    $result->{status}      // 'UNKNOWN',
+                    $result->{configure}   // '',
+                    $result->{pass_count}  // '',
+                    $result->{total_count} // '',
+                    $result->{xs_detected} // '',
+                    $result->{error}       // '',
+                    $result->{elapsed}     // '0',
+                    $result->{category}    // '',
+                    $result->{xs_status}   // '',
+                    $result->{notes}       // '',
+                ), "\n";
+                close $fh;
+                exit(0);
+            }
+
+            # ── Parent process ──
+            $children{$pid} = { mod => $mod, tmpfile => $tmpfile, start => time() };
+            $running++;
+            print "  Started: $name (pid $pid)\n";
+        }
+
+        # Wait for at least one child to finish
+        if ($running > 0) {
+            my $pid = waitpid(-1, 0);
+            if ($pid > 0 && $children{$pid}) {
+                $running--;
+                my $info = delete $children{$pid};
+                my ($name, $category, $xs_status, $env_vars, $notes) = @{$info->{mod}};
+
+                my $result;
+                if (-f $info->{tmpfile}) {
+                    $result = read_child_result($info->{tmpfile});
+                    unlink $info->{tmpfile};
+                } else {
+                    $result = {
+                        module => $name, status => 'CHILD_FAIL', configure => '',
+                        pass_count => undef, total_count => undef,
+                        xs_detected => '', error => 'Child produced no output',
+                        elapsed => sprintf('%.1f', time() - $info->{start}),
+                        category => $category, xs_status => $xs_status, notes => $notes,
+                    };
+                }
+
+                push @results, $result;
+                print_inline_status($result);
+
+                log_msg("\n" . "-" x 70);
+                log_msg("MODULE: $name ($category, $xs_status)");
+                log_msg("  Status: $result->{status}");
+                log_msg("  Configure: $result->{configure}") if $result->{configure};
+                log_msg("  Tests: $result->{pass_count}/$result->{total_count} subtests") if defined $result->{total_count};
+                log_msg("  XS needed: $result->{xs_detected}") if $result->{xs_detected};
+                log_msg("  Error: $result->{error}") if $result->{error};
+                log_msg("  Elapsed: $result->{elapsed}s");
+            }
+        }
+    }
+
+    return @results;
+}
+
+sub read_child_result {
+    my ($tmpfile) = @_;
+    open my $fh, '<', $tmpfile or return { status => 'READ_FAIL', error => "Cannot read $tmpfile: $!" };
+    my $line = <$fh>;
+    close $fh;
+    chomp $line if defined $line;
+    return { status => 'READ_FAIL', error => 'Empty result file' } unless $line;
+
+    my @fields = split /\t/, $line, -1;
+    return {
+        module      => $fields[0],
+        status      => $fields[1] || 'UNKNOWN',
+        configure   => $fields[2] || '',
+        pass_count  => $fields[3] ne '' ? $fields[3] : undef,
+        total_count => $fields[4] ne '' ? $fields[4] : undef,
+        xs_detected => $fields[5] || '',
+        error       => $fields[6] || '',
+        elapsed     => $fields[7] || '0',
+        category    => $fields[8] || '',
+        xs_status   => $fields[9] || '',
+        notes       => $fields[10] || '',
+    };
+}
+
+sub print_inline_status {
+    my ($result) = @_;
+    my $status_str = $result->{status};
+    if ($result->{pass_count} || $result->{total_count}) {
+        $status_str .= " ($result->{pass_count}/$result->{total_count} subtests)";
+    }
+    if ($result->{regression}) {
+        $status_str .= " [$result->{regression}]";
+    }
+    printf "  %-28s %s (%ss)\n", $result->{module}, $status_str, $result->{elapsed};
+}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -605,6 +763,7 @@ Options:
   --quick       Test only known-good modules (regression check)
   --list        List all registered modules and exit
   --timeout N   Timeout per module in seconds (default: 300)
+  --jobs N, -j N  Run N modules in parallel (default: 1, sequential)
   --output FILE Log file path (default: cpan_smoke_TIMESTAMP.log)
   --compare FILE  Compare with previous .dat file to detect regressions
   --help        Show this help
@@ -615,6 +774,9 @@ Examples:
 
   # Quick regression check (known-good only)
   perl dev/tools/cpan_smoke_test.pl --quick
+
+  # Run 3 modules in parallel
+  perl dev/tools/cpan_smoke_test.pl --jobs 3
 
   # Test specific modules
   perl dev/tools/cpan_smoke_test.pl Moo DateTime Try::Tiny
