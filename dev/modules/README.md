@@ -12,6 +12,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [xsloader.md](xsloader.md) | XSLoader architecture |
 | [makemaker_perlonjava.md](makemaker_perlonjava.md) | ExtUtils::MakeMaker implementation |
 | [cpan_client.md](cpan_client.md) | jcpan - CPAN client for PerlOnJava |
+| [dbix_class.md](dbix_class.md) | DBIx::Class support (in progress) |
 
 ## Module Status Overview
 
@@ -117,5 +118,6 @@ PERL_PARAMS_UTIL_PP=1 ./jcpan -t Class::Load
 - [moose_support.md](moose_support.md) - Moose support (in progress)
 - [moo_support.md](moo_support.md) - Moo support (working)
 - [JCPAN_DATETIME_FIXES.md](JCPAN_DATETIME_FIXES.md) - DateTime via jcpan
+- [dbix_class.md](dbix_class.md) - DBIx::Class support
 - [log4perl-compatibility.md](log4perl-compatibility.md) - Log::Log4perl
 - [term_readkey.md](term_readkey.md) - Term::ReadKey
