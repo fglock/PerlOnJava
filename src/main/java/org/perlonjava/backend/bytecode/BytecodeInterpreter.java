@@ -191,6 +191,10 @@ public class BytecodeInterpreter {
                                     return marker;
                                 }
                                 String labelName = target.toString();
+                                if (labelName.isEmpty()) {
+                                    // Bare `goto` without label - runtime error like Perl 5
+                                    throw new PerlCompilerException("goto must have label");
+                                }
                                 if (code.gotoLabelPcs != null) {
                                     Integer targetPc = code.gotoLabelPcs.get(labelName);
                                     if (targetPc != null) {

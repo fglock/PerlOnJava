@@ -1436,7 +1436,18 @@ public class CompileOperator {
                 return;
             }
         }
-        if (labelStr == null) bc.throwCompilerException("goto must be given label");
+        if (labelStr == null) {
+            // Bare `goto` without args: emit GOTO_DYNAMIC with empty string → runtime error
+            int rd = bc.allocateOutputRegister();
+            int emptyIdx = bc.addToStringPool("");
+            bc.emit(Opcodes.LOAD_STRING);
+            bc.emitReg(rd);
+            bc.emit(emptyIdx);
+            bc.emit(Opcodes.GOTO_DYNAMIC);
+            bc.emit(rd);
+            bc.lastResultReg = -1;
+            return;
+        }
         Integer targetPc = bc.gotoLabelPcs.get(labelStr);
         if (targetPc != null) { bc.emit(Opcodes.GOTO); bc.emitInt(targetPc); }
         else { bc.emit(Opcodes.GOTO); int patchPc = bc.bytecode.size(); bc.emitInt(0); bc.pendingGotos.add(new Object[]{patchPc, labelStr}); }

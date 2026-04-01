@@ -495,7 +495,10 @@ public class EmitControlFlow {
 
         // Ensure label is provided for static goto
         if (labelName == null) {
-            throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
+            // Bare `goto` without arguments - emit runtime die like Perl 5
+            // Fall through to interpreter which handles this properly via GOTO_DYNAMIC
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Dynamic goto EXPR requires interpreter fallback", ctx.errorUtil);
         }
 
         // For static label, check if it's local
