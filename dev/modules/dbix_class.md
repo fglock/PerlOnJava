@@ -177,21 +177,25 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.14 | Add `AutoCommit` state tracking for literal transaction SQL | `DBI.java` | DONE |
 | 5.15 | Intercept BEGIN/COMMIT/ROLLBACK via JDBC API instead of executing SQL | `DBI.java` | DONE |
 | 5.16 | Fix `prepare_cached` to use per-dbh `CachedKids` cache | `DBI.pm` | DONE |
+| 5.17 | Fix `-w` flag overriding `no warnings 'redefine'` pragma | `SubroutineParser.java` | DONE |
+| 5.18 | Fix InterpreterFallbackException not caught at top-level | `PerlLanguageProvider.java` | DONE |
+| 5.19 | Implement `MODIFY_CODE_ATTRIBUTES` for subroutine attributes | `SubroutineParser.java` | DONE |
+| 5.20 | Fix ROLLBACK TO SAVEPOINT intercepted as full ROLLBACK | `DBI.java` | DONE |
+| 5.21 | Support CODE reference returns from @INC hooks (PAR simulation) | `ModuleOperators.java` | DONE |
 
 **t/60core.t results** (17 tests emitted):
 - **ok 1–12**: Basic CRUD, update, dirty columns — all pass
 - **not ok 13–17**: Garbage collection tests — expected failures (JVM has no reference counting / `weaken`)
 - RowParser.pm line 260 crash still occurs in END block cleanup (non-blocking — all real tests pass first)
 
-**Full test suite results** (92 test files, updated 2026-04-01):
-- **22 fully passing** (no failures at all)
-- **40 GC-only failures** (all real tests pass, only `weaken`-based GC leak tests fail)
-- **6 tests with real failures** (see Remaining Real Failures below)
-- **22 skipped** (DB-specific: Pg, Oracle, MSSQL, etc.; threads; fork)
-- **2 compile-error** (t/52leaks.t — `wait` operator; t/88result_set_column.t — zero tests)
+**Full test suite results** (314 test files with PERL5LIB, updated 2026-04-01):
+- **68 fully passing** (no failures at all)
+- **144 with some failures** (mostly GC-only; some have real failures)
+- **100 skipped/errors** (DB-specific: Pg, Oracle, MSSQL, etc.; CDBI; threads; fork)
+- **2 incomplete** (t/79aliasing.t, t/inflate/file_column.t — HandleError crash)
+- **Individual test pass rate: 93.7%** (5579/5953 tests OK)
 
-**Effective pass rate**: 62/68 active test files have all real tests passing (91%).
-Previous: 51/65 (78%) → 60/68 (88%) → Current: 62/68 (91%).
+Previous: 62/68 active (91%) → Current: 68/314 fully passing, 93.7% individual tests
 
 ---
 
@@ -294,9 +298,12 @@ perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" };
 
 | Test | Failing | Root cause | Fix needed |
 |------|---------|------------|------------|
-| `t/90ensure_class_loaded.t` | tests 14,17,28 | PAR (Perl Archive) detection + `$INC{...}` manipulation edge cases | Fix `%INC` handling for modules that set `$INC{file}` without returning true |
-| `t/40resultsetmanager.t` | tests 2-4 | Deprecated `ResultSetManager` uses source filtering (`Module::Pluggable` + runtime class creation) | Likely needs `Module::Pluggable` fixes or is acceptable as deprecated-feature failure |
+| `t/90ensure_class_loaded.t` | test 28 | Error message has `{UNKNOWN}:` prefix and absolute path instead of relative | Fix error reporting path format in parser/compiler |
 | `t/53lean_startup.t` | test 5 | Module loading tracking — test checks exact set of loaded modules | PerlOnJava loads extra modules; would need to match exact Perl load footprint |
+
+**Previously fixed:**
+- `t/90ensure_class_loaded.t` tests 14,17 — fixed by implementing CODE reference returns from @INC hooks (PAR simulation)
+- `t/40resultsetmanager.t` tests 2-4 — fixed by implementing `MODIFY_CODE_ATTRIBUTES` call for subroutine attributes
 
 ### Tests needing misc fixes
 
@@ -323,10 +330,12 @@ Subroutine set_subevents redefined at jar:PERL5LIB/Test2/Event/Subtest.pm line 3
 | Test | GC failures | Notes |
 |------|-------------|-------|
 | `t/40compose_connection.t` | 7 | All real tests pass |
+| `t/40resultsetmanager.t` | 1 | All 5 real tests pass (fixed in step 5.20) |
+| `t/88result_set_column.t` | 5 | 46/47 real tests pass (fixed by InterpreterFallbackException catch) |
 | `t/93single_accessor_object.t` | 15 | All real tests pass |
-| `t/752sqlite.t` | 25 | All 34 real tests pass |
+| `t/752sqlite.t` | 30 | 171/172 real tests pass (fixed ROLLBACK TO SAVEPOINT) |
 | `t/106dbic_carp.t` | 5 | All 3 real tests pass (fixed in step 5.18) |
-| 37 other files | 5 each | Standard GC leak detection tests |
+| Many other files | 5 each | Standard GC leak detection tests |
 
 ---
 
@@ -451,16 +460,28 @@ Expressions like `($x) ? @$a = () : $b = []` trigger "Modification of a read-onl
   - 5.16: Fixed `prepare_cached` to use per-dbh `CachedKids` cache instead of global hash — prevents cross-connection cache pollution when multiple `:memory:` SQLite connections share the same DSN name; added `if_active` parameter handling
   - Also: `execute()` now handles metadata sth (no PreparedStatement) gracefully; `fetchrow_hashref` supports PRAGMA pre-fetched rows
   - Result: 60/68 active tests now pass all real tests (was 51/65 = 78%, now 88%)
-- [x] Phase 5 steps 5.17–5.19 (2026-04-01)
+- [x] Phase 5 steps 5.17–5.19 (2026-04-01, earlier session)
   - 5.17: Fixed `$^S` to correctly report 1 inside `$SIG{__DIE__}` when `require` fails in `eval {}` — temporarily restores `evalDepth` in `catchEval()` before calling handler. Unblocks t/00describe_environment.t
   - 5.18: Fixed `__LINE__` inside `@{[expr]}` string interpolation — added `baseLineNumber` to Parser for string sub-parsers, computed from outer source position. Fixes t/106dbic_carp.t tests 2-3
   - 5.19: Fixed `execute_for_fetch` to match real DBI 1.647 behavior — tracks error count, stores `[$sth->err, $sth->errstr, $sth->state]` on failure, dies with error count if `RaiseError` is on. Also fixed `execute()` to set err/errstr/state on both sth and dbh. Fixes t/100populate.t test 2
   - Result: 62/68 active tests now pass all real tests (91%, was 88%)
+- [x] Phase 5 steps 5.20–5.24 (2026-04-01, current session)
+  - 5.20: Fixed `-w` flag overriding `no warnings 'redefine'` pragma — changed condition in SubroutineParser.java to check `isWarningDisabled("redefine")` first
+  - 5.21: Fixed `InterpreterFallbackException` not caught at top-level `compileToExecutable()` — ASM's Frame.merge() crashes on methods with 600+ jumps to single label (Sub::Quote-generated subs); added explicit catch in PerlLanguageProvider.java. Fixes t/88result_set_column.t (46/47 pass)
+  - 5.22: Implemented `MODIFY_CODE_ATTRIBUTES` call for subroutine attributes — when `sub foo : Attr { }` is parsed, now calls `MODIFY_CODE_ATTRIBUTES($package, \&code, @attrs)` at compile time. Fixes t/40resultsetmanager.t (5/5 pass)
+  - 5.23: Fixed ROLLBACK TO SAVEPOINT being intercepted as full ROLLBACK — `sqlUpper.startsWith("ROLLBACK")` now excludes SAVEPOINT-related statements. Fixes t/752sqlite.t (171/172 pass)
+  - 5.24: Added CODE reference returns from @INC hooks — PAR-style module loading where hook returns a line-reader sub that sets `$_` per line. Fixes t/90ensure_class_loaded.t tests 14,17 (27/28 pass)
+  - Result: 68/314 fully passing, 93.7% individual test pass rate (5579/5953 OK)
 
 ### Next Steps
-1. **Must fix**: See "Must Fix" section — ternary-as-lvalue, JDBC error message format, SQL formatting, bind param attrs
-2. **Long-term**: Investigate VerifyError bytecode compiler bug (HIGH PRIORITY for broader CPAN compat)
-3. **Pragmatic**: Accept GC-only failures as known JVM limitation; consider adding skip-leak-tests env var
+1. **JDBC error message format**: Strip/normalize JDBC error prefixes like `[SQLITE_MISMATCH]` in DBI.java `setError()` — affects t/100populate.t tests 52-53
+2. **SQL expression formatting**: Investigate column ordering / whitespace differences in SQL::Abstract output — affects t/100populate.t tests 37-42
+3. **Bind parameter attributes**: Implement attribute-aware bind parameter comparison — affects t/100populate.t tests 58-59
+4. **Ternary-as-lvalue**: Fix JVM backend to emit proper lvalue references for ternary branches with non-constant conditions — affects Class::Accessor::Grouped patterns
+5. **Error message path format**: Fix `{UNKNOWN}:` prefix and absolute vs relative paths in error messages — affects t/90ensure_class_loaded.t test 28
+6. **File::stat VerifyError**: Debug bytecode generation for `Class::Struct` + `use overload` combination — affects Path::Class
+7. **Long-term**: Investigate ASM Frame.merge() crash (the root cause behind step 5.18's fallback) — affects any Sub::Quote-generated sub with high fan-in control flow
+8. **Pragmatic**: Accept GC-only failures as known JVM limitation; consider adding `DBIC_SKIP_LEAK_TESTS` env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
