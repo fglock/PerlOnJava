@@ -146,10 +146,22 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 5.1 | Run `./jcpan -t DBIx::Class` and triage failures | | **NEXT** |
-| 5.2 | Fix issues as discovered | TBD | |
+| 5.1 | Fix `@${$v}` string interpolation | `StringSegmentParser.java` | DONE |
+| 5.2 | Add `B::SV::REFCNT` method (returns 0 for JVM tracing GC) | `B.pm` | DONE |
+| 5.3 | Add DBI `FETCH`/`STORE` methods for tied-hash compat | `DBI.pm` | DONE |
+| 5.4 | Add `DBI::Const::GetInfoReturn` stub | `DBI/Const/GetInfoReturn.pm` | DONE |
+| 5.5 | Fix list assignment autovivification (`($x, @$undef_ref) = ...`) | `RuntimeList.java` | DONE |
+| 5.6 | Add DBI `execute_for_fetch` and `bind_param` methods | `DBI.pm` | DONE |
+| 5.7 | Fix `&func` (no parens) to share caller's `@_` by alias | Parser, JVM emitter, interpreter | DONE |
+| 5.8 | Fix DBI `execute()` return value (row count, not hash ref) | `DBI.java` | DONE |
+| 5.9 | Fix "Not a HASH reference" in RowParser.pm (join/prefetch) | TBD | **NEXT** |
 
-**Result**: Maximise passing DBIx::Class tests.
+**t/60core.t results** (17 tests emitted):
+- **ok 1–12**: Basic CRUD, update, dirty columns — all pass
+- **not ok 13–17**: Garbage collection tests — expected failures (JVM has no reference counting / `weaken`)
+- **Crash after test 17**: `Not a HASH reference at RowParser.pm line 260` — blocks remaining tests
+
+**Result so far**: 12 / 17 real tests pass (5 GC failures are expected and acceptable).
 
 ## Known Bugs (not yet blocking)
 
@@ -175,7 +187,7 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 
 ## Progress Tracking
 
-### Current Status: Phase 5 — run tests and triage failures
+### Current Status: Phase 5 — fixing runtime issues iteratively
 
 ### Completed Phases
 - [x] Phase 1: Unblock Makefile.PL (2025-03-31)
@@ -204,11 +216,20 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 - [x] Phase 4.8: Fix `cp` on read-only installed files (2025-03-31)
   - Changed `_shell_cp` in ExtUtils::MakeMaker.pm to `rm -f` then `cp`
   - Fixes reinstall of modules with read-only (0444) .pod/.pm files
+- [x] Phase 5 steps 5.1–5.8 (2026-03-31 / 2026-04-01)
+  - 5.1: Fixed `@${$v}` string interpolation in StringSegmentParser.java
+  - 5.2: Added `B::SV::REFCNT` returning 0 (JVM has no reference counting)
+  - 5.3: Added DBI `FETCH`/`STORE` wrappers for tied-hash compatibility
+  - 5.4: Created `DBI::Const::GetInfoReturn` stub module
+  - 5.5: Fixed list assignment autovivification in RuntimeList.java
+  - 5.6: Added DBI `execute_for_fetch` and `bind_param` methods
+  - 5.7: Fixed `&func` (no parens) to share caller's `@_` by alias — unblocks Hash::Merge
+  - 5.8: Fixed DBI `execute()` to return row count per DBI spec — unblocks UPDATE operations
 
 ### Next Steps
-1. Run `./jcpan -t DBIx::Class` to see current test results
-2. Triage failures and fix iteratively
-3. Update this document with findings
+1. Investigate "Not a HASH reference" at RowParser.pm line 260 (triggered by join/prefetch queries)
+2. Continue triaging t/60core.t failures after fixing RowParser issue
+3. Run broader DBIx::Class test suite once core tests pass
 
 ### Open Questions
 - Will `weaken`/`isweak` absence cause problems beyond memory leaks?
