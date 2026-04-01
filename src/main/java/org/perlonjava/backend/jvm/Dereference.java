@@ -1171,6 +1171,7 @@ public class Dereference {
                 String methodName = switch (arrayOperation) {
                     case "get" -> "arrayDerefGet";
                     case "delete" -> "arrayDerefDelete";
+                    case "deleteLocal" -> "arrayDerefDeleteLocal";
                     case "exists" -> "arrayDerefExists";
                     default ->
                             throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
@@ -1182,6 +1183,7 @@ public class Dereference {
                 String methodName = switch (arrayOperation) {
                     case "get" -> "arrayDerefGetNonStrict";
                     case "delete" -> "arrayDerefDeleteNonStrict";
+                    case "deleteLocal" -> "arrayDerefDeleteLocalNonStrict";
                     case "exists" -> "arrayDerefExistsNonStrict";
                     default ->
                             throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
@@ -1294,6 +1296,7 @@ public class Dereference {
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGet";
                 case "delete" -> "hashDerefDelete";
+                case "deleteLocal" -> "hashDerefDeleteLocal";
                 case "exists" -> "hashDerefExists";
                 default ->
                         throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
@@ -1305,6 +1308,7 @@ public class Dereference {
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGetNonStrict";
                 case "delete" -> "hashDerefDeleteNonStrict";
+                case "deleteLocal" -> "hashDerefDeleteLocalNonStrict";
                 case "exists" -> "hashDerefExistsNonStrict";
                 default ->
                         throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);

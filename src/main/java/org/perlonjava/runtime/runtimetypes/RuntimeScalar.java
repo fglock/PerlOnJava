@@ -949,6 +949,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDerefNonStrict(packageName).delete(index);
     }
 
+    // Method to implement `delete local $v->{key}`
+    public RuntimeScalar hashDerefDeleteLocal(RuntimeScalar index) {
+        return this.hashDeref().deleteLocal(index);
+    }
+
+    // Method to implement `delete local $v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefDeleteLocalNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).deleteLocal(index);
+    }
+
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
         return this.hashDeref().exists(index);
@@ -987,6 +997,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `delete $v->[10]`, when "no strict refs" is in effect
     public RuntimeScalar arrayDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
         return this.arrayDerefNonStrict(packageName).delete(index);
+    }
+
+    // Method to implement `delete local $v->[10]`
+    public RuntimeScalar arrayDerefDeleteLocal(RuntimeScalar index) {
+        return this.arrayDeref().deleteLocal(index);
+    }
+
+    // Method to implement `delete local $v->[10]`, when "no strict refs" is in effect
+    public RuntimeScalar arrayDerefDeleteLocalNonStrict(RuntimeScalar index, String packageName) {
+        return this.arrayDerefNonStrict(packageName).deleteLocal(index);
     }
 
     // Method to implement `exists $v->[10]`
@@ -1418,6 +1438,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case TIED_SCALAR -> tiedFetch().globDeref();
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
@@ -1463,6 +1484,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case TIED_SCALAR -> tiedFetch().globDerefNonStrict(packageName);
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
@@ -1513,6 +1535,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case TIED_SCALAR -> tiedFetch().codeDerefNonStrict(packageName);
             case CODE -> this;  // Already a CODE reference - return unchanged
             case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
             case REFERENCE -> {

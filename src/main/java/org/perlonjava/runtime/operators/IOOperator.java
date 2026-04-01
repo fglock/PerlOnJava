@@ -2387,7 +2387,15 @@ public class IOOperator {
         if (args.length < 1) throw new PerlCompilerException("Not enough arguments for printf");
         RuntimeScalar fh = args[0].scalar();
         RuntimeList list = new RuntimeList();
-        for (int i = 1; i < args.length; i++) list.add(args[i]);
+        for (int i = 1; i < args.length; i++) {
+            if (args[i] instanceof RuntimeArray array) {
+                for (int j = 0; j < array.size(); j++) {
+                    list.add(array.get(j));
+                }
+            } else {
+                list.add(args[i]);
+            }
+        }
         return printf(list, fh);
     }
 

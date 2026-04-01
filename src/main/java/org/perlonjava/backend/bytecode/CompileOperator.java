@@ -637,6 +637,7 @@ public class CompileOperator {
             case "sprintf" -> visitSprintf(bytecodeCompiler, node);
             case "exists" -> CompileExistsDelete.visitExists(bytecodeCompiler, node);
             case "delete" -> CompileExistsDelete.visitDelete(bytecodeCompiler, node);
+            case "delete_local" -> CompileExistsDelete.visitDeleteLocal(bytecodeCompiler, node);
             case "die", "warn" -> visitDieWarn(bytecodeCompiler, node, op);
 
             // Pop/shift

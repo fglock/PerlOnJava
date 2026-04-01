@@ -2099,6 +2099,31 @@ public class Opcodes {
     public static final short SETPROTOENT = 441;
     public static final short SETSERVENT = 442;
 
+    // delete local operations
+    /**
+     * Hash delete local: rd = hash.deleteLocal(key)
+     * Format: HASH_DELETE_LOCAL rd hash_reg key_reg
+     */
+    public static final short HASH_DELETE_LOCAL = 443;
+
+    /**
+     * Array delete local: rd = array.deleteLocal(index)
+     * Format: ARRAY_DELETE_LOCAL rd array_reg index_reg
+     */
+    public static final short ARRAY_DELETE_LOCAL = 444;
+
+    /**
+     * Hash slice delete local: rd = hash.deleteLocalSlice(keys_list)
+     * Format: HASH_SLICE_DELETE_LOCAL rd hash_reg keys_list_reg
+     */
+    public static final short HASH_SLICE_DELETE_LOCAL = 445;
+
+    /**
+     * Array slice delete local: rd = array.deleteLocalSlice(indices_list)
+     * Format: ARRAY_SLICE_DELETE_LOCAL rd array_reg indices_list_reg
+     */
+    public static final short ARRAY_SLICE_DELETE_LOCAL = 446;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

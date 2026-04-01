@@ -403,6 +403,58 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Implements `delete local $hash{key}`.
+     * Saves the current state of the hash element, deletes it,
+     * and arranges for restoration when the enclosing scope exits.
+     */
+    public RuntimeScalar deleteLocal(RuntimeScalar keyScalar) {
+        String key = keyScalar.toString();
+        return deleteLocal(key);
+    }
+
+    public RuntimeScalar deleteLocal(String key) {
+        boolean existed = elements.containsKey(key);
+        RuntimeScalar savedValue = existed ? new RuntimeScalar(elements.get(key)) : null;
+        RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(key)) : new RuntimeScalar();
+        RuntimeHash self = this;
+
+        DynamicVariableManager.pushLocalVariable(new DynamicState() {
+            @Override
+            public void dynamicSaveState() {
+                // Deletion happens here (during push)
+                self.elements.remove(key);
+            }
+
+            @Override
+            public void dynamicRestoreState() {
+                if (existed) {
+                    self.elements.put(key, savedValue);
+                } else {
+                    self.elements.remove(key);
+                }
+            }
+        });
+
+        return returnValue;
+    }
+
+    /**
+     * Deletes a slice of the hash with local semantics: delete local @hash{keys}
+     * Each element is saved and restored when the current scope exits.
+     *
+     * @param value The RuntimeList containing the keys to delete.
+     * @return A RuntimeList containing the deleted values.
+     */
+    public RuntimeList deleteLocalSlice(RuntimeList value) {
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBase> outElements = result.elements;
+        for (RuntimeScalar runtimeScalar : value) {
+            outElements.add(this.deleteLocal(runtimeScalar));
+        }
+        return result;
+    }
+
+    /**
      * Creates a reference to the hash.
      *
      * @return A RuntimeScalar representing the hash reference.

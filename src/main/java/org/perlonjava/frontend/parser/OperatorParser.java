@@ -548,6 +548,22 @@ public class OperatorParser {
 
     static OperatorNode parseDelete(Parser parser, LexerToken token, int currentIndex) {
         Node operand;
+
+        // Check for 'delete local' syntax
+        LexerToken nextToken = peek(parser);
+        if (nextToken.text.equals("local")) {
+            TokenUtils.consume(parser); // consume 'local'
+            parser.parsingTakeReference = true;
+            operand = ListParser.parseZeroOrOneList(parser, 1);
+            parser.parsingTakeReference = false;
+
+            if (operand instanceof ListNode listNode) {
+                transformCodeRefPatterns(parser, listNode, token.text);
+            }
+
+            return new OperatorNode("delete_local", operand, currentIndex);
+        }
+
         // Handle 'delete' and 'exists' operators with special parsing context
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
         operand = ListParser.parseZeroOrOneList(parser, 1);

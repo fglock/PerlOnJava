@@ -852,6 +852,34 @@ public class Disassemble {
                         int idxDeleteReg = interpretedCode.bytecode[pc++];
                         sb.append("ARRAY_DELETE r").append(rd).append(" = delete r").append(arrDeleteReg).append("[r").append(idxDeleteReg).append("]\n");
                         break;
+                    case Opcodes.HASH_DELETE_LOCAL:
+                        rd = interpretedCode.bytecode[pc++];
+                        int hashDLReg = interpretedCode.bytecode[pc++];
+                        int keyDLReg = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_DELETE_LOCAL r").append(rd).append(" = delete local r").append(hashDLReg).append("{r").append(keyDLReg).append("}\n");
+                        break;
+                    case Opcodes.ARRAY_DELETE_LOCAL:
+                        rd = interpretedCode.bytecode[pc++];
+                        int arrDLReg = interpretedCode.bytecode[pc++];
+                        int idxDLReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_DELETE_LOCAL r").append(rd).append(" = delete local r").append(arrDLReg).append("[r").append(idxDLReg).append("]\n");
+                        break;
+                    case Opcodes.HASH_SLICE_DELETE_LOCAL: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int hsdlHashReg = interpretedCode.bytecode[pc++];
+                        int hsdlKeysReg = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_SLICE_DELETE_LOCAL r").append(rd).append(" = delete local r").append(hsdlHashReg)
+                                .append("{r").append(hsdlKeysReg).append("}\n");
+                        break;
+                    }
+                    case Opcodes.ARRAY_SLICE_DELETE_LOCAL: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int asdlArrayReg = interpretedCode.bytecode[pc++];
+                        int asdlIndicesReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_SLICE_DELETE_LOCAL r").append(rd).append(" = delete local r").append(asdlArrayReg)
+                                .append("[r").append(asdlIndicesReg).append("]\n");
+                        break;
+                    }
                     case Opcodes.HASH_KEYS:
                         rd = interpretedCode.bytecode[pc++];
                         int hashKeysReg = interpretedCode.bytecode[pc++];

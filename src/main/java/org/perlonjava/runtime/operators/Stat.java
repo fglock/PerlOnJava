@@ -95,6 +95,9 @@ public class Stat {
     }
 
     public static RuntimeList lstatLastHandle() {
+        if (!lastStatWasLstat) {
+            throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
+        }
         if (!lastStatOk) {
             getGlobalVariable("main::!").set(9);
             return new RuntimeList();
@@ -110,6 +113,9 @@ public class Stat {
     }
 
     public static RuntimeBase lstatLastHandle(int ctx) {
+        if (!lastStatWasLstat) {
+            throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
+        }
         if (ctx == RuntimeContextType.SCALAR) {
             if (!lastStatOk) {
                 getGlobalVariable("main::!").set(9);

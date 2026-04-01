@@ -822,6 +822,14 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeArrayDelete(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_DELETE_LOCAL -> {
+                                pc = InlineOpcodeHandler.executeHashDeleteLocal(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.ARRAY_DELETE_LOCAL -> {
+                                pc = InlineOpcodeHandler.executeArrayDeleteLocal(bytecode, pc, registers);
+                            }
+
                             case Opcodes.HASH_KEYS -> {
                                 pc = InlineOpcodeHandler.executeHashKeys(bytecode, pc, registers);
                             }
@@ -1916,6 +1924,14 @@ public class BytecodeInterpreter {
 
                             case Opcodes.ARRAY_SLICE_DELETE -> {
                                 pc = SlowOpcodeHandler.executeArraySliceDelete(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.HASH_SLICE_DELETE_LOCAL -> {
+                                pc = SlowOpcodeHandler.executeHashSliceDeleteLocal(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.ARRAY_SLICE_DELETE_LOCAL -> {
+                                pc = SlowOpcodeHandler.executeArraySliceDeleteLocal(bytecode, pc, registers);
                             }
 
                             case Opcodes.HASH_KV_SLICE_DELETE -> {

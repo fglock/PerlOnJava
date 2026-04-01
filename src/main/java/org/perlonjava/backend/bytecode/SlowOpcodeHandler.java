@@ -1022,6 +1022,60 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * HASH_SLICE_DELETE_LOCAL: rd = hash.deleteLocalSlice(keys_list)
+     * Format: [HASH_SLICE_DELETE_LOCAL] [rd] [hashReg] [keysListReg]
+     */
+    public static int executeHashSliceDeleteLocal(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        RuntimeList deletedValuesList = hash.deleteLocalSlice(keysList);
+
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedValuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * ARRAY_SLICE_DELETE_LOCAL: rd = array.deleteLocalSlice(indices_list)
+     * Format: [ARRAY_SLICE_DELETE_LOCAL] [rd] [arrayReg] [indicesListReg]
+     */
+    public static int executeArraySliceDeleteLocal(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indicesListReg = bytecode[pc++];
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indicesList = (RuntimeList) registers[indicesListReg];
+
+        RuntimeList deletedValuesList = array.deleteLocalSlice(indicesList);
+
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedValuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
      * HASH_KV_SLICE_DELETE: rd = hash.deleteKeyValueSlice(keys_list)
      * Format: [HASH_KV_SLICE_DELETE] [rd] [hashReg] [keysListReg]
      * Effect: rd = RuntimeList of alternating keys and deleted values

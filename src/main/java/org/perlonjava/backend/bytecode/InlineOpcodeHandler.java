@@ -645,6 +645,34 @@ public class InlineOpcodeHandler {
     }
 
     /**
+     * Delete local hash key: rd = delete local $hash{key}
+     * Format: HASH_DELETE_LOCAL rd hashReg keyReg
+     */
+    public static int executeHashDeleteLocal(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keyReg = bytecode[pc++];
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+        registers[rd] = hash.deleteLocal(key);
+        return pc;
+    }
+
+    /**
+     * Delete local array element: rd = delete local $array[index]
+     * Format: ARRAY_DELETE_LOCAL rd arrayReg indexReg
+     */
+    public static int executeArrayDeleteLocal(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indexReg = bytecode[pc++];
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeScalar index = (RuntimeScalar) registers[indexReg];
+        registers[rd] = array.deleteLocal(index);
+        return pc;
+    }
+
+    /**
      * Get hash keys: rd = keys %hash
      * Calls .keys() on RuntimeBase for proper error handling on non-hash types.
      * Format: HASH_KEYS rd hashReg

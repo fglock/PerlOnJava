@@ -433,6 +433,10 @@ public class RuntimeList extends RuntimeBase {
                     result.elements.add(new RuntimeScalar(entry.getKey()));
                     result.elements.add(entry.getValue());
                 }
+            } else if (element instanceof PerlRange range) {
+                for (RuntimeScalar scalar : range) {
+                    result.elements.add(scalar);
+                }
             } else {
                 result.elements.add(element);
             }

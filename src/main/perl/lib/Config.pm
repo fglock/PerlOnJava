@@ -91,6 +91,7 @@ $os_name =~ s/\s+/_/g;
     # implement full taint checking. This allows tests that check for taint
     # support to skip gracefully.
     ccflags => '-DSILENT_NO_TAINT_SUPPORT',
+    taint_support => '',
 
     # Library/path configuration
     path_sep => $path_separator,
