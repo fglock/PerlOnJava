@@ -103,7 +103,13 @@ public class ListOperators {
         }
         final RuntimeScalar finalComparator = comparator;
 
-        RuntimeArray comparatorArgs = new RuntimeArray();
+        // Check if comparator has $$ prototype (stacked comparator)
+        // In Perl 5, $$-prototyped sort subs receive elements via @_ instead of $a/$b
+        boolean isStacked = false;
+        if (finalComparator.value instanceof RuntimeCode runtimeCode) {
+            isStacked = "$$".equals(runtimeCode.prototype);
+        }
+        final boolean stackedComparator = isStacked;
 
         // Create the sort variables
         RuntimeScalar varA = getGlobalVariable(packageName + "::a");
@@ -115,6 +121,13 @@ public class ListOperators {
                 // Create $a, $b arguments for the comparator
                 varA.set(a);
                 varB.set(b);
+
+                // For $$-prototyped comparators, pass elements via @_
+                RuntimeArray comparatorArgs = new RuntimeArray();
+                if (stackedComparator) {
+                    comparatorArgs.push(a);
+                    comparatorArgs.push(b);
+                }
 
                 // Apply the Perl comparator subroutine with the arguments
                 RuntimeList result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
