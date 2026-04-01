@@ -329,7 +329,19 @@ public class DBI extends PerlModuleBase {
 
             // Store execution result in statement handle
             sth.put("execute_result", result.createReference());
-            return result.createReference().getList();
+
+            // Return value per DBI spec:
+            // - For DML (INSERT/UPDATE/DELETE): number of rows affected, or "0E0" for 0 rows
+            // - For SELECT: -1 (unknown number of rows)
+            if (hasResultSet) {
+                return new RuntimeScalar(-1).getList();
+            } else {
+                int updateCount = stmt.getUpdateCount();
+                if (updateCount == 0) {
+                    return new RuntimeScalar("0E0").getList();
+                }
+                return new RuntimeScalar(updateCount).getList();
+            }
         }, dbh, "execute");
     }
 
