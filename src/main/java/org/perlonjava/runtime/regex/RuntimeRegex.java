@@ -728,9 +728,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastMatchedString = null;
             lastMatchStart = -1;
             lastMatchEnd = -1;
-            if (matcher.groupCount() > 0) {
-                lastCaptureGroups = null;
-            }
+            // Don't clear lastCaptureGroups - Perl preserves $1 across failed matches
         }
 
         if (found) {

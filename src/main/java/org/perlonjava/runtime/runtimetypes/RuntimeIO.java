@@ -1219,6 +1219,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar with the file descriptor number, or undef if not available
      */
     public RuntimeScalar fileno() {
+        if (ioHandle == null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
         return ioHandle.fileno();
     }
 

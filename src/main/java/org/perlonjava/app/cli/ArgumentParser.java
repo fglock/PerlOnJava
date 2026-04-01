@@ -448,7 +448,7 @@ public class ArgumentParser {
                     return index;
                 default:
                     System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options).");
-                    // System.exit(0);
+                    System.exit(1);
                     break;
             }
         }
@@ -983,7 +983,7 @@ public class ArgumentParser {
                 break;
             default:
                 System.err.println("Unrecognized switch: " + arg + "  (-h will show valid options).");
-                System.exit(0);
+                System.exit(1);
                 break;
         }
         return index;

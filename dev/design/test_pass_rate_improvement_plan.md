@@ -248,14 +248,14 @@ These are small, targeted fixes that each unblock many tests:
 
 | # | Fix | Tests Gained | Effort |
 |---|-----|-------------|--------|
-| 1.1 | Register `experimental::smartmatch` warnings category | ~1,065 (taint.t) | Tiny |
-| 1.2 | Null-check in `fileno()` for unopened handles | 8 (fh.t) | Tiny |
-| 1.3 | Null-guard in file test operator for NUL-in-filename | 5 (filetest.t) | Tiny |
+| 1.1 | ~~Register `experimental::smartmatch` warnings~~  (already done; taint.t blocked by missing taint mode) | ~~1,065~~ 0 | N/A |
+| 1.2 | Null-check in `fileno()` for unopened handles | ~~8~~ **done** (6 gained) | Tiny |
+| 1.3 | Null-guard in `stat()`/`lstat()` for NUL-in-filename | ~~5~~ **done** (4 gained) | Tiny |
 | 1.4 | `@UNIVERSAL::ISA` traversal in MRO | 156 (ref.t) | Small |
 | 1.5 | Fix dynamic `goto $variable` + state var persistence | ~~101~~ **done** (72 gained) | Small |
 | 1.6 | Extend `vec()` to 64-bit widths | 28 (vec.t) | Small |
-| 1.7 | Fix `$1` capture after successful match (state corruption) | 38 (universal.t) | Small |
-| 1.8 | Fix unrecognized-switch error message (add trailing `.`) | ~56 (switches.t) | Tiny |
+| 1.7 | Fix `$1` persistence across failed regex matches | ~~38~~ **done** (32 gained) | Small |
+| 1.8 | Fix unrecognized-switch `System.exit` + exit code | ~~56~~ **done** (est. 33 gained) | Tiny |
 | 1.9 | Fix op/tie_fetch_count.t parse error | ~343 | Small |
 | 1.10 | Fix op/sort.t prototype argument handling | ~206 | Small |
 
@@ -357,9 +357,27 @@ Remaining op/state.t failures (15 + 14 blocked):
 
 ### Next Steps
 
-1. Continue Phase 1 quick wins (items 1.1-1.10)
+1. Continue Phase 1 quick wins (items 1.4, 1.6, 1.9, 1.10)
 2. Investigate op/state.t goto+state interaction failures in full test context
 3. Run full test suite to measure overall progress
+
+#### Quick win batch 2 (2025-03-31)
+
+Branch: `fix/state-attribute-validation`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| `fileno()` null-check for unopened/closed handles | +6 (fh.t: 0/8→6/8) | 1.2 |
+| `stat()`/`lstat()` null-guard for NUL-in-filename | +4 (filetest.t: 227/436→231/436) | 1.3 |
+| Unrecognized switch `System.exit(1)` (was commented out) | est. +33 (switches.t) | 1.8 |
+| `$1` persistence across failed regex matches | +32 (universal.t: 90/142→122/142) | 1.7 |
+
+Files changed:
+- `IOOperator.java` — fileno() returns undef for closed/null ioHandle
+- `RuntimeIO.java` — fileno() null guard on ioHandle
+- `Stat.java` — null check after resolvePath() in stat()/lstat()
+- `ArgumentParser.java` — uncommented System.exit(1) for unrecognized switches
+- `RuntimeRegex.java` — don't clear $1 on failed match
 
 ### Baseline
 
