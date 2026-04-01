@@ -70,6 +70,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     int patternFlags;
     int patternFlagsUnicode;
     String patternString;
+    String javaPatternString; // Preprocessed Java-compatible pattern for recompilation
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     // Indicates if \G assertion is used (set from regexFlags during compilation)
     private boolean useGAssertion = false;
@@ -151,6 +152,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasBranchReset = RegexPreprocessor.hadBranchReset();
 
                 regex.patternString = patternString;
+                regex.javaPatternString = javaPattern;
 
                 // Compile the regex pattern for byte strings (ASCII-only \w, \d)
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
@@ -502,15 +504,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 Pattern pattern = lastSuccessfulPattern.pattern;
                 // Re-apply current flags if they differ
                 if (originalFlags != null && !originalFlags.equals(lastSuccessfulPattern.regexFlags)) {
-                    // Need to recompile with current flags
+                    // Need to recompile with current flags using preprocessed pattern
                     int newFlags = originalFlags.toPatternFlags();
-                    pattern = Pattern.compile(lastSuccessfulPattern.patternString, newFlags);
+                    String recompilePattern = lastSuccessfulPattern.javaPatternString != null
+                            ? lastSuccessfulPattern.javaPatternString : lastSuccessfulPattern.patternString;
+                    pattern = Pattern.compile(recompilePattern, newFlags);
                 }
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
                 tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.javaPatternString = lastSuccessfulPattern.javaPatternString;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
@@ -855,15 +860,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 Pattern pattern = lastSuccessfulPattern.pattern;
                 // Re-apply current flags if they differ
                 if (originalFlags != null && !originalFlags.equals(lastSuccessfulPattern.regexFlags)) {
-                    // Need to recompile with current flags
+                    // Need to recompile with current flags using preprocessed pattern
                     int newFlags = originalFlags.toPatternFlags();
-                    pattern = Pattern.compile(lastSuccessfulPattern.patternString, newFlags);
+                    String recompilePattern = lastSuccessfulPattern.javaPatternString != null
+                            ? lastSuccessfulPattern.javaPatternString : lastSuccessfulPattern.patternString;
+                    pattern = Pattern.compile(recompilePattern, newFlags);
                 }
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
                 tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.javaPatternString = lastSuccessfulPattern.javaPatternString;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();

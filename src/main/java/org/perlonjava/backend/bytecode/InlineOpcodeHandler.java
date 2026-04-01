@@ -1184,11 +1184,8 @@ public class InlineOpcodeHandler {
         if (value == null) {
             registers[rd] = RuntimeScalarCache.scalarUndef;
         } else if (value instanceof RuntimeList list) {
-            if (list.size() == 1) {
-                registers[rd] = list.getFirst().createReference();
-            } else {
-                registers[rd] = list.createListReference();
-            }
+            // \(LIST) semantics: flatten arrays/ranges/hashes, then create individual refs
+            registers[rd] = list.flattenElements().createListReference();
         } else {
             registers[rd] = value.createReference();
         }
