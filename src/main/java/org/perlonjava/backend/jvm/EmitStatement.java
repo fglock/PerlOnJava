@@ -207,6 +207,18 @@ public class EmitStatement {
                 node.initialization.accept(voidVisitor);
             }
 
+            // For while/for loops in non-void context, allocate a register to save
+            // the condition value so the false condition is returned on normal exit.
+            boolean needWhileConditionResult = !node.isSimpleBlock
+                    && node.condition != null
+                    && emitterVisitor.ctx.contextType != RuntimeContextType.VOID;
+            int conditionResultReg = -1;
+            if (needWhileConditionResult) {
+                conditionResultReg = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                EmitOperator.emitUndef(mv);
+                mv.visitVarInsn(Opcodes.ASTORE, conditionResultReg);
+            }
+
             // Visit the start label (this is where the loop condition and body are)
             mv.visitLabel(startLabel);
 
@@ -217,11 +229,22 @@ public class EmitStatement {
             if (node.condition != null) {
                 node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
+                if (needWhileConditionResult) {
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitVarInsn(Opcodes.ASTORE, conditionResultReg);
+                }
+
                 // Convert the result to a boolean
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
 
                 // Jump to the end label if the condition is false (exit the loop)
                 mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+
+                if (needWhileConditionResult) {
+                    // Clear register to undef so 'last' returns undef, not condition value
+                    EmitOperator.emitUndef(mv);
+                    mv.visitVarInsn(Opcodes.ASTORE, conditionResultReg);
+                }
             }
 
             // Add redo label
@@ -322,10 +345,14 @@ public class EmitStatement {
 
             // If the context is not VOID, push a value to the stack
             // For simple blocks with resultReg, load the captured result
+            // For while/for loops with conditionResultReg, load the condition value
             // Otherwise, push undef
             if (needsReturnValue && resultReg >= 0) {
                 // Load the result from the register (all paths converge here with empty stack)
                 mv.visitVarInsn(Opcodes.ALOAD, resultReg);
+            } else if (needWhileConditionResult && conditionResultReg >= 0) {
+                // Load the false condition value (or undef if 'last' was used)
+                mv.visitVarInsn(Opcodes.ALOAD, conditionResultReg);
             } else if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             }
