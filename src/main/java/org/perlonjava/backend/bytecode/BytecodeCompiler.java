@@ -5524,13 +5524,33 @@ public class BytecodeCompiler implements Visitor {
     void handleLoopControlOperator(OperatorNode node, String op) {
         // Extract label if present
         String labelStr = null;
+        boolean isDynamicLabel = false;
+        int dynamicLabelReg = -1;
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
             if (arg instanceof IdentifierNode) {
                 labelStr = ((IdentifierNode) arg).name;
             } else {
-                throwCompilerException("Not implemented: " + node, node.getIndex());
+                // Dynamic label: last EXPR, next EXPR, redo EXPR
+                // Evaluate expression at runtime to get label string
+                isDynamicLabel = true;
+                compileNode(arg, -1, RuntimeContextType.SCALAR);
+                dynamicLabelReg = lastResultReg;
             }
+        }
+
+        // Dynamic label always uses non-local control flow
+        if (isDynamicLabel) {
+            short createDynOp = op.equals("last") ? Opcodes.CREATE_LAST_DYNAMIC
+                    : op.equals("next") ? Opcodes.CREATE_NEXT_DYNAMIC
+                    : Opcodes.CREATE_REDO_DYNAMIC;
+            int rd = allocateOutputRegister();
+            emit(createDynOp);
+            emitReg(rd);
+            emitReg(dynamicLabelReg);
+            emit(Opcodes.RETURN);
+            emitReg(rd);
+            return;
         }
 
         // Find the target loop

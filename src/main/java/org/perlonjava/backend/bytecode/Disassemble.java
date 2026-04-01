@@ -1634,6 +1634,17 @@ public class Disassemble {
                         sb.append("\n");
                         break;
                     }
+                    case Opcodes.CREATE_LAST_DYNAMIC:
+                    case Opcodes.CREATE_NEXT_DYNAMIC:
+                    case Opcodes.CREATE_REDO_DYNAMIC: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int labelReg = interpretedCode.bytecode[pc++];
+                        String dynName = opcode == Opcodes.CREATE_LAST_DYNAMIC ? "CREATE_LAST_DYNAMIC"
+                                : opcode == Opcodes.CREATE_NEXT_DYNAMIC ? "CREATE_NEXT_DYNAMIC"
+                                : "CREATE_REDO_DYNAMIC";
+                        sb.append(dynName).append(" r").append(rd).append(" r").append(labelReg).append("\n");
+                        break;
+                    }
                     case Opcodes.CREATE_GOTO: {
                         rd = interpretedCode.bytecode[pc++];
                         int cfLabelIdx = interpretedCode.bytecode[pc++];

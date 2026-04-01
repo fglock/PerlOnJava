@@ -2054,6 +2054,15 @@ public class Opcodes {
     public static final short SETPWENT = 411;
     public static final short ENDPWENT = 412;
 
+    /**
+     * Dynamic loop control: last/next/redo with runtime-evaluated label expression.
+     * Format: CREATE_LAST_DYNAMIC rd labelReg
+     * Creates RuntimeControlFlowList with label from registers[labelReg].toString().
+     */
+    public static final short CREATE_LAST_DYNAMIC = 413;
+    public static final short CREATE_NEXT_DYNAMIC = 414;
+    public static final short CREATE_REDO_DYNAMIC = 415;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

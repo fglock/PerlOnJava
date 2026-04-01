@@ -69,7 +69,10 @@ public class EmitControlFlow {
                 // Extract the label name.
                 labelStr = ((IdentifierNode) arg).name;
             } else {
-                throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+                // Dynamic label: last EXPR, next EXPR, redo EXPR
+                // Fall back to interpreter which supports dynamic label evaluation
+                throw new PerlCompilerException(node.tokenIndex,
+                        "Dynamic loop control EXPR requires interpreter fallback", ctx.errorUtil);
             }
         }
 

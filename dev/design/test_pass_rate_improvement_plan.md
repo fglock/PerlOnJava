@@ -443,14 +443,18 @@ Branch: `fix/test-pass-rate-quick-wins`
 | Handle TIED_SCALAR in typeglob assignment (tiedFetch before dispatch) | +63 (tie_fetch_count.t: 1/343→64/343) | 1.9 |
 | Allow argless `goto` (runtime error instead of compile error) | unblocks goto.t past line 525 (still blocked at 755) | 3.6 |
 | Support `$$` prototype in sort comparators (pass args via `@_`) | +2 (sort.t: 23→25/206) | 1.10 |
+| Implement `last/next/redo EXPR` dynamic labels | loopctl.t: 0/0→~45/69 (hangs at test 62) | New |
 
 Files changed:
 - `RuntimeGlob.java` — add `case TIED_SCALAR: return set(value.tiedFetch())` in typeglob switch
 - `RuntimeStashEntry.java` — same TIED_SCALAR case in stash entry switch
 - `OperatorParser.java` — change goto arg minimum from 1 to 0
-- `EmitControlFlow.java` — bare goto falls back to interpreter
+- `EmitControlFlow.java` — bare goto falls back to interpreter; dynamic `last/next/redo EXPR` falls back
 - `CompileOperator.java` — bare goto emits GOTO_DYNAMIC with empty string
-- `BytecodeInterpreter.java` — GOTO_DYNAMIC empty label throws "goto must have label"
+- `BytecodeInterpreter.java` — GOTO_DYNAMIC empty label throws "goto must have label"; new CREATE_*_DYNAMIC handlers
+- `BytecodeCompiler.java` — `last/next/redo EXPR` emits CREATE_*_DYNAMIC opcodes
+- `Opcodes.java` — new CREATE_LAST_DYNAMIC/CREATE_NEXT_DYNAMIC/CREATE_REDO_DYNAMIC opcodes
+- `Disassemble.java` — disassembly support for new opcodes
 - `ListOperators.java` — detect `$$` prototype on comparator, populate `@_` args
 
 #### Investigation notes: op/sort.t (updated)
@@ -468,6 +472,51 @@ Files changed:
    the comparator resolution logic.
 
 4. **Tests 4, 6** — sort of utf8/non-utf8 lists produce wrong order. Likely locale/collation issue.
+
+#### Investigation notes: op/override.t (item 2.7)
+
+**Status:** 0/0 (VerifyError crash). The test installs `CORE::GLOBAL::*` overrides via BEGIN blocks.
+The JVM bytecode emitter generates invalid bytecode for the complex control flow from 30+ rewritten
+builtin calls. Two-part fix needed:
+
+1. **Immediate:** Add `VerifyError` to `needsInterpreterFallback()` in `PerlLanguageProvider.java`
+   (line 479) so the interpreter backend handles it instead of crashing.
+
+2. **Root cause:** The bytecode generation for overridden builtins in `EmitSubroutine.handleApplyOperator()`
+   creates complex branch structures that fail JVM verification. Needs ASM debugging to find the
+   exact invalid pattern.
+
+#### Investigation notes: op/loopctl.t (item 1.13, was 0/0)
+
+**Status:** ~45/69 passing (was 0/0). The compile-time crash from `last EXPR` / `next EXPR` / `redo EXPR`
+is fixed with new `CREATE_*_DYNAMIC` opcodes. Remaining failures:
+
+- Tests 1, 5, 20, 24: `redo` in while/until loops returns 0 instead of 1 — redo re-evaluates the
+  condition when it shouldn't (redo should jump to loop body, not loop condition).
+- Tests 10, 11, 29, 30: `next` in for(@array) returns 0 — similar control flow issue.
+- Tests 18, 37: `next` on bare block returns 0.
+- Tests 46-48: `redo` lexical lifetime — redo creates a new lexical scope when it shouldn't.
+- Test 49: reverse with empty array slots — unrelated to loop control.
+- Tests 62-69: hang (likely `last EXPR` / `next EXPR` test at lines 1088-1123 causes infinite loop).
+
+#### Investigation notes: comp/parser.t (item new)
+
+**Status:** 96/195 (blocked at ~96). Error: "Unsupported $ operand: StringNode" in the interpreter
+backend's `BytecodeCompiler.java` (line 3783). The `$` sigil handler doesn't support `StringNode`
+operands, which arise from `${}` (empty braces) and `${<<END}` (heredoc in braces) in `Variable.java`.
+
+**Fix:** Add `StringNode` case to the `$` handler in `BytecodeCompiler.java` line 3782, mirroring the
+existing `@`/`%`/`*` handlers which all handle `StringNode`. Same fix needed for `&` handler at line 4086.
+
+#### Investigation notes: op/heredoc.t (item 2.3)
+
+**Status:** 66/138 (~60 blocked). Root cause: heredoc state corruption during `print` argument
+look-ahead in `ListParser.java` (lines 141-155). When `wantFileHandle` look-ahead triggers
+`skipWhitespace` → `parseHeredocAfterNewline`, the heredoc is consumed. If backtracking occurs
+(no filehandle found), `parser.tokenIndex` is restored but `heredocNodes` is not.
+
+**Fix:** Add `saveHeredocState()` / `restoreHeredocStateIfNeeded()` around the `wantFileHandle`
+section, matching the pattern already used in `looksLikeEmptyList()` (lines 305-384).
 
 ### Baseline
 

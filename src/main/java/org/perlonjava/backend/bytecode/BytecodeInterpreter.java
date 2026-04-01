@@ -1080,6 +1080,16 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeCreateRedo(bytecode, pc, registers, code);
                             }
 
+                            case Opcodes.CREATE_LAST_DYNAMIC, Opcodes.CREATE_NEXT_DYNAMIC, Opcodes.CREATE_REDO_DYNAMIC -> {
+                                int rd = bytecode[pc++];
+                                int labelReg = bytecode[pc++];
+                                String label = ((RuntimeScalar) registers[labelReg]).toString();
+                                ControlFlowType type = opcode == Opcodes.CREATE_LAST_DYNAMIC ? ControlFlowType.LAST
+                                        : opcode == Opcodes.CREATE_NEXT_DYNAMIC ? ControlFlowType.NEXT
+                                        : ControlFlowType.REDO;
+                                registers[rd] = new RuntimeControlFlowList(type, label, code.sourceName, code.sourceLine);
+                            }
+
                             case Opcodes.CREATE_GOTO -> {
                                 pc = InlineOpcodeHandler.executeCreateGoto(bytecode, pc, registers, code);
                             }
