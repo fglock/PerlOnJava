@@ -66,18 +66,21 @@ public class Vec {
         int bitOffset = (offset * bits) % 8;
 
         ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
-        int value = 0;
 
-        if (bits == 32 && byteOffset + 4 <= data.length) {
-            value = buffer.getInt(byteOffset);
-        } else if (bits == 16 && byteOffset + 2 <= data.length) {
-            value = buffer.getShort(byteOffset) & 0xFFFF;
-        } else if (bits == 8 && byteOffset < data.length) {
-            value = buffer.get(byteOffset) & 0xFF;
-        } else if (bits == 64 && byteOffset + 8 <= data.length) {
+        if (bits == 64 && byteOffset + 8 <= data.length) {
             long longValue = buffer.getLong(byteOffset);
             return new RuntimeVecLvalue(strScalar, offset, bits, longValue);
+        } else if (bits == 32 && byteOffset + 4 <= data.length) {
+            long unsignedValue = Integer.toUnsignedLong(buffer.getInt(byteOffset));
+            return new RuntimeVecLvalue(strScalar, offset, bits, unsignedValue);
+        } else if (bits == 16 && byteOffset + 2 <= data.length) {
+            int value = buffer.getShort(byteOffset) & 0xFFFF;
+            return new RuntimeVecLvalue(strScalar, offset, bits, value);
+        } else if (bits == 8 && byteOffset < data.length) {
+            int value = buffer.get(byteOffset) & 0xFF;
+            return new RuntimeVecLvalue(strScalar, offset, bits, value);
         } else {
+            int value = 0;
             for (int i = 0; i < bits; i++) {
                 int byteIndex = byteOffset + (bitOffset + i) / 8;
                 int bitIndex = (bitOffset + i) % 8;
@@ -85,9 +88,8 @@ public class Vec {
                     value |= ((data[byteIndex] >> bitIndex) & 1) << i;
                 }
             }
+            return new RuntimeVecLvalue(strScalar, offset, bits, value);
         }
-
-        return new RuntimeVecLvalue(strScalar, offset, bits, value);
     }
 
     /**
