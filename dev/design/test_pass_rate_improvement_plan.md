@@ -539,10 +539,9 @@ The offending line is: `eval { no warnings 'syscalls'; require eval "qr/\0/" };`
 The `\0` inside the double-quoted string produces a null byte. The parser then sees
 `qr/` + NUL + `/` and gets confused, interpreting it as `qr/\\` (unterminated regex).
 
-**Fix options:**
-1. **Patch the test** to skip the null-byte lines (258-263) — quickest unblock
-2. **Fix the string parser** to handle embedded null bytes in double-quoted strings
-   that contain regex-like content — proper fix but harder
+**Fix:** Fix the string parser to handle embedded null bytes in double-quoted strings
+that contain regex-like content. The null byte from `\0` confuses the tokenizer/parser
+when it appears inside string content adjacent to regex delimiters.
 
 ### Baseline
 

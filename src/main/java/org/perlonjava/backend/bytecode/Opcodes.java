@@ -2063,6 +2063,35 @@ public class Opcodes {
     public static final short CREATE_NEXT_DYNAMIC = 414;
     public static final short CREATE_REDO_DYNAMIC = 415;
 
+    // ExtendedNativeUtils operators (user/group info, network lookups, enumeration)
+    public static final short GETLOGIN = 416;
+    public static final short GETPWNAM = 417;
+    public static final short GETPWUID = 418;
+    public static final short GETGRNAM = 419;
+    public static final short GETGRGID = 420;
+    public static final short GETGRENT = 421;
+    public static final short SETGRENT = 422;
+    public static final short ENDGRENT = 423;
+    public static final short GETHOSTBYADDR = 424;
+    public static final short GETSERVBYNAME = 425;
+    public static final short GETSERVBYPORT = 426;
+    public static final short GETPROTOBYNAME = 427;
+    public static final short GETPROTOBYNUMBER = 428;
+    public static final short ENDHOSTENT = 429;
+    public static final short ENDNETENT = 430;
+    public static final short ENDPROTOENT = 431;
+    public static final short ENDSERVENT = 432;
+    public static final short GETHOSTENT = 433;
+    public static final short GETNETBYADDR = 434;
+    public static final short GETNETBYNAME = 435;
+    public static final short GETNETENT = 436;
+    public static final short GETPROTOENT = 437;
+    public static final short GETSERVENT = 438;
+    public static final short SETHOSTENT = 439;
+    public static final short SETNETENT = 440;
+    public static final short SETPROTOENT = 441;
+    public static final short SETSERVENT = 442;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

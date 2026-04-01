@@ -1606,7 +1606,20 @@ public class BytecodeInterpreter {
                                  Opcodes.SYMLINK, Opcodes.CHROOT, Opcodes.MKDIR,
                                  Opcodes.MSGCTL, Opcodes.SHMCTL, Opcodes.SEMCTL,
                                  Opcodes.EXEC, Opcodes.FCNTL, Opcodes.IOCTL,
-                                 Opcodes.GETPWENT, Opcodes.SETPWENT, Opcodes.ENDPWENT -> {
+                                 Opcodes.GETPWENT, Opcodes.SETPWENT, Opcodes.ENDPWENT,
+                                 Opcodes.GETLOGIN, Opcodes.GETPWNAM, Opcodes.GETPWUID,
+                                 Opcodes.GETGRNAM, Opcodes.GETGRGID, Opcodes.GETGRENT,
+                                 Opcodes.SETGRENT, Opcodes.ENDGRENT,
+                                 Opcodes.GETHOSTBYADDR, Opcodes.GETSERVBYNAME,
+                                 Opcodes.GETSERVBYPORT, Opcodes.GETPROTOBYNAME,
+                                 Opcodes.GETPROTOBYNUMBER, Opcodes.ENDHOSTENT,
+                                 Opcodes.ENDNETENT, Opcodes.ENDPROTOENT,
+                                 Opcodes.ENDSERVENT, Opcodes.GETHOSTENT,
+                                 Opcodes.GETNETBYADDR, Opcodes.GETNETBYNAME,
+                                 Opcodes.GETNETENT, Opcodes.GETPROTOENT,
+                                 Opcodes.GETSERVENT, Opcodes.SETHOSTENT,
+                                 Opcodes.SETNETENT, Opcodes.SETPROTOENT,
+                                 Opcodes.SETSERVENT -> {
                                 pc = executeSystemOps(opcode, bytecode, pc, registers);
                             }
 
@@ -2555,6 +2568,87 @@ public class BytecodeInterpreter {
             }
             case Opcodes.ENDPWENT -> {
                 return MiscOpcodeHandler.execute(Opcodes.ENDPWENT, bytecode, pc, registers);
+            }
+            case Opcodes.GETLOGIN -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETLOGIN, bytecode, pc, registers);
+            }
+            case Opcodes.GETPWNAM -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETPWNAM, bytecode, pc, registers);
+            }
+            case Opcodes.GETPWUID -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETPWUID, bytecode, pc, registers);
+            }
+            case Opcodes.GETGRNAM -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETGRNAM, bytecode, pc, registers);
+            }
+            case Opcodes.GETGRGID -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETGRGID, bytecode, pc, registers);
+            }
+            case Opcodes.GETGRENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETGRENT, bytecode, pc, registers);
+            }
+            case Opcodes.SETGRENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.SETGRENT, bytecode, pc, registers);
+            }
+            case Opcodes.ENDGRENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.ENDGRENT, bytecode, pc, registers);
+            }
+            case Opcodes.GETHOSTBYADDR -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETHOSTBYADDR, bytecode, pc, registers);
+            }
+            case Opcodes.GETSERVBYNAME -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETSERVBYNAME, bytecode, pc, registers);
+            }
+            case Opcodes.GETSERVBYPORT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETSERVBYPORT, bytecode, pc, registers);
+            }
+            case Opcodes.GETPROTOBYNAME -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETPROTOBYNAME, bytecode, pc, registers);
+            }
+            case Opcodes.GETPROTOBYNUMBER -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETPROTOBYNUMBER, bytecode, pc, registers);
+            }
+            case Opcodes.ENDHOSTENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.ENDHOSTENT, bytecode, pc, registers);
+            }
+            case Opcodes.ENDNETENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.ENDNETENT, bytecode, pc, registers);
+            }
+            case Opcodes.ENDPROTOENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.ENDPROTOENT, bytecode, pc, registers);
+            }
+            case Opcodes.ENDSERVENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.ENDSERVENT, bytecode, pc, registers);
+            }
+            case Opcodes.GETHOSTENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETHOSTENT, bytecode, pc, registers);
+            }
+            case Opcodes.GETNETBYADDR -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETNETBYADDR, bytecode, pc, registers);
+            }
+            case Opcodes.GETNETBYNAME -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETNETBYNAME, bytecode, pc, registers);
+            }
+            case Opcodes.GETNETENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETNETENT, bytecode, pc, registers);
+            }
+            case Opcodes.GETPROTOENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETPROTOENT, bytecode, pc, registers);
+            }
+            case Opcodes.GETSERVENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETSERVENT, bytecode, pc, registers);
+            }
+            case Opcodes.SETHOSTENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.SETHOSTENT, bytecode, pc, registers);
+            }
+            case Opcodes.SETNETENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.SETNETENT, bytecode, pc, registers);
+            }
+            case Opcodes.SETPROTOENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.SETPROTOENT, bytecode, pc, registers);
+            }
+            case Opcodes.SETSERVENT -> {
+                return MiscOpcodeHandler.execute(Opcodes.SETSERVENT, bytecode, pc, registers);
             }
             default -> throw new RuntimeException("Unknown system opcode: " + opcode);
         }

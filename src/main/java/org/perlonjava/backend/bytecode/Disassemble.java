@@ -1846,7 +1846,34 @@ public class Disassemble {
                     case Opcodes.IOCTL:
                     case Opcodes.GETPWENT:
                     case Opcodes.SETPWENT:
-                    case Opcodes.ENDPWENT: {
+                    case Opcodes.ENDPWENT:
+                    case Opcodes.GETLOGIN:
+                    case Opcodes.GETPWNAM:
+                    case Opcodes.GETPWUID:
+                    case Opcodes.GETGRNAM:
+                    case Opcodes.GETGRGID:
+                    case Opcodes.GETGRENT:
+                    case Opcodes.SETGRENT:
+                    case Opcodes.ENDGRENT:
+                    case Opcodes.GETHOSTBYADDR:
+                    case Opcodes.GETSERVBYNAME:
+                    case Opcodes.GETSERVBYPORT:
+                    case Opcodes.GETPROTOBYNAME:
+                    case Opcodes.GETPROTOBYNUMBER:
+                    case Opcodes.ENDHOSTENT:
+                    case Opcodes.ENDNETENT:
+                    case Opcodes.ENDPROTOENT:
+                    case Opcodes.ENDSERVENT:
+                    case Opcodes.GETHOSTENT:
+                    case Opcodes.GETNETBYADDR:
+                    case Opcodes.GETNETBYNAME:
+                    case Opcodes.GETNETENT:
+                    case Opcodes.GETPROTOENT:
+                    case Opcodes.GETSERVENT:
+                    case Opcodes.SETHOSTENT:
+                    case Opcodes.SETNETENT:
+                    case Opcodes.SETPROTOENT:
+                    case Opcodes.SETSERVENT: {
                         rd = interpretedCode.bytecode[pc++];
                         int sysArgsReg = interpretedCode.bytecode[pc++];
                         int sysCtx = interpretedCode.bytecode[pc++];
@@ -1871,6 +1898,33 @@ public class Disassemble {
                             case Opcodes.GETPWENT -> "getpwent";
                             case Opcodes.SETPWENT -> "setpwent";
                             case Opcodes.ENDPWENT -> "endpwent";
+                            case Opcodes.GETLOGIN -> "getlogin";
+                            case Opcodes.GETPWNAM -> "getpwnam";
+                            case Opcodes.GETPWUID -> "getpwuid";
+                            case Opcodes.GETGRNAM -> "getgrnam";
+                            case Opcodes.GETGRGID -> "getgrgid";
+                            case Opcodes.GETGRENT -> "getgrent";
+                            case Opcodes.SETGRENT -> "setgrent";
+                            case Opcodes.ENDGRENT -> "endgrent";
+                            case Opcodes.GETHOSTBYADDR -> "gethostbyaddr";
+                            case Opcodes.GETSERVBYNAME -> "getservbyname";
+                            case Opcodes.GETSERVBYPORT -> "getservbyport";
+                            case Opcodes.GETPROTOBYNAME -> "getprotobyname";
+                            case Opcodes.GETPROTOBYNUMBER -> "getprotobynumber";
+                            case Opcodes.ENDHOSTENT -> "endhostent";
+                            case Opcodes.ENDNETENT -> "endnetent";
+                            case Opcodes.ENDPROTOENT -> "endprotoent";
+                            case Opcodes.ENDSERVENT -> "endservent";
+                            case Opcodes.GETHOSTENT -> "gethostent";
+                            case Opcodes.GETNETBYADDR -> "getnetbyaddr";
+                            case Opcodes.GETNETBYNAME -> "getnetbyname";
+                            case Opcodes.GETNETENT -> "getnetent";
+                            case Opcodes.GETPROTOENT -> "getprotoent";
+                            case Opcodes.GETSERVENT -> "getservent";
+                            case Opcodes.SETHOSTENT -> "sethostent";
+                            case Opcodes.SETNETENT -> "setnetent";
+                            case Opcodes.SETPROTOENT -> "setprotoent";
+                            case Opcodes.SETSERVENT -> "setservent";
                             default -> "sys_op_" + opcode;
                         };
                         sb.append(sysName).append(" r").append(rd)
