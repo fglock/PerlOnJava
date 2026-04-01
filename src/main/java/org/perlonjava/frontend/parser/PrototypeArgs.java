@@ -784,7 +784,7 @@ public class PrototypeArgs {
         while (prototypeIndex < prototype.length() && prototype.charAt(prototypeIndex) != ']') {
             prototypeIndex++;
         }
-        return prototypeIndex + 1;  // For groups, skip past the closing ']'
+        return prototypeIndex;  // Return index of ']'; caller's i++ advances past it
     }
 
     public static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {

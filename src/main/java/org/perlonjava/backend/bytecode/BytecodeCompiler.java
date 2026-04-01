@@ -3779,6 +3779,15 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
                 lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: ${'name'} — load global scalar by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
+                int rd = allocateRegister();
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emitReg(rd);
+                emit(nameIdx);
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -4082,6 +4091,16 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emit(constIdx);
 
+                lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: &{'name'} — look up global code reference by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(globalName);
+                int rd = allocateOutputRegister();
+                int constIdx = addToConstantPool(codeRef);
+                emit(Opcodes.LOAD_CONST);
+                emitReg(rd);
+                emit(constIdx);
                 lastResultReg = rd;
             } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {
                 // Dynamic code reference: &{$name} or &$name

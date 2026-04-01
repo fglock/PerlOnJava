@@ -518,6 +518,19 @@ look-ahead in `ListParser.java` (lines 141-155). When `wantFileHandle` look-ahea
 **Fix:** Add `saveHeredocState()` / `restoreHeredocStateIfNeeded()` around the `wantFileHandle`
 section, matching the pattern already used in `looksLikeEmptyList()` (lines 305-384).
 
+#### Investigation notes: op/override.t (updated)
+
+**Status:** 0/0 (compile-time crash). The initial diagnosis of VerifyError was incorrect.
+The actual blocker is `Unsupported operator: getlogin` at line 20. The test uses `getlogin`
+as a CORE::GLOBAL override target, but `getlogin` is not implemented as an operator.
+
+**Fix:** Implement `getlogin` as a built-in operator. In Perl, `getlogin()` returns the
+current login name from `/dev/utmp` (or equivalent). On Java, this can be implemented as
+`System.getProperty("user.name")`. Needs:
+1. Add `getlogin` to the operator table in the parser
+2. Implement the runtime operation (return `System.getProperty("user.name")`)
+3. This unblocks override.t which tests CORE::GLOBAL overrides for ~36 built-in functions
+
 ### Baseline
 
 Update this document as fixes land. Use the test runner to measure progress:
