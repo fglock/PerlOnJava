@@ -3,10 +3,88 @@ use strict;
 use warnings;
 use XSLoader;
 
+our $VERSION = '1.643';
+
 XSLoader::load( 'DBI' );
 
 # NOTE: The rest of the code is in file:
-#       src/main/java/org/perlonjava/perlmodule/DBI.java
+#       src/main/java/org/perlonjava/runtime/perlmodule/DBI.java
+
+# SQL type constants (from DBI spec, java.sql.Types values)
+# Used by DBIx::Class::Storage::DBI::SQLite and others
+use constant {
+    SQL_GUID            => -11,
+    SQL_WLONGVARCHAR    => -10,
+    SQL_WVARCHAR        => -9,
+    SQL_WCHAR           => -8,
+    SQL_BIGINT          => -5,
+    SQL_BIT             => -7,
+    SQL_TINYINT         => -6,
+    SQL_LONGVARBINARY   => -4,
+    SQL_VARBINARY       => -3,
+    SQL_BINARY          => -2,
+    SQL_LONGVARCHAR     => -1,
+    SQL_UNKNOWN_TYPE    => 0,
+    SQL_ALL_TYPES       => 0,
+    SQL_CHAR            => 1,
+    SQL_NUMERIC         => 2,
+    SQL_DECIMAL         => 3,
+    SQL_INTEGER         => 4,
+    SQL_SMALLINT        => 5,
+    SQL_FLOAT           => 6,
+    SQL_REAL            => 7,
+    SQL_DOUBLE          => 8,
+    SQL_DATETIME        => 9,
+    SQL_DATE            => 9,
+    SQL_INTERVAL        => 10,
+    SQL_TIME            => 10,
+    SQL_TIMESTAMP       => 11,
+    SQL_VARCHAR         => 12,
+    SQL_BOOLEAN         => 16,
+    SQL_UDT             => 17,
+    SQL_UDT_LOCATOR     => 18,
+    SQL_ROW             => 19,
+    SQL_REF             => 20,
+    SQL_BLOB            => 30,
+    SQL_BLOB_LOCATOR    => 31,
+    SQL_CLOB            => 40,
+    SQL_CLOB_LOCATOR    => 41,
+    SQL_ARRAY           => 50,
+    SQL_MULTISET        => 55,
+    SQL_TYPE_DATE       => 91,
+    SQL_TYPE_TIME       => 92,
+    SQL_TYPE_TIMESTAMP  => 93,
+    SQL_TYPE_TIME_WITH_TIMEZONE      => 94,
+    SQL_TYPE_TIMESTAMP_WITH_TIMEZONE => 95,
+};
+
+# DSN translation: convert Perl DBI DSN format to JDBC URL
+# This wraps the Java-side connect() to support dbi:Driver:... format
+{
+    no warnings 'redefine';
+    my $orig_connect = \&connect;
+    *connect = sub {
+        my ($class, $dsn, $user, $pass, $attr) = @_;
+        $dsn = '' unless defined $dsn;
+        my $driver_name;
+        if ($dsn =~ /^dbi:(\w+):(.*)$/i) {
+            my ($driver, $rest) = ($1, $2);
+            $driver_name = $driver;
+            my $dbd_class = "DBD::$driver";
+            eval "require $dbd_class";
+            if ($dbd_class->can('_dsn_to_jdbc')) {
+                $dsn = $dbd_class->_dsn_to_jdbc($rest);
+            }
+        }
+        my $dbh = $orig_connect->($class, $dsn, $user, $pass, $attr);
+        if ($dbh && $driver_name) {
+            # Set Driver attribute so DBIx::Class can detect the driver
+            # (e.g. $dbh->{Driver}{Name} returns "SQLite")
+            $dbh->{Driver} = bless { Name => $driver_name }, 'DBI::dr';
+        }
+        return $dbh;
+    };
+}
 
 # Example:
 #
@@ -26,6 +104,19 @@ our $MAX_CACHED_STATEMENTS = 100;
 our %CACHED_CONNECTIONS;
 our $MAX_CACHED_CONNECTIONS = 10;
 
+# FETCH/STORE methods for tied-hash compatibility
+# In real Perl DBI, handles are tied hashes. DBIx::Class calls
+# $dbh->FETCH('Active') explicitly, so we need method wrappers.
+sub FETCH {
+    my ($self, $key) = @_;
+    return $self->{$key};
+}
+
+sub STORE {
+    my ($self, $key, $value) = @_;
+    $self->{$key} = $value;
+}
+
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
@@ -37,6 +128,37 @@ sub do {
 sub finish {
     my ($sth) = @_;
     $sth->{Active} = 0;
+}
+
+# Batch execution: calls $fetch_tuple->() repeatedly to get parameter arrays,
+# executes the prepared statement for each, and tracks results in $tuple_status.
+sub execute_for_fetch {
+    my ($sth, $fetch_tuple, $tuple_status) = @_;
+    $tuple_status ||= [];
+    @$tuple_status = ();
+
+    my $total_rows = 0;
+    while (my $tuple = $fetch_tuple->()) {
+        my $rv;
+        eval {
+            $rv = $sth->execute(@$tuple);
+        };
+        if ($@) {
+            push @$tuple_status, [$@];
+            next;
+        }
+        push @$tuple_status, $rv;
+        $total_rows += $rv if defined $rv && $rv >= 0;
+    }
+    return $total_rows;
+}
+
+sub bind_param {
+    my ($sth, $param_num, $value, $attr) = @_;
+    # Store bind parameter for later use
+    $sth->{_bind_params} ||= {};
+    $sth->{_bind_params}{$param_num} = $value;
+    return 1;
 }
 
 sub clone {

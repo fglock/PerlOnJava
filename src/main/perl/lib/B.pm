@@ -49,6 +49,12 @@ package B::SV {
         return bless { ref => $ref }, $class;
     }
 
+    sub REFCNT {
+        # JVM uses tracing GC, not reference counting.
+        # Return 0 to indicate objects are always reclaimable.
+        return 0;
+    }
+
     sub FLAGS {
         my $self = shift;
         my $r = $self->{ref};

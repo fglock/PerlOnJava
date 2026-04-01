@@ -339,9 +339,10 @@ public class SignatureParser {
             return null;
         }
 
-        // Parse the default value expression
-        ListNode arguments = consumeArgsWithPrototype(parser, "$", false);
-        return arguments.elements.getFirst();
+        // Parse the default value expression at comma precedence, so that
+        // complex expressions (ternary, comparisons, logical ops) are included
+        // but ',' and ')' correctly terminate the default value.
+        return parser.parseExpression(parser.getPrecedence(","));
     }
 
     /**

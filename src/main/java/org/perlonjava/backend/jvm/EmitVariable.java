@@ -331,12 +331,15 @@ public class EmitVariable {
      * @param node           the OperatorNode representing the variable operation
      */
     static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // In void context, don't emit any code
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+        String sigil = node.operator;
+
+        // In void context, don't emit any code — EXCEPT for glob (*) access,
+        // which has vivification side effects. In Perl, `*{"PKG::name"}` in void
+        // context still vivifies the glob entry in the stash. Package::Stash::PP
+        // relies on this for its `local *__ANON__:: = $namespace; *{"__ANON__::$name"};` pattern.
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID && !sigil.equals("*")) {
             return;
         }
-
-        String sigil = node.operator;
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Case 1: Simple variable with identifier (most common case)
@@ -363,6 +366,10 @@ public class EmitVariable {
                         "createDetachedCopy",
                         "()Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                         false);
+                // In void context, pop the result — the access was needed for vivification side effects
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
                 return;
             }
 
@@ -554,6 +561,11 @@ public class EmitVariable {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "globDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;", false);
+                }
+                // In void context, pop the result off the JVM stack since no one consumes it.
+                // The glob access was still needed for its vivification side effect.
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
                 }
                 return;
             case "&":

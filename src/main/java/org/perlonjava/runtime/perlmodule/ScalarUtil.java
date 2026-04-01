@@ -185,8 +185,14 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isweak() method");
         }
-        // Placeholder for isweak functionality
-        return new RuntimeScalar(false).getList();
+        // On the JVM, the tracing garbage collector handles circular references
+        // natively, so all references are effectively "weak" from a GC perspective.
+        // Return true for any reference to indicate it has been "weakened".
+        RuntimeScalar arg = args.get(0);
+        boolean isRef = arg.type == RuntimeScalarType.REFERENCE
+                || arg.type == RuntimeScalarType.ARRAYREFERENCE
+                || arg.type == RuntimeScalarType.HASHREFERENCE;
+        return new RuntimeScalar(isRef).getList();
     }
 
     /**

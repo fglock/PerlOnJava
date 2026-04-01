@@ -16,6 +16,10 @@ public class CompileBinaryOperatorHelper {
      * @return Result register containing the operation result
      */
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex) {
+        return compileBinaryOperatorSwitch(bytecodeCompiler, operator, rs1, rs2, tokenIndex, false);
+    }
+
+    public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs) {
         // Allocate result register
         int rd = bytecodeCompiler.allocateOutputRegister();
 
@@ -215,7 +219,8 @@ public class CompileBinaryOperatorHelper {
                 // BytecodeInterpreter convert it to RuntimeArray
 
                 // Emit CALL_SUB: rd = coderef.apply(args, context)
-                bytecodeCompiler.emit(Opcodes.CALL_SUB);
+                // Use CALL_SUB_SHARE_ARGS for &func (no parens) to share caller's @_
+                bytecodeCompiler.emit(shareCallerArgs ? Opcodes.CALL_SUB_SHARE_ARGS : Opcodes.CALL_SUB);
                 bytecodeCompiler.emitReg(rd);  // Result register
                 bytecodeCompiler.emitReg(rs1); // Code reference register
                 bytecodeCompiler.emitReg(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)

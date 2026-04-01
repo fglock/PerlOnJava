@@ -197,12 +197,17 @@ public class ParsePrimary {
                         }
                     }
                     
-                    parser.tokenIndex = startIndex;   // backtrack
+                    // Skip whitespace to find the actual position of the operator token.
+                    // startIndex may point to a whitespace token before the operator,
+                    // and inserting CORE::GLOBAL:: before whitespace would leave the
+                    // whitespace between GLOBAL:: and the operator, causing a parse error.
+                    int insertPos = Whitespace.skipWhitespace(parser, startIndex, parser.tokens);
+                    parser.tokenIndex = insertPos;   // backtrack to operator position
                     // Rewrite the tokens to call CORE::GLOBAL::operator
-                    parser.tokens.add(startIndex, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));
-                    parser.tokens.add(startIndex + 1, new LexerToken(LexerTokenType.OPERATOR, "::"));
-                    parser.tokens.add(startIndex + 2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
-                    parser.tokens.add(startIndex + 3, new LexerToken(LexerTokenType.OPERATOR, "::"));
+                    parser.tokens.add(insertPos, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));
+                    parser.tokens.add(insertPos + 1, new LexerToken(LexerTokenType.OPERATOR, "::"));
+                    parser.tokens.add(insertPos + 2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
+                    parser.tokens.add(insertPos + 3, new LexerToken(LexerTokenType.OPERATOR, "::"));
                     return SubroutineParser.parseSubroutineCall(parser, false);
                 }
             }

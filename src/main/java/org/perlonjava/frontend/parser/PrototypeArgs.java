@@ -89,7 +89,23 @@ public class PrototypeArgs {
         }
 
         char firstChar = prototype.charAt(i);
-        return firstChar == ';' || firstChar == '@' || firstChar == '%';
+        return firstChar == ';' || firstChar == '@' || firstChar == '%' || firstChar == '_';
+    }
+
+    /**
+     * Checks if the prototype represents a named unary operator.
+     * In Perl, functions with exactly prototype ($) or (_) are parsed as named unary
+     * operators with higher precedence than comparison operators.
+     * Prototypes like ($;), (_;), ($;$) are NOT named unary - the trailing semicolon
+     * makes them list operators.
+     *
+     * @param prototype The prototype string
+     * @return true if the prototype is exactly "$" or "_"
+     */
+    private static boolean isNamedUnaryPrototype(String prototype) {
+        if (prototype.length() != 1) return false;
+        char first = prototype.charAt(0);
+        return first == '$' || first == '_';
     }
 
     /**
@@ -139,6 +155,35 @@ public class PrototypeArgs {
         int index = parser.tokenIndex;
         ListNode args = new ListNode(parser.tokenIndex);
         boolean hasParentheses = handleParen && handleOpeningParenthesis(parser);
+
+        // For single-scalar prototypes ("$" or "_") without parentheses, parse as named
+        // unary operator. In Perl, func($) acts like a named unary with higher precedence
+        // than comparison operators. So `reftype $h eq 'HASH'` parses as
+        // `(reftype($h)) eq 'HASH'`, not `reftype($h eq 'HASH')`.
+        if (!hasParentheses && prototype != null && isNamedUnaryPrototype(prototype)) {
+            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>")) {
+                // No argument - check if optional
+                if (!allowsZeroArguments(prototype)) {
+                    throwNotEnoughArgumentsError(parser);
+                }
+                // _ prototype defaults to $_ when no argument is provided
+                if (prototype.charAt(0) == '_') {
+                    Node underscoreArg = new OperatorNode(
+                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    underscoreArg.setAnnotation("context", "SCALAR");
+                    args.elements.add(underscoreArg);
+                }
+                return args;
+            }
+            // Parse one argument at named unary precedence (higher than comparison ops)
+            Node expr = parser.parseExpression(parser.getPrecedence("isa") + 1);
+            if (expr != null) {
+                Node scalarArg = ParserNodeUtils.toScalarContext(expr);
+                scalarArg.setAnnotation("context", "SCALAR");
+                args.elements.add(scalarArg);
+            }
+            return args;
+        }
 
         // Check for => immediately after subroutine name (no parentheses)
         if (!hasParentheses && TokenUtils.peek(parser).text.equals("=>")) {

@@ -73,6 +73,8 @@ PerlOnJava does **not** implement the following Perl features:
 
 ### Testing
 
+**NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).
+
 **ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
 | Command | What it does |

@@ -59,6 +59,7 @@ public class WarningFlags {
         warningHierarchy.put("exec", new String[]{"io::exec"});
         warningHierarchy.put("reserved", new String[]{});
         warningHierarchy.put("prototype", new String[]{});
+        warningHierarchy.put("qw", new String[]{"syntax::qw"});
         warningHierarchy.put("newline", new String[]{"io::newline"});
         warningHierarchy.put("NONFATAL", new String[]{});
         warningHierarchy.put("non_unicode", new String[]{});

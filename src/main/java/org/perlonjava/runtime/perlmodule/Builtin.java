@@ -110,9 +110,8 @@ public class Builtin extends PerlModuleBase {
     }
 
     public static RuntimeList isWeak(RuntimeArray args, int ctx) {
-        RuntimeScalar ref = args.get(0);
-        // Implementation to check if reference is weak
-        return new RuntimeList(scalarFalse);
+        // Delegate to Scalar::Util::isweak - on JVM all refs are effectively weak
+        return ScalarUtil.isweak(args, ctx);
     }
 
     public static RuntimeList blessed(RuntimeArray args, int ctx) {

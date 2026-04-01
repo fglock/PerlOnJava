@@ -418,6 +418,20 @@ public class ParseInfix {
         // backtrack
         parser.tokenIndex = currentIndex;
 
+        // Check for -WORD} pattern: $hash{-key} autoquotes to "-key"
+        // This handles keywords like -join, -sort, -map etc. inside hash subscripts
+        if (ident.text.equals("-") && close.type == LexerTokenType.IDENTIFIER) {
+            int afterWord = currentIndex + 2;
+            if (afterWord < parser.tokens.size() && parser.tokens.get(afterWord).text.equals("}")) {
+                parser.tokenIndex = afterWord + 1; // skip past }
+                List<Node> list = new ArrayList<>();
+                list.add(new StringNode("-" + close.text, currentIndex));
+                return list;
+            }
+        }
+        // backtrack (in case the -WORD} check didn't match)
+        parser.tokenIndex = currentIndex;
+
         // Handle optional empty parentheses
         LexerToken nextToken = peek(parser);
         if (nextToken.text.equals("(")) {

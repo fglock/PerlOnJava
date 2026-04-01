@@ -185,13 +185,28 @@ public class LValueVisitor implements Visitor {
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        node.trueExpr.accept(this);
-        int context1 = context;
-        node.falseExpr.accept(this);
-        int context2 = context;
+        int context1 = assignmentTypeOf(node.trueExpr);
+        int context2 = assignmentTypeOf(node.falseExpr);
         if (context1 != context2) {
             throw new PerlCompilerException("Assignment to both a list and a scalar");
         }
+        context = context1;
+    }
+
+    /**
+     * Determine the assignment type of a ternary branch, matching Perl 5's S_assignment_type().
+     * In Perl 5, assignment ops (both OP_SASSIGN and OP_AASSIGN) are not in the list of
+     * op types that return ASSIGN_LIST, so they fall through to ASSIGN_SCALAR.
+     * This allows patterns like: (wantarray ? @rv = eval $src : $rv[0]) = eval $src
+     * where the true branch is a list assignment but is treated as SCALAR for the
+     * mixed-context check.
+     */
+    private int assignmentTypeOf(Node expr) {
+        if (expr instanceof BinaryOperatorNode binop && binop.operator.equals("=")) {
+            return RuntimeContextType.SCALAR;
+        }
+        expr.accept(this);
+        return context;
     }
 
     @Override

@@ -177,4 +177,57 @@ sub hoisted_with_prototype($) {
     }
 }
 
+############################
+# &func (no parens) shares caller's @_ by alias
+# shift() in the callee should modify the caller's @_
+
+{
+    sub _get_first { shift }
+
+    sub caller_of_get_first {
+        my $first = &_get_first;
+        return ($first, scalar @_);
+    }
+
+    my ($result, $remaining) = caller_of_get_first("a", "b", "c");
+    is($result, "a", '&func shares @_ - shift returns first element');
+    is($remaining, 2, '&func shares @_ - shift modifies caller @_');
+}
+
+# _get_obj pattern (used by Hash::Merge and other CPAN modules)
+{
+    use Scalar::Util "blessed";
+
+    package TestGetObj;
+    sub new { bless {val => $_[1]}, $_[0] }
+
+    package main;
+    my $fallback;
+
+    sub _test_get_obj {
+        if (my $type = ref $_[0]) {
+            return shift()
+              if $type eq "TestGetObj"
+              || (blessed $_[0] && $_[0]->isa("TestGetObj"));
+        }
+        defined $fallback or $fallback = TestGetObj->new("default");
+        return $fallback;
+    }
+
+    sub do_merge {
+        my $self = &_test_get_obj;
+        my ($left, $right) = @_;
+        return "$self->{val}:$left:$right";
+    }
+
+    # OO call - object is shifted from @_, remaining are args
+    my $obj = TestGetObj->new("custom");
+    is(do_merge($obj, "L", "R"), "custom:L:R",
+       '&_get_obj pattern - OO call shifts object from @_');
+
+    # Functional call - no object, uses fallback
+    is(do_merge("L", "R"), "default:L:R",
+       '&_get_obj pattern - functional call uses fallback');
+}
+
 done_testing();

@@ -508,9 +508,12 @@ public class GlobalVariable {
         // Ensure we have the :: suffix for the prefix check
         final String prefix = className.endsWith("::") ? className : className + "::";
 
-        // Check if any code references exist with this class prefix
+        // Check if any code references exist directly in this class (not in sub-packages).
+        // A key like "Foo::Bar::baz" belongs to package "Foo::Bar", not "Foo".
+        // After stripping the prefix, the remaining part must NOT contain "::"
+        // to be a direct member of this package.
         boolean exists = globalCodeRefs.keySet().stream()
-                .anyMatch(key -> key.startsWith(prefix));
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"));
 
         // Cache the result
         packageExistsCache.put(className, exists);
@@ -518,16 +521,50 @@ public class GlobalVariable {
     }
 
     /**
+     * Resolves a fully-qualified variable name through stash hash redirections.
+     * <p>
+     * When {@code *PKG:: = \%OtherPkg::} is executed, accesses to {@code PKG::name}
+     * should resolve to {@code OtherPkg::name}. This method checks if the package
+     * portion of the name has been redirected to another package's RuntimeStash, and
+     * if so, rewrites the name accordingly.
+     * <p>
+     * This is critical for the {@code local *__ANON__:: = $namespace} pattern used
+     * by Package::Stash::PP, where glob vivification through the aliased stash must
+     * create entries visible in the target package's symbol table.
+     *
+     * @param fullName The fully-qualified variable name (e.g., "__ANON__::foo").
+     * @return The resolved name (e.g., "Foo::foo" if __ANON__:: was redirected to Foo::),
+     *         or the original name if no redirection is active.
+     */
+    public static String resolveStashHashRedirect(String fullName) {
+        int lastDoubleColon = fullName.lastIndexOf("::");
+        if (lastDoubleColon >= 0) {
+            String pkgPart = fullName.substring(0, lastDoubleColon + 2);
+            RuntimeHash stashHash = globalHashes.get(pkgPart);
+            if (stashHash instanceof RuntimeStash stash && !stash.namespace.equals(pkgPart)) {
+                String shortName = fullName.substring(lastDoubleColon + 2);
+                return stash.namespace + shortName;
+            }
+        }
+        return fullName;
+    }
+
+    /**
      * Retrieves a global IO reference by its key, initializing it if necessary.
+     * <p>
+     * Resolves stash hash redirections so that glob vivification through an aliased
+     * stash (e.g., after {@code *__ANON__:: = \%Foo::}) creates entries in the correct
+     * package's symbol table.
      *
      * @param key The key of the global IO reference.
      * @return The RuntimeScalar representing the global IO reference.
      */
     public static RuntimeGlob getGlobalIO(String key) {
-        RuntimeGlob glob = globalIORefs.get(key);
+        String resolvedKey = resolveStashHashRedirect(key);
+        RuntimeGlob glob = globalIORefs.get(resolvedKey);
         if (glob == null) {
-            glob = new RuntimeGlob(key);
-            globalIORefs.put(key, glob);
+            glob = new RuntimeGlob(resolvedKey);
+            globalIORefs.put(resolvedKey, glob);
         }
         return glob;
     }

@@ -372,8 +372,13 @@ public class CompileBinaryOperator {
             bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             int rs2 = bytecodeCompiler.lastResultReg;
 
-            // Emit CALL_SUB opcode
-            int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
+            // Check if this is a &func (no parens) call that should share caller's @_
+            boolean shareCallerArgs = node.getBooleanAnnotation("shareCallerArgs");
+
+            // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode
+            int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
+                    bytecodeCompiler, node.operator, rs1, rs2, node.getIndex(),
+                    shareCallerArgs);
             bytecodeCompiler.lastResultReg = rd;
             return;
         }

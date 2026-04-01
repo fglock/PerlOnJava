@@ -418,9 +418,18 @@ public abstract class StringSegmentParser {
             if ("@".equals(sigil) && parser.tokenIndex < parser.tokens.size()) {
                 LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
                 if (nextToken.text.startsWith("$")) {
-                    // This is @$var - array of scalar variable
+                    // This is @$var or @${expr} - array dereference of scalar
                     // Consume the $ token
                     TokenUtils.consume(parser);
+
+                    // Check if next is { for @${expr} pattern (e.g., @${$v})
+                    if (parser.tokenIndex < parser.tokens.size() &&
+                            parser.tokens.get(parser.tokenIndex).text.equals("{")) {
+                        // @${...} - parse as ${...} then wrap in @
+                        Node scalarExpr = Variable.parseBracedVariable(parser, "$", true);
+                        return new OperatorNode("@", scalarExpr, tokenIndex);
+                    }
+
                     // Now parse the rest of the identifier
                     identifier = IdentifierParser.parseComplexIdentifier(parser);
                     if (identifier == null || identifier.isEmpty()) {

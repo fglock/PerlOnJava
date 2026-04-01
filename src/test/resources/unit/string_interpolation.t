@@ -334,5 +334,27 @@ EOT
     ok(defined($result) || $@, "Here-doc in array ref interpolation handled");
 };
 
+# Test @${$v} interpolation - array dereference of scalar dereference in strings
+{
+    my @a = (10, 20, 30);
+    my $r = \@a;
+    my $v = \$r;
+    is("@${$v}", "10 20 30", '@${$v} interpolates array via double dereference');
+}
+
+# Test @${$v} with array ref directly
+{
+    my $v = [4, 5, 6];
+    my $rv = \$v;
+    is("@${$rv}", "4 5 6", '@${$rv} interpolates array ref via scalar deref');
+}
+
+# Test @$r still works (simple array deref in string)
+{
+    my @a = (7, 8, 9);
+    my $r = \@a;
+    is("@$r", "7 8 9", '@$r simple array dereference in string');
+}
+
 done_testing();
 

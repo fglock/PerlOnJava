@@ -959,6 +959,11 @@ public class Dereference {
                 }
             }
 
+            // Save the call context into a local slot for the TAILCALL trampoline.
+            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.pushCallContext();
+            mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+
             // Allocate a unique callsite ID for inline method caching
             int callsiteId = nextMethodCallsiteId++;
             mv.visitLdcInsn(callsiteId);
@@ -966,7 +971,7 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-            emitterVisitor.pushCallContext();   // push call context to stack (handles RUNTIME)
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);   // push saved call context
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1048,7 +1053,7 @@ public class Dereference {
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
                 mv.visitLdcInsn("tailcall");
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
-                mv.visitVarInsn(Opcodes.ILOAD, 2);  // context parameter (passed to current sub)
+                mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);  // context of the original call site
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "apply",

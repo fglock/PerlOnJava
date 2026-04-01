@@ -2040,28 +2040,35 @@ public class Opcodes {
     // Effect: rd = CompareOperators.smartmatch(rs1, rs2)
     public static final short SMARTMATCH = 400;
 
+    /**
+     * Call subroutine sharing caller's @_: rd = RuntimeCode.apply(coderef_reg, args_reg, context)
+     * Used for &func (no parens) which shares caller's @_ by alias.
+     * Same format as CALL_SUB but uses the sharing apply() overload in slow path.
+     */
+    public static final short CALL_SUB_SHARE_ARGS = 401;
+
     // Missing system operators needed for interpreter fallback of large files (e.g. taint.t)
-    public static final short SYMLINK = 401;
-    public static final short CHROOT = 402;
-    public static final short MKDIR = 403;
-    public static final short MSGCTL = 404;
-    public static final short SHMCTL = 405;
-    public static final short SEMCTL = 406;
-    public static final short EXEC = 407;
-    public static final short FCNTL = 408;
-    public static final short IOCTL = 409;
-    public static final short GETPWENT = 410;
-    public static final short SETPWENT = 411;
-    public static final short ENDPWENT = 412;
+    public static final short SYMLINK = 402;
+    public static final short CHROOT = 403;
+    public static final short MKDIR = 404;
+    public static final short MSGCTL = 405;
+    public static final short SHMCTL = 406;
+    public static final short SEMCTL = 407;
+    public static final short EXEC = 408;
+    public static final short FCNTL = 409;
+    public static final short IOCTL = 410;
+    public static final short GETPWENT = 411;
+    public static final short SETPWENT = 412;
+    public static final short ENDPWENT = 413;
 
     /**
      * Dynamic loop control: last/next/redo with runtime-evaluated label expression.
      * Format: CREATE_LAST_DYNAMIC rd labelReg
      * Creates RuntimeControlFlowList with label from registers[labelReg].toString().
      */
-    public static final short CREATE_LAST_DYNAMIC = 413;
-    public static final short CREATE_NEXT_DYNAMIC = 414;
-    public static final short CREATE_REDO_DYNAMIC = 415;
+    public static final short CREATE_LAST_DYNAMIC = 443;
+    public static final short CREATE_NEXT_DYNAMIC = 444;
+    public static final short CREATE_REDO_DYNAMIC = 445;
 
     // ExtendedNativeUtils operators (user/group info, network lookups, enumeration)
     public static final short GETLOGIN = 416;
