@@ -317,7 +317,7 @@ public class DBI extends PerlModuleBase {
             String sqlUpper = strippedSql.toUpperCase();
             boolean isBegin = sqlUpper.startsWith("BEGIN");
             boolean isCommit = sqlUpper.startsWith("COMMIT") || sqlUpper.startsWith("END");
-            boolean isRollback = sqlUpper.startsWith("ROLLBACK");
+            boolean isRollback = sqlUpper.startsWith("ROLLBACK") && !sqlUpper.contains("SAVEPOINT");
 
             Connection conn = (Connection) dbh.get("connection").value;
 
