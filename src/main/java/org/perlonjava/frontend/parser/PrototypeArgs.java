@@ -93,6 +93,24 @@ public class PrototypeArgs {
     }
 
     /**
+     * Checks if the prototype represents a named unary operator.
+     * In Perl, functions with prototype ($) or (_) are parsed as named unary
+     * operators with higher precedence than comparison operators.
+     *
+     * @param prototype The prototype string
+     * @return true if the prototype is a single-scalar named unary pattern
+     */
+    private static boolean isNamedUnaryPrototype(String prototype) {
+        if (prototype.isEmpty()) return false;
+        char first = prototype.charAt(0);
+        if (first != '$' && first != '_') return false;
+        // Exactly one character: "$" or "_"
+        if (prototype.length() == 1) return true;
+        // Optional args follow: "$;..." or "_;..."
+        return prototype.charAt(1) == ';';
+    }
+
+    /**
      * Check if the current token is an expression terminator or assignment operator
      * that should end argument parsing.
      */
@@ -139,6 +157,28 @@ public class PrototypeArgs {
         int index = parser.tokenIndex;
         ListNode args = new ListNode(parser.tokenIndex);
         boolean hasParentheses = handleParen && handleOpeningParenthesis(parser);
+
+        // For single-scalar prototypes ("$" or "_") without parentheses, parse as named
+        // unary operator. In Perl, func($) acts like a named unary with higher precedence
+        // than comparison operators. So `reftype $h eq 'HASH'` parses as
+        // `(reftype($h)) eq 'HASH'`, not `reftype($h eq 'HASH')`.
+        if (!hasParentheses && prototype != null && isNamedUnaryPrototype(prototype)) {
+            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>")) {
+                // No argument - check if optional
+                if (!allowsZeroArguments(prototype)) {
+                    throwNotEnoughArgumentsError(parser);
+                }
+                return args;
+            }
+            // Parse one argument at named unary precedence (higher than comparison ops)
+            Node expr = parser.parseExpression(parser.getPrecedence("isa") + 1);
+            if (expr != null) {
+                Node scalarArg = ParserNodeUtils.toScalarContext(expr);
+                scalarArg.setAnnotation("context", "SCALAR");
+                args.elements.add(scalarArg);
+            }
+            return args;
+        }
 
         // Check for => immediately after subroutine name (no parentheses)
         if (!hasParentheses && TokenUtils.peek(parser).text.equals("=>")) {
