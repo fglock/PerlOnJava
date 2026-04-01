@@ -184,14 +184,14 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 - RowParser.pm line 260 crash still occurs in END block cleanup (non-blocking — all real tests pass first)
 
 **Full test suite results** (92 test files, updated 2026-04-01):
-- **21 fully passing** (no failures at all)
-- **39 GC-only failures** (all real tests pass, only `weaken`-based GC leak tests fail)
-- **8 tests with real failures** (see Blocking Issues below)
+- **22 fully passing** (no failures at all)
+- **40 GC-only failures** (all real tests pass, only `weaken`-based GC leak tests fail)
+- **6 tests with real failures** (see Remaining Real Failures below)
 - **22 skipped** (DB-specific: Pg, Oracle, MSSQL, etc.; threads; fork)
 - **2 compile-error** (t/52leaks.t — `wait` operator; t/88result_set_column.t — zero tests)
 
-**Effective pass rate**: 60/68 active test files have all real tests passing (88%).
-Previous: 51/65 (78%) → Current: 60/68 (88%) — **+10 percentage points**.
+**Effective pass rate**: 62/68 active test files have all real tests passing (91%).
+Previous: 51/65 (78%) → 60/68 (88%) → Current: 62/68 (91%).
 
 ---
 
@@ -266,7 +266,7 @@ perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" };
 
 ---
 
-## Remaining Real Failures (8 tests)
+## Remaining Real Failures (6 tests)
 
 ### Tests needing DBI/Storage fixes — RESOLVED
 
@@ -274,14 +274,15 @@ perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" };
 |------|--------|----------------|
 | `t/64db.t` | **FIXED** (4/4 real pass) | `column_info()` implemented via SQLite PRAGMA (step 5.13) |
 | `t/752sqlite.t` | **FIXED** (34/34 real pass) | AutoCommit tracking + BEGIN/COMMIT/ROLLBACK interception (steps 5.14-5.15); `prepare_cached` per-dbh cache (step 5.16) |
+| `t/00describe_environment.t` | **FIXED** (fully passing) | `$^S` correctly reports 1 inside `$SIG{__DIE__}` for `require` failures in `eval {}` (step 5.17) |
+| `t/106dbic_carp.t` | **FIXED** (3/3 real pass) | `__LINE__` inside `@{[]}` string interpolation returns correct line number (step 5.18) |
+| `t/100populate.t` | **PARTIAL** (test 2 fixed) | `execute_for_fetch` error propagation now matches real DBI (step 5.19); tests 37-42, 52-53, 58-59 are new failures exposed by progressing further (see Must Fix) |
 
 ### Tests needing caller/carp fixes
 
 | Test | Failing | Root cause | Fix needed |
 |------|---------|------------|------------|
-| `t/106dbic_carp.t` | tests 2-3 | DBIx::Class::Carp callsite detection — `caller()` returns wrong package/line; also `__LINE__` inside `qr//` differs from Perl 5 | Fix `caller()` to return correct info through `namespace::clean`'d frames |
-| `t/100populate.t` | test 2 | `execute_for_fetch()` doesn't throw on duplicate key constraint violation | DBI needs unique constraint error propagation |
-| `t/101populate_rs.t` | test(s) | Similar to t/100populate.t — `execute_for_fetch` exception handling | Same as above |
+| `t/101populate_rs.t` | test 4 | `warnings_like` doesn't find expected warning | Investigate warning emission during populate |
 
 ### Tests needing serialization/Storable fixes
 
@@ -324,7 +325,8 @@ Subroutine set_subevents redefined at jar:PERL5LIB/Test2/Event/Subtest.pm line 3
 | `t/40compose_connection.t` | 7 | All real tests pass |
 | `t/93single_accessor_object.t` | 15 | All real tests pass |
 | `t/752sqlite.t` | 25 | All 34 real tests pass |
-| 36 other files | 5 each | Standard GC leak detection tests |
+| `t/106dbic_carp.t` | 5 | All 3 real tests pass (fixed in step 5.18) |
+| 37 other files | 5 each | Standard GC leak detection tests |
 
 ---
 
@@ -449,12 +451,16 @@ Expressions like `($x) ? @$a = () : $b = []` trigger "Modification of a read-onl
   - 5.16: Fixed `prepare_cached` to use per-dbh `CachedKids` cache instead of global hash — prevents cross-connection cache pollution when multiple `:memory:` SQLite connections share the same DSN name; added `if_active` parameter handling
   - Also: `execute()` now handles metadata sth (no PreparedStatement) gracefully; `fetchrow_hashref` supports PRAGMA pre-fetched rows
   - Result: 60/68 active tests now pass all real tests (was 51/65 = 78%, now 88%)
+- [x] Phase 5 steps 5.17–5.19 (2026-04-01)
+  - 5.17: Fixed `$^S` to correctly report 1 inside `$SIG{__DIE__}` when `require` fails in `eval {}` — temporarily restores `evalDepth` in `catchEval()` before calling handler. Unblocks t/00describe_environment.t
+  - 5.18: Fixed `__LINE__` inside `@{[expr]}` string interpolation — added `baseLineNumber` to Parser for string sub-parsers, computed from outer source position. Fixes t/106dbic_carp.t tests 2-3
+  - 5.19: Fixed `execute_for_fetch` to match real DBI 1.647 behavior — tracks error count, stores `[$sth->err, $sth->errstr, $sth->state]` on failure, dies with error count if `RaiseError` is on. Also fixed `execute()` to set err/errstr/state on both sth and dbh. Fixes t/100populate.t test 2
+  - Result: 62/68 active tests now pass all real tests (91%, was 88%)
 
 ### Next Steps
-1. **Medium**: Fix caller/carp callsite detection (fixes t/106dbic_carp.t)
-2. **Medium**: Fix `execute_for_fetch` exception propagation on constraint violations (fixes t/100populate.t, t/101populate_rs.t)
-3. **Long-term**: Investigate VerifyError bytecode compiler bug (HIGH PRIORITY for broader CPAN compat)
-4. **Pragmatic**: Accept GC-only failures as known JVM limitation; consider adding skip-leak-tests env var
+1. **Must fix**: See "Must Fix" section — ternary-as-lvalue, JDBC error message format, SQL formatting, bind param attrs
+2. **Long-term**: Investigate VerifyError bytecode compiler bug (HIGH PRIORITY for broader CPAN compat)
+3. **Pragmatic**: Accept GC-only failures as known JVM limitation; consider adding skip-leak-tests env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
