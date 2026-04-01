@@ -74,6 +74,37 @@ sub finish {
     $sth->{Active} = 0;
 }
 
+# Batch execution: calls $fetch_tuple->() repeatedly to get parameter arrays,
+# executes the prepared statement for each, and tracks results in $tuple_status.
+sub execute_for_fetch {
+    my ($sth, $fetch_tuple, $tuple_status) = @_;
+    $tuple_status ||= [];
+    @$tuple_status = ();
+
+    my $total_rows = 0;
+    while (my $tuple = $fetch_tuple->()) {
+        my $rv;
+        eval {
+            $rv = $sth->execute(@$tuple);
+        };
+        if ($@) {
+            push @$tuple_status, [$@];
+            next;
+        }
+        push @$tuple_status, $rv;
+        $total_rows += $rv if defined $rv && $rv >= 0;
+    }
+    return $total_rows;
+}
+
+sub bind_param {
+    my ($sth, $param_num, $value, $attr) = @_;
+    # Store bind parameter for later use
+    $sth->{_bind_params} ||= {};
+    $sth->{_bind_params}{$param_num} = $value;
+    return 1;
+}
+
 sub clone {
     my ($dbh) = @_;
     my %new_dbh = %{$dbh};  # Shallow copy
