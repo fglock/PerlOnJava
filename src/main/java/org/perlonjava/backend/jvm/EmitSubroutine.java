@@ -464,6 +464,38 @@ public class EmitSubroutine {
             return;
         }
 
+        // Special handling for &func (no parens): share @_ with caller directly.
+        // In Perl 5, &func without parens shares the caller's @_ by alias,
+        // so shift/pop inside the callee modifies the caller's @_.
+        // We achieve this by passing the caller's RuntimeArray (slot 1) directly
+        // instead of creating a new array from @_ elements.
+        if (node.getBooleanAnnotation("shareCallerArgs")) {
+            mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "apply",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+
+            if (pooledCodeRef) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+
+            // Registry-based non-local control flow check (for next/last/redo LABEL from closures)
+            emitControlFlowCheck(emitterVisitor.ctx);
+
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
+                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                mv.visitInsn(Opcodes.POP);
+            }
+            return;
+        }
+
         int nameSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledName = nameSlot >= 0;
         if (!pooledName) {

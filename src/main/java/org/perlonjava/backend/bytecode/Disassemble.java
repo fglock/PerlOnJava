@@ -875,11 +875,13 @@ public class Disassemble {
                         break;
                     }
                     case Opcodes.CALL_SUB:
+                    case Opcodes.CALL_SUB_SHARE_ARGS:
                         rd = interpretedCode.bytecode[pc++];
                         int coderefReg = interpretedCode.bytecode[pc++];
                         int argsReg = interpretedCode.bytecode[pc++];
                         int ctx = interpretedCode.bytecode[pc++];
-                        sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
+                        sb.append(opcode == Opcodes.CALL_SUB_SHARE_ARGS ? "CALL_SUB_SHARE_ARGS r" : "CALL_SUB r")
+                                .append(rd).append(" = r").append(coderefReg)
                                 .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                         break;
                     case Opcodes.CALL_METHOD:
