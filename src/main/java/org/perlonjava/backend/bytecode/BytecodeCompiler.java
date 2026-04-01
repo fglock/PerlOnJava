@@ -3779,6 +3779,15 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
                 lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: ${'name'} — load global scalar by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
+                int rd = allocateRegister();
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emitReg(rd);
+                emit(nameIdx);
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -4083,6 +4092,16 @@ public class BytecodeCompiler implements Visitor {
                 emit(constIdx);
 
                 lastResultReg = rd;
+            } else if (node.operand instanceof StringNode strNode) {
+                // Symbolic ref: &{'name'} — look up global code reference by string name
+                String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(globalName);
+                int rd = allocateOutputRegister();
+                int constIdx = addToConstantPool(codeRef);
+                emit(Opcodes.LOAD_CONST);
+                emitReg(rd);
+                emit(constIdx);
+                lastResultReg = rd;
             } else if (node.operand instanceof BlockNode || node.operand instanceof OperatorNode) {
                 // Dynamic code reference: &{$name} or &$name
                 // Compile the expression to get the name/value, then dereference as code
@@ -4179,6 +4198,11 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void compileNode(Node node, int targetReg, int callContext) {
+        if (node == null) {
+            // Skip null nodes (e.g., from format declarations that produce empty statements)
+            lastResultReg = -1;
+            return;
+        }
         int savedTarget = targetOutputReg;
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
@@ -5400,7 +5424,10 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(FormatNode node) {
-        throw new UnsupportedOperationException("Formats not yet implemented");
+        // Format declarations are handled at the JVM compilation stage.
+        // When the interpreter backend processes the AST, formats are already
+        // registered, so this is a no-op.
+        lastResultReg = -1;
     }
 
     @Override
@@ -5524,13 +5551,33 @@ public class BytecodeCompiler implements Visitor {
     void handleLoopControlOperator(OperatorNode node, String op) {
         // Extract label if present
         String labelStr = null;
+        boolean isDynamicLabel = false;
+        int dynamicLabelReg = -1;
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
             if (arg instanceof IdentifierNode) {
                 labelStr = ((IdentifierNode) arg).name;
             } else {
-                throwCompilerException("Not implemented: " + node, node.getIndex());
+                // Dynamic label: last EXPR, next EXPR, redo EXPR
+                // Evaluate expression at runtime to get label string
+                isDynamicLabel = true;
+                compileNode(arg, -1, RuntimeContextType.SCALAR);
+                dynamicLabelReg = lastResultReg;
             }
+        }
+
+        // Dynamic label always uses non-local control flow
+        if (isDynamicLabel) {
+            short createDynOp = op.equals("last") ? Opcodes.CREATE_LAST_DYNAMIC
+                    : op.equals("next") ? Opcodes.CREATE_NEXT_DYNAMIC
+                    : Opcodes.CREATE_REDO_DYNAMIC;
+            int rd = allocateOutputRegister();
+            emit(createDynOp);
+            emitReg(rd);
+            emitReg(dynamicLabelReg);
+            emit(Opcodes.RETURN);
+            emitReg(rd);
+            return;
         }
 
         // Find the target loop

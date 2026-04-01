@@ -85,7 +85,7 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
                 Vec.set(args, new RuntimeScalar(newValue));
             }
         } catch (PerlCompilerException e) {
-            throw new RuntimeException("Invalid vec operation: " + e.getMessage());
+            throw new RuntimeException(e.getMessage());
         }
 
         return this;

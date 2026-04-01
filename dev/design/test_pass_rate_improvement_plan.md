@@ -248,14 +248,14 @@ These are small, targeted fixes that each unblock many tests:
 
 | # | Fix | Tests Gained | Effort |
 |---|-----|-------------|--------|
-| 1.1 | Register `experimental::smartmatch` warnings category | ~1,065 (taint.t) | Tiny |
-| 1.2 | Null-check in `fileno()` for unopened handles | 8 (fh.t) | Tiny |
-| 1.3 | Null-guard in file test operator for NUL-in-filename | 5 (filetest.t) | Tiny |
+| 1.1 | ~~Register `experimental::smartmatch` warnings~~  (already done; taint.t blocked by missing taint mode) | ~~1,065~~ 0 | N/A |
+| 1.2 | Null-check in `fileno()` for unopened handles | ~~8~~ **done** (6 gained) | Tiny |
+| 1.3 | Null-guard in `stat()`/`lstat()` for NUL-in-filename | ~~5~~ **done** (4 gained) | Tiny |
 | 1.4 | `@UNIVERSAL::ISA` traversal in MRO | 156 (ref.t) | Small |
 | 1.5 | Fix dynamic `goto $variable` + state var persistence | ~~101~~ **done** (72 gained) | Small |
 | 1.6 | Extend `vec()` to 64-bit widths | 28 (vec.t) | Small |
-| 1.7 | Fix `$1` capture after successful match (state corruption) | 38 (universal.t) | Small |
-| 1.8 | Fix unrecognized-switch error message (add trailing `.`) | ~56 (switches.t) | Tiny |
+| 1.7 | Fix `$1` persistence across failed regex matches | ~~38~~ **done** (32 gained) | Small |
+| 1.8 | Fix unrecognized-switch `System.exit` + exit code | ~~56~~ **done** (est. 33 gained) | Tiny |
 | 1.9 | Fix op/tie_fetch_count.t parse error | ~343 | Small |
 | 1.10 | Fix op/sort.t prototype argument handling | ~206 | Small |
 
@@ -357,9 +357,191 @@ Remaining op/state.t failures (15 + 14 blocked):
 
 ### Next Steps
 
-1. Continue Phase 1 quick wins (items 1.1-1.10)
-2. Investigate op/state.t goto+state interaction failures in full test context
+1. Fix op/method.t indirect method call parsing with `()` arguments (see investigation notes below)
+2. Fix op/sort.t `$$`-prototyped comparators (pass args via `@_`)
 3. Run full test suite to measure overall progress
+
+#### Quick win batch 2 (2025-03-31)
+
+Branch: `fix/test-pass-rate-quick-wins`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| `fileno()` null-check for unopened/closed handles | +6 (fh.t: 0/8→6/8) | 1.2 |
+| `stat()`/`lstat()` null-guard for NUL-in-filename | +4 (filetest.t: 227/436→231/436) | 1.3 |
+| Unrecognized switch `System.exit(1)` (was commented out) | est. +33 (switches.t) | 1.8 |
+| `$1` persistence across failed regex matches | +32 (universal.t: 90/142→122/142) | 1.7 |
+
+Files changed:
+- `IOOperator.java` — fileno() returns undef for closed/null ioHandle
+- `RuntimeIO.java` — fileno() null guard on ioHandle
+- `Stat.java` — null check after resolvePath() in stat()/lstat()
+- `ArgumentParser.java` — uncommented System.exit(1) for unrecognized switches
+- `RuntimeRegex.java` — don't clear $1 on failed match
+
+#### Quick win batch 3 (2025-03-31)
+
+Branch: `fix/test-pass-rate-quick-wins`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| `vec()` error message prefix removed + unsigned 32-bit read | +37 (vec.t: 37/78→74/78) | 1.6 |
+| `(*pla:...)` `(*plb:...)` `(*nla:...)` `(*nlb:...)` `(*atomic:...)` regex aliases | +88 (alpha_assertions.t: 2100→2188/2320) | 2.9 |
+
+Files changed:
+- `Vec.java` — reorder 64-bit before 32-bit, use `Integer.toUnsignedLong()` for unsigned 32-bit
+- `RuntimeVecLvalue.java` — remove "Invalid vec operation: " error prefix
+- `RegexPreprocessor.java` — map alpha assertion aliases to Java regex equivalents
+
+#### Investigation notes: op/method.t indirect method call (item 2.6)
+
+**Status:** Partially investigated. Package detection fixed but arg parsing still fails.
+
+The parse error at line 59 (`is(method Pack ("a","b","c"), ...)`) has **two layers**:
+
+1. **Package detection** (fixed): When `Pack` is defined via `sub Pack::method { ... }` (without
+   an explicit `package Pack;` statement), `packageExistsCache` has no entry for `Pack`. Added
+   `isPackageLoaded()` fallback in `SubroutineParser.java:208` — this correctly detects `Pack`
+   as a package. However, this fix alone is insufficient.
+
+2. **Argument parsing after indirect method + `(`** (NOT fixed): Even when `Pack` is correctly
+   identified as a package, `method Pack ("a","b","c")` fails because `consumeArgsWithPrototype(parser, "@")`
+   at `SubroutineParser.java:247` doesn't handle parenthesized argument lists in the indirect
+   method context. The `(` after `Pack` causes the parser to either:
+   - Treat `Pack(...)` as a function call (backtracking path), OR
+   - Enter `consumeArgsWithPrototype` which misparses the `(...)` args
+
+   **Confirmed with system Perl:** Both `method Pack "a"` and `method Pack ("a")` are valid
+   indirect method call syntax in Perl 5. PerlOnJava fails on both forms when arguments follow.
+
+   **Root cause:** The indirect method argument consumer needs special handling when the first
+   token is `(` — it should parse as method arguments `Pack->method("a","b","c")`, not as
+   `Pack("a","b","c")` being passed to `method`.
+
+   **Scope:** Fixing this would unblock ~163 tests in op/method.t. The fix requires changes to
+   the argument parsing in `SubroutineParser.java` lines 240-260, specifically how
+   `consumeArgsWithPrototype` interacts with `(` after the package name.
+
+#### Investigation notes: op/sort.t (item 1.10)
+
+**Status:** sort.t now runs (206 planned tests emit TAP). It's NOT a 0/0 crash — the plan doc
+was outdated. Actual status needs measurement. Key issues found:
+
+1. **`$$`-prototyped comparators** don't receive args via `@_`. In Perl 5, `sort sub_with_$$_proto @list`
+   passes elements as `$_[0]`/`$_[1]` instead of `$a`/`$b`. Fix needed in `ListOperators.sort()`
+   (lines 86-138): detect `$$` prototype and populate `comparatorArgs`.
+
+2. **`sort CORE::reverse LIST`** is misparsed — `CORE::reverse` is treated as a comparator name
+   instead of a function applied to the list. Fix needed in `ParseMapGrepSort.parseSort()`.
+
+#### Quick win batch 4 (2025-03-31)
+
+Branch: `fix/test-pass-rate-quick-wins`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| Handle TIED_SCALAR in typeglob assignment (tiedFetch before dispatch) | +63 (tie_fetch_count.t: 1/343→64/343) | 1.9 |
+| Allow argless `goto` (runtime error instead of compile error) | unblocks goto.t past line 525 (still blocked at 755) | 3.6 |
+| Support `$$` prototype in sort comparators (pass args via `@_`) | +2 (sort.t: 23→25/206) | 1.10 |
+| Implement `last/next/redo EXPR` dynamic labels | loopctl.t: 0/0→~45/69 (hangs at test 62) | New |
+
+Files changed:
+- `RuntimeGlob.java` — add `case TIED_SCALAR: return set(value.tiedFetch())` in typeglob switch
+- `RuntimeStashEntry.java` — same TIED_SCALAR case in stash entry switch
+- `OperatorParser.java` — change goto arg minimum from 1 to 0
+- `EmitControlFlow.java` — bare goto falls back to interpreter; dynamic `last/next/redo EXPR` falls back
+- `CompileOperator.java` — bare goto emits GOTO_DYNAMIC with empty string
+- `BytecodeInterpreter.java` — GOTO_DYNAMIC empty label throws "goto must have label"; new CREATE_*_DYNAMIC handlers
+- `BytecodeCompiler.java` — `last/next/redo EXPR` emits CREATE_*_DYNAMIC opcodes
+- `Opcodes.java` — new CREATE_LAST_DYNAMIC/CREATE_NEXT_DYNAMIC/CREATE_REDO_DYNAMIC opcodes
+- `Disassemble.java` — disassembly support for new opcodes
+- `ListOperators.java` — detect `$$` prototype on comparator, populate `@_` args
+
+#### Investigation notes: op/sort.t (updated)
+
+**Status:** 25/206 passing (was 23). Three remaining blockers:
+
+1. **`$$` prototype fix landed** — +2 tests from stacked comparator support.
+
+2. **`sort CORE::reverse LIST`** still misparsed — `CORE::reverse` treated as comparator name.
+   Fix needed in `ParseMapGrepSort.parseSort()`.
+
+3. **`sort $glob` / `sort $globref`** — crashes with "Not a CODE reference" at test 30.
+   `sort $sortglob 4,1,3,2` where `$sortglob = *Backwards` needs the sort implementation
+   to dereference globs to their CODE slot. Fix needed in `ListOperators.sort()` around
+   the comparator resolution logic.
+
+4. **Tests 4, 6** — sort of utf8/non-utf8 lists produce wrong order. Likely locale/collation issue.
+
+#### Investigation notes: op/override.t (item 2.7)
+
+**Status:** 0/0 (VerifyError crash). The test installs `CORE::GLOBAL::*` overrides via BEGIN blocks.
+The JVM bytecode emitter generates invalid bytecode for the complex control flow from 30+ rewritten
+builtin calls. Two-part fix needed:
+
+1. **Immediate:** Add `VerifyError` to `needsInterpreterFallback()` in `PerlLanguageProvider.java`
+   (line 479) so the interpreter backend handles it instead of crashing.
+
+2. **Root cause:** The bytecode generation for overridden builtins in `EmitSubroutine.handleApplyOperator()`
+   creates complex branch structures that fail JVM verification. Needs ASM debugging to find the
+   exact invalid pattern.
+
+#### Investigation notes: op/loopctl.t (item 1.13, was 0/0)
+
+**Status:** ~45/69 passing (was 0/0). The compile-time crash from `last EXPR` / `next EXPR` / `redo EXPR`
+is fixed with new `CREATE_*_DYNAMIC` opcodes. Remaining failures:
+
+- Tests 1, 5, 20, 24: `redo` in while/until loops returns 0 instead of 1 — redo re-evaluates the
+  condition when it shouldn't (redo should jump to loop body, not loop condition).
+- Tests 10, 11, 29, 30: `next` in for(@array) returns 0 — similar control flow issue.
+- Tests 18, 37: `next` on bare block returns 0.
+- Tests 46-48: `redo` lexical lifetime — redo creates a new lexical scope when it shouldn't.
+- Test 49: reverse with empty array slots — unrelated to loop control.
+- Tests 62-69: hang (likely `last EXPR` / `next EXPR` test at lines 1088-1123 causes infinite loop).
+
+#### Investigation notes: comp/parser.t (item new)
+
+**Status:** 96/195 (blocked at ~96). Error: "Unsupported $ operand: StringNode" in the interpreter
+backend's `BytecodeCompiler.java` (line 3783). The `$` sigil handler doesn't support `StringNode`
+operands, which arise from `${}` (empty braces) and `${<<END}` (heredoc in braces) in `Variable.java`.
+
+**Fix:** Add `StringNode` case to the `$` handler in `BytecodeCompiler.java` line 3782, mirroring the
+existing `@`/`%`/`*` handlers which all handle `StringNode`. Same fix needed for `&` handler at line 4086.
+
+#### Investigation notes: op/heredoc.t (item 2.3)
+
+**Status:** 66/138 (~60 blocked). Root cause: heredoc state corruption during `print` argument
+look-ahead in `ListParser.java` (lines 141-155). When `wantFileHandle` look-ahead triggers
+`skipWhitespace` → `parseHeredocAfterNewline`, the heredoc is consumed. If backtracking occurs
+(no filehandle found), `parser.tokenIndex` is restored but `heredocNodes` is not.
+
+**Fix:** Add `saveHeredocState()` / `restoreHeredocStateIfNeeded()` around the `wantFileHandle`
+section, matching the pattern already used in `looksLikeEmptyList()` (lines 305-384).
+
+#### Investigation notes: op/override.t (updated)
+
+**Status:** 0/0 (compile-time crash). The initial diagnosis of VerifyError was incorrect.
+The actual blocker is `Unsupported operator: getlogin` at line 20. The test uses `getlogin`
+as a CORE::GLOBAL override target, but `getlogin` is not implemented as an operator.
+
+**Fix:** Implement `getlogin` as a built-in operator. In Perl, `getlogin()` returns the
+current login name from `/dev/utmp` (or equivalent). On Java, this can be implemented as
+`System.getProperty("user.name")`. Needs:
+1. Add `getlogin` to the operator table in the parser
+2. Implement the runtime operation (return `System.getProperty("user.name")`)
+3. This unblocks override.t which tests CORE::GLOBAL overrides for ~36 built-in functions
+
+#### Investigation notes: op/require_errors.t (item 2.4)
+
+**Status:** 0/0 (compile-time crash). Error: `syntax error at op/require_errors.t line 258, near "qr/\\"`.
+
+The offending line is: `eval { no warnings 'syscalls'; require eval "qr/\0/" };`
+The `\0` inside the double-quoted string produces a null byte. The parser then sees
+`qr/` + NUL + `/` and gets confused, interpreting it as `qr/\\` (unterminated regex).
+
+**Fix:** Fix the string parser to handle embedded null bytes in double-quoted strings
+that contain regex-like content. The null byte from `\0` confuses the tokenizer/parser
+when it appears inside string content adjacent to regex delimiters.
 
 ### Baseline
 

@@ -1923,6 +1923,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
+        // Handle GLOB type - extract CODE slot from the glob
+        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            if (glob.globName != null) {
+                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
+                return apply(resolved, a, callContext);
+            }
+        }
+
+        // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
+        if ((runtimeScalar.type == RuntimeScalarType.REFERENCE || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && runtimeScalar.value instanceof RuntimeGlob glob) {
+            if (glob.globName != null) {
+                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
+                return apply(resolved, a, callContext);
+            }
+        }
+
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
             String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
             RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
@@ -2123,6 +2141,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
+        // Handle GLOB type - extract CODE slot from the glob
+        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            if (glob.globName != null) {
+                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
+                return apply(resolved, subroutineName, args, callContext);
+            }
+        }
+
+        // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
+        if ((runtimeScalar.type == RuntimeScalarType.REFERENCE || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && runtimeScalar.value instanceof RuntimeGlob glob) {
+            if (glob.globName != null) {
+                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
+                return apply(resolved, subroutineName, args, callContext);
+            }
+        }
+
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
             String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
             RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
@@ -2224,6 +2260,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
             }
             throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+        }
+
+        // Handle GLOB type - extract CODE slot from the glob
+        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            if (glob.globName != null) {
+                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
+                return apply(resolved, subroutineName, list, callContext);
+            }
+        }
+
+        // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
+        if ((runtimeScalar.type == RuntimeScalarType.REFERENCE || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && runtimeScalar.value instanceof RuntimeGlob glob) {
+            if (glob.globName != null) {
+                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
+                return apply(resolved, subroutineName, list, callContext);
+            }
         }
 
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {

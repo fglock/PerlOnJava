@@ -172,6 +172,11 @@ public class Stat {
         String filename = arg.toString();
         try {
             Path path = resolvePath(filename);
+            if (path == null) {
+                getGlobalVariable("main::!").set(2);
+                updateLastStat(arg, false, 2, false);
+                return res;
+            }
 
             NativeStatFields nf = nativeStat(path.toString(), true);
 
@@ -232,6 +237,11 @@ public class Stat {
         String filename = arg.toString();
         try {
             Path path = resolvePath(filename);
+            if (path == null) {
+                getGlobalVariable("main::!").set(2);
+                updateLastStat(arg, false, 2, true);
+                return res;
+            }
 
             NativeStatFields nf = nativeStat(path.toString(), false);
 

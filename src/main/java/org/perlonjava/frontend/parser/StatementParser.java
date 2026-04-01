@@ -649,12 +649,39 @@ public class StatementParser {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement return: " + ret);
 
                 if (versionNode != null) {
-                    // check module version
+                    // check module version via method dispatch (Module->VERSION(version))
+                    // This must go through normal method resolution so that custom VERSION
+                    // methods (e.g., sub tests::VERSION { ... }) are called.
                     if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("use version: check module version");
-                    RuntimeArray args = new RuntimeArray();
-                    RuntimeArray.push(args, new RuntimeScalar(packageName));
-                    RuntimeArray.push(args, versionScalar);
-                    Universal.VERSION(args, RuntimeContextType.SCALAR);
+
+                    // Look up the VERSION method via can()
+                    RuntimeArray canArgs = new RuntimeArray();
+                    RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+                    RuntimeArray.push(canArgs, new RuntimeScalar("VERSION"));
+                    RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+
+                    if (codeList.size() == 1) {
+                        RuntimeScalar code = codeList.getFirst();
+                        if (code.getBoolean()) {
+                            // Call the VERSION method: Module->VERSION(version)
+                            RuntimeArray versionArgs = new RuntimeArray();
+                            RuntimeArray.push(versionArgs, new RuntimeScalar(packageName));
+                            RuntimeArray.push(versionArgs, versionScalar);
+                            RuntimeCode.apply(code, versionArgs, RuntimeContextType.SCALAR);
+                        } else {
+                            // No VERSION method found, fall back to Universal.VERSION
+                            RuntimeArray versionArgs = new RuntimeArray();
+                            RuntimeArray.push(versionArgs, new RuntimeScalar(packageName));
+                            RuntimeArray.push(versionArgs, versionScalar);
+                            Universal.VERSION(versionArgs, RuntimeContextType.SCALAR);
+                        }
+                    } else {
+                        // can() returned unexpected result, fall back to Universal.VERSION
+                        RuntimeArray versionArgs = new RuntimeArray();
+                        RuntimeArray.push(versionArgs, new RuntimeScalar(packageName));
+                        RuntimeArray.push(versionArgs, versionScalar);
+                        Universal.VERSION(versionArgs, RuntimeContextType.SCALAR);
+                    }
                 }
 
                 // call Module->import( LIST )

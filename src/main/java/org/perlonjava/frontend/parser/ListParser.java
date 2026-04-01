@@ -139,6 +139,11 @@ public class ListParser {
         }
 
         if (wantFileHandle) {
+            // Save heredoc state before look-ahead, since skipWhitespace in FileHandle.parseFileHandle
+            // may trigger parseHeredocAfterNewline which consumes heredoc content. If we backtrack
+            // (no filehandle found), we need to restore the heredoc state.
+            List<OperatorNode> savedHeredocNodes = ParseHeredoc.saveHeredocState(parser);
+
             if (TokenUtils.peek(parser).text.equals("(")) {
                 TokenUtils.consume(parser);
                 hasParen = true;
@@ -149,6 +154,10 @@ public class ListParser {
                 parser.debugHeredocState("FILEHANDLE_BEFORE_BACKTRACK");
                 expr.handle = null;
                 parser.tokenIndex = currentIndex;
+
+                // Restore heredoc state if needed
+                ParseHeredoc.restoreHeredocStateIfNeeded(parser, savedHeredocNodes);
+
                 parser.debugHeredocState("FILEHANDLE_AFTER_BACKTRACK");
                 hasParen = false;
             }

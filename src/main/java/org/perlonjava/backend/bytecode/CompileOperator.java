@@ -745,6 +745,33 @@ public class CompileOperator {
             case "getpwent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPWENT);
             case "setpwent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETPWENT);
             case "endpwent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ENDPWENT);
+            case "getlogin" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETLOGIN);
+            case "getpwnam" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPWNAM);
+            case "getpwuid" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPWUID);
+            case "getgrnam" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETGRNAM);
+            case "getgrgid" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETGRGID);
+            case "getgrent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETGRENT);
+            case "setgrent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETGRENT);
+            case "endgrent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ENDGRENT);
+            case "gethostbyaddr" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETHOSTBYADDR);
+            case "getservbyname" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETSERVBYNAME);
+            case "getservbyport" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETSERVBYPORT);
+            case "getprotobyname" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPROTOBYNAME);
+            case "getprotobynumber" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPROTOBYNUMBER);
+            case "endhostent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ENDHOSTENT);
+            case "endnetent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ENDNETENT);
+            case "endprotoent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ENDPROTOENT);
+            case "endservent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.ENDSERVENT);
+            case "gethostent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETHOSTENT);
+            case "getnetbyaddr" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETNETBYADDR);
+            case "getnetbyname" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETNETBYNAME);
+            case "getnetent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETNETENT);
+            case "getprotoent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETPROTOENT);
+            case "getservent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.GETSERVENT);
+            case "sethostent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETHOSTENT);
+            case "setnetent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETNETENT);
+            case "setprotoent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETPROTOENT);
+            case "setservent" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SETSERVENT);
             case "opendir" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.OPENDIR);
             case "readdir" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.READDIR);
             case "seekdir" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SEEKDIR);
@@ -1436,10 +1463,32 @@ public class CompileOperator {
                 return;
             }
         }
-        if (labelStr == null) bc.throwCompilerException("goto must be given label");
+        if (labelStr == null) {
+            // Bare `goto` without args: emit GOTO_DYNAMIC with empty string → runtime error
+            int rd = bc.allocateOutputRegister();
+            int emptyIdx = bc.addToStringPool("");
+            bc.emit(Opcodes.LOAD_STRING);
+            bc.emitReg(rd);
+            bc.emit(emptyIdx);
+            bc.emit(Opcodes.GOTO_DYNAMIC);
+            bc.emit(rd);
+            bc.lastResultReg = -1;
+            return;
+        }
         Integer targetPc = bc.gotoLabelPcs.get(labelStr);
         if (targetPc != null) { bc.emit(Opcodes.GOTO); bc.emitInt(targetPc); }
-        else { bc.emit(Opcodes.GOTO); int patchPc = bc.bytecode.size(); bc.emitInt(0); bc.pendingGotos.add(new Object[]{patchPc, labelStr}); }
+        else {
+            // Label not yet seen - use GOTO_DYNAMIC which checks code.gotoLabelPcs at runtime
+            // (populated with all labels after compilation) and creates a GOTO marker for non-local gotos.
+            // This handles both forward references within the same scope and non-local gotos to outer scopes.
+            int rd = bc.allocateOutputRegister();
+            int labelIdx = bc.addToStringPool(labelStr);
+            bc.emit(Opcodes.LOAD_STRING);
+            bc.emitReg(rd);
+            bc.emit(labelIdx);
+            bc.emit(Opcodes.GOTO_DYNAMIC);
+            bc.emit(rd);
+        }
         bc.lastResultReg = -1;
     }
 }

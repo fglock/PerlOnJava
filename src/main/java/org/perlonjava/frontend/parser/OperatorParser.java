@@ -487,6 +487,8 @@ public class OperatorParser {
         if (argCount == 1) {
             // select FILEHANDLE
             if (listNode1.elements.getFirst() instanceof IdentifierNode identifierNode) {
+                // Autovivify the filehandle IO slot so parseBarewordHandle succeeds
+                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, identifierNode.name));
                 Node handle = FileHandle.parseBarewordHandle(parser, identifierNode.name);
                 if (handle != null) {
                     // handle is Bareword
@@ -859,8 +861,8 @@ public class OperatorParser {
 
     static OperatorNode parseGoto(Parser parser, int currentIndex) {
         Node operand;
-        // Handle 'goto' keyword as a unary operator with an operand
-        operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+        // Handle 'goto' keyword - operand is optional (bare `goto` is a runtime error)
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         // Always return a goto operator - the emitter handles &sub vs LABEL distinction
         return new OperatorNode("goto", operand, currentIndex);
     }

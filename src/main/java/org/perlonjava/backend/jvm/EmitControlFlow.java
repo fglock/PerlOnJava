@@ -69,7 +69,10 @@ public class EmitControlFlow {
                 // Extract the label name.
                 labelStr = ((IdentifierNode) arg).name;
             } else {
-                throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+                // Dynamic label: last EXPR, next EXPR, redo EXPR
+                // Fall back to interpreter which supports dynamic label evaluation
+                throw new PerlCompilerException(node.tokenIndex,
+                        "Dynamic loop control EXPR requires interpreter fallback", ctx.errorUtil);
             }
         }
 
@@ -495,7 +498,10 @@ public class EmitControlFlow {
 
         // Ensure label is provided for static goto
         if (labelName == null) {
-            throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
+            // Bare `goto` without arguments - emit runtime die like Perl 5
+            // Fall through to interpreter which handles this properly via GOTO_DYNAMIC
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Dynamic goto EXPR requires interpreter fallback", ctx.errorUtil);
         }
 
         // For static label, check if it's local
