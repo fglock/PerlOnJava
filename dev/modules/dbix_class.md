@@ -303,6 +303,20 @@ perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" };
 |------|---------|------------|------------|
 | `t/85utf8.t` | test 7 | Warning about incorrect `use utf8` ordering not issued | May need to implement `utf8` pragma ordering detection |
 
+### Spurious "Subroutine redefined" warnings
+
+Multiple DBIx::Class tests emit these warnings at startup:
+```
+Subroutine set_todo redefined at jar:PERL5LIB/Test2/Event/Ok.pm line 29.
+Subroutine set_subevents redefined at jar:PERL5LIB/Test2/Event/Subtest.pm line 32.
+```
+
+**Root cause**: Test2::Event::Ok and Test2::Event::Subtest define subroutines that PerlOnJava considers already defined — likely because the modules are loaded twice (once from the bundled jar, once from an installed copy) or because accessor generation re-defines subs without checking first.
+
+**Impact**: Low — cosmetic noise only, does not cause test failures. But could cause failures in tests that check for unexpected warnings (e.g., `Test::Warn` / `warnings_like`).
+
+**Fix needed**: Investigate whether the modules are double-loaded (check `%INC` for duplicate entries) or whether the subroutine redefinition warning threshold differs from Perl 5.
+
 ### GC-only failures (not real failures)
 
 | Test | GC failures | Notes |
@@ -314,7 +328,21 @@ perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" };
 
 ---
 
-## Known Bugs
+## Must Fix
+
+### Ternary-as-lvalue with assignment branches
+
+Expressions like `($x) ? @$a = () : $b = []` trigger "Modification of a read-only value attempted" at runtime. Perl 5 parses this as `($x) ? (@$a = ()) : ($b = [])`, where each branch is an independent assignment expression. PerlOnJava's compile-time `LValueVisitor` (Phase 4.7) correctly classifies assignment branches as `ASSIGN_SCALAR`, but the **JVM backend code generator** emits incorrect code for the runtime ternary-as-lvalue path when the condition is non-constant.
+
+**Root cause**: When the ternary condition is non-constant (e.g., `$x`, `wantarray`), the emitter generates bytecode that evaluates both branches and selects the result — but the selected value is not returned as a modifiable lvalue. The assignment to the "winning" branch's target fails because the emitter wraps the result in a read-only temporary. Constant-folded cases (`1 ? @rv = eval $src : $rv[0]`) work correctly because only one branch is emitted.
+
+**What's needed to fix**:
+- In the JVM backend emitter (likely `EmitOperator.java` or `EmitAssignment.java`), fix the ternary-as-lvalue code path to emit proper lvalue references for both branches
+- The emitter should generate a conditional jump that executes the selected branch's assignment in place, rather than evaluating both branches and selecting a result
+- Reference: Perl 5's `pp_cond_expr` in `pp_ctl.c` — the ternary simply jumps to the selected branch, which then evaluates (including any assignments) and returns its result
+- Alternatively, detect ternary expressions where both branches are complete assignments (not lvalue targets) and compile them as `if`/`else` instead of ternary-as-lvalue
+
+**Impact**: Affects real DBI's `execute_for_fetch` implementation (worked around with if/else in our DBI.pm), Class::Accessor::Grouped patterns, and potentially other CPAN code using this idiom.
 
 ### File::stat VerifyError
 - `use File::stat` triggers `java.lang.VerifyError: Bad type on operand stack`
@@ -322,6 +350,36 @@ perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" };
 - Minimal repro: `use Class::Struct; use overload ("-X" => sub { "" }, fallback => 1); struct( 'Foo' => [dev => "\$", ino => "\$"] );`
 - Impact: Path::Class cannot load; DBIx::Class works without it
 - Same class of bug as the t/00describe_environment.t VerifyError (see HIGH PRIORITY above)
+
+### JDBC error message format mismatch
+
+**Symptom**: t/100populate.t test 52 (`bad slice fails PK insert`) — the exception IS thrown correctly by `execute_for_fetch`, but the regex doesn't match because the JDBC SQLite driver wraps error messages differently from native SQLite.
+
+**Example**:
+- Expected: `execute_for_fetch() aborted with 'datatype mismatch`
+- Got: `execute_for_fetch() aborted with '[SQLITE_MISMATCH] Data type mismatch (datatype mismatch)'`
+
+**What's needed to fix**:
+- Strip or normalize JDBC error message prefixes (e.g., `[SQLITE_MISMATCH]`) in `setError()` in `DBI.java` so that `$sth->errstr` returns the same text as native SQLite
+- Alternatively, extract the parenthesized message at the end: `(datatype mismatch)` → `datatype mismatch`
+
+**Impact**: Affects t/100populate.t tests 52-53, and potentially any code that pattern-matches on SQLite error strings.
+
+### SQL expression formatting differences (t/100populate.t tests 37-42)
+
+**Symptom**: Tests compare generated SQL against expected strings, but PerlOnJava's SQL::Abstract produces slightly different whitespace or column ordering.
+
+**Example**:
+- Got: `INSERT INTO link ( id, title, url) VALUES ( ?, ?, ? )`
+- Expected format likely differs in spacing or column order
+
+**What's needed to fix**: Investigate whether this is a SQL::Abstract::Classic difference or a column ordering issue in populate's internal logic. May need to normalize SQL whitespace in comparisons or fix column ordering.
+
+### bind parameter attribute handling (t/100populate.t tests 58-59)
+
+**Symptom**: Test 58 (`literal+bind with differing attrs throws`) expects an exception that isn't thrown. Test 59 (`literal+bind with semantically identical attrs works after normalization`) also fails.
+
+**What's needed to fix**: Investigate how `bind_param` attributes (data types) are compared during populate's bind parameter deduplication. May need to implement attribute-aware bind parameter comparison in DBI.pm or Storage::DBI.
 
 ## Summary
 

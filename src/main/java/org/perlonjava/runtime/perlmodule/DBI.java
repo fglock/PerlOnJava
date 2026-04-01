@@ -75,12 +75,19 @@ public class DBI extends PerlModuleBase {
      * @return RuntimeList result from the operation or error result
      */
     private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, String methodName) {
+        return executeWithErrorHandling(operation, handle, null, methodName);
+    }
+
+    private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, RuntimeHash secondHandle, String methodName) {
         try {
             return operation.execute();
         } catch (SQLException e) {
             setError(handle, e);
+            if (secondHandle != null) setError(secondHandle, e);
         } catch (Exception e) {
-            setError(handle, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+            SQLException sqlEx = new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE);
+            setError(handle, sqlEx);
+            if (secondHandle != null) setError(secondHandle, sqlEx);
         }
         RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + "() failed: " + getGlobalVariable("DBI::errstr"));
         if (handle.get("RaiseError").getBoolean()) {
@@ -274,6 +281,9 @@ public class DBI extends PerlModuleBase {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
 
+        // Clear previous error state on sth before executing
+        setError(sth, null);
+
         return executeWithErrorHandling(() -> {
             if (args.isEmpty()) {
                 throw new IllegalStateException("Bad number of arguments for DBI->execute");
@@ -396,7 +406,7 @@ public class DBI extends PerlModuleBase {
                 }
                 return new RuntimeScalar(updateCount).getList();
             }
-        }, dbh, "execute");
+        }, dbh, sth, "execute");
     }
 
     /**
