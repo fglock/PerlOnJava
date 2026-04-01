@@ -41,27 +41,11 @@ estimated difficulty level.
 
 ## 1. Taint Tracking
 
-**Test:** `op/taint.t` (4/1065)
-**Blocked tests:** ~1061
+**Status:** SKIP WORKAROUND IMPLEMENTED (2026-04-01)
 
-### What is needed
+`Config.pm` now has `taint_support => ''` and `ccflags => '-DSILENT_NO_TAINT_SUPPORT'`, so `op/taint.t` skips gracefully. Full taint tracking remains unimplemented (`RuntimeScalar.isTainted()` always returns `false`).
 
-Full taint tracking system:
-- A taint flag on every `RuntimeScalar` value
-- Propagation of taint through string/numeric operations
-- Enforcement of taint checks on dangerous ops (`kill`, `exec`, `system`, backticks, `open` with pipes)
-- "Insecure dependency in X while running with -T switch" error mechanism
-- The `-T` command-line switch activating taint mode
-
-### Current state
-
-`RuntimeScalar.isTainted()` always returns `false`. The `$^X` variable is never marked tainted. The `Config.pm` does not set `taint_support` key, so the test does not skip.
-
-### Quick workaround
-
-Add `taint_support => ''` to `Config.pm` so the test skips entirely.
-
-### Difficulty: Very Hard (full implementation), Trivial (skip workaround)
+### Difficulty: Very Hard (full implementation) - skip workaround already applied
 
 ---
 
@@ -122,98 +106,33 @@ Making `(?{UNIMPLEMENTED_CODE_BLOCK})` non-fatal (replace with `(?:)` no-op) wou
 
 ## 4. delete local Construct
 
-**Test:** `op/local.t` (0/319 - crashes before any output)
-**Blocked tests:** ~319
+**Status:** FULLY IMPLEMENTED (2026-04-01)
 
-### What is needed
+`delete local` is fully implemented across all layers: parser (`OperatorParser.parseDelete`), JVM backend (`EmitOperatorDeleteExists`), bytecode compiler (`CompileExistsDelete.visitDeleteLocal`), opcodes (`HASH_DELETE_LOCAL`, `ARRAY_DELETE_LOCAL`, slices), runtime (`RuntimeHash.deleteLocal`, `RuntimeArray.deleteLocal`), and disassembler. Supports all forms: `delete local $hash{key}`, `delete local @hash{@keys}`, `delete local $array[idx]`, `delete local @array[@idx]`, and arrow-deref variants.
 
-The `delete local` syntax:
-```perl
-delete local $hash{key};   # Save value, delete, restore on scope exit
-delete local $array[idx];
-```
-
-Currently:
-- The parser (`parseDelete` in `OperatorParser.java` line 549) does NOT check for a `local` keyword after `delete`
-- No `DeleteLocalNode` or compilation path exists
-- The test crashes at line 164 with "Not implemented: delete with dynamic patterns"
-
-### Implementation plan
-
-1. **Parser**: `parseDelete` must check for `local` keyword and produce a new AST node
-2. **Compiler**: Emit save-state, delete, and scope-exit restore
-3. **Runtime**: Use existing `dynamicSaveState`/`dynamicRestoreState` mechanism on hash/array elements
-
-### Note
-
-Many tests before line 161 in local.t don't use `delete local`. If the parser didn't crash, ~100+ tests might pass.
-
-### Difficulty: Moderate
+### Difficulty: Done
 
 ---
 
 ## 5. \(LIST) Reference Creation
 
-**Test:** `op/ref.t` (97/265)
-**Blocked tests:** ~155
+**Status:** JVM BACKEND IMPLEMENTED (2026-04-01)
 
-### What is needed
+JVM backend works correctly: `EmitOperator.handleCreateReference` calls `flattenElements()` then `createListReference()`. `RuntimeList.flattenElements()` handles `PerlRange`, `RuntimeArray`, and `RuntimeHash`.
 
-`\(LIST)` should return a list of references to each element. E.g., `\(@array)` returns refs to each element; `\($a, $b)` returns `(\$a, \$b)`.
+**Remaining:** Bytecode interpreter (`InlineOpcodeHandler.executeCreateRef`) does NOT call `flattenElements()`, so `\(@array)`, `\(1..3)` fail in `eval STRING` and `--interpreter` mode.
 
-### Root cause
-
-`RuntimeList.flattenElements()` (line 424) does not handle `PerlRange` objects. When `\(1..3)` is evaluated, the PerlRange passes through unflattened, then `createReference()` throws "Can't create reference to list".
-
-### Fix
-
-Add PerlRange handling to `flattenElements()` (~5 lines):
-```java
-} else if (element instanceof PerlRange range) {
-    for (RuntimeScalar scalar : range) {
-        result.elements.add(scalar);
-    }
-}
-```
-
-Also need to update `InlineOpcodeHandler.executeCreateRef()` for the bytecode interpreter path.
-
-### Key files
-
-- `src/main/java/org/perlonjava/runtime/RuntimeList.java` (flattenElements, createListReference)
-- `src/main/java/org/perlonjava/runtime/PerlRange.java`
-- `src/main/java/org/perlonjava/codegen/EmitOperator.java` (handleCreateReference)
-
-### Difficulty: Easy (this is actually a quick fix, ~5 lines)
+### Difficulty: Easy (1-line fix in interpreter)
 
 ---
 
 ## 6. Tied Scalar Code Deref
 
-**Test:** `op/tie_fetch_count.t` (64/343)
-**Blocked tests:** ~279
+**Status:** FULLY IMPLEMENTED (2026-04-01)
 
-### What is needed
+All three `RuntimeCode.apply()` overloads handle `TIED_SCALAR` by calling `tiedFetch()` before proceeding. `RuntimeScalar.codeDerefNonStrict()`, `globDeref()`, and `globDerefNonStrict()` also handle tied scalars.
 
-`RuntimeCode.apply()` does not handle `TIED_SCALAR` type. When `$tied_var` holds a CODE ref and you call `&$tied_var`, the code falls through to "Not a CODE reference" error instead of calling `tiedFetch()` first.
-
-### Fix
-
-Add `TIED_SCALAR` handling in all three `RuntimeCode.apply()` overloads:
-```java
-if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
-    return apply(runtimeScalar.tiedFetch(), subroutineName, args, callContext);
-}
-```
-
-Also fix `RuntimeScalar.codeDerefNonStrict()` and `globDeref()` for the same pattern.
-
-### Key files
-
-- `src/main/java/org/perlonjava/runtime/RuntimeCode.java` (three apply overloads)
-- `src/main/java/org/perlonjava/runtime/RuntimeScalar.java` (codeDerefNonStrict, globDeref)
-
-### Difficulty: Easy (this is actually a quick fix, ~6 lines across 3 methods)
+### Difficulty: Done
 
 ---
 
@@ -372,42 +291,27 @@ The `-C` flags are **parsed** in `ArgumentParser.java` (lines 469-563) and **sto
 **Test:** `op/stat.t` (64/111)
 **Blocked tests:** ~47
 
-### What is needed
+**Status:** Item 1 IMPLEMENTED (2026-04-01) - `lstat _` validation now checks `lastStatWasLstat` in `Stat.java` (lines 111, 129, 249). Items 2-5 remain open.
 
-1. **`lstat _` validation** - `Stat.lstatLastHandle()` does NOT validate `lastStatWasLstat`. Should throw "The stat preceding lstat() wasn't an lstat" when the previous call was `stat` not `lstat`. `FileTestOperator.java` already has this check for `-l _` but `Stat.java` doesn't.
+### Remaining items
+
+1. ~~**`lstat _` validation**~~ - DONE
 2. **`lstat *FOO{IO}`** - lstat on IO reference
 3. **`stat *DIR{IO}`** - stat on directory handles
 4. **`-T _` breaking the stat buffer**
 5. **stat on filenames with `\0`**
 
-### Key files
-
-- `src/main/java/org/perlonjava/operators/Stat.java` (lstatLastHandle)
-- `src/main/java/org/perlonjava/operators/FileTestOperator.java`
-
-### Difficulty: Easy-Medium (lstat validation is a 1-line fix; other items are moderate)
+### Difficulty: Easy-Medium (remaining items)
 
 ---
 
 ## 15. printf Array Flattening
 
-**Test:** `io/print.t` (8/24)
-**Blocked tests:** ~16
+**Status:** IMPLEMENTED (2026-04-01)
 
-### What is needed
+Both `printf` methods in `IOOperator.java` now flatten `RuntimeArray` elements. `printf +()` (empty list) also handled. Remaining io/print.t failures may relate to `$\` null bytes or `%n` format specifier.
 
-When `printf @array` is called, the RuntimeArray argument is not flattened before extracting the format string. `IOOperator.printf()` calls `list.add(args[i])` which adds the array as-is; then `removeFirst()` expects a RuntimeScalar but gets a RuntimeArray.
-
-Additional issues:
-- Null bytes in `$\` (output record separator)
-- `%n` format specifier (writes char count via substr)
-- `printf +()` (empty list)
-
-### Key files
-
-- `src/main/java/org/perlonjava/operators/IOOperator.java` (printf method, line 2386)
-
-### Difficulty: Medium
+### Difficulty: Done (core issue); remaining edge cases Medium
 
 ---
 
@@ -606,9 +510,20 @@ The Perl `class` feature (added in Perl 5.38) is partially implemented. Missing:
 
 ---
 
-## 25. Test Failures Investigated 2026-04-01 (Not Quick Fixes)
+## 25. Test Failures Investigated 2026-04-01 (Status Update)
 
-These were investigated during the `feature/test-failure-fixes` branch work session.
+Items marked FIXED were implemented on the `feature/test-failure-fixes` branch.
+
+### FIXED items
+
+| Test | Before | After | Fix |
+|------|--------|-------|-----|
+| op/oct.t | 79/81 | **81/81** | Oct/hex overflow detection with double fallback |
+| op/my.t | 52/59 | **59/59** | `my() in false conditional` detection in 3 places |
+| op/push.t | 29/32 | **32/32** | Error messages + readonly array handling |
+| op/unshift.t | 16/19 | **19/19** | Error messages + readonly array handling |
+| op/lex_assign.t | 349/353 | **350/353** | Select 4-arg LIST context fix |
+| op/while.t | 22/26 | **23/26** | While loop returns false condition value |
 
 ### op/time.t (71/72) - MOSTLY FIXED
 - **Remaining failure:** Test 7 `changes to $ENV{TZ} respected` - Java caches timezone on startup via `ZoneId.systemDefault()`. Changing `$ENV{TZ}` at runtime has no effect.
@@ -701,55 +616,58 @@ These were investigated during the `feature/test-failure-fixes` branch work sess
 
 ---
 
-## Priority Ranking by Impact
+## Priority Ranking by Impact (Updated 2026-04-01)
 
-### Tier 1: Highest impact (1000+ tests unlocked)
+### Already Implemented
+| Feature | Status |
+|---------|--------|
+| Taint skip workaround | Done - Config.pm has `taint_support => ''` |
+| Tied scalar code deref | Done - all apply() overloads handle TIED_SCALAR |
+| delete local | Done - full implementation across all layers |
+| \(LIST) reference creation (JVM) | Done - JVM backend works; interpreter fix pending |
+| printf array flattening | Done |
+| stat/lstat _ validation (item 1) | Done |
+| op/my.t false conditional | Done - 59/59 |
+| op/push.t / op/unshift.t | Done - 32/32, 19/19 |
+| op/oct.t overflow | Done - 81/81 |
+
+### Tier 1: Highest impact remaining
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
-| Taint skip workaround | 1061 | Trivial |
 | Regex code blocks (non-fatal workaround) | 500+ | Medium |
 | Format/write system | 658 | Hard |
 
 ### Tier 2: High impact (100-500 tests)
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
-| delete local | 319 | Moderate |
-| Tied scalar code deref | 279 | Easy |
-| \(LIST) reference creation | 155 | Easy |
-| comp/parser.t (?{} non-fatal) | 132 | Medium |
-| In-place editing ($^I) | 120+ | Hard |
 | 64-bit integer ops | 274 | Medium-Hard |
+| Attribute system | 160+ | Medium-Hard |
+| comp/parser.t (non-fatal (?{}) + #line) | 132 | Medium |
+| In-place editing ($^I) | 120+ | Hard |
 
 ### Tier 3: Medium impact (30-100 tests)
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
 | caller() extended fields | 66 | Medium-Hard |
-| Attribute system | 160+ | Medium-Hard |
 | MRO @ISA invalidation | 50+ | Hard |
-| stat/lstat validation | 47 | Easy-Medium |
+| stat/lstat remaining items (2-5) | 47 | Easy-Medium |
 | Duplicate named captures | 36 | Hard |
 | Class feature completion | 30 | Medium |
 
-### Tier 4: Lower impact but easy
+### Tier 4: Lower impact
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
-| -C unicode switch | 13 | Medium |
-| printf array flattening | 16 | Medium |
 | Closures (edge cases) | 20 | Medium-Hard |
-| %^H hints (advanced) | 8 | Medium-Hard |
 | Special blocks lifecycle | 17 | Medium-Hard |
+| -C unicode switch | 13 | Medium |
+| %^H hints (advanced) | 8 | Medium-Hard |
 
 ---
 
-## Recommended Implementation Order (effort vs. impact)
+## Recommended Next Steps
 
-1. **Taint skip** (Trivial) - 1061 tests
-2. **\(LIST) flattenElements fix** (Easy, ~5 lines) - 155 tests
-3. **Tied scalar code deref** (Easy, ~6 lines) - 279 tests
-4. **(?{...}) non-fatal workaround** (Medium) - 500+ tests
-5. **stat/lstat _ validation** (Easy) - ~7 tests + unblocks others
-6. **delete local** (Moderate) - 319 tests
-7. **printf array flattening** (Medium) - 16 tests
-8. **-C switch application** (Medium) - 13 tests
-9. **caller() extended fields** (Medium-Hard) - 66 tests
-10. **attributes.pm module** (Medium-Hard) - 160+ tests
+1. **\(LIST) interpreter fix** (Easy, 1-line) - fix `InlineOpcodeHandler.executeCreateRef`
+2. **(?{...}) non-fatal workaround** (Medium) - change `UNIMPLEMENTED_CODE_BLOCK` from fatal to `(?:)` fallback - 500+ tests
+3. **64-bit integer ops** (Medium-Hard) - unsigned semantics, overflow handling
+4. **caller() extended fields** (Medium-Hard) - wantarray, evaltext, is_require
+5. **Attribute system** (Medium-Hard) - attributes.pm module, MODIFY_*_ATTRIBUTES callbacks

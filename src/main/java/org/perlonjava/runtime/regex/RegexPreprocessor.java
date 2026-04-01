@@ -1013,11 +1013,7 @@ public class RegexPreprocessor {
             } else if (c3 == '{') {
                 // Check if this is our special unimplemented marker
                 if (s.startsWith("(?{UNIMPLEMENTED_CODE_BLOCK})", offset)) {
-                    // Replace with no-op group so the regex compiles.
-                    // This allows tests that use (?{...}) in non-critical parts to continue running.
-                    sb.append("(?:)");
-                    offset += "(?{UNIMPLEMENTED_CODE_BLOCK})".length();
-                    return offset - 1; // caller will increment past ')'
+                    regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
                 }
                 // Handle (?{ ... }) code blocks - try constant folding
                 offset = handleCodeBlock(s, offset, length, sb, regexFlags);
