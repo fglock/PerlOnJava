@@ -927,6 +927,16 @@ public class StatementResolver {
      */
     private static Node handleStatementModifierWithMy(Node expression, Node modifierExpression,
                                                        String operator, int tokenIndex) {
+        // Check for bare my()/state()/our() in conditional - error since Perl 5.30 (RT #133543)
+        // Patterns like "my $x if 0;" or "my @arr unless 1;" are no longer allowed
+        if (expression instanceof OperatorNode opNode) {
+            String op = opNode.operator;
+            if (op.equals("my") || op.equals("state") || op.equals("our")) {
+                throw new PerlCompilerException(
+                        "This use of my() in false conditional is no longer allowed");
+            }
+        }
+
         // Check if expression is an assignment with 'my' on the left side
         if (expression instanceof BinaryOperatorNode assignNode && assignNode.operator.equals("=")) {
             Node left = assignNode.left;
