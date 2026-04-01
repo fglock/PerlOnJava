@@ -1254,14 +1254,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
-            case REGEX -> {
-                // Dereferencing a Regexp (qr//) returns its stringified form
-                // In Perl, ${qr/foo/} returns "(?^:foo)"
-                RuntimeScalar result = new RuntimeScalar();
-                result.type = RuntimeScalarType.STRING;
-                result.value = this.value.toString();
-                yield result;
-            }
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 if (value instanceof RuntimeGlob glob) {
@@ -1638,8 +1630,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
             }
-            case GLOB -> // 6
-                throw new PerlCompilerException("Modification of a read-only value attempted");
+            case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
             case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -1748,8 +1745,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = old.getInt() + 1;
             }
-            case GLOB -> // 6
-                throw new PerlCompilerException("Modification of a read-only value attempted");
+            case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
             case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -1835,8 +1837,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() - 1;
             }
-            case GLOB -> // 6
-                throw new PerlCompilerException("Modification of a read-only value attempted");
+            case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = -1;
+            }
             case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
@@ -1929,8 +1936,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = old.getInt() - 1;
             }
-            case GLOB -> // 6
-                throw new PerlCompilerException("Modification of a read-only value attempted");
+            case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = -1;
+            }
             case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;

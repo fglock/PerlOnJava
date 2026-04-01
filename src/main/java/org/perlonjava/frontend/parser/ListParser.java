@@ -54,8 +54,11 @@ public class ListParser {
             if (expr.elements.size() > 1) {
                 parser.throwError("syntax error");
             }
-        } else if (token.type == LexerTokenType.EOF || isListTerminator(parser, token) || token.text.equals(",")) {
+        } else if (token.type == LexerTokenType.EOF || isListTerminator(parser, token) || token.text.equals(",")
+                || (token.text.equals("isa") && token.type == LexerTokenType.IDENTIFIER
+                    && parser.ctx.symbolTable.isFeatureCategoryEnabled("isa"))) {
             // No argument
+            // 'isa' when enabled as a feature is an infix operator, not a bareword argument
             expr = new ListNode(parser.tokenIndex);
         } else {
             // Argument without parentheses
