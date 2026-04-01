@@ -155,6 +155,7 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.7 | Fix `&func` (no parens) to share caller's `@_` by alias | Parser, JVM emitter, interpreter | DONE |
 | 5.8 | Fix DBI `execute()` return value (row count, not hash ref) | `DBI.java` | DONE |
 | 5.9 | Fix "Not a HASH reference" in RowParser.pm (join/prefetch) | TBD | **NEXT** |
+| 5.10 | Investigate `t/00describe_environment.t` "Something horrible happened while assembling the diag data" | TBD | **NEXT** |
 
 **t/60core.t results** (17 tests emitted):
 - **ok 1–12**: Basic CRUD, update, dirty columns — all pass
