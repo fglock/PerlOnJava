@@ -790,7 +790,8 @@ public class SubroutineParser {
                 String msg = "Constant subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
-            } else if (dollarW || Warnings.warningManager.isWarningEnabled("redefine")) {
+            } else if (!Warnings.warningManager.isWarningDisabled("redefine")
+                    && (dollarW || Warnings.warningManager.isWarningEnabled("redefine"))) {
                 String msg = "Subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
