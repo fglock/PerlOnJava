@@ -3660,6 +3660,24 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
+            // local @{expr} / local %{expr} - localize a dynamic array/hash by name
+            // Implemented by localizing the typeglob (covers the array/hash slot)
+            if (node.operand instanceof OperatorNode sigilOp4
+                    && (sigilOp4.operator.equals("@") || sigilOp4.operator.equals("%"))
+                    && sigilOp4.operand instanceof BlockNode blockNode2) {
+                if (blockNode2.elements.size() == 1) {
+                    compileNode(blockNode2.elements.getFirst(), -1, RuntimeContextType.SCALAR);
+                } else {
+                    compileNode(blockNode2, -1, RuntimeContextType.SCALAR);
+                }
+                int nameReg = lastResultReg;
+                int rd = allocateOutputRegister();
+                emit(Opcodes.LOCAL_GLOB_DYNAMIC);
+                emitReg(rd);
+                emitReg(nameReg);
+                lastResultReg = rd;
+                return;
+            }
             // General fallback for any lvalue expression (matches JVM backend behavior)
             // Handles: local $hash{key}, local $array[index], local $obj->method->{key}, etc.
             if (node.operand instanceof BinaryOperatorNode binOp) {
