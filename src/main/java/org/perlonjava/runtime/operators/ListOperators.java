@@ -132,10 +132,26 @@ public class ListOperators {
                 // Apply the Perl comparator subroutine with the arguments
                 RuntimeList result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
 
+                // Check for control flow markers (goto/last/next/redo) that tried to escape the sort block.
+                // The marker propagates as the return value (RuntimeControlFlowList), not via the registry.
+                if (result.isNonLocalGoto()) {
+                    ControlFlowType cfType = ((RuntimeControlFlowList) result).getControlFlowType();
+                    String keyword = switch (cfType) {
+                        case GOTO, TAILCALL -> "goto";
+                        case LAST -> "last";
+                        case NEXT -> "next";
+                        case REDO -> "redo";
+                    };
+                    throw new PerlCompilerException("Can't \"" + keyword + "\" out of a pseudo block");
+                }
+
                 // Retrieve the comparison result and return it as an integer
                 return result.getFirst().getInt();
             } catch (PerlExitException e) {
                 // exit() should propagate immediately - don't wrap it
+                throw e;
+            } catch (PerlCompilerException e) {
+                // Propagate Perl errors directly so eval {} can catch them
                 throw e;
             } catch (Exception e) {
                 // Wrap any exceptions thrown by the comparator in a RuntimeException

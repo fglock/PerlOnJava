@@ -372,15 +372,17 @@ public class ArgumentParser {
                     return index;
                 case '0':
                     // Handle input record separator specified with -0
+                    // Return immediately as the handler consumes the rest of the argument (e.g., -0777)
                     index = handleInputRecordSeparator(args, parsedArgs, index, j, arg);
-                    break;
+                    return index;
                 case 'g':
                     parsedArgs.inputRecordSeparator = null;
                     break;
                 case 'l':
                     // Handle automatic line-ending processing
+                    // Return immediately as the handler consumes the rest of the argument (e.g., -l012)
                     index = handleLineEndingProcessing(args, parsedArgs, index, j, arg);
-                    break;
+                    return index;
                 case 'e':
                     // Handle inline code specified with -e
                     index = handleInlineCode(args, parsedArgs, index, j, arg);

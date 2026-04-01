@@ -1477,7 +1477,18 @@ public class CompileOperator {
         }
         Integer targetPc = bc.gotoLabelPcs.get(labelStr);
         if (targetPc != null) { bc.emit(Opcodes.GOTO); bc.emitInt(targetPc); }
-        else { bc.emit(Opcodes.GOTO); int patchPc = bc.bytecode.size(); bc.emitInt(0); bc.pendingGotos.add(new Object[]{patchPc, labelStr}); }
+        else {
+            // Label not yet seen - use GOTO_DYNAMIC which checks code.gotoLabelPcs at runtime
+            // (populated with all labels after compilation) and creates a GOTO marker for non-local gotos.
+            // This handles both forward references within the same scope and non-local gotos to outer scopes.
+            int rd = bc.allocateOutputRegister();
+            int labelIdx = bc.addToStringPool(labelStr);
+            bc.emit(Opcodes.LOAD_STRING);
+            bc.emitReg(rd);
+            bc.emit(labelIdx);
+            bc.emit(Opcodes.GOTO_DYNAMIC);
+            bc.emit(rd);
+        }
         bc.lastResultReg = -1;
     }
 }
