@@ -314,17 +314,49 @@ public class EmitSubroutine {
             // Set prototype if needed
             if (node.prototype != null) {
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                mv.visitFieldInsn(Opcodes.GETFIELD,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "getCode",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeCode;",
-                        false);
+                        "value",
+                        "Ljava/lang/Object;");
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
                 mv.visitLdcInsn(node.prototype);
                 mv.visitFieldInsn(Opcodes.PUTFIELD,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "prototype",
                         "Ljava/lang/String;");
             }
+        }
+
+        // Set attributes if needed (after try-catch, both paths leave RuntimeScalar on stack)
+        if (node.attributes != null && !node.attributes.isEmpty()) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value",
+                    "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            // Create a new ArrayList and populate it
+            mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "java/util/ArrayList",
+                    "<init>",
+                    "()V",
+                    false);
+            for (String attr : node.attributes) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(attr);
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+                        "java/util/List",
+                        "add",
+                        "(Ljava/lang/Object;)Z",
+                        true);
+                mv.visitInsn(Opcodes.POP); // pop boolean return of add()
+            }
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "attributes",
+                    "Ljava/util/List;");
         }
 
         // 6. Clean up the stack if context is VOID

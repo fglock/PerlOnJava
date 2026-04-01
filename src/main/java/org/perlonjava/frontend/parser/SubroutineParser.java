@@ -569,7 +569,10 @@ public class SubroutineParser {
 
                 // While there are attributes after the prototype (denoted by a colon ':'), we keep parsing them.
                 while (peek(parser).text.equals(":")) {
-                    consumeAttributes(parser, attributes);
+                    String attrPrototype = consumeAttributes(parser, attributes);
+                    if (attrPrototype != null) {
+                        prototype = attrPrototype;
+                    }
                 }
             }
         }
@@ -577,9 +580,21 @@ public class SubroutineParser {
         if (wantName && subName != null && !peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+            RuntimeScalar codeRefScalar = GlobalVariable.getGlobalCodeRef(fullName);
+            RuntimeCode codeRef = (RuntimeCode) codeRefScalar.value;
             codeRef.prototype = prototype;
             codeRef.attributes = attributes;
+
+            // Validate attributes on forward declarations too
+            if (attributes != null && !attributes.isEmpty()) {
+                String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
+                // For cross-package declarations like "sub Y::bar : foo", use original package
+                if (subName.contains("::")) {
+                    packageToUse = subName.substring(0, subName.lastIndexOf("::"));
+                }
+                callModifyCodeAttributes(packageToUse, codeRefScalar, attributes, parser);
+            }
+
             ListNode result = new ListNode(parser.tokenIndex);
             result.setAnnotation("compileTimeOnly", true);
             return result;
@@ -643,20 +658,55 @@ public class SubroutineParser {
 
         String prototype = null;
 
-        String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
-        if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
-            String argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+        // Loop to handle space-separated attributes after a single colon
+        // e.g., `: locked method` parses both `locked` and `method`
+        while (peek(parser).type == LexerTokenType.IDENTIFIER) {
+            String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
+            if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
+                String argString;
+                try {
+                    argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                } catch (PerlCompilerException e) {
+                    // Rethrow with Perl-compatible message for unterminated parens
+                    if (e.getMessage() != null && e.getMessage().contains("Can't find string terminator")) {
+                        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                        throw new PerlCompilerException(
+                                "Unterminated attribute parameter in attribute list" + loc + ".\n");
+                    }
+                    throw e;
+                }
 
-            if (attrString.equals("prototype")) {
-                //  :prototype($)
-                prototype = argString;
+                if (attrString.equals("prototype")) {
+                    //  :prototype($)
+                    prototype = argString;
+                }
+
+                attrString += "(" + argString + ")";
             }
 
-            attrString += "(" + argString + ")";
+            // Consume the attribute name (an identifier) and add it to the attributes list.
+            attributes.add(attrString);
         }
 
-        // Consume the attribute name (an identifier) and add it to the attributes list.
-        attributes.add(attrString);
+        // Check for invalid separator characters after attributes
+        // Valid separators are: colon (:), semicolon (;), opening/closing brace ({, }), assignment (=), EOF
+        if (!attributes.isEmpty()) {
+            LexerToken nextToken = peek(parser);
+            if (nextToken.type == LexerTokenType.OPERATOR) {
+                String t = nextToken.text;
+                if (!t.equals(":") && !t.equals(";") && !t.equals("{") && !t.equals("}") && !t.equals("=")
+                        && !t.equals("(") && !t.equals(",") && !t.equals(")")
+                        && !t.equals("$") && !t.equals("@") && !t.equals("%")) {
+                    // Check for :: (double colon is invalid separator in attr list)
+                    if (t.equals("::") || (t.length() == 1 && !Character.isWhitespace(t.charAt(0)))) {
+                        throw new PerlCompilerException(parser.tokenIndex,
+                                "Invalid separator character '" + t.charAt(0) + "' in attribute list",
+                                parser.ctx.errorUtil);
+                    }
+                }
+            }
+        }
+
         return prototype;
     }
 
@@ -1042,9 +1092,33 @@ public class SubroutineParser {
      * the package's MODIFY_CODE_ATTRIBUTES method is called at compile time with
      * ($package, \&code, @attributes). If it returns any values, those are
      * unrecognized attributes and an error is thrown.
+     *
+     * If no MODIFY_CODE_ATTRIBUTES handler exists, non-built-in attributes
+     * are rejected with an error.
      */
     private static void callModifyCodeAttributes(String packageName, RuntimeScalar codeRef,
                                                   List<String> attributes, Parser parser) {
+        // Built-in CODE attributes that are always recognized
+        java.util.Set<String> builtinAttrs = java.util.Set.of("lvalue", "method", "const");
+
+        // Filter out built-in and prototype(...) attributes — these are always valid
+        List<String> nonBuiltinAttrs = new java.util.ArrayList<>();
+        for (String attr : attributes) {
+            String name = attr;
+            if (name.startsWith("-")) name = name.substring(1);
+            // Strip (args) for matching
+            int parenIdx = name.indexOf('(');
+            String baseName = parenIdx >= 0 ? name.substring(0, parenIdx) : name;
+            if (!builtinAttrs.contains(baseName) && !baseName.equals("prototype")) {
+                nonBuiltinAttrs.add(attr);
+            }
+        }
+
+        // If all attributes are built-in, nothing more to check
+        if (nonBuiltinAttrs.isEmpty()) {
+            return;
+        }
+
         // Check if the package has MODIFY_CODE_ATTRIBUTES
         RuntimeArray canArgs = new RuntimeArray();
         RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
@@ -1058,33 +1132,51 @@ public class SubroutineParser {
             InheritanceResolver.autoloadEnabled = true;
         }
 
-        if (codeList.size() == 1) {
+        boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
+
+        if (hasHandler) {
             RuntimeScalar method = codeList.getFirst();
-            if (method.getBoolean()) {
-                // Build args: ($package, \&code, @attributes)
-                RuntimeArray callArgs = new RuntimeArray();
-                RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
-                RuntimeArray.push(callArgs, codeRef);
-                for (String attr : attributes) {
-                    RuntimeArray.push(callArgs, new RuntimeScalar(attr));
-                }
-
-                RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
-
-                // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized attributes
-                RuntimeArray resultArray = result.getArrayOfAlias();
-                if (resultArray.size() > 0) {
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < resultArray.size(); i++) {
-                        if (i > 0) sb.append(", ");
-                        sb.append("\"").append(resultArray.get(i).toString()).append("\"");
-                    }
-                    throw new PerlCompilerException(parser.tokenIndex,
-                            "Invalid CODE attribute" + (resultArray.size() > 1 ? "s" : "") + ": " + sb,
-                            parser.ctx.errorUtil);
-                }
+            // Build args: ($package, \&code, @attributes)
+            RuntimeArray callArgs = new RuntimeArray();
+            RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
+            RuntimeArray.push(callArgs, codeRef);
+            for (String attr : nonBuiltinAttrs) {
+                RuntimeArray.push(callArgs, new RuntimeScalar(attr));
             }
+
+            RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+
+            // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized attributes
+            RuntimeArray resultArray = result.getArrayOfAlias();
+            if (resultArray.size() > 0) {
+                throwInvalidAttributeError("CODE", resultArray, parser);
+            }
+        } else {
+            // No MODIFY_CODE_ATTRIBUTES handler — all non-built-in attributes are invalid
+            throwInvalidAttributeError("CODE", nonBuiltinAttrs, parser);
         }
+    }
+
+    static void throwInvalidAttributeError(String type, RuntimeArray attrs, Parser parser) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < attrs.size(); i++) {
+            if (i > 0) sb.append(" : ");
+            sb.append(attrs.get(i).toString());
+        }
+        throw new PerlCompilerException(parser.tokenIndex,
+                "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb,
+                parser.ctx.errorUtil);
+    }
+
+    static void throwInvalidAttributeError(String type, List<String> attrs, Parser parser) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < attrs.size(); i++) {
+            if (i > 0) sb.append(" : ");
+            sb.append(attrs.get(i));
+        }
+        throw new PerlCompilerException(parser.tokenIndex,
+                "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb,
+                parser.ctx.errorUtil);
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {

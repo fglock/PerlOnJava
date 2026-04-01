@@ -8,10 +8,9 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.perlmodule.Universal;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -417,6 +416,13 @@ public class OperatorParser {
             consumeAttributes(parser, attributes);
         }
         if (!attributes.isEmpty()) {
+            // Dispatch variable attributes at compile time
+            // Determine the package for MODIFY_*_ATTRIBUTES lookup
+            String attrPackage = varType != null ? varType : parser.ctx.symbolTable.getCurrentPackage();
+            
+            // Dispatch attributes for each variable in the declaration
+            callModifyVariableAttributes(parser, attrPackage, operator, operand, attributes);
+
             // Add the attributes to the operand, preserving any existing annotations
             if (decl.annotations != null && decl.annotations.containsKey("isDeclaredReference")) {
                 // Create a new map with both the existing isDeclaredReference and new attributes
@@ -1119,5 +1125,125 @@ public class OperatorParser {
             }
         }
         return new OperatorNode("require", operand, parser.tokenIndex);
+    }
+
+    /**
+     * Dispatch variable attributes via MODIFY_*_ATTRIBUTES at compile time.
+     *
+     * <p>For each variable in the declaration, checks if the package has
+     * MODIFY_SCALAR_ATTRIBUTES, MODIFY_ARRAY_ATTRIBUTES, or MODIFY_HASH_ATTRIBUTES
+     * and calls it. Follows the same pattern as SubroutineParser.callModifyCodeAttributes().
+     */
+    private static void callModifyVariableAttributes(Parser parser, String packageName,
+                                                      String operator, Node operand,
+                                                      List<String> attributes) {
+        // Collect the variables from the declaration
+        List<Node> variables = new ArrayList<>();
+        if (operand instanceof ListNode listNode) {
+            variables.addAll(listNode.elements);
+        } else {
+            variables.add(operand);
+        }
+
+        for (Node varNode : variables) {
+            if (!(varNode instanceof OperatorNode opNode)) continue;
+            
+            String sigil = opNode.operator;
+            String svtype;
+            switch (sigil) {
+                case "$": svtype = "SCALAR"; break;
+                case "@": svtype = "ARRAY"; break;
+                case "%": svtype = "HASH"; break;
+                default: continue;
+            }
+
+            // Filter out built-in attributes
+            List<String> nonBuiltinAttrs = new ArrayList<>();
+            for (String attr : attributes) {
+                if ("shared".equals(attr)) {
+                    // 'shared' is a no-op (no threads in PerlOnJava)
+                    continue;
+                }
+                nonBuiltinAttrs.add(attr);
+            }
+
+            if (nonBuiltinAttrs.isEmpty()) {
+                return;
+            }
+
+            // Check if the package has MODIFY_*_ATTRIBUTES
+            String modifyMethod = "MODIFY_" + svtype + "_ATTRIBUTES";
+            RuntimeArray canArgs = new RuntimeArray();
+            RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+            RuntimeArray.push(canArgs, new RuntimeScalar(modifyMethod));
+
+            InheritanceResolver.autoloadEnabled = false;
+            RuntimeList codeList;
+            try {
+                codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+            } finally {
+                InheritanceResolver.autoloadEnabled = true;
+            }
+
+            boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
+
+            if (hasHandler) {
+                // Get the variable name for creating a reference
+                String varName;
+                if (opNode.operand instanceof IdentifierNode identNode) {
+                    varName = identNode.name;
+                } else {
+                    continue;
+                }
+
+                // Resolve full variable name
+                String fullVarName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
+
+                // Get or create a reference to the variable
+                RuntimeScalar varRef;
+                switch (sigil) {
+                    case "$":
+                        RuntimeScalar scalar = operator.equals("our")
+                                ? GlobalVariable.getGlobalVariable(fullVarName)
+                                : new RuntimeScalar();
+                        varRef = scalar.createReference();
+                        break;
+                    case "@":
+                        RuntimeArray array = operator.equals("our")
+                                ? GlobalVariable.getGlobalArray(fullVarName)
+                                : new RuntimeArray();
+                        varRef = array.createReference();
+                        break;
+                    case "%":
+                        RuntimeHash hash = operator.equals("our")
+                                ? GlobalVariable.getGlobalHash(fullVarName)
+                                : new RuntimeHash();
+                        varRef = hash.createReference();
+                        break;
+                    default:
+                        continue;
+                }
+
+                RuntimeScalar method = codeList.getFirst();
+                // Build args: ($package, \$var, @attributes)
+                RuntimeArray callArgs = new RuntimeArray();
+                RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
+                RuntimeArray.push(callArgs, varRef);
+                for (String attr : nonBuiltinAttrs) {
+                    RuntimeArray.push(callArgs, new RuntimeScalar(attr));
+                }
+
+                RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+
+                // If MODIFY_*_ATTRIBUTES returns any values, they are unrecognized attributes
+                RuntimeArray resultArray = result.getArrayOfAlias();
+                if (resultArray.size() > 0) {
+                    SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
+                }
+            } else {
+                // No MODIFY_*_ATTRIBUTES handler — all non-built-in attributes are invalid
+                SubroutineParser.throwInvalidAttributeError(svtype, nonBuiltinAttrs, parser);
+            }
+        }
     }
 }
