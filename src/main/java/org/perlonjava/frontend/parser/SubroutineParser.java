@@ -14,6 +14,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.reflect.Constructor;
@@ -740,6 +741,8 @@ public class SubroutineParser {
         // This matches Perl's behavior where:
         //   my $orig = \&foo; sub foo { "new" }; $orig->() returns "old"
         boolean isRedefinition = false;
+        String oldPrototype = null;
+        boolean isConstantSub = false;
         if (codeRef.value instanceof RuntimeCode existingCode) {
             // Check if the existing code has actual implementation OR pending compilation
             // compilerSupplier != null means there's a lazy definition waiting to be compiled
@@ -747,8 +750,49 @@ public class SubroutineParser {
                     || existingCode.methodHandle != null
                     || existingCode.codeObject != null
                     || existingCode.compilerSupplier != null;
+            if (isRedefinition) {
+                oldPrototype = existingCode.prototype;
+                // A constant sub has empty prototype "()" - detect for "Constant subroutine" warning
+                isConstantSub = "".equals(oldPrototype);
+            }
         }
-        
+
+        // Emit "Prototype mismatch" and "Subroutine redefined" warnings
+        if (isRedefinition && block != null) {
+            String location = "";
+            if (parser.ctx.errorUtil != null) {
+                int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                location = " at " + parser.ctx.compilerOptions.fileName + " line " + line + ".\n";
+            }
+
+            // Prototype mismatch is a default warning (always on unless explicitly disabled)
+            boolean dollarW = GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean();
+            {
+                // Perl format: "sub NAME: none vs (new)" or "sub NAME (old) vs none"
+                // When prototype is null, display as ": none"; when defined, display as " (proto)"
+                String oldDisplay = oldPrototype == null ? ": none" : " (" + oldPrototype + ")";
+                String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
+                String oldForCompare = oldPrototype == null ? "none" : "(" + oldPrototype + ")";
+                if (!oldForCompare.equals(newDisplay)) {
+                    String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
+                    org.perlonjava.runtime.operators.WarnDie.warn(
+                            new RuntimeScalar(msg), new RuntimeScalar(""));
+                }
+            }
+
+            // "Constant subroutine X redefined" is a default warning (always on)
+            // "Subroutine X redefined" requires -w or use warnings 'redefine'
+            if (isConstantSub) {
+                String msg = "Constant subroutine " + subName + " redefined" + location;
+                org.perlonjava.runtime.operators.WarnDie.warn(
+                        new RuntimeScalar(msg), new RuntimeScalar(""));
+            } else if (dollarW || Warnings.warningManager.isWarningEnabled("redefine")) {
+                String msg = "Subroutine " + subName + " redefined" + location;
+                org.perlonjava.runtime.operators.WarnDie.warn(
+                        new RuntimeScalar(msg), new RuntimeScalar(""));
+            }
+        }
+
         if (codeRef.value == null || isRedefinition) {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
