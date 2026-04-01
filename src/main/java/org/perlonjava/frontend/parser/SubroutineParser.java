@@ -536,9 +536,23 @@ public class SubroutineParser {
             }
         }
 
+        // Build display name for attribute warnings
+        String attrSubDisplayName;
+        if (subName != null) {
+            attrSubDisplayName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        } else {
+            attrSubDisplayName = parser.ctx.symbolTable.getCurrentPackage() + "::__ANON__";
+        }
+
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
+        // Track prevAttrPrototype to detect ":prototype(X) : prototype(Y)" across colon-separated calls
+        String prevAttrProto = null;
         while (peek(parser).text.equals(":")) {
-            prototype = consumeAttributes(parser, attributes);
+            String attrPrototype = consumeAttributes(parser, attributes, null, attrSubDisplayName, prevAttrProto);
+            if (attrPrototype != null) {
+                prevAttrProto = attrPrototype; // remember for "discards earlier" warning in next call
+                prototype = attrPrototype;
+            }
         }
 
         // Ensure attributes.pm is loaded when attribute syntax is used, so that
@@ -573,9 +587,30 @@ public class SubroutineParser {
                     }
                 }
 
+                // Emit "Illegal character in prototype" warning for (proto) syntax
+                // For (proto) syntax, Perl uses "?" as the name for anonymous subs
+                {
+                    String protoDisplayName;
+                    if (subName != null) {
+                        protoDisplayName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                    } else {
+                        protoDisplayName = "?";
+                    }
+                    emitIllegalProtoWarning(parser, prototype, protoDisplayName);
+                }
+
+                // Build display name for :prototype() warnings
+                // For :prototype(), Perl uses the full qualified name or __ANON__
+                String subDisplayName;
+                if (subName != null) {
+                    subDisplayName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                } else {
+                    subDisplayName = parser.ctx.symbolTable.getCurrentPackage() + "::__ANON__";
+                }
+
                 // While there are attributes after the prototype (denoted by a colon ':'), we keep parsing them.
                 while (peek(parser).text.equals(":")) {
-                    String attrPrototype = consumeAttributes(parser, attributes);
+                    String attrPrototype = consumeAttributes(parser, attributes, prototype, subDisplayName);
                     if (attrPrototype != null) {
                         prototype = attrPrototype;
                     }
@@ -588,14 +623,44 @@ public class SubroutineParser {
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeScalar codeRefScalar = GlobalVariable.getGlobalCodeRef(fullName);
             RuntimeCode codeRef = (RuntimeCode) codeRefScalar.value;
-            codeRef.prototype = prototype;
-            codeRef.attributes = attributes;
+
+            // Only set prototype/attributes on a forward declaration if the sub
+            // doesn't already have a body. Perl 5 ignores prototype changes from
+            // forward redeclarations of already-defined subs.
+            boolean hasBody = codeRef.subroutine != null || codeRef.methodHandle != null
+                    || codeRef.compilerSupplier != null;
+            if (!hasBody) {
+                codeRef.prototype = prototype;
+                codeRef.attributes = attributes;
+            } else {
+                // Emit "Prototype mismatch" warning when redeclaring with different prototype
+                String oldProto = codeRef.prototype;
+                if (prototype != null || oldProto != null) {
+                    String oldDisplay = oldProto == null ? ": none" : " (" + oldProto + ")";
+                    String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
+                    String oldForCompare = oldProto == null ? "none" : "(" + oldProto + ")";
+                    if (!oldForCompare.equals(newDisplay)) {
+                        String location = "";
+                        if (parser.ctx.errorUtil != null) {
+                            int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                            location = " at " + parser.ctx.compilerOptions.fileName + " line " + line + ".\n";
+                        }
+                        String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(""));
+                    }
+                }
+            }
 
             // Validate attributes on forward declarations too
             if (attributes != null && !attributes.isEmpty()) {
                 String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
-                // For cross-package declarations like "sub Y::bar : foo", use original package
-                if (subName.contains("::")) {
+                // For cross-package declarations like "sub Y::bar : foo", use the
+                // original CV's package (where the code was first compiled), not
+                // the syntactic target package. This matches Perl 5 behavior.
+                if (codeRef.packageName != null) {
+                    packageToUse = codeRef.packageName;
+                } else if (subName.contains("::")) {
                     packageToUse = subName.substring(0, subName.lastIndexOf("::"));
                 }
                 callModifyCodeAttributes(packageToUse, codeRefScalar, attributes, parser);
@@ -652,6 +717,34 @@ public class SubroutineParser {
     }
 
     static String consumeAttributes(Parser parser, List<String> attributes) {
+        return consumeAttributes(parser, attributes, null, null, null);
+    }
+
+    /**
+     * Parse attributes after a colon. Returns a prototype string if :prototype(...) is found.
+     *
+     * @param parser     The parser
+     * @param attributes List to accumulate parsed attribute strings
+     * @param priorPrototype The prototype set by (proto) syntax, for "overridden" warning (may be null)
+     * @param subDisplayName The sub name for warning messages (may be null for anon subs)
+     * @return The prototype string from :prototype(...), or null if not found
+     */
+    static String consumeAttributes(Parser parser, List<String> attributes, String priorPrototype, String subDisplayName) {
+        return consumeAttributes(parser, attributes, priorPrototype, subDisplayName, null);
+    }
+
+    /**
+     * Parse attributes after a colon. Returns a prototype string if :prototype(...) is found.
+     *
+     * @param parser     The parser
+     * @param attributes List to accumulate parsed attribute strings
+     * @param parenPrototype The prototype from (proto) syntax, for "overridden" warning (may be null)
+     * @param subDisplayName The sub name for warning messages (may be null for anon subs)
+     * @param prevAttrPrototype Prototype from a previous :prototype(...) call, for "discards" warning (may be null)
+     * @return The prototype string from :prototype(...), or null if not found
+     */
+    static String consumeAttributes(Parser parser, List<String> attributes, String parenPrototype,
+                                     String subDisplayName, String prevAttrPrototype) {
         // Consume the colon
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
 
@@ -684,6 +777,26 @@ public class SubroutineParser {
 
                 if (attrString.equals("prototype")) {
                     //  :prototype($)
+                    // Validate prototype characters first (Perl emits this before "overridden")
+                    emitIllegalProtoWarning(parser, argString, subDisplayName);
+                    // Emit "Prototype overridden" warning if prior prototype was set from (proto) syntax
+                    if (parenPrototype != null && subDisplayName != null) {
+                        String msg = "Prototype '" + parenPrototype + "' overridden by attribute 'prototype("
+                                + argString + ")' in " + subDisplayName;
+                        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(loc));
+                    }
+                    // Emit "discards earlier prototype" warning if :prototype was already set
+                    // (either in this same call or from a previous :prototype() call)
+                    String existingAttrProto = prototype != null ? prototype : prevAttrPrototype;
+                    if (existingAttrProto != null && subDisplayName != null) {
+                        String msg = "Attribute prototype(" + argString
+                                + ") discards earlier prototype attribute in same sub";
+                        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(loc));
+                    }
                     prototype = argString;
                 }
 
@@ -1198,4 +1311,30 @@ public class SubroutineParser {
         return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
     }
 
+    /**
+     * Validates prototype characters and emits "Illegal character in prototype" warnings.
+     * Valid prototype characters: $ @ % & * ; + \ [ ] _
+     *
+     * @param parser The parser (for location info)
+     * @param proto  The prototype string to validate
+     * @param subDisplayName The sub name for the warning message (may be null)
+     */
+    static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
+        if (proto == null || proto.isEmpty()) return;
+        // Check if any character is illegal
+        boolean hasIllegal = false;
+        for (int i = 0; i < proto.length(); i++) {
+            char c = proto.charAt(i);
+            if ("$@%&*;+\\[]_ ".indexOf(c) < 0) {
+                hasIllegal = true;
+                break;
+            }
+        }
+        if (hasIllegal) {
+            String name = subDisplayName != null ? subDisplayName : "?";
+            String msg = "Illegal character in prototype for " + name + " : " + proto;
+            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+            Warnings.warnWithCategory("illegalproto", msg, loc);
+        }
+    }
 }

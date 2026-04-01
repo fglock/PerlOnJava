@@ -53,18 +53,18 @@ public class WarningFlags {
         warningHierarchy.put("pipe", new String[]{"io::pipe"});
         warningHierarchy.put("unopened", new String[]{"io::unopened"});
         warningHierarchy.put("FATAL", new String[]{});
-        warningHierarchy.put("illegalproto", new String[]{});
-        warningHierarchy.put("digit", new String[]{});
+        warningHierarchy.put("illegalproto", new String[]{"syntax::illegalproto"});
+        warningHierarchy.put("digit", new String[]{"syntax::digit"});
         warningHierarchy.put("closed", new String[]{"io::closed"});
         warningHierarchy.put("exec", new String[]{"io::exec"});
-        warningHierarchy.put("reserved", new String[]{});
-        warningHierarchy.put("prototype", new String[]{});
+        warningHierarchy.put("reserved", new String[]{"syntax::reserved"});
+        warningHierarchy.put("prototype", new String[]{"syntax::prototype"});
         warningHierarchy.put("qw", new String[]{"syntax::qw"});
         warningHierarchy.put("newline", new String[]{"io::newline"});
         warningHierarchy.put("NONFATAL", new String[]{});
-        warningHierarchy.put("non_unicode", new String[]{});
-        warningHierarchy.put("surrogate", new String[]{});
-        warningHierarchy.put("nonchar", new String[]{});
+        warningHierarchy.put("non_unicode", new String[]{"utf8::non_unicode"});
+        warningHierarchy.put("surrogate", new String[]{"utf8::surrogate"});
+        warningHierarchy.put("nonchar", new String[]{"utf8::nonchar"});
     }
     
     // ==================== Perl 5 Compatible Bit Offsets ====================

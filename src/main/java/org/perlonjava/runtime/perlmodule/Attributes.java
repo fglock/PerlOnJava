@@ -61,7 +61,17 @@ public class Attributes extends PerlModuleBase {
 
         for (int i = 1; i < args.size(); i++) {
             String attr = args.get(i).toString();
-            if (!applyBuiltinAttribute(svref, svtype, attr)) {
+
+            // Check for unterminated attribute parameter
+            if (attr.contains("(") && !attr.endsWith(")")) {
+                throw new org.perlonjava.runtime.runtimetypes.PerlCompilerException(
+                        "Unterminated attribute parameter in attribute list");
+            }
+
+            int result = applyBuiltinAttribute(svref, svtype, attr);
+            if (result == ATTR_UNRECOGNIZED || result == ATTR_WARN) {
+                // ATTR_WARN: attribute was applied but should be returned so
+                // _modify_attrs_and_deprecate can emit the appropriate warning
                 unrecognized.add(attr);
             }
         }
@@ -73,35 +83,83 @@ public class Attributes extends PerlModuleBase {
         return result.getList();
     }
 
+    // Return values for applyBuiltinAttribute
+    private static final int ATTR_UNRECOGNIZED = 0;   // Not a built-in attribute
+    private static final int ATTR_APPLIED = 1;         // Applied silently (no warning needed)
+    private static final int ATTR_WARN = 2;            // Applied, but should warn (state change on defined sub)
+
     /**
      * Try to apply a single built-in attribute.
      *
-     * @return {@code true} if the attribute was recognized (built-in), {@code false} otherwise.
+     * @return ATTR_UNRECOGNIZED if not built-in, ATTR_APPLIED if applied silently,
+     *         ATTR_WARN if applied but the original attr name should be returned
+     *         so _modify_attrs_and_deprecate can emit a warning.
      */
-    private static boolean applyBuiltinAttribute(RuntimeScalar svref, String svtype, String attr) {
+    private static int applyBuiltinAttribute(RuntimeScalar svref, String svtype, String attr) {
         boolean negate = attr.startsWith("-");
         String attrName = negate ? attr.substring(1) : attr;
 
         if ("CODE".equals(svtype)) {
             return applyCodeAttribute(svref, attrName, negate);
         } else if ("SCALAR".equals(svtype) || "ARRAY".equals(svtype) || "HASH".equals(svtype)) {
-            return applyVariableAttribute(attrName, negate);
+            return applyVariableAttribute(attrName, negate) ? ATTR_APPLIED : ATTR_UNRECOGNIZED;
         }
-        return false;
+        return ATTR_UNRECOGNIZED;
     }
 
     /**
      * Apply a built-in CODE attribute.
+     *
+     * <p>For {@code lvalue} and {@code const}: returns ATTR_WARN when there's a meaningful
+     * state change on an already-defined subroutine. This causes the attribute name to be
+     * returned by {@code _modify_attrs}, allowing {@code _modify_attrs_and_deprecate} in
+     * attributes.pm to emit the appropriate warning.
+     *
+     * <p>Only attributes with entries in attributes.pm's {@code %msg} hash should return
+     * ATTR_WARN: {@code lvalue} (adding), {@code -lvalue} (removing), and {@code const} (adding).
      */
-    private static boolean applyCodeAttribute(RuntimeScalar svref, String attrName, boolean negate) {
+    private static int applyCodeAttribute(RuntimeScalar svref, String attrName, boolean negate) {
         // Handle prototype(...)
         if (attrName.startsWith("prototype(") && attrName.endsWith(")")) {
             if (svref.type == CODE) {
                 RuntimeCode code = (RuntimeCode) svref.value;
-                String proto = attrName.substring(10, attrName.length() - 1);
-                code.prototype = negate ? null : proto;
+                String newProto = attrName.substring(10, attrName.length() - 1);
+                String oldProto = code.prototype;
+
+                // Emit "Illegal character in prototype" warning
+                if (newProto != null && !newProto.isEmpty()) {
+                    boolean hasIllegal = false;
+                    for (int i = 0; i < newProto.length(); i++) {
+                        char c = newProto.charAt(i);
+                        if ("$@%&*;+\\[]_ ".indexOf(c) < 0) {
+                            hasIllegal = true;
+                            break;
+                        }
+                    }
+                    if (hasIllegal) {
+                        // Use *PKG::name format for the warning when called via use attributes
+                        String name = code.subName != null ? "*" + code.packageName + "::" + code.subName : "?";
+                        String msg = "Illegal character in prototype for " + name + " : " + newProto;
+                        Warnings.emitCategoryWarning("illegalproto", msg);
+                    }
+                }
+
+                // Emit "Prototype mismatch" warning
+                if (oldProto != null || newProto != null) {
+                    String oldDisplay = oldProto == null ? ": none" : " (" + oldProto + ")";
+                    String newDisplay = newProto == null ? "none" : "(" + newProto + ")";
+                    String oldForCompare = oldProto == null ? "none" : "(" + oldProto + ")";
+                    if (!oldForCompare.equals(newDisplay)) {
+                        String subName = code.subName != null
+                                ? code.packageName + "::" + code.subName : "__ANON__";
+                        String msg = "Prototype mismatch: sub " + subName + oldDisplay + " vs " + newDisplay;
+                        Warnings.emitWarningFromCaller(msg);
+                    }
+                }
+
+                code.prototype = negate ? null : newProto;
             }
-            return true;
+            return ATTR_APPLIED;
         }
 
         switch (attrName) {
@@ -113,15 +171,37 @@ public class Attributes extends PerlModuleBase {
                     if (code.attributes == null) {
                         code.attributes = new ArrayList<>();
                     }
+                    boolean hadAttr = code.attributes.contains(attrName);
+                    // Check if sub has an actual body (not just a stub from \&foo)
+                    boolean isDefinedSub = code.subroutine != null || code.methodHandle != null
+                            || code.constantValue != null || code.compilerSupplier != null
+                            || code.isBuiltin;
                     if (negate) {
                         code.attributes.remove(attrName);
-                    } else if (!code.attributes.contains(attrName)) {
-                        code.attributes.add(attrName);
+                        // Only lvalue has a removal warning in %msg ("-lvalue")
+                        // Only warn for already-defined subroutines with a state change
+                        if ("lvalue".equals(attrName) && hadAttr && isDefinedSub) {
+                            return ATTR_WARN;
+                        }
+                        return ATTR_APPLIED;
+                    } else {
+                        if (!hadAttr) {
+                            code.attributes.add(attrName);
+                        }
+                        // lvalue warns on state change for already-defined subs
+                        if ("lvalue".equals(attrName) && !hadAttr && isDefinedSub) {
+                            return ATTR_WARN;
+                        }
+                        // const always warns when applied via use attributes to defined subs
+                        if ("const".equals(attrName) && isDefinedSub) {
+                            return ATTR_WARN;
+                        }
+                        return ATTR_APPLIED;
                     }
                 }
-                return true;
+                return ATTR_APPLIED;
             default:
-                return false;
+                return ATTR_UNRECOGNIZED;
         }
     }
 
