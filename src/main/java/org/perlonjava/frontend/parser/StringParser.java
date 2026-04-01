@@ -509,7 +509,7 @@ public class StringParser {
             replace = StringSingleQuoted.parseSingleQuotedString(rawStr);
         }
 
-        if (modifierStr.contains("ee")) {
+        if (modifierStr.chars().filter(c -> c == 'e').count() >= 2) {
             replace = new OperatorNode("eval", new ListNode(List.of(replace), rawStr.index), rawStr.index);
         }
 
