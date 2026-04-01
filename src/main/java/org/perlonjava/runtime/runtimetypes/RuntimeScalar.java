@@ -1443,7 +1443,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1454,7 +1454,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1488,7 +1488,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1499,7 +1499,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }

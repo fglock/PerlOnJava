@@ -117,6 +117,9 @@ public class PrototypeArgs {
         return next.type == LexerTokenType.EOF ||
                 ListParser.isListTerminator(parser, next) ||
                 Parser.isExpressionTerminator(next) ||
+                // Defined-or operator should terminate argument parsing
+                // (not be confused with empty regex //)
+                next.text.equals("//") ||
                 // Assignment operators should terminate argument parsing
                 next.text.equals("=") ||
                 next.text.equals("+=") ||

@@ -364,7 +364,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 String name = lastColonIndex >= 0 ? this.globName.substring(lastColonIndex + 2) : this.globName;
                 yield new RuntimeScalar(name);
             }
-            case "IO" -> {
+            case "IO", "FILEHANDLE" -> {
                 // Accessing the IO slot yields a blessable reference-like value.
                 // We model this by returning a GLOBREFERENCE wrapper around the RuntimeIO.
                 if (IO != null && IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {

@@ -573,45 +573,55 @@ public class StatementParser {
                 versionScalar = versionValues.getFirst();
                 if (packageName == null) {
                     if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("use version: check Perl version");
-                    VersionHelper.compareVersion(
-                            new RuntimeScalar(Configuration.version),
-                            versionScalar,
-                            "Perl");
-
-                    // Enable/disable features based on Perl version
-                    setCurrentScope(parser.ctx.symbolTable);
-                    // ":5.34"
-                    String[] parts = normalizeVersion(versionScalar).split("\\.");
-                    int majorVersion = Integer.parseInt(parts[0]);
-                    int minorVersion = Integer.parseInt(parts[1]);
-
-                    // If the minor version is odd, increment it to make it the next even version
-                    if (minorVersion % 2 != 0) {
-                        minorVersion++;
+                    if (isNoDeclaration) {
+                        // "no VERSION" fails if current Perl >= VERSION
+                        VersionHelper.compareVersionNoDeclaration(
+                                Configuration.getPerlVersionVString(),
+                                versionScalar);
+                    } else {
+                        // "use VERSION" fails if current Perl < VERSION
+                        VersionHelper.compareVersion(
+                                Configuration.getPerlVersionVString(),
+                                versionScalar,
+                                "Perl");
                     }
 
-                    String closestVersion = minorVersion < 10
-                            ? ":default"
-                            : ":" + majorVersion + "." + minorVersion;
-                    featureManager.enableFeatureBundle(closestVersion);
+                    if (!isNoDeclaration) {
+                        // Enable/disable features based on Perl version (only for "use", not "no")
+                        setCurrentScope(parser.ctx.symbolTable);
+                        // ":5.34"
+                        String[] parts = normalizeVersion(versionScalar).split("\\.");
+                        int majorVersion = Integer.parseInt(parts[0]);
+                        int minorVersion = Integer.parseInt(parts[1]);
 
-                    if (minorVersion >= 12) {
-                        // If the specified Perl version is 5.12 or higher,
-                        // strictures are enabled lexically.
-                        useStrict(new RuntimeArray(
-                                new RuntimeScalar("strict")), RuntimeContextType.VOID);
-                    }
-                    if (minorVersion >= 35) {
-                        // If the specified Perl version is 5.35.0 or higher,
-                        // warnings are enabled.
-                        useWarnings(new RuntimeArray(
-                                new RuntimeScalar("warnings"),
-                                new RuntimeScalar("all")), RuntimeContextType.VOID);
-                        // Copy warning flags to ALL levels of the parser's symbol table
-                        // This matches what's done after import() for 'use warnings'
-                        java.util.BitSet currentWarnings = getCurrentScope().warningFlagsStack.peek();
-                        for (int i = 0; i < parser.ctx.symbolTable.warningFlagsStack.size(); i++) {
-                            parser.ctx.symbolTable.warningFlagsStack.set(i, (java.util.BitSet) currentWarnings.clone());
+                        // If the minor version is odd, increment it to make it the next even version
+                        if (minorVersion % 2 != 0) {
+                            minorVersion++;
+                        }
+
+                        String closestVersion = minorVersion < 10
+                                ? ":default"
+                                : ":" + majorVersion + "." + minorVersion;
+                        featureManager.enableFeatureBundle(closestVersion);
+
+                        if (minorVersion >= 12) {
+                            // If the specified Perl version is 5.12 or higher,
+                            // strictures are enabled lexically.
+                            useStrict(new RuntimeArray(
+                                    new RuntimeScalar("strict")), RuntimeContextType.VOID);
+                        }
+                        if (minorVersion >= 35) {
+                            // If the specified Perl version is 5.35.0 or higher,
+                            // warnings are enabled.
+                            useWarnings(new RuntimeArray(
+                                    new RuntimeScalar("warnings"),
+                                    new RuntimeScalar("all")), RuntimeContextType.VOID);
+                            // Copy warning flags to ALL levels of the parser's symbol table
+                            // This matches what's done after import() for 'use warnings'
+                            java.util.BitSet currentWarnings = getCurrentScope().warningFlagsStack.peek();
+                            for (int i = 0; i < parser.ctx.symbolTable.warningFlagsStack.size(); i++) {
+                                parser.ctx.symbolTable.warningFlagsStack.set(i, (java.util.BitSet) currentWarnings.clone());
+                            }
                         }
                     }
                 }

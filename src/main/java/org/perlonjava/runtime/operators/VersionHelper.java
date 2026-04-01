@@ -189,18 +189,123 @@ public class VersionHelper {
     }
 
     public static RuntimeScalar compareVersion(RuntimeScalar hasVersion, RuntimeScalar wantVersion, String perlClassName) {
-        String hasStr = normalizeVersion(hasVersion);
-        // If REQUIRE is provided, compare versions
+        // Use decimal comparison for correctness (handles 5.6 > 5.042 properly)
+        String hasDecimal = normalizeVersionForRequireComparison(hasVersion);
+        String wantDecimal = normalizeVersionForRequireComparison(wantVersion);
         if (wantVersion.getDefinedBoolean()) {
-            String wantStr = normalizeVersion(wantVersion);
-            if (!isLaxVersion(hasStr) || !isLaxVersion(wantStr)) {
-                throw new PerlCompilerException("Either package version or REQUIRE is not a lax version number");
-            }
-            if (compareVersions(hasStr, wantStr) < 0) {
-                throw new PerlCompilerException(perlClassName + " version " + wantVersion + " required--this is only version " + hasVersion);
+            if (isVersionLessForRequire(hasDecimal, wantDecimal)) {
+                if (perlClassName.equals("Perl")) {
+                    String wantDisplay = normalizeVersionWithPadding(wantVersion);
+                    String hint = getDidYouMeanHint(wantVersion, wantDisplay);
+                    throw new PerlCompilerException("Perl v" + wantDisplay + " required" + hint + "--this is only " + hasVersion.toString() + ", stopped");
+                } else {
+                    String hasStr = normalizeVersion(hasVersion);
+                    String wantStr = normalizeVersion(wantVersion);
+                    throw new PerlCompilerException(perlClassName + " version " + wantStr + " required--this is only version " + hasVersion);
+                }
             }
         }
         return hasVersion;
+    }
+
+    /**
+     * Implements "no VERSION" - fails if current Perl >= VERSION.
+     */
+    public static void compareVersionNoDeclaration(RuntimeScalar hasVersion, RuntimeScalar wantVersion) {
+        String hasDecimal = normalizeVersionForRequireComparison(hasVersion);
+        String wantDecimal = normalizeVersionForRequireComparison(wantVersion);
+        if (wantVersion.getDefinedBoolean()) {
+            try {
+                double has = Double.parseDouble(hasDecimal);
+                double want = Double.parseDouble(wantDecimal);
+                if (has >= want) {
+                    String wantDisplay = normalizeVersionWithPadding(wantVersion);
+                    throw new PerlCompilerException("Perls since v" + wantDisplay + " too modern--this is " + hasVersion.toString() + ", stopped");
+                }
+            } catch (NumberFormatException e) {
+                // fallback to string comparison
+                if (hasDecimal.compareTo(wantDecimal) >= 0) {
+                    String wantDisplay = normalizeVersionWithPadding(wantVersion);
+                    throw new PerlCompilerException("Perls since v" + wantDisplay + " too modern--this is " + hasVersion.toString() + ", stopped");
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns a "did you mean" hint for ambiguous decimal version specifiers.
+     * E.g., "use 5.6" normalizes to v5.600.0 but the user likely meant v5.6.0.
+     */
+    private static String getDidYouMeanHint(RuntimeScalar wantVersion, String normalizedVersion) {
+        if (wantVersion.type == VSTRING) return "";
+        String verStr = wantVersion.toString();
+        if (verStr.startsWith("v")) return "";
+        String[] dotParts = verStr.split("\\.");
+        if (dotParts.length != 2) return "";
+        String decimalPart = dotParts[1];
+        // If decimal part is 1-2 digits, the user probably meant v5.X.0 not v5.X00.0
+        if (decimalPart.length() >= 1 && decimalPart.length() <= 2) {
+            String[] normParts = normalizedVersion.split("\\.");
+            if (normParts.length >= 2) {
+                int minor = Integer.parseInt(normParts[1]);
+                if (minor >= 100) {
+                    // Strip leading zeros from the decimal part for display
+                    String displayMinor = decimalPart.replaceFirst("^0+", "");
+                    if (displayMinor.isEmpty()) displayMinor = "0";
+                    return " (did you mean v" + dotParts[0] + "." + displayMinor + ".0?)";
+                }
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Normalizes a version with right-padding for Perl version display.
+     * E.g., 5.6 -> 5.600.0, 5.04 -> 5.40.0, 5.042 -> 5.42.0
+     */
+    static String normalizeVersionWithPadding(RuntimeScalar wantVersion) {
+        String normalizedVersion = wantVersion.toString();
+
+        if (normalizedVersion.startsWith("v")) {
+            normalizedVersion = normalizedVersion.substring(1);
+        }
+        if (wantVersion.type == RuntimeScalarType.VSTRING) {
+            normalizedVersion = toDottedString(normalizedVersion);
+            // Ensure at least 3 components
+            String[] parts = normalizedVersion.split("\\.");
+            if (parts.length == 2) {
+                normalizedVersion += ".0";
+            }
+            return normalizedVersion;
+        }
+
+        normalizedVersion = normalizedVersion.replaceAll("_", "");
+        String[] parts = normalizedVersion.split("\\.");
+        if (parts.length < 3) {
+            String major = parts[0];
+            String minor = parts.length > 1 ? parts[1] : "0";
+            // Right-pad minor to at least 3 digits (5.6 -> 600, 5.04 -> 040, 5.10 -> 100)
+            while (minor.length() < 3) {
+                minor = minor + "0";
+            }
+            String patch = minor.length() > 3 ? minor.substring(3) : "0";
+            if (minor.length() > 3) {
+                minor = minor.substring(0, 3);
+            }
+            if (patch.length() > 3) {
+                patch = patch.substring(0, 3);
+            }
+            int majorNumber, minorNumber, patchNumber;
+            try {
+                majorNumber = Integer.parseInt(major);
+                minorNumber = Integer.parseInt(minor);
+                patchNumber = Integer.parseInt(patch);
+            } catch (NumberFormatException e) {
+                return "0.0.0";
+            }
+            return String.format("%d.%d.%d", majorNumber, minorNumber, patchNumber);
+        }
+        return normalizedVersion;
     }
 
     public static String normalizeVersion(RuntimeScalar wantVersion) {
