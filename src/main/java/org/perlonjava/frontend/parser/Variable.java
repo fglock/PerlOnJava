@@ -1002,7 +1002,13 @@ public class Variable {
             }
         }
 
-// Fall back to parsing as a block
+// Fall back to parsing as a block.
+        // When the sigil is %, inner {} should be treated as hash constructor (not block)
+        // to match Perl 5's behavior: %{ {map { $_ => 1 } @_} } should parse the inner {} as hashref.
+        boolean savedInsideBracedDereference = parser.insideBracedDereference;
+        if (sigil.equals("%")) {
+            parser.insideBracedDereference = true;
+        }
         try {
             BlockNode block = ParseBlock.parseBlock(parser);
             if (!TokenUtils.peek(parser).text.equals("}")) {
@@ -1030,6 +1036,8 @@ public class Variable {
                     "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
                     "Execution of " + fileName + " aborted due to compilation errors.";
             throw new PerlParserException(multiLineError);
+        } finally {
+            parser.insideBracedDereference = savedInsideBracedDereference;
         }
     }
 

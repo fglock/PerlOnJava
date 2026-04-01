@@ -243,27 +243,50 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList last_insert_id(RuntimeArray args, int ctx) {
         // argument can be either a dbh or a sth
         RuntimeHash dbh = args.get(0).hashDeref();
-        RuntimeHash sth = null;
         String type = dbh.get("Type").toString();
-        if (type.equals("db")) {
-            sth = dbh.get("sth").hashDeref();
-        } else {
-            sth = dbh;
-            dbh = sth.get("Database").hashDeref();
+        if (!type.equals("db")) {
+            dbh = args.get(0).hashDeref().get("Database").hashDeref();
         }
 
         final RuntimeHash finalDbh = dbh;
-        final RuntimeHash finalSth = sth;
         return executeWithErrorHandling(() -> {
             Connection conn = (Connection) finalDbh.get("connection").value;
-            Statement stmt = (Statement) finalSth.get("statement").value;
-            ResultSet rs = stmt.getGeneratedKeys();
 
-            if (rs.next()) {
-                long id = rs.getLong(1);
-                return new RuntimeScalar(id).getList();
+            // Use database-specific SQL to retrieve the last auto-generated ID.
+            // This is more reliable than getGeneratedKeys() because it works
+            // regardless of which statement was most recently prepared/executed.
+            String jdbcUrl = finalDbh.get("Name").toString();
+            String sql;
+            if (jdbcUrl.contains("sqlite")) {
+                sql = "SELECT last_insert_rowid()";
+            } else if (jdbcUrl.contains("mysql") || jdbcUrl.contains("mariadb")) {
+                sql = "SELECT LAST_INSERT_ID()";
+            } else if (jdbcUrl.contains("postgresql")) {
+                sql = "SELECT lastval()";
+            } else if (jdbcUrl.contains("h2")) {
+                sql = "SELECT SCOPE_IDENTITY()";
+            } else {
+                // Generic fallback: try getGeneratedKeys() on the last statement
+                RuntimeScalar sthRef = finalDbh.get("sth");
+                if (sthRef != null && RuntimeScalarType.isReference(sthRef)) {
+                    RuntimeHash sth = sthRef.hashDeref();
+                    Statement stmt = (Statement) sth.get("statement").value;
+                    ResultSet rs = stmt.getGeneratedKeys();
+                    if (rs.next()) {
+                        long id = rs.getLong(1);
+                        return new RuntimeScalar(id).getList();
+                    }
+                }
+                return scalarUndef.getList();
             }
 
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    return new RuntimeScalar(id).getList();
+                }
+            }
             return scalarUndef.getList();
         }, finalDbh, "last_insert_id");
     }

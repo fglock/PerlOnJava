@@ -47,6 +47,9 @@ public class Parser {
     public boolean isInClassBlock = false;
     // Are we parsing inside a method?
     public boolean isInMethod = false;
+    // Are we parsing inside a braced dereference like %{...} or @{...}?
+    // When true, inner {} should default to hash constructor, not block.
+    public boolean insideBracedDereference = false;
     // List to store ADJUST blocks for the current class
     public List<Node> classAdjustBlocks = new ArrayList<>();
     // List to store heredoc nodes encountered during parsing.

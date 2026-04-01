@@ -1804,17 +1804,59 @@ public class BytecodeCompiler implements Visitor {
     void handleCompoundAssignment(BinaryOperatorNode node) {
         String op = node.operator;
 
+        // Short-circuit operators (//=, ||=, &&=) must NOT evaluate the RHS eagerly.
+        // The RHS should only be evaluated if the short-circuit condition is not met.
+        if (op.equals("//=") || op.equals("||=") || op.equals("&&=")) {
+            handleShortCircuitAssignment(node);
+            return;
+        }
+
         // Compile the right operand first (the value to add/subtract/etc.)
         compileNode(node.right, -1, RuntimeContextType.SCALAR);
         int valueReg = lastResultReg;
 
         // Get the left operand register (the variable or expression being assigned to)
+        int targetReg = compileLhsForCompoundAssignment(node);
+
+        // Emit the appropriate compound assignment opcode
+        switch (op) {
+            case "+=" -> emit(Opcodes.ADD_ASSIGN);
+            case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
+            case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
+            case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
+            case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
+            case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
+            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
+            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
+            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
+            case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
+            case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
+            case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
+            case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
+            case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
+            case "<<=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
+            case ">>=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
+            default -> {
+                throwCompilerException("Unknown compound assignment operator: " + op);
+                return;
+            }
+        }
+
+        emitReg(targetReg);
+        emitReg(valueReg);
+
+        // The result is stored in targetReg
+        lastResultReg = targetReg;
+    }
+
+    /**
+     * Compile the left-hand side of a compound assignment and return its register.
+     */
+    private int compileLhsForCompoundAssignment(BinaryOperatorNode node) {
         int targetReg;
-        boolean isGlobal = false;
 
         // Check if left side is a simple variable reference
         if (node.left instanceof OperatorNode leftOp) {
-
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
                 String varName = "$" + ((IdentifierNode) leftOp.operand).name;
@@ -1824,7 +1866,6 @@ public class BytecodeCompiler implements Visitor {
                     targetReg = getVariableRegister(varName);
                 } else {
                     // Global variable - need to load it first
-                    isGlobal = true;
                     targetReg = allocateRegister();
                     // Strip sigil before normalizing (varName is "$x", need "x" for normalize)
                     String normalizedName = NameNormalizer.normalizeVariableName(
@@ -1846,50 +1887,61 @@ public class BytecodeCompiler implements Visitor {
             targetReg = lastResultReg;
         }
 
-        // Emit the appropriate compound assignment opcode
-        switch (op) {
-            case "+=" -> emit(Opcodes.ADD_ASSIGN);
-            case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
-            case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
-            case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
-            case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
-            case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
-            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
-            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
-            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
-            case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
-            case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
-            case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
-            case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
-            case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
-            case "<<=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
-            case ">>=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
-            case "&&=" -> emit(Opcodes.LOGICAL_AND_ASSIGN);             // Logical AND
-            case "||=" -> emit(Opcodes.LOGICAL_OR_ASSIGN);              // Logical OR
-            case "//=" -> emit(Opcodes.DEFINED_OR_ASSIGN);              // Defined-or
-            default -> {
-                throwCompilerException("Unknown compound assignment operator: " + op);
-                return;
-            }
+        return targetReg;
+    }
+
+    /**
+     * Handle short-circuit compound assignment operators (//=, ||=, &&=).
+     * These must NOT evaluate the RHS if the short-circuit condition is met:
+     * - //= : skip RHS if LHS is defined
+     * - ||= : skip RHS if LHS is truthy
+     * - &&= : skip RHS if LHS is falsy
+     */
+    private void handleShortCircuitAssignment(BinaryOperatorNode node) {
+        String op = node.operator;
+
+        // Step 1: Compile LHS first to get the target register
+        int targetReg = compileLhsForCompoundAssignment(node);
+
+        // Step 2: Emit conditional jump to skip RHS evaluation
+        int jumpPos;
+        if (op.equals("//=")) {
+            // For //=, check if LHS is defined using DEFINED opcode
+            int condReg = allocateRegister();
+            emit(Opcodes.DEFINED);
+            emitReg(condReg);
+            emitReg(targetReg);
+            jumpPos = bytecode.size();
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(condReg);
+            emitInt(0); // placeholder for end target
+        } else if (op.equals("||=")) {
+            // For ||=, skip RHS if LHS is truthy
+            jumpPos = bytecode.size();
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(targetReg);
+            emitInt(0); // placeholder for end target
+        } else {
+            // For &&=, skip RHS if LHS is falsy
+            jumpPos = bytecode.size();
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(targetReg);
+            emitInt(0); // placeholder for end target
         }
 
+        // Step 3: Compile RHS (only executed if short-circuit didn't trigger)
+        compileNode(node.right, -1, RuntimeContextType.SCALAR);
+        int valueReg = lastResultReg;
+
+        // Step 4: Assign RHS to LHS
+        emit(Opcodes.SET_SCALAR);
         emitReg(targetReg);
         emitReg(valueReg);
 
-        // If it's a global variable, store it back
-        if (isGlobal) {
-            OperatorNode leftOp = (OperatorNode) node.left;
-            String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+        // Step 5: Patch the forward jump to skip past the RHS evaluation
+        int endPc = bytecode.size();
+        patchIntOffset(jumpPos + 2, endPc);
 
-            // Check strict vars before compound assignment
-            if (shouldBlockGlobalUnderStrictVars(varName)) {
-                throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-            }
-            // LOAD_GLOBAL_SCALAR loaded the live object; the compound-assign opcode
-            // already mutated it in-place via .set(), so no STORE_GLOBAL_SCALAR needed.
-        }
-
-        // The result is stored in targetReg
         lastResultReg = targetReg;
     }
 
