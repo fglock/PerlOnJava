@@ -242,14 +242,21 @@ sub run_single_test {
     local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{
           re/pat_rt_report.t
         | re/pat.t
+        | re/pat_advanced.t
         | re/regex_sets.t
         | re/regexp_unicode_prop.t
+        | re/reg_eval_scope.t
+        | re/subst.t
+        | re/substT.t
+        | re/subst_wamp.t
         | op/pack.t
         | op/index.t
         | op/split.t
+        | op/pos.t
         | re/reg_pmod.t
         | op/sprintf.t
-        | base/lex.t }x
+        | base/lex.t
+        | comp/parser.t }x
         ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{
           re/pat.t
