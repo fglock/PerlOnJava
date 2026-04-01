@@ -606,6 +606,101 @@ The Perl `class` feature (added in Perl 5.38) is partially implemented. Missing:
 
 ---
 
+## 25. Test Failures Investigated 2026-04-01 (Not Quick Fixes)
+
+These were investigated during the `feature/test-failure-fixes` branch work session.
+
+### op/time.t (71/72) - MOSTLY FIXED
+- **Remaining failure:** Test 7 `changes to $ENV{TZ} respected` - Java caches timezone on startup via `ZoneId.systemDefault()`. Changing `$ENV{TZ}` at runtime has no effect.
+- **Difficulty:** Hard (would need to call `TimeZone.setDefault()` which has global side effects)
+
+### op/cond.t (6/7) - MOSTLY FIXED
+- **Remaining failure:** Test 5 - 20,000-deep nested ternary eval. StackOverflow in parser/emitter recursion.
+- **Difficulty:** Hard (requires iterative parser for deeply nested expressions)
+
+### op/not.t (21/24)
+- Test 20: `${qr//}` dereference of regex ref returns empty string instead of `(?^:)`
+- Tests 21-22: `not 0` / `not 1` return values not read-only (Perl returns immortal `PL_sv_yes`/`PL_sv_no`)
+- **Difficulty:** Medium (regex deref), Hard (read-only return values)
+
+### op/range.t (155/162)
+- Tests 48, 57: `undef..undef` range behavior, `for -2..undef` edge case
+- Tests 138-154: Tied variable fetch/store counting in range operations
+- **Difficulty:** Medium
+
+### op/reverse.t (20/26)
+- **Not yet investigated in detail**
+- **Difficulty:** Unknown
+
+### op/inc.t (66/93)
+- **Not yet investigated in detail**
+- **Difficulty:** Unknown
+
+### uni/upper.t (6449/6450) - NEARLY PERFECT
+- **Remaining failure:** Test 1 `Verify moves YPOGEGRAMMENI` - Greek combining mark reordering during uppercase (`uc("\x{3B1}\x{345}\x{301}")` should move ypogegrammeni after accent)
+- **Difficulty:** Hard (special Unicode Greek casing rule, ICU4J doesn't match Perl's reordering)
+
+### op/oct.t (79/81)
+- Tests 48, 71: Very large octal/hex numbers should overflow to float with warning. PerlOnJava truncates to long.
+- **Difficulty:** Medium (need overflow detection in oct/hex with float fallback)
+
+### op/ord.t (35/38)
+- Tests 33-35: Code points beyond Unicode max (0x110000+). Java's UTF-16 can't represent these.
+- **Difficulty:** Very Hard (fundamental Java UTF-16 limitation)
+
+### op/my.t (52/59)
+- Tests 53-59: `my $x if 0;` should be a compile-time error ("This use of my() in false conditional is no longer allowed")
+- **Difficulty:** Medium (detect `my VAR if CONST_FALSE` pattern in parser/optimizer)
+
+### op/while.t (22/26)
+- Tests 12-14: Regex match variables (`$\``, `$&`, `$'`) scoping with redo/next/last
+- Test 21: While block return value context (last statement should be void)
+- **Difficulty:** Medium-Hard
+
+### op/hash.t (489/494)
+- All 5 failures relate to DESTROY/weaken (unimplemented features)
+- **Difficulty:** Very Hard (depends on DESTROY implementation)
+
+### op/push.t (29/32)
+- Tests 5-6: `push` onto hashref/blessed arrayref (experimental feature)
+- Test 32: Croak when pushing onto readonly array
+- **Difficulty:** Easy-Medium (readonly) to Medium (ref pushing)
+
+### op/unshift.t (18/19)
+- Test 19: Croak when unshifting onto readonly array
+- **Difficulty:** Easy-Medium
+
+### op/die.t (25/26)
+- Test 26: `die qr{x}` TODO test about output termination
+- **Difficulty:** Easy
+
+### op/sprintf2.t (1652/1655)
+- Test 1446: `sprintf %d` overload count
+- Test 1555: UTF-8 flag on sprintf format string result
+- Test 1655: `sprintf("%.115g", 0.3)` full double precision rendering
+- **Difficulty:** Medium-Hard
+
+### op/lex_assign.t (349/353)
+- Test 3: Object destruction via reassignment (DESTROY)
+- Tests 19, 21: chop/chomp of read-only value error
+- Test 107: `select undef,undef,undef,0` ClassCastException
+- **Difficulty:** Easy (select fix) to Hard (DESTROY)
+
+### op/vec.t (74/78)
+- Tests 31-32: Scalar destruction with lvalue vec, read-only ref error
+- Tests 38, 77: UV_MAX lvalue edge cases
+- **Difficulty:** Medium
+
+### op/join.t (38/43)
+- Tied variable FETCH counting and magic delimiter issues
+- **Difficulty:** Medium
+
+### op/delete.t (50/56)
+- Tests involve array delete semantics and DESTROY
+- **Difficulty:** Medium
+
+---
+
 ## Priority Ranking by Impact
 
 ### Tier 1: Highest impact (1000+ tests unlocked)
