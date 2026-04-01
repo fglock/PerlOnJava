@@ -301,7 +301,8 @@ public class WarnDie {
             // Empty message
             message = dieEmptyMessage(oldErr, fileName, lineNumber);
         }
-        if (!RuntimeScalarType.isReference(message.getFirst())) {
+        if (!RuntimeScalarType.isReference(message.getFirst())
+                || message.getFirst().type == RuntimeScalarType.REGEX) {
             // Error message
             String out = message.toString();
             if (!out.endsWith("\n")) {
