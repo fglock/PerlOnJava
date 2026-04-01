@@ -4198,6 +4198,11 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void compileNode(Node node, int targetReg, int callContext) {
+        if (node == null) {
+            // Skip null nodes (e.g., from format declarations that produce empty statements)
+            lastResultReg = -1;
+            return;
+        }
         int savedTarget = targetOutputReg;
         int savedContext = currentCallContext;
         targetOutputReg = targetReg;
@@ -5419,7 +5424,10 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(FormatNode node) {
-        throw new UnsupportedOperationException("Formats not yet implemented");
+        // Format declarations are handled at the JVM compilation stage.
+        // When the interpreter backend processes the AST, formats are already
+        // registered, so this is a no-op.
+        lastResultReg = -1;
     }
 
     @Override
