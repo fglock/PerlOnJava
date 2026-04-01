@@ -487,6 +487,8 @@ public class OperatorParser {
         if (argCount == 1) {
             // select FILEHANDLE
             if (listNode1.elements.getFirst() instanceof IdentifierNode identifierNode) {
+                // Autovivify the filehandle IO slot so parseBarewordHandle succeeds
+                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, identifierNode.name));
                 Node handle = FileHandle.parseBarewordHandle(parser, identifierNode.name);
                 if (handle != null) {
                     // handle is Bareword

@@ -104,7 +104,7 @@ our %Offsets = (
 # NoOp warnings - warnings that have been removed but kept for compatibility
 our %NoOp = ();
 
-sub register_categories {
+sub register_categories (;@) {
     # placeholder
 }
 

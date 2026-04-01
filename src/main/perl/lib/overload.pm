@@ -109,7 +109,7 @@ sub Method {
     #return $ {*{$meth}};
 }
 
-sub AddrRef {
+sub AddrRef ($) {
     no overloading;
     "$_[0]";
 }

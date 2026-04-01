@@ -743,6 +743,7 @@ public class SubroutineParser {
         boolean isRedefinition = false;
         String oldPrototype = null;
         boolean isConstantSub = false;
+        boolean isBuiltinSub = false;  // Java-registered (XS-like) methods don't trigger redefine warnings
         if (codeRef.value instanceof RuntimeCode existingCode) {
             // Check if the existing code has actual implementation OR pending compilation
             // compilerSupplier != null means there's a lazy definition waiting to be compiled
@@ -754,11 +755,14 @@ public class SubroutineParser {
                 oldPrototype = existingCode.prototype;
                 // A constant sub has empty prototype "()" - detect for "Constant subroutine" warning
                 isConstantSub = "".equals(oldPrototype);
+                // Java-registered methods (via registerMethod) have isStatic=true and methodHandle set
+                isBuiltinSub = existingCode.isStatic && existingCode.methodHandle != null;
             }
         }
 
         // Emit "Prototype mismatch" and "Subroutine redefined" warnings
-        if (isRedefinition && block != null) {
+        // Skip warnings for Java-registered (XS-like) built-in methods being overridden by Perl stubs
+        if (isRedefinition && block != null && !isBuiltinSub) {
             String location = "";
             if (parser.ctx.errorUtil != null) {
                 int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
