@@ -125,12 +125,27 @@ PerlOnJava's flat-map architecture stored the vivified glob under the wrong pref
 
 ### Phase 4.7: Fix mixed-context ternary lvalue assignment (DONE)
 
-`Class::Accessor::Grouped` uses `wantarray ? @rv = expr : $rv[0] = expr`.
+`Class::Accessor::Grouped` uses `wantarray ? @rv = eval $src : $rv[0] = eval $src`.
+Perl 5 parses this as `(wantarray ? (@rv = eval $src) : $rv[0]) = eval $src` — a
+ternary-as-lvalue where the true branch contains an assignment expression.
 `LValueVisitor` threw "Assignment to both a list and a scalar" at compile time.
+
+The fix matches Perl 5's `S_assignment_type()` from `op.c`: assignment ops
+(`OP_AASSIGN`, `OP_SASSIGN`) are not in the `ASSIGN_LIST` set, so they return
+`ASSIGN_SCALAR` when classifying ternary branches. This allows the CAG pattern
+while still rejecting genuinely invalid patterns like `($c ? $a : @b) = 123`.
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 4.7.1 | Default to LIST context when ternary branches disagree | `LValueVisitor.java` | DONE |
+| 4.7.1 | Add `assignmentTypeOf()` helper to classify ternary branches matching Perl 5's `S_assignment_type()` | `LValueVisitor.java` | DONE |
+
+**Known runtime limitation**: The ternary-as-lvalue emitter does not properly
+handle assignment-expression branches with non-constant conditions (e.g.,
+`wantarray`). When the true branch is taken at runtime, the result of
+`@rv = eval $src` is not returned as a modifiable lvalue, causing
+"Modification of a read-only value attempted". Constant-folded cases
+(`1 ? @rv = eval $src : $rv[0]`) work correctly. This is a separate JVM
+backend code generation issue.
 
 ### Phase 4.8: Fix `cp` on read-only installed files (DONE)
 
@@ -313,8 +328,9 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
   - Applied redirect in `getGlobalIO()` and EmitVariable.java (JVM backend)
   - Unblocks Package::Stash::PP and namespace::clean
 - [x] Phase 4.7: Fix mixed-context ternary lvalue assignment (2025-03-31)
-  - Changed LValueVisitor to default to LIST context when ternary branches disagree
-  - Unblocks Class::Accessor::Grouped
+  - Added `assignmentTypeOf()` helper matching Perl 5's `S_assignment_type()` — assignment expressions classified as SCALAR in ternary branches
+  - Unblocks Class::Accessor::Grouped (compile-time)
+  - Known runtime limitation: ternary-as-lvalue with assignment branches fails for non-constant conditions (e.g., `wantarray`)
 - [x] Phase 4.8: Fix `cp` on read-only installed files (2025-03-31)
   - Changed `_shell_cp` in ExtUtils::MakeMaker.pm to `rm -f` then `cp`
   - Fixes reinstall of modules with read-only (0444) .pod/.pm files
