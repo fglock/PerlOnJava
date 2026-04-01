@@ -35,7 +35,21 @@ public class CoreOperatorResolver {
         return switch (operatorName) {
             case "__LINE__" -> {
                 handleEmptyParentheses(parser);
-                yield new NumberNode(Integer.toString(parser.ctx.errorUtil.getLineNumber(parser.tokenIndex)), parser.tokenIndex);
+                int lineNumber;
+                if (parser.baseLineNumber > 0) {
+                    // Inside string interpolation sub-parser: count newlines in inner tokens
+                    // up to current position and add to base line of the enclosing string
+                    int newlineCount = 0;
+                    for (int i = 0; i < parser.tokenIndex && i < parser.tokens.size(); i++) {
+                        if (parser.tokens.get(i).type == LexerTokenType.NEWLINE) {
+                            newlineCount++;
+                        }
+                    }
+                    lineNumber = parser.baseLineNumber + newlineCount;
+                } else {
+                    lineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                }
+                yield new NumberNode(Integer.toString(lineNumber), parser.tokenIndex);
             }
             case "__FILE__" -> {
                 handleEmptyParentheses(parser);
