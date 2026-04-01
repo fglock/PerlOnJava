@@ -531,6 +531,19 @@ current login name from `/dev/utmp` (or equivalent). On Java, this can be implem
 2. Implement the runtime operation (return `System.getProperty("user.name")`)
 3. This unblocks override.t which tests CORE::GLOBAL overrides for ~36 built-in functions
 
+#### Investigation notes: op/require_errors.t (item 2.4)
+
+**Status:** 0/0 (compile-time crash). Error: `syntax error at op/require_errors.t line 258, near "qr/\\"`.
+
+The offending line is: `eval { no warnings 'syscalls'; require eval "qr/\0/" };`
+The `\0` inside the double-quoted string produces a null byte. The parser then sees
+`qr/` + NUL + `/` and gets confused, interpreting it as `qr/\\` (unterminated regex).
+
+**Fix options:**
+1. **Patch the test** to skip the null-byte lines (258-263) — quickest unblock
+2. **Fix the string parser** to handle embedded null bytes in double-quoted strings
+   that contain regex-like content — proper fix but harder
+
 ### Baseline
 
 Update this document as fixes land. Use the test runner to measure progress:
