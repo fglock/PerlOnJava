@@ -170,6 +170,13 @@ public class Stat {
                     return stat(new RuntimeScalar(path.toString()));
                 }
             }
+            // Check for directory handle
+            if (fh.directoryIO != null) {
+                Path dirPath = fh.directoryIO.getAbsoluteDirectoryPath();
+                if (dirPath != null) {
+                    return stat(new RuntimeScalar(dirPath.toString()));
+                }
+            }
             getGlobalVariable("main::!").set(9);
             updateLastStat(arg, false, 9, false);
             return res;
@@ -223,21 +230,8 @@ public class Stat {
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
-            RuntimeIO fh = arg.getRuntimeIO();
-            if (fh == null) {
-                getGlobalVariable("main::!").set(9);
-                updateLastStat(arg, false, 9, true);
-                return res;
-            }
-            if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
-                    fh.directoryIO == null) {
-                getGlobalVariable("main::!").set(9);
-                updateLastStat(arg, false, 9, true);
-                return res;
-            }
-            getGlobalVariable("main::!").set(9);
-            updateLastStat(arg, false, 9, true);
-            return res;
+            // Perl: lstat on a filehandle reverts to regular stat (fstat)
+            return stat(arg);
         }
 
         String filename = arg.toString();
@@ -337,7 +331,7 @@ public class Stat {
         res.add(scalarUndef);
     }
 
-    private record NativeStatFields(
+    record NativeStatFields(
             long dev, long ino, long mode, long nlink,
             long uid, long gid, long rdev, long size,
             long atime, long mtime, long ctime,

@@ -19,6 +19,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class DirectoryIO {
     private final String directoryPath;
     private final Path absoluteDirectoryPath;
+
+    public Path getAbsoluteDirectoryPath() {
+        return absoluteDirectoryPath;
+    }
     public DirectoryStream<Path> directoryStream;
     private List<String> allEntries; // Cache all directory entries
     private int currentPosition = 0;
