@@ -1622,8 +1622,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case VSTRING -> // 4
-                    ScalarUtils.stringIncrement(this);
+            case VSTRING -> { // 4
+                ScalarUtils.stringIncrement(this);
+                this.type = RuntimeScalarType.STRING;  // ++ flattens vstrings
+            }
             case BOOLEAN -> { // 5
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
@@ -1732,8 +1734,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case VSTRING -> // 4
-                    ScalarUtils.stringIncrement(this);
+            case VSTRING -> { // 4
+                ScalarUtils.stringIncrement(this);
+                this.type = RuntimeScalarType.STRING;  // ++ flattens vstrings
+            }
             case BOOLEAN -> { // 5
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = old.getInt() + 1;
