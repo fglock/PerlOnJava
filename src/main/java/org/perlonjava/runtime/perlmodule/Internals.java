@@ -99,8 +99,16 @@ public class Internals extends PerlModuleBase {
                 if (variable instanceof RuntimeArray array) {
                     array.type = RuntimeArray.READONLY_ARRAY;
                 } else if (variable instanceof RuntimeScalar scalar) {
+                    // Handle array reference (from \@array via prototype)
+                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE && scalar.value instanceof RuntimeArray array) {
+                        array.type = RuntimeArray.READONLY_ARRAY;
+                    }
+                    // Handle hash reference (from \%hash via prototype)
+                    else if (scalar.type == RuntimeScalarType.HASHREFERENCE && scalar.value instanceof RuntimeHash hash) {
+                        // TODO: implement readonly hash when needed
+                    }
                     // Check if it's a scalar reference (from \$var)
-                    if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
+                    else if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
                         // Replace the target scalar with a readonly version
                         RuntimeScalarReadOnly readonlyScalar;
                         if (targetScalar.type == RuntimeScalarType.INTEGER) {

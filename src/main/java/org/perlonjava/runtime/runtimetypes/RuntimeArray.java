@@ -171,7 +171,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield push(runtimeArray, value);
             }
             case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, value);
-            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
+            case READONLY_ARRAY -> {
+                // Perl allows push of empty list onto readonly array
+                if (value instanceof RuntimeList list && list.size() == 0) {
+                    yield getScalarInt(runtimeArray.elements.size());
+                }
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
