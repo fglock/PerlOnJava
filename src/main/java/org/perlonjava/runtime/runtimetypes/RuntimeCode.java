@@ -1847,6 +1847,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        // Handle tied scalars - fetch the underlying value first
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            return apply(runtimeScalar.tiedFetch(), a, callContext);
+        }
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
@@ -2046,6 +2050,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
+        // Handle tied scalars - fetch the underlying value first
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            return apply(runtimeScalar.tiedFetch(), subroutineName, args, callContext);
+        }
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
         // If the RuntimeScalar is undef (forward declaration never filled),
         // silently return undef so tests can continue running.
@@ -2175,6 +2183,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
+
+        // Handle tied scalars - fetch the underlying value first
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            return apply(runtimeScalar.tiedFetch(), subroutineName, list, callContext);
+        }
 
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
         // If the RuntimeScalar is undef (forward declaration never filled),

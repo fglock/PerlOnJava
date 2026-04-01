@@ -41,6 +41,8 @@ public class EmitOperatorDeleteExists {
 
     private static void handleDeleteExistsInner(OperatorNode node, EmitterVisitor emitterVisitor) {
         String operator = node.operator;
+        // Map delete_local to the runtime method name "deleteLocal"
+        String runtimeMethod = operator.equals("delete_local") ? "deleteLocal" : operator;
         if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 1) {
                 if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
@@ -98,7 +100,7 @@ public class EmitOperatorDeleteExists {
                     switch (binop.operator) {
                         case "{" -> {
                             // Handle hash element operator.
-                            Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
+                            Dereference.handleHashElementOperator(emitterVisitor, binop, runtimeMethod);
                             return;
                         }
                         case "[" -> {
@@ -126,11 +128,11 @@ public class EmitOperatorDeleteExists {
                                             "arrayDerefExists",
                                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                             false);
-                                } else if (operator.equals("delete")) {
+                                } else if (operator.equals("delete") || operator.equals("delete_local")) {
                                     emitterVisitor.ctx.mv.visitMethodInsn(
                                             Opcodes.INVOKEVIRTUAL,
                                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                            "arrayDerefDelete",
+                                            operator.equals("delete_local") ? "arrayDerefDeleteLocal" : "arrayDerefDelete",
                                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                                             false);
                                 }
@@ -138,18 +140,18 @@ public class EmitOperatorDeleteExists {
                             }
 
                             // Handle simple array element operator.
-                            Dereference.handleArrayElementOperator(emitterVisitor, binop, operator);
+                            Dereference.handleArrayElementOperator(emitterVisitor, binop, runtimeMethod);
                             return;
                         }
                         case "->" -> {
                             if (binop.right instanceof HashLiteralNode) { // ->{x}
                                 // Handle arrow hash dereference
-                                Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
+                                Dereference.handleArrowHashDeref(emitterVisitor, binop, runtimeMethod);
                                 return;
                             }
                             if (binop.right instanceof ArrayLiteralNode) { // ->[x]
                                 // Handle arrow array dereference
-                                Dereference.handleArrowArrayDeref(emitterVisitor, binop, operator);
+                                Dereference.handleArrowArrayDeref(emitterVisitor, binop, runtimeMethod);
                                 return;
                             }
                         }

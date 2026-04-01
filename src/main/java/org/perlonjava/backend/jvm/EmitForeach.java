@@ -9,6 +9,7 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class EmitForeach {
@@ -96,13 +97,12 @@ public class EmitForeach {
 
         Node variableNode = node.variable;
 
-        // Check if the loop variable is a complex lvalue expression like $$f
-        // If so, emit as while loop with explicit assignment
-        if (variableNode instanceof OperatorNode opNode &&
-                opNode.operand instanceof OperatorNode nestedOpNode &&
-                opNode.operator.equals("$") && nestedOpNode.operator.equals("$")) {
+        // Check if the loop variable is a complex lvalue expression like $$f or ${*$f}
+        // If so, emit as while loop with explicit assignment to avoid ASM frame issues
+        if (variableNode instanceof OperatorNode opNode && opNode.operator.equals("$")
+                && !(opNode.operand instanceof IdentifierNode)) {
 
-            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 emitting complex lvalue $$var as while loop");
+            if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 emitting complex lvalue as while loop");
             emitFor1AsWhileLoop(emitterVisitor, node);
             return;
         }
@@ -167,7 +167,17 @@ public class EmitForeach {
             }
 
             // Reset global variable check after rewriting
-            loopVariableIsGlobal = false;
+            if (opNode.operator.equals("our") && variableNode instanceof OperatorNode declVar
+                    && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
+                // For 'our' variables, the loop should set the global variable, not a local slot.
+                // 'our' creates a lexical alias to a package global, so for loop iteration
+                // we need to use aliasGlobalVariable to properly bind each element.
+                loopVariableIsGlobal = true;
+                globalVarName = NameNormalizer.normalizeVariableName(
+                        declId.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            } else {
+                loopVariableIsGlobal = false;
+            }
         }
 
         if (variableNode instanceof OperatorNode opNode &&

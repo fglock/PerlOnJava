@@ -171,7 +171,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield push(runtimeArray, value);
             }
             case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, value);
-            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
+            case READONLY_ARRAY -> {
+                // Perl allows push of empty list onto readonly array
+                if (value instanceof RuntimeList list && list.size() == 0) {
+                    yield getScalarInt(runtimeArray.elements.size());
+                }
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
@@ -432,6 +438,76 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     public RuntimeScalar delete(RuntimeScalar index) {
         return this.delete(index.getInt());
+    }
+
+    /**
+     * Implements `delete local $array[index]`.
+     * Saves the current state of the array element, deletes it,
+     * and arranges for restoration when the enclosing scope exits.
+     */
+    public RuntimeScalar deleteLocal(int index) {
+        return deleteLocal(new RuntimeScalar(index));
+    }
+
+    public RuntimeScalar deleteLocal(RuntimeScalar indexScalar) {
+        int index = indexScalar.getInt();
+        if (index < 0) {
+            index = elements.size() + index;
+        }
+        boolean existed = index >= 0 && index < elements.size() && elements.get(index) != null;
+        RuntimeScalar savedValue = existed ? new RuntimeScalar(elements.get(index)) : null;
+        RuntimeScalar returnValue = existed ? new RuntimeScalar(elements.get(index)) : new RuntimeScalar();
+        int savedSize = elements.size();
+        RuntimeArray self = this;
+        final int idx = index;
+
+        DynamicVariableManager.pushLocalVariable(new DynamicState() {
+            @Override
+            public void dynamicSaveState() {
+                // Delete the element during save phase
+                if (idx >= 0 && idx < self.elements.size()) {
+                    if (idx == self.elements.size() - 1) {
+                        // Last element - actually remove it
+                        self.elements.removeLast();
+                    } else {
+                        self.elements.set(idx, null);
+                    }
+                }
+            }
+
+            @Override
+            public void dynamicRestoreState() {
+                // Restore original size if needed
+                while (self.elements.size() < savedSize) {
+                    self.elements.add(null);
+                }
+                if (existed) {
+                    if (idx < self.elements.size()) {
+                        self.elements.set(idx, savedValue);
+                    }
+                } else if (idx >= 0 && idx < self.elements.size()) {
+                    self.elements.set(idx, null);
+                }
+            }
+        });
+
+        return returnValue;
+    }
+
+    /**
+     * Deletes a slice of the array with local semantics: delete local @array[indices]
+     * Each element is saved and restored when the current scope exits.
+     *
+     * @param indices The RuntimeList containing the indices to delete.
+     * @return A RuntimeList containing the deleted values.
+     */
+    public RuntimeList deleteLocalSlice(RuntimeList indices) {
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBase> outElements = result.elements;
+        for (RuntimeScalar indexScalar : indices) {
+            outElements.add(this.deleteLocal(indexScalar));
+        }
+        return result;
     }
 
     /**

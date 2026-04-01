@@ -222,8 +222,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case VSTRING:
             case DUALVAR:
                 // Handle scalar value assignments to typeglobs
-                // This assigns the scalar value to the scalar slot of the typeglob
-                GlobalVariable.getGlobalVariable(this.globName).set(value);
+                // This replaces the scalar slot of the typeglob.
+                // If the current scalar is read-only (e.g., aliased from a for-loop
+                // iterating over literal constants), replace it with a new mutable
+                // scalar rather than modifying in-place. In Perl 5, *foo = "value"
+                // replaces the GvSV slot, not modifies the existing SV in-place.
+                RuntimeScalar currentScalar = GlobalVariable.getGlobalVariable(this.globName);
+                if (currentScalar instanceof RuntimeScalarReadOnly) {
+                    RuntimeScalar newScalar = new RuntimeScalar();
+                    newScalar.set(value);
+                    GlobalVariable.aliasGlobalVariable(this.globName, newScalar);
+                } else {
+                    currentScalar.set(value);
+                }
                 return value;
             case FORMAT:
                 // Handle format assignments to typeglobs
@@ -364,7 +375,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 String name = lastColonIndex >= 0 ? this.globName.substring(lastColonIndex + 2) : this.globName;
                 yield new RuntimeScalar(name);
             }
-            case "IO" -> {
+            case "IO", "FILEHANDLE" -> {
                 // Accessing the IO slot yields a blessable reference-like value.
                 // We model this by returning a GLOBREFERENCE wrapper around the RuntimeIO.
                 if (IO != null && IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {

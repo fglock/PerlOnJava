@@ -6,6 +6,7 @@ import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Iterator;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -179,13 +180,20 @@ public class StringOperators {
         if (str.isEmpty()) {
             return new RuntimeScalar(str);
         }
-        // Get the first code point and convert it to titlecase using ICU4J
         int firstCodePoint = str.codePointAt(0);
         int charCount = Character.charCount(firstCodePoint);
+        String firstChar = str.substring(0, charCount);
         String rest = str.substring(charCount);
-        // Use toTitleCase for proper titlecase conversion (not uppercase)
-        int titleCodePoint = UCharacter.toTitleCase(firstCodePoint);
-        String titleFirst = String.valueOf(Character.toChars(titleCodePoint));
+        // Try string-based API first for one-to-many mappings (e.g., U+0587 → U+0535 U+0582)
+        String titleFirst = UCharacter.toTitleCase(Locale.ROOT, firstChar, null);
+        if (titleFirst.equals(firstChar)) {
+            // String API didn't change it (e.g., combining characters like U+0345).
+            // Fall back to code-point API for simple titlecase mapping.
+            int titleCodePoint = UCharacter.toTitleCase(firstCodePoint);
+            if (titleCodePoint != firstCodePoint) {
+                titleFirst = String.valueOf(Character.toChars(titleCodePoint));
+            }
+        }
         return new RuntimeScalar(titleFirst + rest);
     }
 

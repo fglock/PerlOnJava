@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -927,6 +928,27 @@ public class StatementResolver {
      */
     private static Node handleStatementModifierWithMy(Node expression, Node modifierExpression,
                                                        String operator, int tokenIndex) {
+        // Check for bare my()/state()/our() in conditional - error since Perl 5.30 (RT #133543)
+        // Only error when the condition is a compile-time constant that makes my() never execute.
+        // Runtime conditions like "my $x if @_" are valid (unusual but legal Perl).
+        if (expression instanceof OperatorNode opNode) {
+            String op = opNode.operator;
+            if (op.equals("my") || op.equals("state") || op.equals("our")) {
+                RuntimeScalar condVal = ConstantFoldingVisitor.getConstantValue(modifierExpression);
+                if (condVal != null) {
+                    boolean wouldNeverExecute = switch (operator) {
+                        case "&&" -> !condVal.getBoolean();  // "my $x if 0" → never executes
+                        case "||" -> condVal.getBoolean();    // "my $x unless 1" → never executes
+                        default -> false;
+                    };
+                    if (wouldNeverExecute) {
+                        throw new PerlCompilerException(
+                                "This use of my() in false conditional is no longer allowed");
+                    }
+                }
+            }
+        }
+
         // Check if expression is an assignment with 'my' on the left side
         if (expression instanceof BinaryOperatorNode assignNode && assignNode.operator.equals("=")) {
             Node left = assignNode.left;

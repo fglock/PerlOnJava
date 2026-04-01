@@ -3424,6 +3424,21 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = rd;
                     return;
                 }
+
+                // Handle: local $#array (without assignment)
+                if (sigil.equals("$#")) {
+                    int arrayReg = CompileAssignment.resolveArrayForDollarHash(this, sigilOp);
+                    // Save the array state so it's restored on scope exit
+                    emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    emitReg(arrayReg);
+                    // Return the current array size as the result
+                    int resultReg = allocateOutputRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(resultReg);
+                    emitReg(arrayReg);
+                    lastResultReg = resultReg;
+                    return;
+                }
             } else if (node.operand instanceof ListNode listNode) {
                 // local ($x, $y) - list of localized global variables
                 List<Integer> varRegs = new ArrayList<>();
@@ -3651,6 +3666,24 @@ public class BytecodeCompiler implements Visitor {
                     compileNode(blockNode.elements.getFirst(), -1, RuntimeContextType.SCALAR);
                 } else {
                     compileNode(blockNode, -1, RuntimeContextType.SCALAR);
+                }
+                int nameReg = lastResultReg;
+                int rd = allocateOutputRegister();
+                emit(Opcodes.LOCAL_GLOB_DYNAMIC);
+                emitReg(rd);
+                emitReg(nameReg);
+                lastResultReg = rd;
+                return;
+            }
+            // local @{expr} / local %{expr} - localize a dynamic array/hash by name
+            // Implemented by localizing the typeglob (covers the array/hash slot)
+            if (node.operand instanceof OperatorNode sigilOp4
+                    && (sigilOp4.operator.equals("@") || sigilOp4.operator.equals("%"))
+                    && sigilOp4.operand instanceof BlockNode blockNode2) {
+                if (blockNode2.elements.size() == 1) {
+                    compileNode(blockNode2.elements.getFirst(), -1, RuntimeContextType.SCALAR);
+                } else {
+                    compileNode(blockNode2, -1, RuntimeContextType.SCALAR);
                 }
                 int nameReg = lastResultReg;
                 int rd = allocateOutputRegister();

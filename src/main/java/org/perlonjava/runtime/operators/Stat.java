@@ -27,9 +27,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class Stat {
 
     static NativeStatFields lastNativeStatFields;
-    
+
     // FFM POSIX implementation
     private static final FFMPosixInterface posix = FFMPosix.get();
+
+    /**
+     * Checks if a glob argument is the special underscore glob (*_ or \*_).
+     */
+    private static boolean isUnderscoreGlob(RuntimeScalar arg) {
+        if (arg.value instanceof RuntimeGlob rg) {
+            return rg.globName != null && rg.globName.endsWith("::_");
+        }
+        if (arg.value instanceof RuntimeIO rio) {
+            return rio.globName != null && rio.globName.endsWith("::_");
+        }
+        return false;
+    }
 
     static NativeStatFields nativeStat(String path, boolean followLinks) {
         try {
@@ -95,6 +108,9 @@ public class Stat {
     }
 
     public static RuntimeList lstatLastHandle() {
+        if (!lastStatWasLstat) {
+            throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
+        }
         if (!lastStatOk) {
             getGlobalVariable("main::!").set(9);
             return new RuntimeList();
@@ -110,6 +126,9 @@ public class Stat {
     }
 
     public static RuntimeBase lstatLastHandle(int ctx) {
+        if (!lastStatWasLstat) {
+            throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
+        }
         if (ctx == RuntimeContextType.SCALAR) {
             if (!lastStatOk) {
                 getGlobalVariable("main::!").set(9);
@@ -162,6 +181,13 @@ public class Stat {
                 Path path = cfc.getFilePath();
                 if (path != null) {
                     return stat(new RuntimeScalar(path.toString()));
+                }
+            }
+            // Check for directory handle
+            if (fh.directoryIO != null) {
+                Path dirPath = fh.directoryIO.getAbsoluteDirectoryPath();
+                if (dirPath != null) {
+                    return stat(new RuntimeScalar(dirPath.toString()));
                 }
             }
             getGlobalVariable("main::!").set(9);
@@ -217,21 +243,16 @@ public class Stat {
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
-            RuntimeIO fh = arg.getRuntimeIO();
-            if (fh == null) {
-                getGlobalVariable("main::!").set(9);
-                updateLastStat(arg, false, 9, true);
-                return res;
+            // Check if this is the special underscore glob (*_ or \*_)
+            if (isUnderscoreGlob(arg)) {
+                // lstat on *_ or \*_ after stat should croak
+                if (!lastStatWasLstat) {
+                    throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
+                }
+                return lstatLastHandle();
             }
-            if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
-                    fh.directoryIO == null) {
-                getGlobalVariable("main::!").set(9);
-                updateLastStat(arg, false, 9, true);
-                return res;
-            }
-            getGlobalVariable("main::!").set(9);
-            updateLastStat(arg, false, 9, true);
-            return res;
+            // Perl: lstat on a filehandle reverts to regular stat (fstat)
+            return stat(arg);
         }
 
         String filename = arg.toString();
@@ -331,7 +352,7 @@ public class Stat {
         res.add(scalarUndef);
     }
 
-    private record NativeStatFields(
+    record NativeStatFields(
             long dev, long ino, long mode, long nlink,
             long uid, long gid, long rdev, long size,
             long atime, long mtime, long ctime,

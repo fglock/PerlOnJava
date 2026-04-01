@@ -101,7 +101,7 @@ public class FindDeclarationVisitor implements Visitor {
      */
     @Override
     public void visit(OperatorNode node) {
-        if (this.operatorName.equals(node.operator)) {
+        if (this.operatorName.equals(node.operator) || "delete_local".equals(node.operator)) {
             containsLocalOperator = true;
             operatorNode = node;
         }

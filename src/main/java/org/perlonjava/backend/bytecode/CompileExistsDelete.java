@@ -506,4 +506,182 @@ public class CompileExistsDelete {
         bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
         return bc.lastResultReg;
     }
+
+    /**
+     * Handles `delete local` in the bytecode interpreter.
+     * Mirrors visitDelete but uses HASH_DELETE_LOCAL / ARRAY_DELETE_LOCAL opcodes.
+     */
+    public static void visitDeleteLocal(BytecodeCompiler bc, OperatorNode node) {
+        if (node.operand == null || !(node.operand instanceof ListNode list) || list.elements.isEmpty()) {
+            bc.throwCompilerException("delete local requires an argument");
+            return;
+        }
+        Node arg = list.elements.get(0);
+        if (arg instanceof BinaryOperatorNode binOp) {
+            switch (binOp.operator) {
+                case "{" -> visitDeleteLocalHash(bc, node, binOp);
+                case "[" -> visitDeleteLocalArray(bc, node, binOp);
+                case "->" -> visitDeleteLocalArrow(bc, node, binOp);
+                default -> bc.throwCompilerException("delete local requires hash or array element");
+            }
+        } else {
+            bc.throwCompilerException("delete local requires hash or array element");
+        }
+    }
+
+    private static void visitDeleteLocalHash(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode hashAccess) {
+        if (hashAccess.left instanceof OperatorNode leftOp && leftOp.operator.equals("@")) {
+            visitDeleteLocalHashSlice(bc, node, hashAccess, leftOp);
+            return;
+        }
+        int hashReg = resolveHashFromBinaryOp(bc, hashAccess, node.getIndex());
+        int keyReg = compileHashKey(bc, hashAccess.right);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.HASH_DELETE_LOCAL);
+        bc.emitReg(rd);
+        bc.emitReg(hashReg);
+        bc.emitReg(keyReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDeleteLocalHashSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode hashAccess, OperatorNode leftOp) {
+        int hashReg;
+        if (leftOp.operand instanceof IdentifierNode id) {
+            String hashVarName = "%" + id.name;
+            if (bc.hasVariable(hashVarName)) {
+                hashReg = bc.getVariableRegister(hashVarName);
+            } else {
+                hashReg = bc.allocateRegister();
+                String globalHashName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalHashName);
+                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                bc.emitReg(hashReg);
+                bc.emit(nameIdx);
+            }
+        } else {
+            bc.throwCompilerException("Hash slice delete local requires identifier");
+            return;
+        }
+        if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
+            bc.throwCompilerException("Hash slice delete local requires HashLiteralNode");
+            return;
+        }
+        List<Integer> keyRegs = new ArrayList<>();
+        for (Node keyElement : keysNode.elements) {
+            if (keyElement instanceof IdentifierNode keyId) {
+                int keyReg = bc.allocateRegister();
+                int keyIdx = bc.addToStringPool(keyId.name);
+                bc.emit(Opcodes.LOAD_STRING);
+                bc.emitReg(keyReg);
+                bc.emit(keyIdx);
+                keyRegs.add(keyReg);
+            } else {
+                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                keyRegs.add(bc.lastResultReg);
+            }
+        }
+        int keysListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(keysListReg);
+        bc.emit(keyRegs.size());
+        for (int keyReg : keyRegs) {
+            bc.emitReg(keyReg);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.HASH_SLICE_DELETE_LOCAL);
+        bc.emitReg(rd);
+        bc.emitReg(hashReg);
+        bc.emitReg(keysListReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDeleteLocalArray(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess) {
+        if (arrayAccess.left instanceof OperatorNode leftOp && leftOp.operator.equals("@")) {
+            visitDeleteLocalArraySlice(bc, node, arrayAccess, leftOp);
+            return;
+        }
+        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess, node.getIndex());
+        int indexReg = compileArrayIndex(bc, arrayAccess);
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
+        bc.emitReg(rd);
+        bc.emitReg(arrayReg);
+        bc.emitReg(indexReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDeleteLocalArraySlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess, OperatorNode leftOp) {
+        int arrayReg;
+        if (leftOp.operand instanceof IdentifierNode id) {
+            String arrayVarName = "@" + id.name;
+            if (bc.hasVariable(arrayVarName)) {
+                arrayReg = bc.getVariableRegister(arrayVarName);
+            } else {
+                arrayReg = bc.allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalArrayName);
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(arrayReg);
+                bc.emit(nameIdx);
+            }
+        } else {
+            bc.throwCompilerException("Array slice delete local requires identifier");
+            return;
+        }
+        if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
+            bc.throwCompilerException("Array slice delete local requires ArrayLiteralNode");
+            return;
+        }
+        List<Integer> indexRegs = new ArrayList<>();
+        for (Node indexElement : indicesNode.elements) {
+            bc.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
+            indexRegs.add(bc.lastResultReg);
+        }
+        int indicesListReg = bc.allocateRegister();
+        bc.emit(Opcodes.CREATE_LIST);
+        bc.emitReg(indicesListReg);
+        bc.emit(indexRegs.size());
+        for (int indexReg : indexRegs) {
+            bc.emitReg(indexReg);
+        }
+        int rd = bc.allocateOutputRegister();
+        bc.emit(Opcodes.ARRAY_SLICE_DELETE_LOCAL);
+        bc.emitReg(rd);
+        bc.emitReg(arrayReg);
+        bc.emitReg(indicesListReg);
+        bc.lastResultReg = rd;
+    }
+
+    private static void visitDeleteLocalArrow(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrowAccess) {
+        if (arrowAccess.right instanceof HashLiteralNode) {
+            bc.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+            int hashReg = derefHash(bc, refReg, node.getIndex());
+            int keyReg = compileHashKey(bc, arrowAccess.right);
+            int rd = bc.allocateOutputRegister();
+            bc.emit(Opcodes.HASH_DELETE_LOCAL);
+            bc.emitReg(rd);
+            bc.emitReg(hashReg);
+            bc.emitReg(keyReg);
+            bc.lastResultReg = rd;
+        } else if (arrowAccess.right instanceof ArrayLiteralNode indexNode) {
+            bc.compileNode(arrowAccess.left, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+            int arrayReg = derefArray(bc, refReg, node.getIndex());
+            if (indexNode.elements.isEmpty()) {
+                bc.throwCompilerException("Array index required for delete local");
+                return;
+            }
+            bc.compileNode(indexNode.elements.get(0), -1, RuntimeContextType.SCALAR);
+            int indexReg = bc.lastResultReg;
+            int rd = bc.allocateOutputRegister();
+            bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
+            bc.emitReg(rd);
+            bc.emitReg(arrayReg);
+            bc.emitReg(indexReg);
+            bc.lastResultReg = rd;
+        } else {
+            bc.throwCompilerException("delete local requires hash or array element");
+        }
+    }
 }

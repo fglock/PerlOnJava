@@ -548,6 +548,22 @@ public class OperatorParser {
 
     static OperatorNode parseDelete(Parser parser, LexerToken token, int currentIndex) {
         Node operand;
+
+        // Check for 'delete local' syntax
+        LexerToken nextToken = peek(parser);
+        if (nextToken.text.equals("local")) {
+            TokenUtils.consume(parser); // consume 'local'
+            parser.parsingTakeReference = true;
+            operand = ListParser.parseZeroOrOneList(parser, 1);
+            parser.parsingTakeReference = false;
+
+            if (operand instanceof ListNode listNode) {
+                transformCodeRefPatterns(parser, listNode, token.text);
+            }
+
+            return new OperatorNode("delete_local", operand, currentIndex);
+        }
+
         // Handle 'delete' and 'exists' operators with special parsing context
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
         operand = ListParser.parseZeroOrOneList(parser, 1);
@@ -838,6 +854,11 @@ public class OperatorParser {
                 op = operatorNode.operand;
             }
             if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
+                // Perl 5.24+: pushing/unshifting onto scalar variable or expression is forbidden
+                // But literals get a different error message
+                if (op instanceof OperatorNode || op instanceof BinaryOperatorNode) {
+                    parser.throwError(firstArgIndex, "Experimental " + operatorName + " on scalar is now forbidden");
+                }
                 parser.throwError(firstArgIndex, "Type of arg 1 to " + operatorName + " must be array (not constant item)");
             }
         }

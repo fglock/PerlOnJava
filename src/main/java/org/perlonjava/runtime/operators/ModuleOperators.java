@@ -420,6 +420,7 @@ public class ModuleOperators {
             // This handles:
             // 1. Relative module names (e.g., Foo::Bar)
             // 2. Absolute/relative paths that don't exist on filesystem (try @INC hooks only)
+            boolean foundDirectory = false;
             if (fullName == null) {
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
@@ -571,6 +572,8 @@ public class ModuleOperators {
                         if (Files.exists(fullPath)) {
                             // Check if it's a directory
                             if (Files.isDirectory(fullPath)) {
+                                // Track that we found a directory (for EISDIR error)
+                                foundDirectory = true;
                                 // Continue searching in other @INC directories
                                 continue;
                             }
@@ -583,7 +586,11 @@ public class ModuleOperators {
             }
 
             if (fullName == null && code == null) {
-                GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
+                if (foundDirectory) {
+                    GlobalVariable.setGlobalVariable("main::!", "Is a directory");
+                } else {
+                    GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
+                }
                 return new RuntimeScalar(); // return undef
             }
         }

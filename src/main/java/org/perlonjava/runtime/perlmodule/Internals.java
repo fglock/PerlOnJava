@@ -77,11 +77,9 @@ public class Internals extends PerlModuleBase {
      * @return Empty list
      */
     public static RuntimeList svRefcount(RuntimeArray args, int ctx) {
-
-        // XXX TODO rewrite this to emit a RuntimeScalarReadOnly
-        // It needs to happen at the emitter, because the variable container needs to be replaced.
-
-        return new RuntimeList();
+        // JVM uses garbage collection, not reference counting.
+        // Return 1 as a reasonable default for compatibility.
+        return new RuntimeScalar(1).getList();
     }
 
     /**
@@ -101,8 +99,16 @@ public class Internals extends PerlModuleBase {
                 if (variable instanceof RuntimeArray array) {
                     array.type = RuntimeArray.READONLY_ARRAY;
                 } else if (variable instanceof RuntimeScalar scalar) {
+                    // Handle array reference (from \@array via prototype)
+                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE && scalar.value instanceof RuntimeArray array) {
+                        array.type = RuntimeArray.READONLY_ARRAY;
+                    }
+                    // Handle hash reference (from \%hash via prototype)
+                    else if (scalar.type == RuntimeScalarType.HASHREFERENCE && scalar.value instanceof RuntimeHash hash) {
+                        // TODO: implement readonly hash when needed
+                    }
                     // Check if it's a scalar reference (from \$var)
-                    if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
+                    else if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
                         // Replace the target scalar with a readonly version
                         RuntimeScalarReadOnly readonlyScalar;
                         if (targetScalar.type == RuntimeScalarType.INTEGER) {

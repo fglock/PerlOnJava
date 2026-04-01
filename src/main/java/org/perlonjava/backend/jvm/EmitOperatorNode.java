@@ -115,6 +115,7 @@ public class EmitOperatorNode {
             case "atan2" -> EmitOperator.handleAtan2(emitterVisitor, node);
             case "scalar" -> EmitOperator.handleScalar(emitterVisitor, node);
             case "delete", "exists" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);
+            case "delete_local" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);
             case "defined" -> EmitOperatorDeleteExists.handleDefined(node, node.operator, emitterVisitor);
             case "local" -> EmitOperatorLocal.handleLocal(emitterVisitor, node);
             case "\\" -> EmitOperator.handleCreateReference(emitterVisitor, node);

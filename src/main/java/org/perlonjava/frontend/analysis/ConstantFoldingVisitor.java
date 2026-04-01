@@ -287,6 +287,8 @@ public class ConstantFoldingVisitor implements Visitor {
                             result = foldedRight;
                             isConstant = isConstantNode(foldedRight);
                         } else {
+                            // Check for "my() in false conditional" - error since Perl 5.30
+                            checkBareDeclarationInFalseConditional(foldedRight, node.tokenIndex);
                             result = foldedLeft;
                             isConstant = true;
                         }
@@ -294,6 +296,8 @@ public class ConstantFoldingVisitor implements Visitor {
                     case "||": case "or":
                         // true || expr → true constant; false || expr → expr
                         if (leftVal.getBoolean()) {
+                            // Check for "my() in false conditional" (unless case)
+                            checkBareDeclarationInFalseConditional(foldedRight, node.tokenIndex);
                             result = foldedLeft;
                             isConstant = true;
                         } else {
@@ -980,5 +984,24 @@ public class ConstantFoldingVisitor implements Visitor {
     public void visit(CompilerFlagNode node) {
         result = node;
         isConstant = false;
+    }
+
+    /**
+     * Checks if a node is a bare my/state/our declaration (without assignment)
+     * being discarded by constant folding in a false conditional context.
+     * Throws a compile error for patterns like "my $x if 0;" or "0 && my $x;"
+     * which were deprecated in Perl 5.10 and made fatal in Perl 5.30.
+     *
+     * @param node       The node being discarded
+     * @param tokenIndex The source position for error reporting
+     */
+    private static void checkBareDeclarationInFalseConditional(Node node, int tokenIndex) {
+        if (node instanceof OperatorNode opNode) {
+            String op = opNode.operator;
+            if (op.equals("my") || op.equals("state") || op.equals("our")) {
+                throw new PerlCompilerException(
+                        "This use of my() in false conditional is no longer allowed");
+            }
+        }
     }
 }

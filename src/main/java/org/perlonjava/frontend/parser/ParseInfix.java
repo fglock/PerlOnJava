@@ -2,12 +2,14 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.app.cli.CompilerOptions;
 
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -134,6 +136,10 @@ public class ParseInfix {
 
             // Validate operator chaining rules (Perl 5.32+)
             validateOperatorChaining(parser, operator, left, right);
+
+            // Check for "my() in false conditional" (Perl 5.30+, RT #133543)
+            // Catches patterns like: 0 && my $x; or 1 || my %h;
+            checkMyInFalseConditional(operator, left, right);
 
             // Validate that state variables are not initialized in list context
             if (operator.equals("=")) {
@@ -588,5 +594,31 @@ public class ParseInfix {
             }
         }
         return false;
+    }
+
+    /**
+     * Checks for "my() in false conditional" patterns (Perl 5.30+, RT #133543).
+     * Detects: CONST_FALSE && my $x, CONST_TRUE || my $x, etc.
+     * These patterns were deprecated in 5.10 and made fatal in 5.30.
+     */
+    private static void checkMyInFalseConditional(String operator, Node left, Node right) {
+        if (right instanceof OperatorNode opNode) {
+            String op = opNode.operator;
+            if (op.equals("my") || op.equals("state") || op.equals("our")) {
+                // Check if the left side is a constant that would prevent the my() from executing
+                RuntimeScalar leftVal = ConstantFoldingVisitor.getConstantValue(left);
+                if (leftVal != null) {
+                    boolean wouldDiscardMy = switch (operator) {
+                        case "&&", "and" -> !leftVal.getBoolean();  // false && my $x
+                        case "||", "or" -> leftVal.getBoolean();    // true || my $x
+                        default -> false;
+                    };
+                    if (wouldDiscardMy) {
+                        throw new PerlCompilerException(
+                                "This use of my() in false conditional is no longer allowed");
+                    }
+                }
+            }
+        }
     }
 }

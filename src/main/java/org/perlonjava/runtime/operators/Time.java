@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -90,8 +91,17 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
+            double dval = args.getFirst().getDouble();
+            if (Double.isNaN(dval) || Double.isInfinite(dval)) {
+                return returnUndefOrEmptyList(ctx);
+            }
             long arg = args.getFirst().getLong();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
+            try {
+                date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
+            } catch (DateTimeException e) {
+                emitTimeOverflowWarnings("localtime", arg);
+                return returnUndefOrEmptyList(ctx);
+            }
         }
         return getTimeComponents(ctx, date);
     }
@@ -108,8 +118,17 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
+            double dval = args.getFirst().getDouble();
+            if (Double.isNaN(dval) || Double.isInfinite(dval)) {
+                return returnUndefOrEmptyList(ctx);
+            }
             long arg = args.getFirst().getLong();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
+            try {
+                date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
+            } catch (DateTimeException e) {
+                emitTimeOverflowWarnings("gmtime", arg);
+                return returnUndefOrEmptyList(ctx);
+            }
         }
         return getTimeComponents(ctx, date);
     }
@@ -125,6 +144,26 @@ public class Time {
         int h = date.getHour(), m = date.getMinute(), s = date.getSecond();
         int year = date.getYear();
         return String.format("%s %s %s %02d:%02d:%02d %d", dow, mon, dayStr, h, m, s, year);
+    }
+
+    private static void emitTimeOverflowWarnings(String funcName, long arg) {
+        String direction = arg > 0 ? "too large" : "too small";
+        WarnDie.warn(
+                new RuntimeScalar(funcName + "(" + arg + ") " + direction),
+                new RuntimeScalar("\n")
+        );
+        WarnDie.warn(
+                new RuntimeScalar(funcName + "(" + arg + ") failed"),
+                new RuntimeScalar("\n")
+        );
+    }
+
+    private static RuntimeList returnUndefOrEmptyList(int ctx) {
+        RuntimeList res = new RuntimeList();
+        if (ctx == RuntimeContextType.SCALAR) {
+            res.add(new RuntimeScalar()); // undef
+        }
+        return res;
     }
 
     private static RuntimeList getTimeComponents(int ctx, ZonedDateTime date) {

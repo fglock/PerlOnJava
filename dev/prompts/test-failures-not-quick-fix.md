@@ -41,27 +41,11 @@ estimated difficulty level.
 
 ## 1. Taint Tracking
 
-**Test:** `op/taint.t` (4/1065)
-**Blocked tests:** ~1061
+**Status:** SKIP WORKAROUND IMPLEMENTED (2026-04-01)
 
-### What is needed
+`Config.pm` now has `taint_support => ''` and `ccflags => '-DSILENT_NO_TAINT_SUPPORT'`, so `op/taint.t` skips gracefully. Full taint tracking remains unimplemented (`RuntimeScalar.isTainted()` always returns `false`).
 
-Full taint tracking system:
-- A taint flag on every `RuntimeScalar` value
-- Propagation of taint through string/numeric operations
-- Enforcement of taint checks on dangerous ops (`kill`, `exec`, `system`, backticks, `open` with pipes)
-- "Insecure dependency in X while running with -T switch" error mechanism
-- The `-T` command-line switch activating taint mode
-
-### Current state
-
-`RuntimeScalar.isTainted()` always returns `false`. The `$^X` variable is never marked tainted. The `Config.pm` does not set `taint_support` key, so the test does not skip.
-
-### Quick workaround
-
-Add `taint_support => ''` to `Config.pm` so the test skips entirely.
-
-### Difficulty: Very Hard (full implementation), Trivial (skip workaround)
+### Difficulty: Very Hard (full implementation) - skip workaround already applied
 
 ---
 
@@ -122,98 +106,33 @@ Making `(?{UNIMPLEMENTED_CODE_BLOCK})` non-fatal (replace with `(?:)` no-op) wou
 
 ## 4. delete local Construct
 
-**Test:** `op/local.t` (0/319 - crashes before any output)
-**Blocked tests:** ~319
+**Status:** FULLY IMPLEMENTED (2026-04-01)
 
-### What is needed
+`delete local` is fully implemented across all layers: parser (`OperatorParser.parseDelete`), JVM backend (`EmitOperatorDeleteExists`), bytecode compiler (`CompileExistsDelete.visitDeleteLocal`), opcodes (`HASH_DELETE_LOCAL`, `ARRAY_DELETE_LOCAL`, slices), runtime (`RuntimeHash.deleteLocal`, `RuntimeArray.deleteLocal`), and disassembler. Supports all forms: `delete local $hash{key}`, `delete local @hash{@keys}`, `delete local $array[idx]`, `delete local @array[@idx]`, and arrow-deref variants.
 
-The `delete local` syntax:
-```perl
-delete local $hash{key};   # Save value, delete, restore on scope exit
-delete local $array[idx];
-```
-
-Currently:
-- The parser (`parseDelete` in `OperatorParser.java` line 549) does NOT check for a `local` keyword after `delete`
-- No `DeleteLocalNode` or compilation path exists
-- The test crashes at line 164 with "Not implemented: delete with dynamic patterns"
-
-### Implementation plan
-
-1. **Parser**: `parseDelete` must check for `local` keyword and produce a new AST node
-2. **Compiler**: Emit save-state, delete, and scope-exit restore
-3. **Runtime**: Use existing `dynamicSaveState`/`dynamicRestoreState` mechanism on hash/array elements
-
-### Note
-
-Many tests before line 161 in local.t don't use `delete local`. If the parser didn't crash, ~100+ tests might pass.
-
-### Difficulty: Moderate
+### Difficulty: Done
 
 ---
 
 ## 5. \(LIST) Reference Creation
 
-**Test:** `op/ref.t` (97/265)
-**Blocked tests:** ~155
+**Status:** FULLY IMPLEMENTED (2026-04-01)
 
-### What is needed
+JVM backend works correctly: `EmitOperator.handleCreateReference` calls `flattenElements()` then `createListReference()`. `RuntimeList.flattenElements()` handles `PerlRange`, `RuntimeArray`, and `RuntimeHash`.
 
-`\(LIST)` should return a list of references to each element. E.g., `\(@array)` returns refs to each element; `\($a, $b)` returns `(\$a, \$b)`.
+Bytecode interpreter (`InlineOpcodeHandler.executeCreateRef`) calls `createListReference()` directly (without `flattenElements()`) to preserve array/hash identity in declared-ref return values like `\my(\@f, @g)`. The JVM backend's `flattenElements()` is applied at a different compilation level where the distinction is maintained.
 
-### Root cause
-
-`RuntimeList.flattenElements()` (line 424) does not handle `PerlRange` objects. When `\(1..3)` is evaluated, the PerlRange passes through unflattened, then `createReference()` throws "Can't create reference to list".
-
-### Fix
-
-Add PerlRange handling to `flattenElements()` (~5 lines):
-```java
-} else if (element instanceof PerlRange range) {
-    for (RuntimeScalar scalar : range) {
-        result.elements.add(scalar);
-    }
-}
-```
-
-Also need to update `InlineOpcodeHandler.executeCreateRef()` for the bytecode interpreter path.
-
-### Key files
-
-- `src/main/java/org/perlonjava/runtime/RuntimeList.java` (flattenElements, createListReference)
-- `src/main/java/org/perlonjava/runtime/PerlRange.java`
-- `src/main/java/org/perlonjava/codegen/EmitOperator.java` (handleCreateReference)
-
-### Difficulty: Easy (this is actually a quick fix, ~5 lines)
+### Difficulty: Done
 
 ---
 
 ## 6. Tied Scalar Code Deref
 
-**Test:** `op/tie_fetch_count.t` (64/343)
-**Blocked tests:** ~279
+**Status:** FULLY IMPLEMENTED (2026-04-01)
 
-### What is needed
+All three `RuntimeCode.apply()` overloads handle `TIED_SCALAR` by calling `tiedFetch()` before proceeding. `RuntimeScalar.codeDerefNonStrict()`, `globDeref()`, and `globDerefNonStrict()` also handle tied scalars.
 
-`RuntimeCode.apply()` does not handle `TIED_SCALAR` type. When `$tied_var` holds a CODE ref and you call `&$tied_var`, the code falls through to "Not a CODE reference" error instead of calling `tiedFetch()` first.
-
-### Fix
-
-Add `TIED_SCALAR` handling in all three `RuntimeCode.apply()` overloads:
-```java
-if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
-    return apply(runtimeScalar.tiedFetch(), subroutineName, args, callContext);
-}
-```
-
-Also fix `RuntimeScalar.codeDerefNonStrict()` and `globDeref()` for the same pattern.
-
-### Key files
-
-- `src/main/java/org/perlonjava/runtime/RuntimeCode.java` (three apply overloads)
-- `src/main/java/org/perlonjava/runtime/RuntimeScalar.java` (codeDerefNonStrict, globDeref)
-
-### Difficulty: Easy (this is actually a quick fix, ~6 lines across 3 methods)
+### Difficulty: Done
 
 ---
 
@@ -372,42 +291,27 @@ The `-C` flags are **parsed** in `ArgumentParser.java` (lines 469-563) and **sto
 **Test:** `op/stat.t` (64/111)
 **Blocked tests:** ~47
 
-### What is needed
+**Status:** Item 1 IMPLEMENTED (2026-04-01) - `lstat _` validation now checks `lastStatWasLstat` in `Stat.java` (lines 111, 129, 249). Items 2-5 remain open.
 
-1. **`lstat _` validation** - `Stat.lstatLastHandle()` does NOT validate `lastStatWasLstat`. Should throw "The stat preceding lstat() wasn't an lstat" when the previous call was `stat` not `lstat`. `FileTestOperator.java` already has this check for `-l _` but `Stat.java` doesn't.
+### Remaining items
+
+1. ~~**`lstat _` validation**~~ - DONE
 2. **`lstat *FOO{IO}`** - lstat on IO reference
 3. **`stat *DIR{IO}`** - stat on directory handles
 4. **`-T _` breaking the stat buffer**
 5. **stat on filenames with `\0`**
 
-### Key files
-
-- `src/main/java/org/perlonjava/operators/Stat.java` (lstatLastHandle)
-- `src/main/java/org/perlonjava/operators/FileTestOperator.java`
-
-### Difficulty: Easy-Medium (lstat validation is a 1-line fix; other items are moderate)
+### Difficulty: Easy-Medium (remaining items)
 
 ---
 
 ## 15. printf Array Flattening
 
-**Test:** `io/print.t` (8/24)
-**Blocked tests:** ~16
+**Status:** IMPLEMENTED (2026-04-01)
 
-### What is needed
+Both `printf` methods in `IOOperator.java` now flatten `RuntimeArray` elements. `printf +()` (empty list) also handled. Remaining io/print.t failures may relate to `$\` null bytes or `%n` format specifier.
 
-When `printf @array` is called, the RuntimeArray argument is not flattened before extracting the format string. `IOOperator.printf()` calls `list.add(args[i])` which adds the array as-is; then `removeFirst()` expects a RuntimeScalar but gets a RuntimeArray.
-
-Additional issues:
-- Null bytes in `$\` (output record separator)
-- `%n` format specifier (writes char count via substr)
-- `printf +()` (empty list)
-
-### Key files
-
-- `src/main/java/org/perlonjava/operators/IOOperator.java` (printf method, line 2386)
-
-### Difficulty: Medium
+### Difficulty: Done (core issue); remaining edge cases Medium
 
 ---
 
@@ -606,55 +510,243 @@ The Perl `class` feature (added in Perl 5.38) is partially implemented. Missing:
 
 ---
 
-## Priority Ranking by Impact
+## 25. Test Failures Investigated 2026-04-01 (Status Update)
 
-### Tier 1: Highest impact (1000+ tests unlocked)
+Items marked FIXED were implemented on the `feature/test-failure-fixes` branch.
+
+### FIXED items
+
+| Test | Before | After | Fix |
+|------|--------|-------|-----|
+| op/oct.t | 79/81 | **81/81** | Oct/hex overflow detection with double fallback |
+| op/my.t | 52/59 | **59/59** | `my() in false conditional` detection in 3 places |
+| op/push.t | 29/32 | **32/32** | Error messages + readonly array handling |
+| op/unshift.t | 16/19 | **19/19** | Error messages + readonly array handling |
+| op/lex_assign.t | 349/353 | **350/353** | Select 4-arg LIST context fix |
+| op/while.t | 22/26 | **23/26** | While loop returns false condition value |
+| op/closure.t | 0/0 | **246/266** | `my() in false conditional` only on compile-time constants |
+| op/for.t | 128/149 | **141/149** | Glob read-only scalar slot replacement |
+| op/not.t | 21/24 | **22/24** | `${qr//}` strict deref returns stringified regex |
+| op/inc.t | 67/93 | **75/93** | Glob read-only for `++`/`--` (actual globs only) |
+| op/reverse.t | 20/26 | **23/26** | Sparse array null preservation in `reverse` |
+| op/die.t | 25/26 | **26/26** | `die qr{x}` appends location info |
+| op/isa.t | 0/0 | **14/14** | `undef isa "Class"` parse fix in ListParser |
+| op/auto.t | 39/47 | **47/47** | Glob copy `++`/`--` via `instanceof RuntimeGlob` |
+| op/decl-refs.t | 310/408 | **322/408** | Removed `flattenElements()` from interpreter createRef |
+| opbasic/concat.t | 248/254 | **249/254** | Removed REGEX from `scalarDerefNonStrict` |
+
+### op/time.t (71/72) - MOSTLY FIXED
+- **Remaining failure:** Test 7 `changes to $ENV{TZ} respected` - Java caches timezone on startup via `ZoneId.systemDefault()`. Changing `$ENV{TZ}` at runtime has no effect.
+- **Difficulty:** Hard (would need to call `TimeZone.setDefault()` which has global side effects)
+
+### op/cond.t (6/7) - MOSTLY FIXED
+- **Remaining failure:** Test 5 - 20,000-deep nested ternary eval. StackOverflow in parser/emitter recursion.
+- **Difficulty:** Hard (requires iterative parser for deeply nested expressions)
+
+### op/not.t (21/24)
+- Test 20: `${qr//}` dereference of regex ref returns empty string instead of `(?^:)`
+- Tests 21-22: `not 0` / `not 1` return values not read-only (Perl returns immortal `PL_sv_yes`/`PL_sv_no`)
+- **Difficulty:** Medium (regex deref), Hard (read-only return values)
+
+### op/range.t (155/162)
+- Tests 48, 57: `undef..undef` range behavior, `for -2..undef` edge case
+- Tests 138-154: Tied variable fetch/store counting in range operations
+- **Difficulty:** Medium
+
+### op/reverse.t (20/26)
+- **Not yet investigated in detail**
+- **Difficulty:** Unknown
+
+### op/inc.t (75/93) - PARTIALLY IMPROVED
+- Score improved from 67/93 to 75/93 via glob copy `instanceof RuntimeGlob` fix
+- Remaining failures: Magic variable increment, tied variable FETCH counting, read-only value errors
+- **Difficulty:** Medium
+
+### uni/upper.t (6449/6450) - NEARLY PERFECT
+- **Remaining failure:** Test 1 `Verify moves YPOGEGRAMMENI` - Greek combining mark reordering during uppercase (`uc("\x{3B1}\x{345}\x{301}")` should move ypogegrammeni after accent)
+- **Difficulty:** Hard (special Unicode Greek casing rule, ICU4J doesn't match Perl's reordering)
+
+### op/oct.t (79/81)
+- Tests 48, 71: Very large octal/hex numbers should overflow to float with warning. PerlOnJava truncates to long.
+- **Difficulty:** Medium (need overflow detection in oct/hex with float fallback)
+
+### op/ord.t (35/38)
+- Tests 33-35: Code points beyond Unicode max (0x110000+). Java's UTF-16 can't represent these.
+- **Difficulty:** Very Hard (fundamental Java UTF-16 limitation)
+
+### op/my.t (52/59)
+- Tests 53-59: `my $x if 0;` should be a compile-time error ("This use of my() in false conditional is no longer allowed")
+- **Difficulty:** Medium (detect `my VAR if CONST_FALSE` pattern in parser/optimizer)
+
+### op/while.t (22/26)
+- Tests 12-14: Regex match variables (`$\``, `$&`, `$'`) scoping with redo/next/last
+- Test 21: While block return value context (last statement should be void)
+- **Difficulty:** Medium-Hard
+
+### op/hash.t (489/494)
+- All 5 failures relate to DESTROY/weaken (unimplemented features)
+- **Difficulty:** Very Hard (depends on DESTROY implementation)
+
+### op/push.t (29/32)
+- Tests 5-6: `push` onto hashref/blessed arrayref (experimental feature)
+- Test 32: Croak when pushing onto readonly array
+- **Difficulty:** Easy-Medium (readonly) to Medium (ref pushing)
+
+### op/unshift.t (18/19)
+- Test 19: Croak when unshifting onto readonly array
+- **Difficulty:** Easy-Medium
+
+### op/die.t (25/26) - FIXED
+- **Fixed:** `die qr{x}` now appends location info like string messages. REGEX type added to string path in WarnDie.java.
+- **Score:** 25/26 → **26/26**
+
+### op/sprintf2.t (1652/1655)
+- Test 1446: `sprintf %d` overload count
+- Test 1555: UTF-8 flag on sprintf format string result
+- Test 1655: `sprintf("%.115g", 0.3)` full double precision rendering
+- **Difficulty:** Medium-Hard
+
+### op/lex_assign.t (349/353)
+- Test 3: Object destruction via reassignment (DESTROY)
+- Tests 19, 21: chop/chomp of read-only value error
+- Test 107: `select undef,undef,undef,0` ClassCastException
+- **Difficulty:** Easy (select fix) to Hard (DESTROY)
+
+### op/vec.t (74/78)
+- Tests 31-32: Scalar destruction with lvalue vec, read-only ref error
+- Tests 38, 77: UV_MAX lvalue edge cases
+- **Difficulty:** Medium
+
+### op/join.t (38/43)
+- Tied variable FETCH counting and magic delimiter issues
+- **Difficulty:** Medium
+
+### op/delete.t (50/56)
+- Tests involve array delete semantics and DESTROY
+- **Difficulty:** Medium
+
+---
+
+## Priority Ranking by Impact (Updated 2026-04-01)
+
+### Already Implemented
+| Feature | Status |
+|---------|--------|
+| Taint skip workaround | Done - Config.pm has `taint_support => ''` |
+| Tied scalar code deref | Done - all apply() overloads handle TIED_SCALAR |
+| delete local | Done - full implementation across all layers |
+| \(LIST) reference creation | Done - JVM backend + interpreter (without flattenElements) |
+| printf array flattening | Done |
+| stat/lstat _ validation (item 1) | Done |
+| op/my.t false conditional | Done - 59/59 |
+| op/push.t / op/unshift.t | Done - 32/32, 19/19 |
+| op/oct.t overflow | Done - 81/81 |
+| op/die.t `die qr{x}` | Done - 26/26 |
+| op/isa.t `undef isa` | Done - 14/14 |
+| op/auto.t glob copy inc/dec | Done - 47/47 |
+| op/closure.t false conditional | Done - 246/266 |
+
+### Tier 1: Highest impact remaining
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
-| Taint skip workaround | 1061 | Trivial |
 | Regex code blocks (non-fatal workaround) | 500+ | Medium |
 | Format/write system | 658 | Hard |
 
 ### Tier 2: High impact (100-500 tests)
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
-| delete local | 319 | Moderate |
-| Tied scalar code deref | 279 | Easy |
-| \(LIST) reference creation | 155 | Easy |
-| comp/parser.t (?{} non-fatal) | 132 | Medium |
-| In-place editing ($^I) | 120+ | Hard |
 | 64-bit integer ops | 274 | Medium-Hard |
+| Attribute system | 160+ | Medium-Hard |
+| comp/parser.t (non-fatal (?{}) + #line) | 132 | Medium |
+| In-place editing ($^I) | 120+ | Hard |
 
 ### Tier 3: Medium impact (30-100 tests)
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
 | caller() extended fields | 66 | Medium-Hard |
-| Attribute system | 160+ | Medium-Hard |
 | MRO @ISA invalidation | 50+ | Hard |
-| stat/lstat validation | 47 | Easy-Medium |
+| stat/lstat remaining items (2-5) | 47 | Easy-Medium |
 | Duplicate named captures | 36 | Hard |
 | Class feature completion | 30 | Medium |
 
-### Tier 4: Lower impact but easy
+### Tier 4: Lower impact
 | Feature | Tests blocked | Difficulty |
 |---------|--------------|------------|
-| -C unicode switch | 13 | Medium |
-| printf array flattening | 16 | Medium |
 | Closures (edge cases) | 20 | Medium-Hard |
-| %^H hints (advanced) | 8 | Medium-Hard |
 | Special blocks lifecycle | 17 | Medium-Hard |
+| -C unicode switch | 13 | Medium |
+| %^H hints (advanced) | 8 | Medium-Hard |
 
 ---
 
-## Recommended Implementation Order (effort vs. impact)
+## 26. Regressions Investigated 2026-04-01 (Rebase onto master)
 
-1. **Taint skip** (Trivial) - 1061 tests
-2. **\(LIST) flattenElements fix** (Easy, ~5 lines) - 155 tests
-3. **Tied scalar code deref** (Easy, ~6 lines) - 279 tests
-4. **(?{...}) non-fatal workaround** (Medium) - 500+ tests
-5. **stat/lstat _ validation** (Easy) - ~7 tests + unblocks others
-6. **delete local** (Moderate) - 319 tests
-7. **printf array flattening** (Medium) - 16 tests
-8. **-C switch application** (Medium) - 13 tests
-9. **caller() extended fields** (Medium-Hard) - 66 tests
-10. **attributes.pm module** (Medium-Hard) - 160+ tests
+After rebasing `feature/test-failure-fixes` onto latest master, the following regressions were reported:
+
+### op/closure.t (246/266 → 0/0, -246) - FIXED
+
+**Root cause:** `StatementResolver.java` line 932 unconditionally threw "This use of my() in false conditional is no longer allowed" for ALL `my VAR if COND` patterns, including runtime conditions like `my $x if @_`. Perl only errors on compile-time false constants (`my $x if 0`).
+
+**Fix:** Added `ConstantFoldingVisitor.getConstantValue(modifierExpression)` check so the error only fires when the condition is a compile-time constant that would prevent the `my` from ever executing. Runtime conditions like `my $x if @_` now correctly fall through to normal handling.
+
+**Files changed:** `StatementResolver.java` (lines 930-949)
+
+### op/decl-refs.t (322/408 → 310/408, -12) - FIXED
+
+**Root cause:** `InlineOpcodeHandler.executeCreateRef` called `flattenElements()` before `createListReference()`. This destroyed array/hash identity when processing declared-ref return values like `\my(\@f, @g)` — the `@g` array was flattened into its (empty) elements, losing the array reference.
+
+**Fix:** Removed `flattenElements()` call from `executeCreateRef`. The JVM backend applies flattening at a higher compilation level where declared-ref vs plain `\(LIST)` can be distinguished. Verified ref.t (226/265) and local.t (137/319) maintained their scores.
+
+**Files changed:** `InlineOpcodeHandler.java` (line 1188)
+
+### op/isa.t (14/14 → 0/0, -14) - FIXED
+
+**Root cause:** `undef isa "BaseClass"` caused a syntax error because `undef` as a named unary operator consumed `isa` as a bareword argument via `parseZeroOrOneList`. When the `isa` feature was enabled, `isa` should have been treated as an infix operator (list terminator), not parsed as an argument.
+
+**Fix:** Added `isa` feature check to `parseZeroOrOneList` in `ListParser.java` — when the next token is `isa` (identifier) and the feature is enabled, treat it as a list terminator so `undef` gets no argument and `isa` becomes the infix operator.
+
+**Files changed:** `ListParser.java` (lines 57-62)
+
+### op/auto.t (47/47 → 39/47, -8) - FIXED
+
+**Root cause:** Tests 40-47 test `++`/`--` on glob copies (`my $x = *foo; $x++`). The branch added `case GLOB -> throw read-only` in all 4 auto-increment/decrement methods, but this was too aggressive — it should only apply to actual `RuntimeGlob` instances (stash entries), not plain `RuntimeScalar` with GLOB type (copies).
+
+**Fix:** Changed all 4 GLOB cases to check `this instanceof RuntimeGlob` before throwing. Glob copies fall through to integer conversion (numifies to 0, so `++` → 1, `--` → -1).
+
+**Files changed:** `RuntimeScalar.java` (preAutoIncrement, postAutoIncrementLarge, preAutoDecrement, postAutoDecrement)
+
+### opbasic/concat.t (249/254 → 248/254, -1) - FIXED
+
+**Root cause:** Adding `case REGEX` to `scalarDerefNonStrict` broke `$$re = $a . $b` in non-strict mode (eval context). Without strict, `$$re` should fall through to `default` which does `GlobalVariable.getGlobalVariable(stringified_name)` — this allows lvalue assignment and consistent read-back. The REGEX case returned a new temp string, losing the assignment.
+
+**Fix:** Removed `case REGEX` from `scalarDerefNonStrict`. The `scalarDeref` (strict) method already had the REGEX case on master, which is correct for strict-mode reads. Non-strict mode uses the global variable lookup path.
+
+**Files changed:** `RuntimeScalar.java` (scalarDerefNonStrict)
+
+### op/for.t (128/149 → 119/119, -9) - PRE-EXISTING (master)
+
+**Root cause:** Test dies at line 659 with "Modification of a read-only value attempted". The test does `for $foo (0, 1) { *foo = "" }` — the loop aliases `$foo` to constant `0`, then `*foo = ""` tries glob replacement which conflicts with the read-only alias. This regression comes from master's `GlobalVariable.java` changes (commit `6a272a1cd` - DBIx::Class support), not from our branch.
+
+**Difficulty:** Medium - glob assignment when loop variable aliases a read-only constant.
+
+### run/switcht.t (9/13 → 0/0, -9) - DELIBERATE (master)
+
+**Root cause:** `Config.pm` now has `taint_support => ''` which causes the test to skip all 13 tests. Previously the key didn't exist, so the skip check short-circuited and 9 tests passed by coincidence (not actually testing taint). This is a deliberate design decision from the `fix/test-pass-rate-quick-wins` PR merged into master.
+
+**No action needed.**
+
+### op/taint.t (4/1065 → 0/0, -4) - DELIBERATE (master)
+
+**Root cause:** Same as run/switcht.t — `taint_support => ''` in Config.pm causes graceful skip of all 1065 tests. The 4 that previously passed were coincidental. This is the intended behavior. The same applies to `perf/taint.t` which also skips gracefully.
+
+**No action needed.**
+
+---
+
+## Recommended Next Steps
+
+1. **(?{...}) non-fatal workaround** (Medium) - change `UNIMPLEMENTED_CODE_BLOCK` from fatal to `(?:)` fallback - 500+ tests
+2. **64-bit integer ops** (Medium-Hard) - unsigned semantics, overflow handling
+3. **caller() extended fields** (Medium-Hard) - wantarray, evaltext, is_require
+4. **Attribute system** (Medium-Hard) - attributes.pm module, MODIFY_*_ATTRIBUTES callbacks
+5. **op/for.t glob/read-only regression** (Medium) - from master's GlobalVariable.java changes

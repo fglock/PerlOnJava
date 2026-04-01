@@ -267,6 +267,13 @@ public class FileTestOperator {
                     return fileTest(operator, new RuntimeScalar(path.toString()));
                 }
             }
+            // Check for directory handle
+            if (fh.directoryIO != null) {
+                Path dirPath = fh.directoryIO.getAbsoluteDirectoryPath();
+                if (dirPath != null) {
+                    return fileTest(operator, new RuntimeScalar(dirPath.toString()));
+                }
+            }
             // Special handling for -t on standard streams (STDIN, STDOUT, STDERR)
             if (operator.equals("-t")) {
                 String globName = null;
@@ -497,68 +504,89 @@ public class FileTestOperator {
                     yield getScalarBoolean(owner.equals(currentUser));
                 }
                 case "-p" -> {
-                    // Approximate check for named pipe (FIFO)
+                    // Check for named pipe (FIFO) using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0010000);
+                    }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".fifo"));
                 }
                 case "-S" -> {
-                    // Approximate check for socket
+                    // Check for socket using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0140000);
+                    }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".sock"));
                 }
                 case "-b" -> {
-                    // Approximate check for block special file
+                    // Check for block special file using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0060000);
+                    }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
                 }
                 case "-c" -> {
-                    // Approximate check for character special file
+                    // Check for character special file using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0020000);
+                    }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
                 }
                 case "-u" -> {
-                    // Check if setuid bit is set
+                    // Check if setuid bit is set using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 04000) != 0);
+                    }
                     yield getScalarBoolean
                             ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
                 }
                 case "-g" -> {
-                    // Check if setgid bit is set
+                    // Check if setgid bit is set using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 02000) != 0);
+                    }
                     yield getScalarBoolean
                             ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
                 }
                 case "-k" -> {
-                    // Approximate check for sticky bit (using others execute permission)
+                    // Check for sticky bit using native stat mode bits
                     if (!Files.exists(path)) {
                         getGlobalVariable("main::!").set(2); // ENOENT
                         yield scalarUndef;
                     }
-                    getGlobalVariable("main::!").set(0); // Clear error
+                    getGlobalVariable("main::!").set(0);
+                    if (Stat.lastNativeStatFields != null) {
+                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 01000) != 0);
+                    }
                     yield getScalarBoolean
                             ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
                 }
@@ -701,7 +729,8 @@ public class FileTestOperator {
      * @throws IOException If an I/O error occurs
      */
     private static RuntimeScalar getFileTimeDifference(Path path, String operator) throws IOException {
-        long currentTime = System.currentTimeMillis();
+        // Use $^T (program start time) as base, not current time - Perl semantics
+        long currentTime = getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).getLong() * 1000L;
         long fileTime = switch (operator) {
             case "-M" ->
                 // Get last modified time
@@ -709,9 +738,13 @@ public class FileTestOperator {
             case "-A" ->
                 // Get last access time
                     ((FileTime) Files.getAttribute(path, "lastAccessTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
-            case "-C" ->
-                // Get creation time
-                    ((FileTime) Files.getAttribute(path, "creationTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
+            case "-C" -> {
+                // Get ctime (inode change time on Unix, creation time fallback)
+                if (Stat.lastNativeStatFields != null) {
+                    yield Stat.lastNativeStatFields.ctime() * 1000L;
+                }
+                yield ((FileTime) Files.getAttribute(path, "creationTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
+            }
             default -> throw new PerlCompilerException("Invalid time operator: " + operator);
         };
 

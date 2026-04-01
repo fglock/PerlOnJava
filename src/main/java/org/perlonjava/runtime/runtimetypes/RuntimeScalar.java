@@ -949,6 +949,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDerefNonStrict(packageName).delete(index);
     }
 
+    // Method to implement `delete local $v->{key}`
+    public RuntimeScalar hashDerefDeleteLocal(RuntimeScalar index) {
+        return this.hashDeref().deleteLocal(index);
+    }
+
+    // Method to implement `delete local $v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefDeleteLocalNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).deleteLocal(index);
+    }
+
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
         return this.hashDeref().exists(index);
@@ -987,6 +997,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `delete $v->[10]`, when "no strict refs" is in effect
     public RuntimeScalar arrayDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
         return this.arrayDerefNonStrict(packageName).delete(index);
+    }
+
+    // Method to implement `delete local $v->[10]`
+    public RuntimeScalar arrayDerefDeleteLocal(RuntimeScalar index) {
+        return this.arrayDeref().deleteLocal(index);
+    }
+
+    // Method to implement `delete local $v->[10]`, when "no strict refs" is in effect
+    public RuntimeScalar arrayDerefDeleteLocalNonStrict(RuntimeScalar index, String packageName) {
+        return this.arrayDerefNonStrict(packageName).deleteLocal(index);
     }
 
     // Method to implement `exists $v->[10]`
@@ -1287,10 +1307,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> // 0
-                    throw new PerlCompilerException("Not a HASH reference");
-            case DOUBLE -> // 1
-                    throw new PerlCompilerException("Not a HASH reference");
+            case INTEGER, DOUBLE, BOOLEAN, DUALVAR -> { // 0, 1, 6, 10
+                // Symbolic reference: convert number to string and treat as variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalHash(varName);
+            }
             case STRING -> { // 2
                 // Symbolic reference: treat the scalar's string value as a variable name
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
@@ -1310,8 +1331,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case VSTRING -> // 5
                     throw new PerlCompilerException("Not a HASH reference");
-            case BOOLEAN -> // 6
-                    throw new PerlCompilerException("Not a HASH reference");
             case GLOB -> { // 7
                 // When dereferencing a typeglob as a hash, return the hash slot
                 RuntimeGlob glob = (RuntimeGlob) value;
@@ -1322,8 +1341,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not a HASH reference");
             case TIED_SCALAR -> // 9
                     tiedFetch().hashDerefNonStrict(packageName);
-            case DUALVAR -> // 10
-                    throw new PerlCompilerException("Not a HASH reference");
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not a HASH reference");
             default -> throw new PerlCompilerException("Not a HASH reference");
@@ -1354,12 +1371,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> // 0
-                // For numeric constants (like 1->[0]), return an empty array
-                    new RuntimeArray();
-            case DOUBLE -> // 1
-                // For numeric constants (like 1->[0]), return an empty array
-                    new RuntimeArray();
+            case INTEGER, DOUBLE, BOOLEAN, DUALVAR -> { // 0, 1, 6, 10
+                // Symbolic reference: convert number to string and treat as variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalArray(varName);
+            }
             case STRING -> { // 2
                 // Symbolic reference: treat the scalar's string value as a variable name
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
@@ -1380,8 +1396,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case VSTRING -> // 5
                     throw new PerlCompilerException("Not an ARRAY reference");
-            case BOOLEAN -> // 6
-                    throw new PerlCompilerException("Not an ARRAY reference");
             case GLOB -> { // 7
                 // When dereferencing a typeglob as an array, return the array slot
                 RuntimeGlob glob = (RuntimeGlob) value;
@@ -1392,8 +1406,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not an ARRAY reference");
             case TIED_SCALAR -> // 9
                     tiedFetch().arrayDerefNonStrict(packageName);
-            case DUALVAR -> // 10
-                    throw new PerlCompilerException("Not an ARRAY reference");
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not an ARRAY reference");
             default -> throw new PerlCompilerException("Not an ARRAY reference");
@@ -1418,11 +1430,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case TIED_SCALAR -> tiedFetch().globDeref();
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1433,7 +1446,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1463,10 +1476,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case TIED_SCALAR -> tiedFetch().globDerefNonStrict(packageName);
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1477,7 +1491,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
-                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
                 }
@@ -1513,6 +1527,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case TIED_SCALAR -> tiedFetch().codeDerefNonStrict(packageName);
             case CODE -> this;  // Already a CODE reference - return unchanged
             case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
             case REFERENCE -> {
@@ -1607,13 +1622,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case VSTRING -> // 4
-                    ScalarUtils.stringIncrement(this);
+            case VSTRING -> { // 4
+                ScalarUtils.stringIncrement(this);
+                this.type = RuntimeScalarType.STRING;  // ++ flattens vstrings
+            }
             case BOOLEAN -> { // 5
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
             }
             case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
@@ -1717,13 +1737,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case VSTRING -> // 4
-                    ScalarUtils.stringIncrement(this);
+            case VSTRING -> { // 4
+                ScalarUtils.stringIncrement(this);
+                this.type = RuntimeScalarType.STRING;  // ++ flattens vstrings
+            }
             case BOOLEAN -> { // 5
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = old.getInt() + 1;
             }
             case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
@@ -1813,6 +1838,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = this.getInt() - 1;
             }
             case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
@@ -1909,6 +1937,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = old.getInt() - 1;
             }
             case GLOB -> { // 6
+                if (this instanceof RuntimeGlob) {
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
+                }
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
