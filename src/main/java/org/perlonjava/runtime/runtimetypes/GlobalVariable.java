@@ -508,9 +508,12 @@ public class GlobalVariable {
         // Ensure we have the :: suffix for the prefix check
         final String prefix = className.endsWith("::") ? className : className + "::";
 
-        // Check if any code references exist with this class prefix
+        // Check if any code references exist directly in this class (not in sub-packages).
+        // A key like "Foo::Bar::baz" belongs to package "Foo::Bar", not "Foo".
+        // After stripping the prefix, the remaining part must NOT contain "::"
+        // to be a direct member of this package.
         boolean exists = globalCodeRefs.keySet().stream()
-                .anyMatch(key -> key.startsWith(prefix));
+                .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"));
 
         // Cache the result
         packageExistsCache.put(className, exists);

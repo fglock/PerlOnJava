@@ -197,7 +197,7 @@ public class VersionHelper {
                 throw new PerlCompilerException("Either package version or REQUIRE is not a lax version number");
             }
             if (compareVersions(hasStr, wantStr) < 0) {
-                throw new PerlCompilerException(perlClassName + " version " + wantStr + " required--this is only version " + hasVersion);
+                throw new PerlCompilerException(perlClassName + " version " + wantVersion + " required--this is only version " + hasVersion);
             }
         }
         return hasVersion;
@@ -222,6 +222,13 @@ public class VersionHelper {
             if (parts.length < 3) {
                 String major = parts[0];
                 String minor = parts.length > 1 ? parts[1] : "0";
+                // Right-pad minor with zeros to at least 3 chars.
+                // In Perl's version system, decimal digits are grouped in 3s:
+                // 0.01 -> "010" -> v0.10.0, not v0.1.0
+                // 0.5  -> "500" -> v0.500.0
+                while (minor.length() < 3) {
+                    minor = minor + "0";
+                }
                 String patch = minor.length() > 3 ? minor.substring(3) : "0";
                 if (minor.length() > 3) {
                     minor = minor.substring(0, 3);
