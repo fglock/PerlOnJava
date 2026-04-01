@@ -95,6 +95,26 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
+     * Gets the caller location string (e.g., " at file.pl line 42") at the specified level.
+     * Used by warnIf/warnIfAtLevel to append location info to warning messages.
+     *
+     * @param level The stack level (0 = immediate caller of the warnings:: function)
+     * @return A RuntimeScalar containing the location string
+     */
+    private static RuntimeScalar getCallerLocation(int level) {
+        RuntimeList callerInfo = RuntimeCode.caller(
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)),
+            RuntimeContextType.LIST
+        );
+        if (callerInfo.size() >= 3) {
+            String file = callerInfo.elements.get(1).toString();
+            String line = callerInfo.elements.get(2).toString();
+            return new RuntimeScalar(" at " + file + " line " + line);
+        }
+        return new RuntimeScalar("");
+    }
+
+    /**
      * Walks up the call stack past frames in warnings-registered packages to find
      * the "external caller" whose warning bits should be checked. This implements
      * Perl 5's _error_loc() behavior: skip frames in any package that has used
@@ -485,19 +505,63 @@ public class Warnings extends PerlModuleBase {
         // For custom (registered) categories, walk past the registered package
         // to find the external caller's warning bits
         String bits;
+        int bitsLevel = 0; // track which level the bits came from (for location info)
         if (WarningFlags.isCustomCategory(category)) {
             bits = findExternalCallerBits();
+            // findExternalCallerBits walks up; approximate the level
+            // by re-checking which level matches
+            for (int level = 0; level < 50; level++) {
+                String candidateBits = getWarningBitsAtLevel(level);
+                if (candidateBits == bits) {
+                    bitsLevel = level;
+                    break;
+                }
+            }
         } else {
-            bits = getWarningBitsAtLevel(0);
+            // Walk up the call stack to find the first caller NOT in an internal
+            // package (attributes, warnings). This is the "responsible caller"
+            // whose location should be reported. This approximates Perl 5's
+            // _error_loc() behavior.
+            String pkg0 = getCallerPackageAtLevel(0);
+            boolean isInternalPkg = "attributes".equals(pkg0) || "warnings".equals(pkg0);
+            if (isInternalPkg) {
+                for (int level = 1; level < 50; level++) {
+                    String pkg = getCallerPackageAtLevel(level);
+                    if (pkg == null) break; // ran out of callers
+                    if (!"attributes".equals(pkg) && !"warnings".equals(pkg)) {
+                        bitsLevel = level;
+                        break;
+                    }
+                }
+            }
+            // Get bits from the external caller level first
+            bits = getWarningBitsAtLevel(bitsLevel);
+            // If bits are null at external caller level (e.g., eval STRING doesn't
+            // propagate ${^WARNING_BITS}), continue searching up the stack for bits
+            if (bits == null || !WarningFlags.isEnabledInBits(bits, category)) {
+                for (int level = bitsLevel + 1; level < 50; level++) {
+                    String candidateBits = getWarningBitsAtLevel(level);
+                    if (candidateBits != null && WarningFlags.isEnabledInBits(candidateBits, category)) {
+                        bits = candidateBits;
+                        break;
+                    }
+                    // Stop if we've run out of callers
+                    String pkg = getCallerPackageAtLevel(level);
+                    if (pkg == null) break;
+                }
+            }
         }
         
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         
+        // Get caller location from the level where warning bits were found
+        RuntimeScalar where = getCallerLocation(bitsLevel);
+        
         if (!categoryEnabled) {
             // Category not enabled via lexical warnings - fall back to $^W
             if (isWarnFlagSet()) {
-                WarnDie.warn(message, new RuntimeScalar(""));
+                WarnDie.warn(message, where);
             }
             return new RuntimeScalar().getList();
         }
@@ -505,9 +569,9 @@ public class Warnings extends PerlModuleBase {
         // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
         if (WarningFlags.isFatalInBits(bits, category)) {
-            WarnDie.die(message, new RuntimeScalar(""));
+            WarnDie.die(message, where);
         } else {
-            WarnDie.warn(message, new RuntimeScalar(""));
+            WarnDie.warn(message, where);
         }
         
         return new RuntimeScalar().getList();
@@ -536,10 +600,13 @@ public class Warnings extends PerlModuleBase {
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         
+        // Get caller location for warning/error messages
+        RuntimeScalar where = getCallerLocation(level);
+        
         if (!categoryEnabled) {
             // Category not enabled via lexical warnings - fall back to $^W
             if (isWarnFlagSet()) {
-                WarnDie.warn(message, new RuntimeScalar(""));
+                WarnDie.warn(message, where);
             }
             return new RuntimeScalar().getList();
         }
@@ -547,9 +614,9 @@ public class Warnings extends PerlModuleBase {
         // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
         if (WarningFlags.isFatalInBits(bits, category)) {
-            WarnDie.die(message, new RuntimeScalar(""));
+            WarnDie.die(message, where);
         } else {
-            WarnDie.warn(message, new RuntimeScalar(""));
+            WarnDie.warn(message, where);
         }
         
         return new RuntimeScalar().getList();

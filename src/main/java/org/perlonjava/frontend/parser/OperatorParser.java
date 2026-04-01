@@ -1137,6 +1137,9 @@ public class OperatorParser {
     private static void callModifyVariableAttributes(Parser parser, String packageName,
                                                       String operator, Node operand,
                                                       List<String> attributes) {
+        // Ensure attributes.pm is loaded so that attributes::get() is available
+        org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+
         // Collect the variables from the declaration
         List<Node> variables = new ArrayList<>();
         if (operand instanceof ListNode listNode) {
@@ -1239,11 +1242,37 @@ public class OperatorParser {
                 RuntimeArray resultArray = result.getArrayOfAlias();
                 if (resultArray.size() > 0) {
                     SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
+                } else {
+                    // All attrs were accepted by the handler. Issue "may clash with future
+                    // reserved word" warning for non-built-in attrs (respects 'no warnings "reserved"')
+                    emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
                 }
             } else {
                 // No MODIFY_*_ATTRIBUTES handler — all non-built-in attributes are invalid
                 SubroutineParser.throwInvalidAttributeError(svtype, nonBuiltinAttrs, parser);
             }
         }
+    }
+
+    /**
+     * Emit "SCALAR/ARRAY/HASH package attribute(s) may clash with future reserved word(s)"
+     * warning for non-built-in attributes accepted by MODIFY_*_ATTRIBUTES.
+     * Respects 'no warnings "reserved"'.
+     */
+    private static void emitReservedWordWarning(String svtype, List<String> attrs, Parser parser) {
+        if (attrs.isEmpty()) return;
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < attrs.size(); i++) {
+            if (i > 0) sb.append(" ");
+            sb.append(attrs.get(i));
+        }
+
+        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+        String word = attrs.size() > 1 ? "words" : "word";
+        String attrWord = attrs.size() > 1 ? "attributes" : "attribute";
+        String msg = svtype + " package " + attrWord + " may clash with future reserved " + word + ": "
+                + sb + loc + ".\n";
+        WarnDie.warnWithCategory(new RuntimeScalar(msg), new RuntimeScalar(), "reserved");
     }
 }

@@ -541,6 +541,12 @@ public class SubroutineParser {
             prototype = consumeAttributes(parser, attributes);
         }
 
+        // Ensure attributes.pm is loaded when attribute syntax is used, so that
+        // attributes::get() is available (Perl 5 implicitly loads attributes.pm)
+        if (!attributes.isEmpty()) {
+            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+        }
+
         ListNode signature = null;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
