@@ -190,7 +190,11 @@ public class LValueVisitor implements Visitor {
         node.falseExpr.accept(this);
         int context2 = context;
         if (context1 != context2) {
-            throw new PerlCompilerException("Assignment to both a list and a scalar");
+            // Perl allows mixed-context ternary lvalues like:
+            //   (cond ? @arr : $scalar) = expr
+            // The actual assignment context is determined at runtime.
+            // Use LIST as the conservative choice since it works for both cases.
+            context = RuntimeContextType.LIST;
         }
     }
 
