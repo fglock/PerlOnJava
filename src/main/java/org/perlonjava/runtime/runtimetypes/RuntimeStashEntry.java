@@ -127,6 +127,8 @@ public class RuntimeStashEntry extends RuntimeGlob {
 
 
         switch (value.type) {
+            case TIED_SCALAR:
+                return set(value.tiedFetch());
             case CODE:
                 GlobalVariable.getGlobalCodeRef(this.globName).set(value);
 

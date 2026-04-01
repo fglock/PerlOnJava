@@ -166,6 +166,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         markGlobAsAssigned();
 
         switch (value.type) {
+            case TIED_SCALAR:
+                return set(value.tiedFetch());
             case CODE:
                 GlobalVariable.getGlobalCodeRef(this.globName).set(value);
 
