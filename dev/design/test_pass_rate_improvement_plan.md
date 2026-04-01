@@ -357,13 +357,13 @@ Remaining op/state.t failures (15 + 14 blocked):
 
 ### Next Steps
 
-1. Continue Phase 1 quick wins (items 1.4, 1.6, 1.9, 1.10)
-2. Investigate op/state.t goto+state interaction failures in full test context
+1. Fix op/method.t indirect method call parsing with `()` arguments (see investigation notes below)
+2. Fix op/sort.t `$$`-prototyped comparators (pass args via `@_`)
 3. Run full test suite to measure overall progress
 
 #### Quick win batch 2 (2025-03-31)
 
-Branch: `fix/state-attribute-validation`
+Branch: `fix/test-pass-rate-quick-wins`
 
 | Fix | Tests Gained | Category |
 |-----|-------------|----------|
@@ -378,6 +378,61 @@ Files changed:
 - `Stat.java` — null check after resolvePath() in stat()/lstat()
 - `ArgumentParser.java` — uncommented System.exit(1) for unrecognized switches
 - `RuntimeRegex.java` — don't clear $1 on failed match
+
+#### Quick win batch 3 (2025-03-31)
+
+Branch: `fix/test-pass-rate-quick-wins`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| `vec()` error message prefix removed + unsigned 32-bit read | +37 (vec.t: 37/78→74/78) | 1.6 |
+| `(*pla:...)` `(*plb:...)` `(*nla:...)` `(*nlb:...)` `(*atomic:...)` regex aliases | +88 (alpha_assertions.t: 2100→2188/2320) | 2.9 |
+
+Files changed:
+- `Vec.java` — reorder 64-bit before 32-bit, use `Integer.toUnsignedLong()` for unsigned 32-bit
+- `RuntimeVecLvalue.java` — remove "Invalid vec operation: " error prefix
+- `RegexPreprocessor.java` — map alpha assertion aliases to Java regex equivalents
+
+#### Investigation notes: op/method.t indirect method call (item 2.6)
+
+**Status:** Partially investigated. Package detection fixed but arg parsing still fails.
+
+The parse error at line 59 (`is(method Pack ("a","b","c"), ...)`) has **two layers**:
+
+1. **Package detection** (fixed): When `Pack` is defined via `sub Pack::method { ... }` (without
+   an explicit `package Pack;` statement), `packageExistsCache` has no entry for `Pack`. Added
+   `isPackageLoaded()` fallback in `SubroutineParser.java:208` — this correctly detects `Pack`
+   as a package. However, this fix alone is insufficient.
+
+2. **Argument parsing after indirect method + `(`** (NOT fixed): Even when `Pack` is correctly
+   identified as a package, `method Pack ("a","b","c")` fails because `consumeArgsWithPrototype(parser, "@")`
+   at `SubroutineParser.java:247` doesn't handle parenthesized argument lists in the indirect
+   method context. The `(` after `Pack` causes the parser to either:
+   - Treat `Pack(...)` as a function call (backtracking path), OR
+   - Enter `consumeArgsWithPrototype` which misparses the `(...)` args
+
+   **Confirmed with system Perl:** Both `method Pack "a"` and `method Pack ("a")` are valid
+   indirect method call syntax in Perl 5. PerlOnJava fails on both forms when arguments follow.
+
+   **Root cause:** The indirect method argument consumer needs special handling when the first
+   token is `(` — it should parse as method arguments `Pack->method("a","b","c")`, not as
+   `Pack("a","b","c")` being passed to `method`.
+
+   **Scope:** Fixing this would unblock ~163 tests in op/method.t. The fix requires changes to
+   the argument parsing in `SubroutineParser.java` lines 240-260, specifically how
+   `consumeArgsWithPrototype` interacts with `(` after the package name.
+
+#### Investigation notes: op/sort.t (item 1.10)
+
+**Status:** sort.t now runs (206 planned tests emit TAP). It's NOT a 0/0 crash — the plan doc
+was outdated. Actual status needs measurement. Key issues found:
+
+1. **`$$`-prototyped comparators** don't receive args via `@_`. In Perl 5, `sort sub_with_$$_proto @list`
+   passes elements as `$_[0]`/`$_[1]` instead of `$a`/`$b`. Fix needed in `ListOperators.sort()`
+   (lines 86-138): detect `$$` prototype and populate `comparatorArgs`.
+
+2. **`sort CORE::reverse LIST`** is misparsed — `CORE::reverse` is treated as a comparator name
+   instead of a function applied to the list. Fix needed in `ParseMapGrepSort.parseSort()`.
 
 ### Baseline
 
