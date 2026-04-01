@@ -516,7 +516,7 @@ sub _shell_cp {
     my ($src, $dest) = @_;
     $src =~ s/'/'\\''/g;
     $dest =~ s/'/'\\''/g;
-    return "\t\@cp '$src' '$dest'";
+    return "\t\@rm -f '$dest' && cp '$src' '$dest'";
 }
 
 sub _create_mymeta {
