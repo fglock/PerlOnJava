@@ -2066,9 +2066,9 @@ public class Opcodes {
      * Format: CREATE_LAST_DYNAMIC rd labelReg
      * Creates RuntimeControlFlowList with label from registers[labelReg].toString().
      */
-    public static final short CREATE_LAST_DYNAMIC = 413;
-    public static final short CREATE_NEXT_DYNAMIC = 414;
-    public static final short CREATE_REDO_DYNAMIC = 415;
+    public static final short CREATE_LAST_DYNAMIC = 443;
+    public static final short CREATE_NEXT_DYNAMIC = 444;
+    public static final short CREATE_REDO_DYNAMIC = 445;
 
     // ExtendedNativeUtils operators (user/group info, network lookups, enumeration)
     public static final short GETLOGIN = 416;

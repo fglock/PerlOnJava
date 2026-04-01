@@ -89,25 +89,23 @@ public class PrototypeArgs {
         }
 
         char firstChar = prototype.charAt(i);
-        return firstChar == ';' || firstChar == '@' || firstChar == '%';
+        return firstChar == ';' || firstChar == '@' || firstChar == '%' || firstChar == '_';
     }
 
     /**
      * Checks if the prototype represents a named unary operator.
-     * In Perl, functions with prototype ($) or (_) are parsed as named unary
+     * In Perl, functions with exactly prototype ($) or (_) are parsed as named unary
      * operators with higher precedence than comparison operators.
+     * Prototypes like ($;), (_;), ($;$) are NOT named unary - the trailing semicolon
+     * makes them list operators.
      *
      * @param prototype The prototype string
-     * @return true if the prototype is a single-scalar named unary pattern
+     * @return true if the prototype is exactly "$" or "_"
      */
     private static boolean isNamedUnaryPrototype(String prototype) {
-        if (prototype.isEmpty()) return false;
+        if (prototype.length() != 1) return false;
         char first = prototype.charAt(0);
-        if (first != '$' && first != '_') return false;
-        // Exactly one character: "$" or "_"
-        if (prototype.length() == 1) return true;
-        // Optional args follow: "$;..." or "_;..."
-        return prototype.charAt(1) == ';';
+        return first == '$' || first == '_';
     }
 
     /**
@@ -167,6 +165,13 @@ public class PrototypeArgs {
                 // No argument - check if optional
                 if (!allowsZeroArguments(prototype)) {
                     throwNotEnoughArgumentsError(parser);
+                }
+                // _ prototype defaults to $_ when no argument is provided
+                if (prototype.charAt(0) == '_') {
+                    Node underscoreArg = new OperatorNode(
+                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    underscoreArg.setAnnotation("context", "SCALAR");
+                    args.elements.add(underscoreArg);
                 }
                 return args;
             }
