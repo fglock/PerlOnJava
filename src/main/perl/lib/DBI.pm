@@ -133,24 +133,37 @@ sub finish {
 # Batch execution: calls $fetch_tuple->() repeatedly to get parameter arrays,
 # executes the prepared statement for each, and tracks results in $tuple_status.
 sub execute_for_fetch {
-    my ($sth, $fetch_tuple, $tuple_status) = @_;
-    $tuple_status ||= [];
-    @$tuple_status = ();
-
-    my $total_rows = 0;
-    while (my $tuple = $fetch_tuple->()) {
-        my $rv;
-        eval {
-            $rv = $sth->execute(@$tuple);
-        };
-        if ($@) {
-            push @$tuple_status, [$@];
-            next;
-        }
-        push @$tuple_status, $rv;
-        $total_rows += $rv if defined $rv && $rv >= 0;
+    my ($sth, $fetch_tuple_sub, $tuple_status) = @_;
+    # start with empty status array
+    if ($tuple_status) {
+        @$tuple_status = ();
+    } else {
+        $tuple_status = [];
     }
-    return $total_rows;
+
+    my $rc_total = 0;
+    my $err_count;
+    while ( my $tuple = &$fetch_tuple_sub() ) {
+        my $rc = eval { $sth->execute(@$tuple) };
+        if ($rc) {
+            push @$tuple_status, $rc;
+            $rc_total = ($rc >= 0 && $rc_total >= 0) ? $rc_total + $rc : -1;
+        }
+        else {
+            $err_count++;
+            push @$tuple_status, [ $sth->err, $sth->errstr || $@, $sth->state ];
+        }
+    }
+    my $tuples = @$tuple_status;
+    if ($err_count) {
+        my $err_msg = "executing $tuples generated $err_count errors";
+        die $err_msg if $sth->{Database}{RaiseError};
+        warn $err_msg if $sth->{Database}{PrintError};
+        return undef;
+    }
+    $tuples ||= "0E0";
+    return $tuples unless wantarray;
+    return ($tuples, $rc_total);
 }
 
 sub bind_param {
@@ -434,24 +447,31 @@ sub trace_msg {
 sub prepare_cached {
     my ($dbh, $sql, $attr, $if_active) = @_;
 
-    my $cache_key = $dbh->{Name} . ':' . $sql;
+    # Use a per-dbh cache (like real DBI's CachedKids) to avoid cross-connection
+    # cache hits when multiple connections share the same Name (e.g., :memory:)
+    $dbh->{CachedKids} ||= {};
+    my $cache = $dbh->{CachedKids};
 
-    if (exists $CACHED_STATEMENTS{$cache_key}) {
-        my $sth = $CACHED_STATEMENTS{$cache_key};
+    if (exists $cache->{$sql}) {
+        my $sth = $cache->{$sql};
         if ($sth->{Database}{Active}) {
+            # Handle if_active parameter:
+            # 1 = warn and finish, 2 = finish silently, 3 = return new sth
+            if ($if_active && $sth->{Active}) {
+                if ($if_active == 3) {
+                    # Return a fresh sth instead of the active cached one
+                    my $new_sth = $dbh->prepare($sql, $attr) or return undef;
+                    $cache->{$sql} = $new_sth;
+                    return $new_sth;
+                }
+                $sth->finish;
+            }
             return $sth;
         }
     }
 
     my $sth = $dbh->prepare($sql, $attr) or return undef;
-
-    # Implement simple LRU by removing oldest if cache is full
-    if (keys %CACHED_STATEMENTS >= $MAX_CACHED_STATEMENTS) {
-        my @keys = keys %CACHED_STATEMENTS;
-        delete $CACHED_STATEMENTS{$keys[0]};
-    }
-
-    $CACHED_STATEMENTS{$cache_key} = $sth;
+    $cache->{$sql} = $sth;
     return $sth;
 }
 

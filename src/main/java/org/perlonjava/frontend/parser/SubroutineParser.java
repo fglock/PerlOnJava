@@ -14,6 +14,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -790,7 +791,8 @@ public class SubroutineParser {
                 String msg = "Constant subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
-            } else if (dollarW || Warnings.warningManager.isWarningEnabled("redefine")) {
+            } else if (!Warnings.warningManager.isWarningDisabled("redefine")
+                    && (dollarW || Warnings.warningManager.isWarningEnabled("redefine"))) {
                 String msg = "Subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
@@ -816,6 +818,12 @@ public class SubroutineParser {
         placeholder.attributes = attributes;
         placeholder.subName = subName;
         placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
+
+        // Call MODIFY_CODE_ATTRIBUTES if attributes are present
+        // In Perl, this is called at compile time after the sub is defined
+        if (attributes != null && !attributes.isEmpty()) {
+            callModifyCodeAttributes(packageToUse, codeRef, attributes, parser);
+        }
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
@@ -1026,6 +1034,57 @@ public class SubroutineParser {
         ListNode result = new ListNode(parser.tokenIndex);
         result.setAnnotation("compileTimeOnly", true);
         return result;
+    }
+
+    /**
+     * Call MODIFY_CODE_ATTRIBUTES on the package if it exists.
+     * In Perl, when a subroutine is defined with attributes (sub foo : Attr { }),
+     * the package's MODIFY_CODE_ATTRIBUTES method is called at compile time with
+     * ($package, \&code, @attributes). If it returns any values, those are
+     * unrecognized attributes and an error is thrown.
+     */
+    private static void callModifyCodeAttributes(String packageName, RuntimeScalar codeRef,
+                                                  List<String> attributes, Parser parser) {
+        // Check if the package has MODIFY_CODE_ATTRIBUTES
+        RuntimeArray canArgs = new RuntimeArray();
+        RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+        RuntimeArray.push(canArgs, new RuntimeScalar("MODIFY_CODE_ATTRIBUTES"));
+
+        InheritanceResolver.autoloadEnabled = false;
+        RuntimeList codeList;
+        try {
+            codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+        } finally {
+            InheritanceResolver.autoloadEnabled = true;
+        }
+
+        if (codeList.size() == 1) {
+            RuntimeScalar method = codeList.getFirst();
+            if (method.getBoolean()) {
+                // Build args: ($package, \&code, @attributes)
+                RuntimeArray callArgs = new RuntimeArray();
+                RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
+                RuntimeArray.push(callArgs, codeRef);
+                for (String attr : attributes) {
+                    RuntimeArray.push(callArgs, new RuntimeScalar(attr));
+                }
+
+                RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+
+                // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized attributes
+                RuntimeArray resultArray = result.getArrayOfAlias();
+                if (resultArray.size() > 0) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < resultArray.size(); i++) {
+                        if (i > 0) sb.append(", ");
+                        sb.append("\"").append(resultArray.get(i).toString()).append("\"");
+                    }
+                    throw new PerlCompilerException(parser.tokenIndex,
+                            "Invalid CODE attribute" + (resultArray.size() > 1 ? "s" : "") + ": " + sb,
+                            parser.ctx.errorUtil);
+                }
+            }
+        }
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {

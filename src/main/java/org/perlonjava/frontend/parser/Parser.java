@@ -53,6 +53,10 @@ public class Parser {
     public int heredocSkipToIndex = -1;
     // The specific NEWLINE token index that should trigger the skip.
     public int heredocNewlineIndex = -1;
+    // Base line number for string sub-parsers. When > 0, this parser operates on
+    // re-tokenized string content and __LINE__ should use this as the base line,
+    // counting newlines from the inner token list to offset from it.
+    public int baseLineNumber = 0;
 
     /**
      * Constructs a Parser with the given context and tokens.

@@ -75,12 +75,19 @@ public class DBI extends PerlModuleBase {
      * @return RuntimeList result from the operation or error result
      */
     private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, String methodName) {
+        return executeWithErrorHandling(operation, handle, null, methodName);
+    }
+
+    private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, RuntimeHash secondHandle, String methodName) {
         try {
             return operation.execute();
         } catch (SQLException e) {
             setError(handle, e);
+            if (secondHandle != null) setError(secondHandle, e);
         } catch (Exception e) {
-            setError(handle, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+            SQLException sqlEx = new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE);
+            setError(handle, sqlEx);
+            if (secondHandle != null) setError(secondHandle, sqlEx);
         }
         RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + "() failed: " + getGlobalVariable("DBI::errstr"));
         if (handle.get("RaiseError").getBoolean()) {
@@ -274,13 +281,70 @@ public class DBI extends PerlModuleBase {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
 
+        // Clear previous error state on sth before executing
+        setError(sth, null);
+
         return executeWithErrorHandling(() -> {
             if (args.isEmpty()) {
                 throw new IllegalStateException("Bad number of arguments for DBI->execute");
             }
 
+            // Metadata statement handles (from column_info, table_info, etc.)
+            // don't have a PreparedStatement — result set is already available
+            RuntimeScalar stmtScalar = sth.get("statement");
+            if (stmtScalar == null || stmtScalar.type == RuntimeScalarType.UNDEF) {
+                // Already "executed" by the metadata method — just return success
+                sth.put("Executed", scalarTrue);
+                dbh.put("Executed", scalarTrue);
+                return new RuntimeScalar(-1).getList();
+            }
+
             // Get prepared statement from statement handle
-            PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
+            PreparedStatement stmt = (PreparedStatement) stmtScalar.value;
+
+            // Detect literal transaction SQL before execution
+            // Strip leading comments (-- comment\n) for detection
+            String sql = sth.get("sql").toString().trim();
+            String strippedSql = sql;
+            while (strippedSql.startsWith("--")) {
+                int nlIdx = strippedSql.indexOf('\n');
+                if (nlIdx >= 0) {
+                    strippedSql = strippedSql.substring(nlIdx + 1).trim();
+                } else {
+                    break;
+                }
+            }
+            String sqlUpper = strippedSql.toUpperCase();
+            boolean isBegin = sqlUpper.startsWith("BEGIN");
+            boolean isCommit = sqlUpper.startsWith("COMMIT") || sqlUpper.startsWith("END");
+            boolean isRollback = sqlUpper.startsWith("ROLLBACK") && !sqlUpper.contains("SAVEPOINT");
+
+            Connection conn = (Connection) dbh.get("connection").value;
+
+            // Intercept transaction control SQL — use JDBC API instead of executing
+            // as SQL, because JDBC drivers (especially SQLite) don't handle literal
+            // BEGIN/COMMIT/ROLLBACK properly when autocommit is enabled
+            if (isBegin || isCommit || isRollback) {
+                if (isBegin) {
+                    conn.setAutoCommit(false);
+                    dbh.put("AutoCommit", scalarFalse);
+                } else if (isCommit) {
+                    conn.commit();
+                    conn.setAutoCommit(true);
+                    dbh.put("AutoCommit", scalarTrue);
+                } else {
+                    conn.rollback();
+                    conn.setAutoCommit(true);
+                    dbh.put("AutoCommit", scalarTrue);
+                }
+                sth.put("Executed", scalarTrue);
+                dbh.put("Executed", scalarTrue);
+                RuntimeHash result = new RuntimeHash();
+                result.put("success", scalarTrue);
+                result.put("has_resultset", scalarFalse);
+                sth.put("execute_result", result.createReference());
+                return new RuntimeScalar("0E0").getList();
+            }
 
             // Bind parameters to prepared statement if provided
             for (int i = 1; i < args.size(); i++) {
@@ -342,7 +406,7 @@ public class DBI extends PerlModuleBase {
                 }
                 return new RuntimeScalar(updateCount).getList();
             }
-        }, dbh, "execute");
+        }, dbh, sth, "execute");
     }
 
     /**
@@ -404,6 +468,19 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = sth.get("Database").hashDeref();
 
         return executeWithErrorHandling(() -> {
+            // Handle pre-fetched rows (from PRAGMA-based column_info, etc.)
+            RuntimeScalar pragmaRows = sth.get("_pragma_rows");
+            if (pragmaRows != null && pragmaRows.type != RuntimeScalarType.UNDEF) {
+                RuntimeArray rows = pragmaRows.arrayDeref();
+                int idx = sth.get("_pragma_idx").getInt();
+                if (idx < rows.size()) {
+                    sth.put("_pragma_idx", new RuntimeScalar(idx + 1));
+                    RuntimeHash row = rows.get(idx).hashDeref();
+                    return row.createReference().getList();
+                }
+                return scalarUndef.getList();
+            }
+
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
 
@@ -645,7 +722,8 @@ public class DBI extends PerlModuleBase {
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            return sth.createReference().getList();
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            return sthRef.getList();
         }, dbh, "table_info");
     }
 
@@ -658,18 +736,115 @@ public class DBI extends PerlModuleBase {
             }
 
             Connection conn = (Connection) dbh.get("connection").value;
+            String table = args.get(3).toString();
+
+            // For SQLite, use PRAGMA table_info() to preserve original type case
+            // (JDBC getColumns() uppercases type names like varchar -> VARCHAR)
+            String jdbcUrl = dbh.get("Name").toString();
+            if (jdbcUrl.contains("sqlite")) {
+                return columnInfoViaPragma(dbh, conn, table);
+            }
+
             DatabaseMetaData metaData = conn.getMetaData();
 
-            String catalog = args.get(1).toString();
-            String schema = args.get(2).toString();
-            String table = args.get(3).toString();
+            // Handle undef args: pass null to JDBC (means "any") instead of ""
+            String catalog = args.get(1).type == RuntimeScalarType.UNDEF ? null : args.get(1).toString();
+            String schema = args.get(2).type == RuntimeScalarType.UNDEF ? null : args.get(2).toString();
             String column = args.size() > 4 ? args.get(4).toString() : "%";
 
             ResultSet rs = metaData.getColumns(catalog, schema, table, column);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            return sth.createReference().getList();
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            return sthRef.getList();
         }, dbh, "column_info");
+    }
+
+    /**
+     * SQLite-specific column_info using PRAGMA table_info().
+     * Preserves original type case from CREATE TABLE (e.g., "varchar" not "VARCHAR").
+     * Returns a pre-populated sth with DBI-standard column names.
+     */
+    private static RuntimeList columnInfoViaPragma(RuntimeHash dbh, Connection conn, String table) throws SQLException {
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ")");
+
+        // Build arrays of rows matching DBI column_info format
+        RuntimeArray rows = new RuntimeArray();
+        while (rs.next()) {
+            RuntimeHash row = new RuntimeHash();
+            String colName = rs.getString("name");
+            String declType = rs.getString("type");
+            int notNull = rs.getInt("notnull");
+            String dfltValue = rs.getString("dflt_value");
+            int pk = rs.getInt("pk");
+
+            // Parse declared type: "varchar(100)" -> type="varchar", size=100
+            String typeName = declType;
+            String columnSize = null;
+            if (declType != null) {
+                int parenIdx = declType.indexOf('(');
+                if (parenIdx >= 0) {
+                    typeName = declType.substring(0, parenIdx);
+                    int closeIdx = declType.indexOf(')', parenIdx);
+                    if (closeIdx > parenIdx) {
+                        columnSize = declType.substring(parenIdx + 1, closeIdx);
+                    }
+                }
+            }
+
+            row.put("COLUMN_NAME", new RuntimeScalar(colName));
+            row.put("TYPE_NAME", new RuntimeScalar(typeName != null ? typeName : ""));
+            row.put("COLUMN_SIZE", columnSize != null ? new RuntimeScalar(columnSize) : scalarUndef);
+            // DBI NULLABLE: 0=not nullable, 1=nullable, 2=unknown
+            row.put("NULLABLE", new RuntimeScalar(notNull != 0 ? 0 : 1));
+            row.put("COLUMN_DEF", dfltValue != null ? new RuntimeScalar(dfltValue) : scalarUndef);
+            row.put("ORDINAL_POSITION", new RuntimeScalar(rs.getInt("cid") + 1));
+
+            RuntimeArray.push(rows, row.createReference());
+        }
+        rs.close();
+        stmt.close();
+
+        // Create a synthetic sth that yields these rows via fetchrow_hashref
+        RuntimeHash sth = new RuntimeHash();
+        sth.put("Database", dbh.createReference());
+        sth.put("Type", new RuntimeScalar("st"));
+        sth.put("Executed", scalarTrue);
+
+        // Inherit error handling and fetch settings from dbh
+        RuntimeScalar raiseError = dbh.get("RaiseError");
+        if (raiseError != null) sth.put("RaiseError", raiseError);
+        RuntimeScalar printError = dbh.get("PrintError");
+        if (printError != null) sth.put("PrintError", printError);
+
+        // Store pre-fetched rows for iteration
+        sth.put("_pragma_rows", rows.createReference());
+        sth.put("_pragma_idx", new RuntimeScalar(0));
+
+        // Set up column names for the result set
+        String[] colNames = {"COLUMN_NAME", "TYPE_NAME", "COLUMN_SIZE", "NULLABLE", "COLUMN_DEF", "ORDINAL_POSITION"};
+        RuntimeArray names = new RuntimeArray();
+        RuntimeArray namesLc = new RuntimeArray();
+        RuntimeArray namesUc = new RuntimeArray();
+        for (String n : colNames) {
+            RuntimeArray.push(names, new RuntimeScalar(n));
+            RuntimeArray.push(namesLc, new RuntimeScalar(n.toLowerCase()));
+            RuntimeArray.push(namesUc, new RuntimeScalar(n.toUpperCase()));
+        }
+        sth.put("NAME", names.createReference());
+        sth.put("NAME_lc", namesLc.createReference());
+        sth.put("NAME_uc", namesUc.createReference());
+        sth.put("NUM_OF_FIELDS", new RuntimeScalar(colNames.length));
+
+        // Create a dummy execute_result with no JDBC resultset
+        RuntimeHash result = new RuntimeHash();
+        result.put("success", scalarTrue);
+        result.put("has_resultset", scalarTrue);
+        sth.put("execute_result", result.createReference());
+
+        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+        return sthRef.getList();
     }
 
     public static RuntimeList primary_key_info(RuntimeArray args, int ctx) {
@@ -690,7 +865,8 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            return sth.createReference().getList();
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            return sthRef.getList();
         }, dbh, "primary_key_info");
     }
 
@@ -716,7 +892,8 @@ public class DBI extends PerlModuleBase {
                     fkCatalog, fkSchema, fkTable);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            return sth.createReference().getList();
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            return sthRef.getList();
         }, dbh, "foreign_key_info");
     }
 
@@ -729,13 +906,22 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            return sth.createReference().getList();
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            return sthRef.getList();
         }, dbh, "type_info");
     }
 
     private static RuntimeHash createMetadataResultSet(RuntimeHash dbh, ResultSet rs) throws SQLException {
         RuntimeHash sth = new RuntimeHash();
         sth.put("Database", dbh.createReference());
+
+        // Inherit error handling and fetch settings from dbh
+        RuntimeScalar raiseError = dbh.get("RaiseError");
+        if (raiseError != null) sth.put("RaiseError", raiseError);
+        RuntimeScalar printError = dbh.get("PrintError");
+        if (printError != null) sth.put("PrintError", printError);
+        RuntimeScalar fetchKeyName = dbh.get("FetchHashKeyName");
+        if (fetchKeyName != null) sth.put("FetchHashKeyName", fetchKeyName);
 
         // Create statement handle with result set
         RuntimeHash result = new RuntimeHash();
@@ -767,6 +953,7 @@ public class DBI extends PerlModuleBase {
         sth.put("Executed", scalarTrue);
         sth.put("execute_result", result.createReference());
 
+        // Bless into DBI so method calls like $sth->fetchrow_hashref() work
         return sth;
     }
 

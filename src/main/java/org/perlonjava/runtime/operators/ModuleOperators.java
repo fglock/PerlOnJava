@@ -506,6 +506,25 @@ public class ModuleOperators {
                                 } catch (Exception e) {
                                     // Continue to next @INC entry
                                 }
+                            } else if (hookResultScalar.type == RuntimeScalarType.CODE) {
+                                // Hook returned a CODE reference (line-reader sub)
+                                // Perl calls this repeatedly; the sub sets $_ to each line
+                                // and returns true for more data, false to stop
+                                RuntimeCode lineReader = (RuntimeCode) hookResultScalar.value;
+                                RuntimeScalar dollarUnderscore = GlobalVariable.getGlobalVariable("main::_");
+                                StringBuilder codeBuilder = new StringBuilder();
+                                while (true) {
+                                    RuntimeArray readerArgs = new RuntimeArray();
+                                    RuntimeBase result = lineReader.apply(readerArgs, RuntimeContextType.SCALAR);
+                                    if (result == null || !result.scalar().getBoolean()) {
+                                        break;
+                                    }
+                                    codeBuilder.append(dollarUnderscore.toString()).append("\n");
+                                }
+                                code = codeBuilder.toString();
+                                actualFileName = fileName;
+                                incHookRef = dirScalar;
+                                break;
                             }
                         }
                         // If hook returned undef or we couldn't use the result, continue to next @INC entry

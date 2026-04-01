@@ -7,6 +7,7 @@ import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.backend.jvm.InterpreterFallbackException;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.Node;
@@ -433,6 +434,15 @@ public class PerlLanguageProvider {
                 );
                 return compiled;
 
+            } catch (InterpreterFallbackException fallback) {
+                // getBytecode() already compiled interpreter code as fallback
+                // when ASM frame computation failed (e.g., high fan-in to shared labels).
+                // Use the pre-compiled interpreter code directly.
+                boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+                if (showFallback) {
+                    System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
+                }
+                return fallback.interpretedCode;
             } catch (Throwable e) {
                 // Check if this is a recoverable compilation error that can use interpreter fallback
                 // Catch Throwable (not just RuntimeException) because ClassFormatError

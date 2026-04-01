@@ -1,0 +1,39 @@
+Test::Deep	FAIL	1266	1268	pure-perl
+Try::Tiny	FAIL	91	94	pure-perl
+Test::Fatal	PASS	19	19	pure-perl
+MIME::Base32	PASS	31	31	pure-perl
+HTML::Tagset	PASS	33	33	pure-perl
+Test::Warn	FAIL	0	14	pure-perl
+Path::Tiny	FAIL	1488	1542	pure-perl
+namespace::clean	FAIL	0	44	pure-perl
+Parse::RecDescent	FAIL	2	64	pure-perl
+Spreadsheet::WriteExcel	FAIL	1124	1189	pure-perl
+Image::ExifTool	PASS	600	600	pure-perl
+DateTime	FAIL	5	8	java-xs
+Spreadsheet::ParseExcel	PASS	1612	1612	java-xs
+IO::Stringy	PASS	127	127	pure-perl
+Moo	FAIL	809	840	xs-with-pp-fallback
+MIME::Base64	FAIL	315	348	java-xs
+URI	FAIL	844	947	pure-perl
+IO::HTML	FAIL	0	52	pure-perl
+LWP::MediaTypes	FAIL	41	47	pure-perl
+Test::Needs	PASS	227	227	pure-perl
+Test::Warnings	FAIL	86	88	pure-perl
+Encode::Locale	FAIL	0	11	pure-perl
+Log::Log4perl	FAIL	715	719	pure-perl
+JSON	FAIL	23683	24886	pure-perl
+Type::Tiny	FAIL	18	20	pure-perl
+List::MoreUtils	INSTALLED			xs-with-pp-fallback
+Template	FAIL	170	2072	xs-with-pp-fallback
+Mojolicious	TIMEOUT			pure-perl
+Devel::Cover	PASS	1	1	xs-required
+HTTP::Message	PASS	0	0	pure-perl
+HTML::Parser	FAIL	190	415	xs-required
+IO::Compress::Gzip	FAIL	0	847	xs-required
+Moose	CONFIG_FAIL			xs-required
+Plack	TIMEOUT			pure-perl
+LWP::UserAgent	TIMEOUT			pure-perl
+DBIx::Class	CONFIG_FAIL			pure-perl
+DBI	FAIL	0	490	xs-required
+Params::Util	INSTALLED			xs-with-pp-fallback
+Class::Load	FAIL	69	86	xs-with-pp-fallback
