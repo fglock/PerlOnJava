@@ -339,6 +339,12 @@ public class ListParser {
             // -d, -e, -f, -l, -p, -x
             // -$v
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator or unary minus");
+        } else if (token.type == LexerTokenType.IDENTIFIER && (token.text.equals("x") || token.text.equals("isa"))
+                && ParserTables.INFIX_OP.contains(token.text)) {
+            // 'x' and 'isa' are context-dependent: they are infix operators only when they have
+            // a left operand. At the start of a list (no left operand), they are barewords
+            // (labels for goto/last/next/redo, or function calls). This matches Perl 5 behavior.
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like bareword " + token.text);
         } else if (ParserTables.INFIX_OP.contains(token.text) || token.text.equals(",")) {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("<") || token.text.equals("<<")) {
@@ -368,12 +374,6 @@ public class ListParser {
                 // In Perl, /pattern/ at the start of a list context is a regex match
                 // Note: // is the defined-or operator, not a regex, so we don't include it here
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
-            } else if (token.text.equals("x") && nextToken.text.equals("=>")) {
-                // Special case: `x =>` is autoquoted as bareword, not the repetition operator
-                // This is critical for Moo which uses hash keys like: x => 1
-                // Without this, the parser would try to parse 'x' as repetition operator
-                // Combined with the fix in Parser.java, this ensures 'x =>' works correctly
-                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like autoquoted x");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
