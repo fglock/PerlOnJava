@@ -944,31 +944,54 @@ public class RegexPreprocessor {
         // Check for (*...) verb patterns FIRST, before checking (?
         if (c2 == '*') {
             // (*...) control verbs like (*ACCEPT), (*FAIL), (*COMMIT), etc.
-            // These are Perl-specific and not supported by Java regex
+            // Also handles alpha assertion aliases: (*pla:...), (*plb:...), etc.
 
-            // Find the end of the verb
-            int verbEnd = offset + 2;
-            while (verbEnd < length && s.codePointAt(verbEnd) != ')') {
-                verbEnd++;
+            // Find the verb name (up to ':' or ')')
+            int verbNameEnd = offset + 2;
+            while (verbNameEnd < length) {
+                int cp = s.codePointAt(verbNameEnd);
+                if (cp == ':' || cp == ')') break;
+                verbNameEnd++;
             }
-            if (verbEnd < length) {
-                verbEnd++; // Include the closing paren
+            String verbName = s.substring(offset + 2, verbNameEnd);
+
+            // Check for alpha assertion aliases (Perl 5.28+)
+            String replacement = switch (verbName) {
+                case "pla", "positive_lookahead" -> "(?=";
+                case "plb", "positive_lookbehind" -> "(?<=";
+                case "nla", "negative_lookahead" -> "(?!";
+                case "nlb", "negative_lookbehind" -> "(?<!";
+                case "atomic" -> "(?>";
+                default -> null;
+            };
+
+            if (replacement != null && verbNameEnd < length && s.codePointAt(verbNameEnd) == ':') {
+                // Alpha assertion with content: (*pla:...) -> (?=...)
+                sb.append(replacement);
+                offset = handleRegex(s, verbNameEnd + 1, sb, regexFlags, true);
+                // Fall through to common ')' handling at end of handleParentheses
+            } else {
+                // Find the end of the verb for error reporting
+                int verbEnd = offset + 2;
+                while (verbEnd < length && s.codePointAt(verbEnd) != ')') {
+                    verbEnd++;
+                }
+                if (verbEnd < length) {
+                    verbEnd++; // Include the closing paren
+                }
+
+                // Extract the verb name for error reporting
+                String verb = s.substring(offset, Math.min(verbEnd, length));
+
+                // Replace with empty non-capturing group as placeholder
+                sb.append("(?:)");
+
+                // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
+                regexError(s, offset + 2, "Regex control verb " + verb + " not implemented");
+
+                return verbEnd; // Skip past the entire verb construct
             }
-
-            // Extract the verb name for error reporting
-            String verb = s.substring(offset, Math.min(verbEnd, length));
-
-            // Replace with empty non-capturing group as placeholder
-            sb.append("(?:)");
-
-            // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
-            regexError(s, offset + 2, "Regex control verb " + verb + " not implemented");
-
-            return verbEnd; // Skip past the entire verb construct
-        }
-
-        // Handle (?
-        if (c2 == '?') {
+        } else if (c2 == '?') {
             if (offset + 2 >= length) {
                 // Marker should be after the ?
                 regexError(s, offset + 2, "Sequence (? incomplete");
