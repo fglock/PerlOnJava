@@ -92,6 +92,8 @@ public class OpcodeHandlerExtended {
         int argsListReg = bytecode[pc++];
         int ctx = bytecode[pc++];
 
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+
         RuntimeList argsList = (RuntimeList) registers[argsListReg];
         RuntimeBase[] substrArgs = argsList.elements.toArray(new RuntimeBase[0]);
 
@@ -113,6 +115,8 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int argsListReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
 
         RuntimeList argsList = (RuntimeList) registers[argsListReg];
         RuntimeBase[] substrArgs = argsList.elements.toArray(new RuntimeBase[0]);
@@ -536,6 +540,8 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         registers[rd] = Stat.stat((RuntimeScalar) registers[rs], ctx);
         return pc;
     }
@@ -548,6 +554,8 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         registers[rd] = Stat.lstat((RuntimeScalar) registers[rs], ctx);
         return pc;
     }
@@ -555,6 +563,8 @@ public class OpcodeHandlerExtended {
     public static int executeStatLastHandle(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         registers[rd] = Stat.statLastHandle(ctx);
         return pc;
     }
@@ -562,6 +572,8 @@ public class OpcodeHandlerExtended {
     public static int executeLstatLastHandle(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         registers[rd] = Stat.lstatLastHandle(ctx);
         return pc;
     }
@@ -782,6 +794,8 @@ public class OpcodeHandlerExtended {
     public static int executeOpen(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         int argsReg = bytecode[pc++];
         RuntimeArray argsArray = (RuntimeArray) registers[argsReg];
         RuntimeBase[] argsVarargs = argsArray.elements.toArray(new RuntimeBase[0]);
@@ -797,6 +811,8 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int fhReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeScalar fh = (RuntimeScalar) registers[fhReg];
         // Diamond operator <> passes a plain string scalar (not a glob/IO).
         // Route to DiamondIO.readline which manages @ARGV / STDIN iteration.
@@ -817,6 +833,8 @@ public class OpcodeHandlerExtended {
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         registers[rd] = RuntimeRegex.matchRegex(
                 (RuntimeScalar) registers[regexReg],
                 (RuntimeScalar) registers[stringReg],
@@ -834,6 +852,8 @@ public class OpcodeHandlerExtended {
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeBase matchResult = RuntimeRegex.matchRegex(
                 (RuntimeScalar) registers[regexReg],
                 (RuntimeScalar) registers[stringReg],

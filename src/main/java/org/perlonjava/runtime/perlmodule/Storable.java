@@ -3,6 +3,7 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.DumpSettings;
 import org.snakeyaml.engine.v2.api.Load;
@@ -152,7 +153,11 @@ public class Storable extends PerlModuleBase {
     }
 
     /**
-     * Deep clone using YAML serialization.
+     * Deep clone using direct deep-copy with STORABLE_freeze/thaw hook support.
+     * <p>
+     * When cloning a blessed object that has a STORABLE_freeze method, calls the
+     * hook instead of traversing the object directly. This handles objects with
+     * non-serializable internals (e.g., DBI handles with Java JDBC connections).
      */
     public static RuntimeList dclone(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -161,12 +166,128 @@ public class Storable extends PerlModuleBase {
 
         try {
             RuntimeScalar data = args.get(0);
-            String yaml = serializeToYAML(data);
-            RuntimeScalar cloned = deserializeFromYAML(yaml);
-            return cloned.getList();
+            IdentityHashMap<Object, RuntimeScalar> cloned = new IdentityHashMap<>();
+            RuntimeScalar result = deepClone(data, cloned);
+            return result.getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("dclone failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
         }
+    }
+
+    /**
+     * Recursively deep-clones a RuntimeScalar, handling circular references and
+     * STORABLE_freeze/STORABLE_thaw hooks on blessed objects.
+     */
+    private static RuntimeScalar deepClone(RuntimeScalar scalar, IdentityHashMap<Object, RuntimeScalar> cloned) {
+        if (scalar == null) return new RuntimeScalar();
+
+        // Check for already-cloned references (circular reference handling)
+        if (scalar.value != null && cloned.containsKey(scalar.value)) {
+            return cloned.get(scalar.value);
+        }
+
+        // Check for blessed objects with STORABLE_freeze hook
+        int blessId = RuntimeScalarType.blessedId(scalar);
+        if (blessId != 0) {
+            String className = NameNormalizer.getBlessStr(blessId);
+            RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
+                    "STORABLE_freeze", className, null, 0);
+
+            if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
+                // Call STORABLE_freeze($self, $cloning=1)
+                RuntimeArray freezeArgs = new RuntimeArray();
+                RuntimeArray.push(freezeArgs, scalar);
+                RuntimeArray.push(freezeArgs, new RuntimeScalar(1)); // cloning = true
+                RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                RuntimeArray freezeArray = new RuntimeArray();
+                freezeResult.setArrayOfAlias(freezeArray);
+
+                // Create a new empty blessed object of the same class
+                RuntimeHash newHash = new RuntimeHash();
+                RuntimeScalar newObj = newHash.createReference();
+                ReferenceOperators.bless(newObj, new RuntimeScalar(className));
+                cloned.put(scalar.value, newObj);
+
+                // Call STORABLE_thaw($new_obj, $cloning=1, $serialized, @extra_refs)
+                RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
+                        "STORABLE_thaw", className, null, 0);
+                if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
+                    RuntimeArray thawArgs = new RuntimeArray();
+                    RuntimeArray.push(thawArgs, newObj);
+                    RuntimeArray.push(thawArgs, new RuntimeScalar(1)); // cloning = true
+                    // Pass serialized data and any extra refs from freeze
+                    for (int i = 0; i < freezeArray.size(); i++) {
+                        RuntimeArray.push(thawArgs, freezeArray.get(i));
+                    }
+                    RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                }
+
+                return newObj;
+            }
+        }
+
+        // Regular deep copy based on type
+        return switch (scalar.type) {
+            case RuntimeScalarType.HASHREFERENCE -> {
+                RuntimeHash origHash = (RuntimeHash) scalar.value;
+                RuntimeHash newHash = new RuntimeHash();
+                RuntimeScalar newRef = newHash.createReference();
+                cloned.put(scalar.value, newRef);
+
+                // Preserve blessing
+                if (blessId != 0) {
+                    String className = NameNormalizer.getBlessStr(blessId);
+                    ReferenceOperators.bless(newRef, new RuntimeScalar(className));
+                }
+
+                // Deep-clone each value
+                origHash.elements.forEach((key, value) ->
+                        newHash.put(key, deepClone(value, cloned)));
+                yield newRef;
+            }
+            case RuntimeScalarType.ARRAYREFERENCE -> {
+                RuntimeArray origArray = (RuntimeArray) scalar.value;
+                RuntimeArray newArray = new RuntimeArray();
+                RuntimeScalar newRef = newArray.createReference();
+                cloned.put(scalar.value, newRef);
+
+                // Preserve blessing
+                if (blessId != 0) {
+                    String className = NameNormalizer.getBlessStr(blessId);
+                    ReferenceOperators.bless(newRef, new RuntimeScalar(className));
+                }
+
+                // Deep-clone each element
+                for (RuntimeScalar element : origArray.elements) {
+                    newArray.elements.add(deepClone(element, cloned));
+                }
+                yield newRef;
+            }
+            case RuntimeScalarType.REFERENCE -> {
+                // Scalar reference: clone the referenced value
+                RuntimeScalar origValue = (RuntimeScalar) scalar.value;
+                RuntimeScalar newValue = deepClone(origValue, cloned);
+                RuntimeScalar newRef = newValue.createReference();
+                cloned.put(scalar.value, newRef);
+
+                // Preserve blessing
+                if (blessId != 0) {
+                    String className = NameNormalizer.getBlessStr(blessId);
+                    ReferenceOperators.bless(newRef, new RuntimeScalar(className));
+                }
+                yield newRef;
+            }
+            case RuntimeScalarType.CODE -> {
+                // CODE refs are shared, not cloned
+                yield scalar;
+            }
+            default -> {
+                // Scalar values (int, double, string, undef) — just copy
+                RuntimeScalar copy = new RuntimeScalar();
+                copy.set(scalar);
+                yield copy;
+            }
+        };
     }
 
     /**
@@ -201,6 +322,7 @@ public class Storable extends PerlModuleBase {
 
     /**
      * Converts RuntimeScalar to YAML object with type tags for blessed objects.
+     * Supports STORABLE_freeze hooks on blessed objects.
      */
     @SuppressWarnings("unchecked")
     private static Object convertToYAMLWithTags(RuntimeScalar scalar, IdentityHashMap<Object, Object> seen) {
@@ -214,6 +336,31 @@ public class Storable extends PerlModuleBase {
         int blessId = RuntimeScalarType.blessedId(scalar);
         if (blessId != 0) {
             String className = NameNormalizer.getBlessStr(blessId);
+
+            // Check for STORABLE_freeze hook
+            RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
+                    "STORABLE_freeze", className, null, 0);
+            if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
+                // Call STORABLE_freeze($self, $cloning=0) for serialization
+                RuntimeArray freezeArgs = new RuntimeArray();
+                RuntimeArray.push(freezeArgs, scalar);
+                RuntimeArray.push(freezeArgs, new RuntimeScalar(0)); // cloning = false
+                RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                RuntimeArray freezeArray = new RuntimeArray();
+                freezeResult.setArrayOfAlias(freezeArray);
+
+                // Store serialized data with class tag
+                Map<String, Object> taggedObject = new LinkedHashMap<>();
+                if (freezeArray.size() > 0) {
+                    // STORABLE_freeze returns (serialized_string, @extra_refs)
+                    // Store the serialized string directly
+                    taggedObject.put("!!perl/freeze:" + className, freezeArray.get(0).toString());
+                } else {
+                    taggedObject.put("!!perl/freeze:" + className, "");
+                }
+                return taggedObject;
+            }
+
             Map<String, Object> taggedObject = new LinkedHashMap<>();
             taggedObject.put("!!perl/hash:" + className, convertScalarValue(scalar, seen));
             return taggedObject;
@@ -304,6 +451,25 @@ public class Storable extends PerlModuleBase {
                             ReferenceOperators.bless(obj, new RuntimeScalar(className));
                         }
                         yield obj;
+                    } else if (key.startsWith("!!perl/freeze:")) {
+                        // Handle STORABLE_freeze/thaw hooks
+                        String className = key.substring("!!perl/freeze:".length());
+                        RuntimeHash newHash = new RuntimeHash();
+                        RuntimeScalar newObj = newHash.createReference();
+                        ReferenceOperators.bless(newObj, new RuntimeScalar(className));
+
+                        // Call STORABLE_thaw($new_obj, $cloning=0, $serialized_string)
+                        RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
+                                "STORABLE_thaw", className, null, 0);
+                        if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
+                            RuntimeArray thawArgs = new RuntimeArray();
+                            RuntimeArray.push(thawArgs, newObj);
+                            RuntimeArray.push(thawArgs, new RuntimeScalar(0)); // cloning = false
+                            RuntimeArray.push(thawArgs, new RuntimeScalar(
+                                    entry.getValue() != null ? entry.getValue().toString() : ""));
+                            RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                        }
+                        yield newObj;
                     } else if (key.equals("!!perl/ref")) {
                         // Handle scalar references like \$x
                         RuntimeScalar referenced = convertFromYAMLWithTags(entry.getValue(), seen);

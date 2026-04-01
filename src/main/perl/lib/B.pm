@@ -83,15 +83,50 @@ package B::PVIV {
 
 package B::CV {
     our @ISA = ('B::SV');
-    
+
+    # Introspect code reference to extract package and sub name
+    sub _introspect {
+        my $self = shift;
+        return if $self->{_introspected};
+        $self->{_introspected} = 1;
+        $self->{_sub_name} = '__ANON__';
+        $self->{_pkg_name} = 'main';
+        $self->{_is_anon}  = 1;
+        if ($self->{ref} && ref($self->{ref}) eq 'CODE') {
+            require Sub::Util;
+            my $fqn = Sub::Util::subname($self->{ref});
+            if (defined $fqn && $fqn ne '__ANON__') {
+                # Split "Package::Name::subname" into package and name
+                if ($fqn =~ /^(.+)::([^:]+)$/) {
+                    my ($pkg, $name) = ($1, $2);
+                    # Verify the sub still exists in the stash. Stubs whose
+                    # stash entry has been deleted/cleared/undefined should be
+                    # treated as anonymous (matching Perl 5's GV anonymization).
+                    no strict 'refs';
+                    if (defined &{"$fqn"}) {
+                        $self->{_pkg_name} = $pkg;
+                        $self->{_sub_name} = $name;
+                        $self->{_is_anon}  = 0;
+                    } else {
+                        # Stash entry gone — extract package for STASH but
+                        # keep NAME as __ANON__ and CVf_ANON set
+                        $self->{_pkg_name} = $pkg;
+                    }
+                }
+            }
+        }
+    }
+
     sub GV {
         my $self = shift;
-        return B::GV->new("__ANON__", "main");
+        $self->_introspect;
+        return B::GV->new($self->{_sub_name}, $self->{_pkg_name});
     }
     
     sub STASH {
         my $self = shift;
-        return B::STASH->new("main");
+        $self->_introspect;
+        return B::STASH->new($self->{_pkg_name});
     }
     
     sub FILE {
@@ -108,8 +143,9 @@ package B::CV {
     }
     
     sub CvFLAGS {
-        # Always return CVf_ANON for stubs
-        return 0x0004;  # CVf_ANON
+        my $self = shift;
+        $self->_introspect;
+        return $self->{_is_anon} ? 0x0004 : 0;  # CVf_ANON for anonymous subs
     }
 }
 
@@ -253,10 +289,9 @@ that can work with limited B functionality.
 
 =head1 LIMITATIONS
 
-- Cannot extract actual subroutine names from code references  
-- Cannot determine actual package names
-- CV flags are generic
+- CV flags are generic (only CVf_ANON is set for anonymous subs)
 - File locations are not tracked
+- Anonymous subs report package as 'main' and name as '__ANON__'
 
 =head1 AUTHOR
 

@@ -112,6 +112,12 @@ public class NumericPackHandler implements PackFormatHandler {
                 valueIndex++;
             }
 
+            // For blessed objects, resolve numeric overload once to avoid
+            // invoking the 0+ overload multiple times (handleInfinity + getInt/getDouble).
+            if (value.isBlessed()) {
+                value = value.getNumber();
+            }
+
             // Check for Inf/NaN values for integer formats
             if (PackHelper.isIntegerFormat(format)) {
                 PackHelper.handleInfinity(value, format);

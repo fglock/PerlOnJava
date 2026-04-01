@@ -793,6 +793,22 @@ public class EmitVariable {
                     break;
                 }
 
+                // Special case: ternary LHS with LIST assignment branches.
+                // Perl 5 parses e.g. `($x ? @$a = () : $b) = []` where the true branch
+                // is itself an assignment. For LIST assignments (like @$a = ()), the result
+                // in scalar context is a cached read-only count (RuntimeScalarReadOnly).
+                // The outer assignment targets this read-only temp (effectively a no-op).
+                // Scalar assignments (like $c = 100) return the variable itself (writable),
+                // so they work fine with the normal code path.
+                if (node.left instanceof TernaryOperatorNode ternary) {
+                    boolean trueIsListAssign = isListAssignBranch(ternary.trueExpr);
+                    boolean falseIsListAssign = isListAssignBranch(ternary.falseExpr);
+                    if (trueIsListAssign || falseIsListAssign) {
+                        emitTernaryWithAssignBranches(emitterVisitor, node, ternary, trueIsListAssign, falseIsListAssign);
+                        break;
+                    }
+                }
+
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
@@ -976,6 +992,123 @@ public class EmitVariable {
         }
         EmitOperator.handleVoidContext(emitterVisitor);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
+    }
+
+    /**
+     * Checks whether a ternary branch is a LIST assignment expression (e.g. {@code @arr = expr}).
+     * LIST assignments in scalar context return a cached read-only element count, which cannot
+     * be used as an lvalue target. Scalar assignments return the variable itself (writable).
+     */
+    private static boolean isListAssignBranch(Node expr) {
+        if (expr instanceof BinaryOperatorNode binop && binop.operator.equals("=")) {
+            int innerContext = LValueVisitor.getContext(binop);
+            return innerContext == RuntimeContextType.LIST;
+        }
+        return false;
+    }
+
+    /**
+     * Emits a scalar assignment where the LHS is a ternary operator with at least one
+     * branch that is a LIST assignment expression.
+     * <p>
+     * In Perl 5, patterns like {@code ($cond ? @arr = expr : $var) = rhs} work because
+     * LIST assignment branches execute their inner assignment and return a writable temporary.
+     * Non-assignment branches are used as lvalue targets for the outer assignment.
+     * <p>
+     * In PerlOnJava, list assignments in scalar context return cached read-only values
+     * (RuntimeScalarReadOnly), so we compile this as an if/else: LIST assignment branches
+     * execute in void context (for side effects), while non-assignment branches get the
+     * outer assignment applied normally. The result is always the outer RHS value,
+     * matching Perl 5 behavior.
+     */
+    private static void emitTernaryWithAssignBranches(
+            EmitterVisitor emitterVisitor,
+            BinaryOperatorNode outerAssign,
+            TernaryOperatorNode ternary,
+            boolean trueIsAssign,
+            boolean falseIsAssign) {
+
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+
+        // Emit and spill the outer RHS
+        outerAssign.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int rhsSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledRhs = rhsSlot >= 0;
+        if (!pooledRhs) {
+            rhsSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, rhsSlot);
+
+        // Use a result spill slot so both branches produce consistent stack state
+        int resultSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledResult = resultSlot >= 0;
+        if (!pooledResult) {
+            resultSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+
+        Label elseLabel = new Label();
+        Label endLabel = new Label();
+
+        // Emit condition
+        ternary.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                "getBoolean", "()Z", false);
+        mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
+
+        // True branch
+        emitTernaryAssignBranch(emitterVisitor, ternary.trueExpr, trueIsAssign, rhsSlot);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+        // False branch
+        mv.visitLabel(elseLabel);
+        emitTernaryAssignBranch(emitterVisitor, ternary.falseExpr, falseIsAssign, rhsSlot);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+
+        mv.visitLabel(endLabel);
+        mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
+
+        // Release spill slots in LIFO order
+        if (pooledResult) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledRhs) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
+    }
+
+    /**
+     * Emits one branch of a ternary-as-lvalue with LIST assignment branches.
+     * <p>
+     * If the branch is a LIST assignment, executes it in void context and pushes the outer RHS
+     * as the result. If the branch is a plain lvalue (or scalar assignment), performs the outer
+     * assignment normally.
+     */
+    private static void emitTernaryAssignBranch(
+            EmitterVisitor emitterVisitor,
+            Node branchExpr,
+            boolean isAssign,
+            int rhsSlot) {
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        if (isAssign) {
+            // Branch is an assignment expression — execute it for side effects only
+            branchExpr.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            // Push the outer RHS as the result (matching Perl 5 behavior where
+            // assigning to the temp result of an inner assignment is effectively a no-op)
+            mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+        } else {
+            // Branch is a plain lvalue — do the outer assignment
+            branchExpr.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    "addToScalar",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
     }
 
     private static void emitStateInitialization(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorNode operatorNode, EmitterContext ctx) {

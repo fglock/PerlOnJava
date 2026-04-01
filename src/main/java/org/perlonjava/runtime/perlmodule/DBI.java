@@ -346,13 +346,48 @@ public class DBI extends PerlModuleBase {
                 return new RuntimeScalar("0E0").getList();
             }
 
-            // Bind parameters to prepared statement if provided
-            for (int i = 1; i < args.size(); i++) {
-                stmt.setObject(i, args.get(i).value);
-            }
+            // Bind parameters and execute the statement.
+            // If the JDBC PreparedStatement is stale (e.g., invalidated by ROLLBACK),
+            // re-prepare it and retry once.
+            boolean retried = false;
+            boolean hasResultSet = false;
+            while (true) {
+                try {
+                    // Bind parameters to prepared statement
+                    if (args.size() > 1) {
+                        // Inline parameters passed to execute(@bind_values)
+                        for (int i = 1; i < args.size(); i++) {
+                            stmt.setObject(i, args.get(i).value);
+                        }
+                    } else {
+                        // Apply stored bound_params from bind_param() calls
+                        RuntimeScalar boundParamsRef = sth.get("bound_params");
+                        if (boundParamsRef != null && RuntimeScalarType.isReference(boundParamsRef)) {
+                            RuntimeHash boundParams = boundParamsRef.hashDeref();
+                            for (RuntimeScalar key : boundParams.keys().elements) {
+                                int paramIndex = Integer.parseInt(key.toString());
+                                RuntimeScalar val = boundParams.get(key.toString());
+                                stmt.setObject(paramIndex, val.value);
+                            }
+                        }
+                    }
 
-            // Execute the statement and check for result set
-            boolean hasResultSet = stmt.execute();
+                    // Execute the statement and check for result set
+                    hasResultSet = stmt.execute();
+                    break; // Success — exit retry loop
+                } catch (SQLException e) {
+                    // SQLite JDBC invalidates PreparedStatements after ROLLBACK.
+                    // Re-prepare the statement and retry once.
+                    if (!retried && e.getMessage() != null
+                            && e.getMessage().contains("not executing")) {
+                        retried = true;
+                        stmt = conn.prepareStatement(sql);
+                        sth.put("statement", new RuntimeScalar(stmt));
+                        continue; // Retry with fresh statement
+                    }
+                    throw e; // Rethrow other errors
+                }
+            }
 
             // Create result hash with execution status
             RuntimeHash result = new RuntimeHash();
@@ -585,10 +620,30 @@ public class DBI extends PerlModuleBase {
      * @param handle    The database or statement handle
      * @param exception The SQL exception that occurred
      */
+    /**
+     * Normalizes JDBC error messages to match native driver format.
+     * JDBC drivers (especially SQLite) wrap error messages with extra context:
+     *   "[SQLITE_MISMATCH] Data type mismatch (datatype mismatch)"
+     * Native drivers return just the core message:
+     *   "datatype mismatch"
+     * This method extracts the parenthesized message if present.
+     */
+    private static String normalizeErrorMessage(String message) {
+        if (message == null) return null;
+        // Match pattern: "[CODE] Description (actual message)" -> "actual message"
+        // The parenthesized part at the end is the native error message
+        int lastOpen = message.lastIndexOf('(');
+        int lastClose = message.lastIndexOf(')');
+        if (lastOpen >= 0 && lastClose > lastOpen && message.startsWith("[")) {
+            return message.substring(lastOpen + 1, lastClose);
+        }
+        return message;
+    }
+
     private static void setError(RuntimeHash handle, SQLException exception) {
         if (exception != null) {
             handle.put("err", new RuntimeScalar(exception.getErrorCode()));
-            handle.put("errstr", new RuntimeScalar(exception.getMessage()));
+            handle.put("errstr", new RuntimeScalar(normalizeErrorMessage(exception.getMessage())));
             handle.put("state", new RuntimeScalar(exception.getSQLState() != null ?
                     exception.getSQLState() : GENERAL_ERROR_STATE));
         } else {
@@ -645,17 +700,24 @@ public class DBI extends PerlModuleBase {
                 throw new IllegalStateException("Bad number of arguments for DBI->bind_param");
             }
 
-            PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
             int paramIndex = args.get(1).getInt();
             Object value = args.get(2).value;
 
-            // Store bound parameters for later use
+            // Store bound parameters for later use (applied during execute())
             RuntimeHash boundParams = sth.get("bound_params") != null ?
                     sth.get("bound_params").hashDeref() : new RuntimeHash();
             boundParams.put(String.valueOf(paramIndex), new RuntimeScalar(value));
             sth.put("bound_params", boundParams.createReference());
 
-            stmt.setObject(paramIndex, value);
+            // Store bind attributes if provided (4th arg is attrs hashref or type int)
+            if (args.size() >= 4) {
+                RuntimeHash boundAttrs = sth.get("bound_attrs") != null ?
+                        sth.get("bound_attrs").hashDeref() : new RuntimeHash();
+                boundAttrs.put(String.valueOf(paramIndex), args.get(3));
+                sth.put("bound_attrs", boundAttrs.createReference());
+            }
+
+            // Don't call stmt.setObject() here - params are applied in execute()
             return scalarTrue.getList();
         }, dbh, "bind_param");
     }
@@ -669,17 +731,16 @@ public class DBI extends PerlModuleBase {
                 throw new IllegalStateException("Bad number of arguments for DBI->bind_param_inout");
             }
 
-            PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
             int paramIndex = args.get(1).getInt();
             RuntimeScalar valueRef = args.get(2);
 
-            // Store bound parameters for later use
+            // Store bound parameters for later use (applied during execute())
             RuntimeHash boundParams = sth.get("bound_params") != null ?
                     sth.get("bound_params").hashDeref() : new RuntimeHash();
             boundParams.put(String.valueOf(paramIndex), valueRef);
             sth.put("bound_params", boundParams.createReference());
 
-            stmt.setObject(paramIndex, valueRef.value);
+            // Don't call stmt.setObject() here - params are applied in execute()
             return scalarTrue.getList();
         }, dbh, "bind_param_inout");
     }

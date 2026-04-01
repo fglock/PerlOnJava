@@ -855,6 +855,15 @@ public class BytecodeInterpreter {
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];
 
+                                // Resolve RUNTIME context from register 2 (wantarray).
+                                // When a subroutine body is compiled by the interpreter,
+                                // the calling context is not known at compile time, so
+                                // RUNTIME is baked into the bytecode. At execution time,
+                                // resolve it from the actual calling context in register 2.
+                                if (context == RuntimeContextType.RUNTIME) {
+                                    context = ((RuntimeScalar) registers[2]).getInt();
+                                }
+
                                 // Auto-convert coderef to scalar if needed
                                 RuntimeBase codeRefBase = registers[coderefReg];
                                 RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
@@ -997,6 +1006,11 @@ public class BytecodeInterpreter {
                                 int currentSubReg = bytecode[pc++];
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];
+
+                                // Resolve RUNTIME context from register 2 (wantarray)
+                                if (context == RuntimeContextType.RUNTIME) {
+                                    context = ((RuntimeScalar) registers[2]).getInt();
+                                }
 
                                 RuntimeScalar invocant = (RuntimeScalar) registers[invocantReg];
                                 RuntimeScalar method = (RuntimeScalar) registers[methodReg];

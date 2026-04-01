@@ -943,6 +943,8 @@ public class InlineOpcodeHandler {
         int closureReg = bytecode[pc++];
         int ctx = bytecode[pc++];
 
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
@@ -960,6 +962,8 @@ public class InlineOpcodeHandler {
         int listReg = bytecode[pc++];
         int closureReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
 
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
@@ -1250,6 +1254,8 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeList tieArgs = (RuntimeList) registers[argsReg];
         registers[rd] = TieOperators.tie(ctx, tieArgs.elements.toArray(new RuntimeBase[0]));
         return pc;
@@ -1259,6 +1265,8 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeList untieArgs = (RuntimeList) registers[argsReg];
         registers[rd] = TieOperators.untie(ctx, untieArgs.elements.toArray(new RuntimeBase[0]));
         return pc;
@@ -1268,6 +1276,8 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeList tiedArgs = (RuntimeList) registers[argsReg];
         registers[rd] = TieOperators.tied(ctx, tiedArgs.elements.toArray(new RuntimeBase[0]));
         return pc;
@@ -1337,6 +1347,8 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int fileReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeScalar file = registers[fileReg].scalar();
         registers[rd] = ModuleOperators.doFile(file, ctx);
         return pc;
@@ -1354,6 +1366,8 @@ public class InlineOpcodeHandler {
         int globId = bytecode[pc++];
         int patternReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         registers[rd] = ScalarGlobOperator.evaluate(globId, (RuntimeScalar) registers[patternReg], ctx);
         return pc;
     }
