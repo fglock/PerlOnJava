@@ -1077,7 +1077,7 @@ public class CompileOperator {
                 int rd = bytecodeCompiler.allocateOutputRegister();
                 boolean hasArgs = node.operand instanceof ListNode ln && !ln.elements.isEmpty();
                 if (hasArgs) {
-                    node.operand.accept(bytecodeCompiler);
+                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
                     int listReg = bytecodeCompiler.lastResultReg;
                     bytecodeCompiler.emitWithToken(Opcodes.SELECT, node.getIndex());
                     bytecodeCompiler.emitReg(rd);
