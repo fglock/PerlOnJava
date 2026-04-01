@@ -439,13 +439,30 @@ public class IOOperator {
             return TieHandle.tiedPrintf(tieHandle, runtimeList);
         }
 
-        RuntimeScalar format = (RuntimeScalar) runtimeList.elements.removeFirst(); // Extract the format string from elements
+        // Flatten any arrays in the list (handles "printf @a" where @a contains format + args)
+        RuntimeList flatList = new RuntimeList();
+        for (RuntimeBase elem : runtimeList.elements) {
+            if (elem instanceof RuntimeArray array) {
+                for (int j = 0; j < array.size(); j++) {
+                    flatList.add(array.get(j));
+                }
+            } else {
+                flatList.add(elem);
+            }
+        }
+
+        // Handle empty argument list (printf +())
+        if (flatList.elements.isEmpty()) {
+            return scalarTrue;
+        }
+
+        RuntimeScalar format = (RuntimeScalar) flatList.elements.removeFirst(); // Extract the format string from elements
 
         String formattedString;
 
         // Use sprintf to get the formatted string
         try {
-            formattedString = SprintfOperator.sprintf(format, runtimeList).toString();
+            formattedString = SprintfOperator.sprintf(format, flatList).toString();
         } catch (PerlCompilerException e) {
             // Change sprintf error messages to printf
             String message = e.getMessage();
