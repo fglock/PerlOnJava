@@ -533,12 +533,16 @@ public class Variable {
 
                         // Handle arguments if present
                         Node list;
+                        boolean shareArgs = false;
                         if (!TokenUtils.peek(parser).text.equals("(")) {
                             list = atUnderscore(parser);
+                            shareArgs = true; // &func shares caller's @_
                         } else {
                             list = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
                         }
-                        return new BinaryOperatorNode("(", qualifiedNode, list, index);
+                        BinaryOperatorNode callNode = new BinaryOperatorNode("(", qualifiedNode, list, index);
+                        if (shareArgs) callNode.setAnnotation("shareCallerArgs", true);
+                        return callNode;
                     }
                 }
 
@@ -578,12 +582,16 @@ public class Variable {
                     // Handle arguments for actual calls (&foo or &foo())
                     // Use $hiddenVar directly - the () operator will handle dereferencing
                     Node list;
+                    boolean shareArgs = false;
                     if (!TokenUtils.peek(parser).text.equals("(")) {
                         list = atUnderscore(parser);
+                        shareArgs = true; // &func shares caller's @_
                     } else {
                         list = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
                     }
-                    return new BinaryOperatorNode("(", dollarOp, list, index);
+                    BinaryOperatorNode callNode = new BinaryOperatorNode("(", dollarOp, list, index);
+                    if (shareArgs) callNode.setAnnotation("shareCallerArgs", true);
+                    return callNode;
                 }
             }
         }
@@ -623,9 +631,11 @@ public class Variable {
         }
 
         Node list;
+        boolean shareArgs = false;
         // If the next token is not `(`, handle auto-call by transforming `&subr` to `&subr(@_)`
         if (!peek(parser).text.equals("(")) {
             list = atUnderscore(parser);
+            shareArgs = true; // &func shares caller's @_
         } else {
             // Otherwise, parse the list of arguments
             list = ListParser.parseZeroOrMoreList(parser,
@@ -648,7 +658,9 @@ public class Variable {
         }
 
         // Return a new BinaryOperatorNode representing the function call with arguments
-        return new BinaryOperatorNode("(", node, list, parser.tokenIndex);
+        BinaryOperatorNode callNode = new BinaryOperatorNode("(", node, list, parser.tokenIndex);
+        if (shareArgs) callNode.setAnnotation("shareCallerArgs", true);
+        return callNode;
     }
 
     /**

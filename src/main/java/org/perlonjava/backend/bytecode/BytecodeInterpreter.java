@@ -834,9 +834,12 @@ public class BytecodeInterpreter {
                             // SUBROUTINE CALLS
                             // =================================================================
 
-                            case Opcodes.CALL_SUB -> {
+                            case Opcodes.CALL_SUB, Opcodes.CALL_SUB_SHARE_ARGS -> {
                                 // Call subroutine: rd = coderef->(args)
+                                // CALL_SUB_SHARE_ARGS: &func (no parens) shares caller's @_ by alias
                                 // May return RuntimeControlFlowList!
+                                // pcHolder[0] contains the PC of this opcode (set before opcode read)
+                                boolean shareArgs = (opcode == Opcodes.CALL_SUB_SHARE_ARGS);
                                 // pcHolder[0] contains the PC of this opcode (set before opcode read)
                                 int callSitePc = pcHolder[0];
                                 int rd = bytecode[pc++];
@@ -893,7 +896,12 @@ public class BytecodeInterpreter {
                                         }
                                     } else {
                                         // Slow path for JVM-compiled code, symbolic references, etc.
-                                        result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                        // For &func (shareArgs), use the apply overload that shares @_
+                                        if (shareArgs) {
+                                            result = RuntimeCode.apply(codeRef, callArgs, context);
+                                        } else {
+                                            result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                        }
                                     }
 
                                     // Handle TAILCALL with trampoline loop (same as JVM backend)
