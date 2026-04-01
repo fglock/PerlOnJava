@@ -584,18 +584,21 @@ public class Operator {
     }
 
     private static RuntimeList reversePlainArray(RuntimeArray array) {
-        List<RuntimeBase> newElements = new ArrayList<>();
-        // Handle null elements (deleted array elements)
+        // Preserve null elements (deleted array elements) so that
+        // @a = reverse @a maintains sparse array structure.
+        // null = deleted (exists returns false), undef = defined but undef
+        RuntimeArray result = new RuntimeArray();
         for (RuntimeBase element : array.elements) {
             if (element != null) {
-                newElements.add(element);
+                result.elements.add(new RuntimeScalar((RuntimeScalar) element));
             } else {
-                // Preserve undef for deleted elements
-                newElements.add(new RuntimeScalar());
+                result.elements.add(null);
             }
         }
-        Collections.reverse(newElements);
-        return new RuntimeList(newElements.toArray(new RuntimeBase[0]));
+        Collections.reverse(result.elements);
+        RuntimeList list = new RuntimeList();
+        list.add(result);
+        return list;
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
