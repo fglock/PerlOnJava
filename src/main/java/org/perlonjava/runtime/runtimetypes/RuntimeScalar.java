@@ -1307,10 +1307,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> // 0
-                    throw new PerlCompilerException("Not a HASH reference");
-            case DOUBLE -> // 1
-                    throw new PerlCompilerException("Not a HASH reference");
+            case INTEGER, DOUBLE, BOOLEAN, DUALVAR -> { // 0, 1, 6, 10
+                // Symbolic reference: convert number to string and treat as variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalHash(varName);
+            }
             case STRING -> { // 2
                 // Symbolic reference: treat the scalar's string value as a variable name
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
@@ -1330,8 +1331,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case VSTRING -> // 5
                     throw new PerlCompilerException("Not a HASH reference");
-            case BOOLEAN -> // 6
-                    throw new PerlCompilerException("Not a HASH reference");
             case GLOB -> { // 7
                 // When dereferencing a typeglob as a hash, return the hash slot
                 RuntimeGlob glob = (RuntimeGlob) value;
@@ -1342,8 +1341,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not a HASH reference");
             case TIED_SCALAR -> // 9
                     tiedFetch().hashDerefNonStrict(packageName);
-            case DUALVAR -> // 10
-                    throw new PerlCompilerException("Not a HASH reference");
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not a HASH reference");
             default -> throw new PerlCompilerException("Not a HASH reference");
@@ -1374,12 +1371,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> // 0
-                // For numeric constants (like 1->[0]), return an empty array
-                    new RuntimeArray();
-            case DOUBLE -> // 1
-                // For numeric constants (like 1->[0]), return an empty array
-                    new RuntimeArray();
+            case INTEGER, DOUBLE, BOOLEAN, DUALVAR -> { // 0, 1, 6, 10
+                // Symbolic reference: convert number to string and treat as variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalArray(varName);
+            }
             case STRING -> { // 2
                 // Symbolic reference: treat the scalar's string value as a variable name
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
@@ -1400,8 +1396,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case VSTRING -> // 5
                     throw new PerlCompilerException("Not an ARRAY reference");
-            case BOOLEAN -> // 6
-                    throw new PerlCompilerException("Not an ARRAY reference");
             case GLOB -> { // 7
                 // When dereferencing a typeglob as an array, return the array slot
                 RuntimeGlob glob = (RuntimeGlob) value;
@@ -1412,8 +1406,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not an ARRAY reference");
             case TIED_SCALAR -> // 9
                     tiedFetch().arrayDerefNonStrict(packageName);
-            case DUALVAR -> // 10
-                    throw new PerlCompilerException("Not an ARRAY reference");
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not an ARRAY reference");
             default -> throw new PerlCompilerException("Not an ARRAY reference");

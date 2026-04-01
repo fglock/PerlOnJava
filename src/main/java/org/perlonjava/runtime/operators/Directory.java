@@ -206,7 +206,7 @@ public class Directory {
 
     public static RuntimeBase readdir(RuntimeScalar dirHandle, int ctx) {
         RuntimeIO runtimeIO = dirHandle.getRuntimeIO();
-        if (runtimeIO.directoryIO != null) {
+        if (runtimeIO != null && runtimeIO.directoryIO != null) {
             return runtimeIO.directoryIO.readdir(ctx);
         }
         return scalarFalse;

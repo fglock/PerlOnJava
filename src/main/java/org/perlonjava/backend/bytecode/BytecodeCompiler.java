@@ -3424,6 +3424,21 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = rd;
                     return;
                 }
+
+                // Handle: local $#array (without assignment)
+                if (sigil.equals("$#")) {
+                    int arrayReg = CompileAssignment.resolveArrayForDollarHash(this, sigilOp);
+                    // Save the array state so it's restored on scope exit
+                    emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    emitReg(arrayReg);
+                    // Return the current array size as the result
+                    int resultReg = allocateOutputRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(resultReg);
+                    emitReg(arrayReg);
+                    lastResultReg = resultReg;
+                    return;
+                }
             } else if (node.operand instanceof ListNode listNode) {
                 // local ($x, $y) - list of localized global variables
                 List<Integer> varRegs = new ArrayList<>();

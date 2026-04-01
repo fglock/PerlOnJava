@@ -130,6 +130,22 @@ public class CompileAssignment {
                     && innerSigilOp.operand instanceof IdentifierNode idNode) {
                 return handleLocalOurAssignment(bc, node, innerSigilOp, idNode, rhsContext);
             }
+            // Handle: local $#array = value
+            if (sigil.equals("$#")) {
+                int arrayReg = resolveArrayForDollarHash(bc, sigilOp);
+                // Save the array state so it's restored on scope exit
+                bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                bc.emitReg(arrayReg);
+                // Compile the RHS value
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                // Set $#array to the new value
+                bc.emit(Opcodes.SET_ARRAY_LAST_INDEX);
+                bc.emitReg(arrayReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = valueReg;
+                return true;
+            }
         }
         if (localOperand instanceof ListNode listNode) {
             return handleLocalListAssignment(bc, node, listNode, rhsContext);
