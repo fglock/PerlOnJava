@@ -160,6 +160,18 @@ public class StringParser {
                         break;
 
                     case ESCAPE:
+                        if (!isPair && ch == endDelim) {
+                            // Delimiter escape (e.g., \/ in qr/.../):
+                            // Remove the preceding backslash that was already appended in STRING state.
+                            // In Perl 5, delimiter escaping is resolved before \Q processing,
+                            // so \Qfoo\/bar/ becomes \Qfoo/bar which \Q quotes as foo\/bar.
+                            // The backslash might be in pendingBuffer or already flushed to buffer.
+                            if (pendingBuffer.length() > 0) {
+                                pendingBuffer.deleteCharAt(pendingBuffer.length() - 1);
+                            } else if (buffer.length() > 0) {
+                                buffer.deleteCharAt(buffer.length() - 1);
+                            }
+                        }
                         pendingBuffer.append(ch);  // Append escaped character to pending buffer
                         state = STRING;  // Return to STRING state
                         break;

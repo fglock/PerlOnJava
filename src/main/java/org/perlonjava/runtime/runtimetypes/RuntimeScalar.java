@@ -256,7 +256,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
             // semantics for 64-bit formats (q/Q/j/J) and BER compression (w).
             long lv = value;
-            if (Math.abs(lv) <= 9007199254740992L) { // 2^53
+            // Note: avoid Math.abs(lv) which overflows for Long.MIN_VALUE
+            if (lv <= 9007199254740992L && lv >= -9007199254740992L) { // within 2^53
                 this.type = DOUBLE;
                 this.value = (double) lv;
             } else {

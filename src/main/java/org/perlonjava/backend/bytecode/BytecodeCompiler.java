@@ -4659,6 +4659,10 @@ public class BytecodeCompiler implements Visitor {
         subCompiler.currentSubroutineBeginId = beginId;
         subCompiler.currentSubroutineClosureVars = new HashSet<>(closureVarNames);
 
+        // Subroutine bodies should use RUNTIME context so the calling context
+        // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
+        subCompiler.currentCallContext = RuntimeContextType.RUNTIME;
+
         // Step 4: Compile the subroutine body
         // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
@@ -4760,6 +4764,12 @@ public class BytecodeCompiler implements Visitor {
         if (isDeferBlock != null && isDeferBlock) {
             subCompiler.isInDeferBlock = true;
         }
+
+        // Subroutine bodies should use RUNTIME context so the calling context
+        // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
+        // Without this, the default LIST context is baked into all opcodes,
+        // causing incorrect behavior when the sub is called in VOID or SCALAR context.
+        subCompiler.currentCallContext = RuntimeContextType.RUNTIME;
 
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables

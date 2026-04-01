@@ -279,6 +279,7 @@ public class SlowOpcodeHandler {
         if (pc < bytecode.length) {
             evalCallContext = bytecode[pc++];
         }
+        if (evalCallContext == RuntimeContextType.RUNTIME) evalCallContext = ((RuntimeScalar) registers[2]).getInt();
         int evalSiteIndex = -1;
         if (pc < bytecode.length) {
             evalSiteIndex = bytecode[pc++];
@@ -691,6 +692,7 @@ public class SlowOpcodeHandler {
         int arrayReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int context = bytecode[pc++];
+        if (context == RuntimeContextType.RUNTIME) context = ((RuntimeScalar) registers[2]).getInt();
 
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList args = (RuntimeList) registers[argsReg];
@@ -747,6 +749,8 @@ public class SlowOpcodeHandler {
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
 
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+
         RuntimeList argsList = (RuntimeList) registers[argsReg];
         RuntimeBase[] args = argsList.elements.toArray(new RuntimeBase[0]);
 
@@ -799,6 +803,8 @@ public class SlowOpcodeHandler {
         int patternReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
         RuntimeBase argsBase = registers[argsReg];
@@ -1266,6 +1272,7 @@ public class SlowOpcodeHandler {
 
         // Read context (1 int slot)
         int context = bytecode[pc++];
+        if (context == RuntimeContextType.RUNTIME) context = ((RuntimeScalar) registers[2]).getInt();
 
         RuntimeScalar search = (RuntimeScalar) registers[searchReg];
         RuntimeScalar replace = (RuntimeScalar) registers[replaceReg];

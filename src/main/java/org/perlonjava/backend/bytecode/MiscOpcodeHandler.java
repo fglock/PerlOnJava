@@ -20,6 +20,8 @@ public class MiscOpcodeHandler {
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
 
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+
         // EACH receives the container directly (RuntimeHash or RuntimeArray), not a RuntimeList
         if (opcode == Opcodes.EACH) {
             registers[rd] = registers[argsReg].each(ctx);

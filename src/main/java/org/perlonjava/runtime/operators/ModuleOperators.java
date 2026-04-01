@@ -564,7 +564,9 @@ public class ModuleOperators {
                             Path fullPath = dirPath.resolve(fileName + "c");
                             if (Files.exists(fullPath) && !Files.isDirectory(fullPath)) {
                                 fullName = fullPath;
-                                actualFileName = fullName.toString();
+                                // Preserve the @INC entry's relativity for display/error messages
+                                // (Perl 5 uses "lib/Foo.pm" not "/abs/path/lib/Foo.pm")
+                                actualFileName = dirName + "/" + fileName + "c";
                                 break;
                             }
                         }
@@ -578,7 +580,8 @@ public class ModuleOperators {
                                 continue;
                             }
                             fullName = fullPath;
-                            actualFileName = fullName.toString();
+                            // Preserve the @INC entry's relativity for display/error messages
+                            actualFileName = dirName + "/" + fileName;
                             break;
                         }
                     }
@@ -603,7 +606,9 @@ public class ModuleOperators {
         parsedArgs.useInterpreter = RuntimeCode.USE_INTERPRETER;
         if (code == null) {
             try {
-                code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName), parsedArgs);
+                // Use the absolute fullName for file I/O (parsedArgs.fileName may be relative)
+                Path readPath = (fullName != null) ? fullName : Paths.get(parsedArgs.fileName);
+                code = FileUtils.readFileWithEncodingDetection(readPath, parsedArgs);
             } catch (IOException e) {
                 GlobalVariable.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
                 return new RuntimeScalar(); // return undef
