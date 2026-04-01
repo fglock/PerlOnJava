@@ -197,11 +197,34 @@ Previous: 51/65 (78%) → Current: 60/68 (88%) — **+10 percentage points**.
 
 ## Blocking Issues — Not Quick Fixes
 
+### HIGH PRIORITY: `$^S` wrong inside `$SIG{__DIE__}` when `require` fails in `eval {}`
+
+**Symptom**: `$^S` is 0 (top-level) instead of 1 (inside eval) when `require` triggers `$SIG{__DIE__}` from within `eval {}`. This causes die handlers that check `$^S` to misidentify eval-guarded require failures as top-level crashes.
+
+**Affected tests**: `t/00describe_environment.t` — the test installs a `$SIG{__DIE__}` handler that uses `$^S` to distinguish eval-caught exceptions from real crashes. Because `$^S` is wrong, the optional `require File::HomeDir` (inside `eval {}`) triggers the "Something horrible happened" path and `exit 0`, aborting the test. The `Class::Accessor::Grouped->VERSION` check also crashes the same way.
+
+**Repro**:
+```bash
+# PerlOnJava (wrong): S=0
+./jperl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" }; eval { require No::Such::Module }; print "after eval\n"'
+
+# Perl 5 (correct): S=1
+perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" }; eval { require No::Such::Module }; print "after eval\n"'
+```
+
+**Root cause**: The `require` failure path does not propagate the eval depth / `$^S` state when invoking `$SIG{__DIE__}`. A plain `die` inside `eval {}` correctly reports `$^S=1`, but a failed `require` inside `eval {}` reports `$^S=0`.
+
+**What's needed to fix**:
+- Find where `require` failure invokes the `__DIE__` handler (likely in `Require.java` or `WarnDie.java`)
+- Ensure `$^S` reflects the enclosing eval context, matching the behavior of `die` inside `eval {}`
+
+**Impact**: HIGH — blocks `t/00describe_environment.t` and any code that relies on `$^S` in `$SIG{__DIE__}` with `require` inside `eval {}`. Common pattern in CPAN (Test::Exception, DBIx::Class, Moose).
+
 ### HIGH PRIORITY: VerifyError (bytecode compiler bug)
 
 **Symptom**: `java.lang.VerifyError: Bad type on operand stack` when compiling complex anonymous subroutines with many local variables.
 
-**Affected tests**: `t/00describe_environment.t` (crashes after already emitting `1..0` skip)
+**Affected tests**: `t/00describe_environment.t` (secondary issue — also blocked by `$^S` bug above)
 
 **Root cause**: The JVM bytecode emitter generates incorrect stack map frames when a subroutine has many locals and complex control flow (ternary chains, nested `eval`, `for` loops). The JVM verifier rejects the class because `java/lang/Object` on the stack is not assignable to `RuntimeScalar`.
 
