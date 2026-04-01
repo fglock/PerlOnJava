@@ -566,7 +566,9 @@ public class ModuleOperators {
                                 fullName = fullPath;
                                 // Preserve the @INC entry's relativity for display/error messages
                                 // (Perl 5 uses "lib/Foo.pm" not "/abs/path/lib/Foo.pm")
-                                actualFileName = dirName + "/" + fileName + "c";
+                                // Strip trailing slash from dirName to avoid double slashes
+                                String cleanDir = dirName.endsWith("/") ? dirName.substring(0, dirName.length() - 1) : dirName;
+                                actualFileName = cleanDir + "/" + fileName + "c";
                                 break;
                             }
                         }
@@ -581,7 +583,9 @@ public class ModuleOperators {
                             }
                             fullName = fullPath;
                             // Preserve the @INC entry's relativity for display/error messages
-                            actualFileName = dirName + "/" + fileName;
+                            // Strip trailing slash from dirName to avoid double slashes
+                            String cleanDir = dirName.endsWith("/") ? dirName.substring(0, dirName.length() - 1) : dirName;
+                            actualFileName = cleanDir + "/" + fileName;
                             break;
                         }
                     }

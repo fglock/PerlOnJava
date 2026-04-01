@@ -98,9 +98,20 @@ package B::CV {
             if (defined $fqn && $fqn ne '__ANON__') {
                 # Split "Package::Name::subname" into package and name
                 if ($fqn =~ /^(.+)::([^:]+)$/) {
-                    $self->{_pkg_name} = $1;
-                    $self->{_sub_name} = $2;
-                    $self->{_is_anon}  = 0;
+                    my ($pkg, $name) = ($1, $2);
+                    # Verify the sub still exists in the stash. Stubs whose
+                    # stash entry has been deleted/cleared/undefined should be
+                    # treated as anonymous (matching Perl 5's GV anonymization).
+                    no strict 'refs';
+                    if (defined &{"$fqn"}) {
+                        $self->{_pkg_name} = $pkg;
+                        $self->{_sub_name} = $name;
+                        $self->{_is_anon}  = 0;
+                    } else {
+                        # Stash entry gone — extract package for STASH but
+                        # keep NAME as __ANON__ and CVf_ANON set
+                        $self->{_pkg_name} = $pkg;
+                    }
                 }
             }
         }
