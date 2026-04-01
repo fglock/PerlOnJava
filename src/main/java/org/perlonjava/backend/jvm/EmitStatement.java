@@ -89,9 +89,10 @@ public class EmitStatement {
                         emitterVisitor.ctx.javaClassInfo.popGotoLabels();
                     }
                 } else {
-                    // No else branch - emit undef if not void context
+                    // No else branch - emit condition value if not void context
+                    // Perl returns the condition value when no branch is taken
                     if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                        EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+                        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     }
                 }
             }
@@ -112,8 +113,16 @@ public class EmitStatement {
         Label elseLabel = new Label();
         Label endLabel = new Label();
 
+        // When there's no else branch and we need a result value, DUP the condition
+        // so the condition value is returned when no branch is taken (Perl semantics)
+        boolean needConditionValue = (node.elseBranch == null && emitterVisitor.ctx.contextType != RuntimeContextType.VOID);
+
         // Visit the condition node in scalar context
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        if (needConditionValue) {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+        }
 
         // Convert the result to a boolean
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
@@ -121,7 +130,10 @@ public class EmitStatement {
         // Jump to the else label if the condition is false
         emitterVisitor.ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
 
-        // Visit the then branch
+        // Visit the then branch (condition was true for if, false for unless)
+        if (needConditionValue) {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); // discard DUPed condition value
+        }
         node.thenBranch.accept(emitterVisitor);
 
         // Jump to the end label after executing the then branch
@@ -133,12 +145,10 @@ public class EmitStatement {
         // Visit the else branch if it exists
         if (node.elseBranch != null) {
             node.elseBranch.accept(emitterVisitor);
-        } else {
-            // If the context is not VOID, push "undef" to the stack
-            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                EmitOperator.emitUndef(emitterVisitor.ctx.mv);
-            }
+        } else if (!needConditionValue) {
+            // VOID context, no value needed on stack
         }
+        // else: needConditionValue is true, DUPed condition value is already on stack
 
         // Visit the end label
         emitterVisitor.ctx.mv.visitLabel(endLabel);
