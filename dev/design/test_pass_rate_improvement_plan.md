@@ -434,6 +434,41 @@ was outdated. Actual status needs measurement. Key issues found:
 2. **`sort CORE::reverse LIST`** is misparsed — `CORE::reverse` is treated as a comparator name
    instead of a function applied to the list. Fix needed in `ParseMapGrepSort.parseSort()`.
 
+#### Quick win batch 4 (2025-03-31)
+
+Branch: `fix/test-pass-rate-quick-wins`
+
+| Fix | Tests Gained | Category |
+|-----|-------------|----------|
+| Handle TIED_SCALAR in typeglob assignment (tiedFetch before dispatch) | +63 (tie_fetch_count.t: 1/343→64/343) | 1.9 |
+| Allow argless `goto` (runtime error instead of compile error) | unblocks goto.t past line 525 (still blocked at 755) | 3.6 |
+| Support `$$` prototype in sort comparators (pass args via `@_`) | +2 (sort.t: 23→25/206) | 1.10 |
+
+Files changed:
+- `RuntimeGlob.java` — add `case TIED_SCALAR: return set(value.tiedFetch())` in typeglob switch
+- `RuntimeStashEntry.java` — same TIED_SCALAR case in stash entry switch
+- `OperatorParser.java` — change goto arg minimum from 1 to 0
+- `EmitControlFlow.java` — bare goto falls back to interpreter
+- `CompileOperator.java` — bare goto emits GOTO_DYNAMIC with empty string
+- `BytecodeInterpreter.java` — GOTO_DYNAMIC empty label throws "goto must have label"
+- `ListOperators.java` — detect `$$` prototype on comparator, populate `@_` args
+
+#### Investigation notes: op/sort.t (updated)
+
+**Status:** 25/206 passing (was 23). Three remaining blockers:
+
+1. **`$$` prototype fix landed** — +2 tests from stacked comparator support.
+
+2. **`sort CORE::reverse LIST`** still misparsed — `CORE::reverse` treated as comparator name.
+   Fix needed in `ParseMapGrepSort.parseSort()`.
+
+3. **`sort $glob` / `sort $globref`** — crashes with "Not a CODE reference" at test 30.
+   `sort $sortglob 4,1,3,2` where `$sortglob = *Backwards` needs the sort implementation
+   to dereference globs to their CODE slot. Fix needed in `ListOperators.sort()` around
+   the comparator resolution logic.
+
+4. **Tests 4, 6** — sort of utf8/non-utf8 lists produce wrong order. Likely locale/collation issue.
+
 ### Baseline
 
 Update this document as fixes land. Use the test runner to measure progress:
