@@ -173,20 +173,25 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.10 | Fix DBI `get_info()` to accept numeric constants per DBI spec | `DBI.java` | DONE |
 | 5.11 | Add DBI SQL type constants (`SQL_BIGINT`, `SQL_INTEGER`, etc.) | `DBI.pm` | DONE |
 | 5.12 | Fix `bind_columns` + `fetch` to update bound scalar references | `DBI.java` | DONE |
+| 5.13 | Implement `column_info()` via SQLite PRAGMA; bless metadata sth | `DBI.java` | DONE |
+| 5.14 | Add `AutoCommit` state tracking for literal transaction SQL | `DBI.java` | DONE |
+| 5.15 | Intercept BEGIN/COMMIT/ROLLBACK via JDBC API instead of executing SQL | `DBI.java` | DONE |
+| 5.16 | Fix `prepare_cached` to use per-dbh `CachedKids` cache | `DBI.pm` | DONE |
 
 **t/60core.t results** (17 tests emitted):
 - **ok 1–12**: Basic CRUD, update, dirty columns — all pass
 - **not ok 13–17**: Garbage collection tests — expected failures (JVM has no reference counting / `weaken`)
 - RowParser.pm line 260 crash still occurs in END block cleanup (non-blocking — all real tests pass first)
 
-**Full test suite results** (92 test files):
-- **15 fully passing** (no failures at all)
-- **36 GC-only failures** (all real tests pass, only `weaken`-based GC leak tests fail)
-- **12 tests with real failures** (see Blocking Issues below)
-- **27 skipped** (DB-specific: Pg, Oracle, MSSQL, etc.; threads; fork)
-- **2 zero-test** (MySQL-specific, result_set_column)
+**Full test suite results** (92 test files, updated 2026-04-01):
+- **21 fully passing** (no failures at all)
+- **39 GC-only failures** (all real tests pass, only `weaken`-based GC leak tests fail)
+- **8 tests with real failures** (see Blocking Issues below)
+- **22 skipped** (DB-specific: Pg, Oracle, MSSQL, etc.; threads; fork)
+- **2 compile-error** (t/52leaks.t — `wait` operator; t/88result_set_column.t — zero tests)
 
-**Effective pass rate**: 51/65 active test files have all real tests passing (78%).
+**Effective pass rate**: 60/68 active test files have all real tests passing (88%).
+Previous: 51/65 (78%) → Current: 60/68 (88%) — **+10 percentage points**.
 
 ---
 
@@ -238,21 +243,22 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 
 ---
 
-## Remaining Real Failures (12 tests)
+## Remaining Real Failures (8 tests)
 
-### Tests needing DBI/Storage fixes
+### Tests needing DBI/Storage fixes — RESOLVED
 
-| Test | Failing | Root cause | Fix needed |
-|------|---------|------------|------------|
-| `t/64db.t` | tests 3-4 | `column_info()` not implemented in DBI shim | Implement `$dbh->column_info()` using JDBC `DatabaseMetaData.getColumns()` |
-| `t/752sqlite.t` | test 6 | Transaction state tracking incomplete — `$dbh->{AutoCommit}` not updated on BEGIN/COMMIT | Track txn state in DBI `do()` or implement `begin_work`/`commit`/`rollback` that update `AutoCommit` |
+| Test | Status | What was fixed |
+|------|--------|----------------|
+| `t/64db.t` | **FIXED** (4/4 real pass) | `column_info()` implemented via SQLite PRAGMA (step 5.13) |
+| `t/752sqlite.t` | **FIXED** (34/34 real pass) | AutoCommit tracking + BEGIN/COMMIT/ROLLBACK interception (steps 5.14-5.15); `prepare_cached` per-dbh cache (step 5.16) |
 
 ### Tests needing caller/carp fixes
 
 | Test | Failing | Root cause | Fix needed |
 |------|---------|------------|------------|
-| `t/106dbic_carp.t` | tests 2-3 | DBIx::Class::Carp callsite detection — `caller()` returns wrong package/line | Fix `caller()` to return correct info through `namespace::clean`'d frames |
-| `t/100populate.t` | test 2 | Exception message doesn't include expected callsite info | Same caller/carp issue as above |
+| `t/106dbic_carp.t` | tests 2-3 | DBIx::Class::Carp callsite detection — `caller()` returns wrong package/line; also `__LINE__` inside `qr//` differs from Perl 5 | Fix `caller()` to return correct info through `namespace::clean`'d frames |
+| `t/100populate.t` | test 2 | `execute_for_fetch()` doesn't throw on duplicate key constraint violation | DBI needs unique constraint error propagation |
+| `t/101populate_rs.t` | test(s) | Similar to t/100populate.t — `execute_for_fetch` exception handling | Same as above |
 
 ### Tests needing serialization/Storable fixes
 
@@ -272,10 +278,16 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 
 | Test | Failing | Root cause | Fix needed |
 |------|---------|------------|------------|
-| `t/40compose_connection.t` | (GC only) | Actually all real tests pass — has 7 GC failures instead of 5 | No fix needed (mis-categorized by test harness due to extra GC tests) |
-| `t/52leaks.t` | test 4 | Dedicated leak testing — "how did we get so far?!" means previous leak tests should have aborted | `weaken` absence; same systemic issue as GC tests |
 | `t/85utf8.t` | test 7 | Warning about incorrect `use utf8` ordering not issued | May need to implement `utf8` pragma ordering detection |
-| `t/93single_accessor_object.t` | (GC only) | Actually all real tests pass — has 8 GC failures | No fix needed |
+
+### GC-only failures (not real failures)
+
+| Test | GC failures | Notes |
+|------|-------------|-------|
+| `t/40compose_connection.t` | 7 | All real tests pass |
+| `t/93single_accessor_object.t` | 15 | All real tests pass |
+| `t/752sqlite.t` | 25 | All 34 real tests pass |
+| 36 other files | 5 each | Standard GC leak detection tests |
 
 ---
 
@@ -349,10 +361,17 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
   - 5.11: Added DBI SQL type constants (`SQL_BIGINT`, `SQL_INTEGER`, etc.)
   - 5.12: Fixed `bind_columns` + `fetch` to update bound scalar references — unblocks ALL join/prefetch queries
   - Result: 51/65 active tests now pass all real tests (was ~15/65 before)
+- [x] Phase 5 steps 5.13–5.16 (2026-04-01)
+  - 5.13: Implemented `column_info()` via SQLite `PRAGMA table_info()` — preserves original type case (JDBC uppercases), returns pre-fetched rows; also blessed metadata sth into `DBI` class with proper attributes
+  - 5.14: Added `AutoCommit` state tracking — `execute()` now detects literal BEGIN/COMMIT/ROLLBACK SQL and updates `$dbh->{AutoCommit}` accordingly
+  - 5.15: Intercepted literal transaction SQL via JDBC API — `conn.setAutoCommit(false)`, `conn.commit()`, `conn.rollback()` instead of executing SQL directly; fixes SQLite JDBC autocommit conflicts
+  - 5.16: Fixed `prepare_cached` to use per-dbh `CachedKids` cache instead of global hash — prevents cross-connection cache pollution when multiple `:memory:` SQLite connections share the same DSN name; added `if_active` parameter handling
+  - Also: `execute()` now handles metadata sth (no PreparedStatement) gracefully; `fetchrow_hashref` supports PRAGMA pre-fetched rows
+  - Result: 60/68 active tests now pass all real tests (was 51/65 = 78%, now 88%)
 
 ### Next Steps
-1. **Quick wins**: Implement `column_info()` in DBI (fixes t/64db.t) and `AutoCommit` txn tracking (fixes t/752sqlite.t)
-2. **Medium**: Fix caller/carp callsite detection (fixes t/106dbic_carp.t, t/100populate.t)
+1. **Medium**: Fix caller/carp callsite detection (fixes t/106dbic_carp.t)
+2. **Medium**: Fix `execute_for_fetch` exception propagation on constraint violations (fixes t/100populate.t, t/101populate_rs.t)
 3. **Long-term**: Investigate VerifyError bytecode compiler bug (HIGH PRIORITY for broader CPAN compat)
 4. **Pragmatic**: Accept GC-only failures as known JVM limitation; consider adding skip-leak-tests env var
 

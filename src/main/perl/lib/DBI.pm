@@ -434,24 +434,31 @@ sub trace_msg {
 sub prepare_cached {
     my ($dbh, $sql, $attr, $if_active) = @_;
 
-    my $cache_key = $dbh->{Name} . ':' . $sql;
+    # Use a per-dbh cache (like real DBI's CachedKids) to avoid cross-connection
+    # cache hits when multiple connections share the same Name (e.g., :memory:)
+    $dbh->{CachedKids} ||= {};
+    my $cache = $dbh->{CachedKids};
 
-    if (exists $CACHED_STATEMENTS{$cache_key}) {
-        my $sth = $CACHED_STATEMENTS{$cache_key};
+    if (exists $cache->{$sql}) {
+        my $sth = $cache->{$sql};
         if ($sth->{Database}{Active}) {
+            # Handle if_active parameter:
+            # 1 = warn and finish, 2 = finish silently, 3 = return new sth
+            if ($if_active && $sth->{Active}) {
+                if ($if_active == 3) {
+                    # Return a fresh sth instead of the active cached one
+                    my $new_sth = $dbh->prepare($sql, $attr) or return undef;
+                    $cache->{$sql} = $new_sth;
+                    return $new_sth;
+                }
+                $sth->finish;
+            }
             return $sth;
         }
     }
 
     my $sth = $dbh->prepare($sql, $attr) or return undef;
-
-    # Implement simple LRU by removing oldest if cache is full
-    if (keys %CACHED_STATEMENTS >= $MAX_CACHED_STATEMENTS) {
-        my @keys = keys %CACHED_STATEMENTS;
-        delete $CACHED_STATEMENTS{$keys[0]};
-    }
-
-    $CACHED_STATEMENTS{$cache_key} = $sth;
+    $cache->{$sql} = $sth;
     return $sth;
 }
 
