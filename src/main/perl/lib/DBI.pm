@@ -48,6 +48,19 @@ our $MAX_CACHED_STATEMENTS = 100;
 our %CACHED_CONNECTIONS;
 our $MAX_CACHED_CONNECTIONS = 10;
 
+# FETCH/STORE methods for tied-hash compatibility
+# In real Perl DBI, handles are tied hashes. DBIx::Class calls
+# $dbh->FETCH('Active') explicitly, so we need method wrappers.
+sub FETCH {
+    my ($self, $key) = @_;
+    return $self->{$key};
+}
+
+sub STORE {
+    my ($self, $key, $value) = @_;
+    $self->{$key} = $value;
+}
+
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
