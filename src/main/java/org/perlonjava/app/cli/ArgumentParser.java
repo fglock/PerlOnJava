@@ -370,19 +370,67 @@ public class ArgumentParser {
                     parsedArgs.autoSplit = true; // -F implicitly sets -a
                     parsedArgs.processOnly = true; // -F implicitly sets -n
                     return index;
-                case '0':
-                    // Handle input record separator specified with -0
-                    // Return immediately as the handler consumes the rest of the argument (e.g., -0777)
-                    index = handleInputRecordSeparator(args, parsedArgs, index, j, arg);
-                    return index;
+                case '0': {
+                    // Handle input record separator: -0[octal/hex]
+                    // Only consume octal digits (0-7) or hex (0xHH) from the current arg,
+                    // allowing subsequent switches in the same clustered arg (e.g., -0e 'code')
+                    int scanEnd0 = j + 1;
+                    boolean isHex0 = false;
+                    if (scanEnd0 + 1 < arg.length() && arg.charAt(scanEnd0) == '0' &&
+                            (arg.charAt(scanEnd0 + 1) == 'x' || arg.charAt(scanEnd0 + 1) == 'X')) {
+                        isHex0 = true;
+                        scanEnd0 += 2;
+                        while (scanEnd0 < arg.length() && "0123456789abcdefABCDEF".indexOf(arg.charAt(scanEnd0)) >= 0) scanEnd0++;
+                    } else {
+                        while (scanEnd0 < arg.length() && arg.charAt(scanEnd0) >= '0' && arg.charAt(scanEnd0) <= '7') scanEnd0++;
+                    }
+                    String sepValue0 = arg.substring(j + 1, scanEnd0);
+                    if (sepValue0.isEmpty()) {
+                        parsedArgs.inputRecordSeparator = "\0";
+                    } else {
+                        try {
+                            int sepInt0;
+                            if (isHex0) {
+                                sepInt0 = Integer.parseInt(sepValue0.substring(2), 16);
+                            } else {
+                                sepInt0 = Integer.parseInt(sepValue0, 8);
+                            }
+                            if (sepInt0 == 0) parsedArgs.inputRecordSeparator = "\n\n";
+                            else if (sepInt0 >= 0400) parsedArgs.inputRecordSeparator = null;
+                            else parsedArgs.inputRecordSeparator = Character.toString((char) sepInt0);
+                        } catch (NumberFormatException e) {
+                            System.err.println("Invalid input record separator: " + sepValue0);
+                            System.exit(1);
+                        }
+                    }
+                    j = scanEnd0 - 1; // advance past consumed digits (-1 for loop j++)
+                    break;
+                }
                 case 'g':
                     parsedArgs.inputRecordSeparator = null;
                     break;
-                case 'l':
-                    // Handle automatic line-ending processing
-                    // Return immediately as the handler consumes the rest of the argument (e.g., -l012)
-                    index = handleLineEndingProcessing(args, parsedArgs, index, j, arg);
-                    return index;
+                case 'l': {
+                    // Handle automatic line-ending processing: -l[octnum]
+                    // Only consume octal digits (0-7) from the current arg,
+                    // allowing subsequent switches in the same clustered arg (e.g., -le 'code')
+                    parsedArgs.lineEndingProcessing = true;
+                    int scanEndL = j + 1;
+                    while (scanEndL < arg.length() && arg.charAt(scanEndL) >= '0' && arg.charAt(scanEndL) <= '7') scanEndL++;
+                    String octStrL = arg.substring(j + 1, scanEndL);
+                    if (octStrL.isEmpty()) {
+                        parsedArgs.outputRecordSeparator = parsedArgs.inputRecordSeparator;
+                    } else {
+                        try {
+                            int sepIntL = Integer.parseInt(octStrL, 8);
+                            parsedArgs.outputRecordSeparator = Character.toString((char) sepIntL);
+                        } catch (NumberFormatException e) {
+                            System.err.println("Invalid output record separator: " + octStrL);
+                            System.exit(1);
+                        }
+                    }
+                    j = scanEndL - 1; // advance past consumed octal digits (-1 for loop j++)
+                    break;
+                }
                 case 'e':
                     // Handle inline code specified with -e
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
