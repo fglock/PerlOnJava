@@ -567,7 +567,9 @@ public class RuntimeList extends RuntimeBase {
                 // Overwriting `elements` would discard the TieArray wrapper while leaving
                 // `type == TIED_ARRAY`, leading to ClassCastException when tie operations
                 // cast `array.elements` back to TieArray.
-                if (runtimeArray.type == RuntimeArray.TIED_ARRAY) {
+                // For autovivify arrays, we must also go through setFromList() to trigger
+                // the autovivification that converts the parent scalar from UNDEF to ARRAYREFERENCE.
+                if (runtimeArray.type == RuntimeArray.TIED_ARRAY || runtimeArray.type == RuntimeArray.AUTOVIVIFY_ARRAY) {
                     RuntimeList remainingList = new RuntimeList();
                     remainingList.elements.addAll(remaining);
                     runtimeArray.setFromList(remainingList);
