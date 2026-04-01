@@ -365,10 +365,25 @@ public class DBI extends PerlModuleBase {
             if (rs.next()) {
                 RuntimeArray row = new RuntimeArray();
                 ResultSetMetaData metaData = rs.getMetaData();
+                int colCount = metaData.getColumnCount();
                 // Convert each column value to string and add to row array
-                for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                for (int i = 1; i <= colCount; i++) {
                     RuntimeArray.push(row, RuntimeScalar.newScalarOrString(rs.getObject(i)));
                 }
+
+                // Update bound columns if any (for bind_columns + fetch pattern)
+                RuntimeScalar boundRef = sth.get("bound_columns");
+                if (boundRef != null && boundRef.type != RuntimeScalarType.UNDEF) {
+                    RuntimeHash boundColumns = boundRef.hashDeref();
+                    for (int i = 1; i <= colCount; i++) {
+                        RuntimeScalar ref = boundColumns.get(String.valueOf(i));
+                        if (ref != null && ref.type != RuntimeScalarType.UNDEF) {
+                            // Dereference the scalar ref and set its value
+                            ref.scalarDeref().set(row.get(i - 1));
+                        }
+                    }
+                }
+
                 return row.createReference().getList();
             }
 
@@ -812,25 +827,63 @@ public class DBI extends PerlModuleBase {
 
     public static RuntimeList get_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
+        int infoType = args.size() > 1 ? args.get(1).getInt() : -1;
 
         return executeWithErrorHandling(() -> {
-            RuntimeHash info = new RuntimeHash();
             Connection conn = (Connection) dbh.get("connection").value;
             DatabaseMetaData meta = conn.getMetaData();
 
-            // Add standard database information using available JDBC methods
-            info.put("DBMS_NAME", RuntimeScalar.newScalarOrString(meta.getDatabaseProductName()));
-            info.put("DBMS_VERSION", RuntimeScalar.newScalarOrString(meta.getDatabaseProductVersion()));
-            info.put("DRIVER_NAME", RuntimeScalar.newScalarOrString(meta.getDriverName()));
-            info.put("DRIVER_VERSION", RuntimeScalar.newScalarOrString(meta.getDriverVersion()));
-            info.put("IDENTIFIER_QUOTE_CHAR", RuntimeScalar.newScalarOrString(meta.getIdentifierQuoteString()));
-            info.put("SQL_KEYWORDS", RuntimeScalar.newScalarOrString(meta.getSQLKeywords()));
-            info.put("MAX_CONNECTIONS", RuntimeScalar.newScalarOrString(meta.getMaxConnections()));
-            info.put("USER_NAME", RuntimeScalar.newScalarOrString(meta.getUserName()));
-            info.put("NUMERIC_FUNCTIONS", RuntimeScalar.newScalarOrString(meta.getNumericFunctions()));
-            info.put("STRING_FUNCTIONS", RuntimeScalar.newScalarOrString(meta.getStringFunctions()));
-
-            return info.createReference().getList();
+            // DBI get_info() takes a numeric SQL info type constant and returns a scalar.
+            // Standard DBI::Const::GetInfoType constants:
+            //   6  = SQL_DRIVER_NAME
+            //   7  = SQL_DRIVER_VER
+            //  17  = SQL_DBMS_NAME
+            //  18  = SQL_DBMS_VER
+            //  29  = SQL_IDENTIFIER_QUOTE_CHAR
+            //  41  = SQL_CATALOG_NAME_SEPARATOR
+            //  47  = SQL_USER_NAME
+            //  89  = SQL_KEYWORDS
+            // 112  = SQL_NUMERIC_FUNCTIONS
+            // 116  = SQL_MAX_CONNECTIONS (0 = no limit)
+            // 119  = SQL_STRING_FUNCTIONS
+            String result;
+            switch (infoType) {
+                case 6:
+                    result = meta.getDriverName();
+                    break;
+                case 7:
+                    result = meta.getDriverVersion();
+                    break;
+                case 17:
+                    result = meta.getDatabaseProductName();
+                    break;
+                case 18:
+                    result = meta.getDatabaseProductVersion();
+                    break;
+                case 29:
+                    result = meta.getIdentifierQuoteString();
+                    break;
+                case 41:
+                    result = meta.getCatalogSeparator();
+                    break;
+                case 47:
+                    result = meta.getUserName();
+                    break;
+                case 89:
+                    result = meta.getSQLKeywords();
+                    break;
+                case 112:
+                    result = meta.getNumericFunctions();
+                    break;
+                case 116:
+                    return new RuntimeScalar(meta.getMaxConnections()).getList();
+                case 119:
+                    result = meta.getStringFunctions();
+                    break;
+                default:
+                    return new RuntimeScalar().getList();
+            }
+            return RuntimeScalar.newScalarOrString(result != null ? result : "").getList();
         }, dbh, "get_info");
     }
 

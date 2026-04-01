@@ -154,23 +154,124 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.6 | Add DBI `execute_for_fetch` and `bind_param` methods | `DBI.pm` | DONE |
 | 5.7 | Fix `&func` (no parens) to share caller's `@_` by alias | Parser, JVM emitter, interpreter | DONE |
 | 5.8 | Fix DBI `execute()` return value (row count, not hash ref) | `DBI.java` | DONE |
-| 5.9 | Fix "Not a HASH reference" in RowParser.pm (join/prefetch) | TBD | **NEXT** |
-| 5.10 | Investigate `t/00describe_environment.t` "Something horrible happened while assembling the diag data" | TBD | **NEXT** |
+| 5.9 | Set `$dbh->{Driver}` for SQLite driver detection | `DBI.pm` | DONE |
+| 5.10 | Fix DBI `get_info()` to accept numeric constants per DBI spec | `DBI.java` | DONE |
+| 5.11 | Add DBI SQL type constants (`SQL_BIGINT`, `SQL_INTEGER`, etc.) | `DBI.pm` | DONE |
+| 5.12 | Fix `bind_columns` + `fetch` to update bound scalar references | `DBI.java` | DONE |
 
 **t/60core.t results** (17 tests emitted):
 - **ok 1–12**: Basic CRUD, update, dirty columns — all pass
 - **not ok 13–17**: Garbage collection tests — expected failures (JVM has no reference counting / `weaken`)
-- **Crash after test 17**: `Not a HASH reference at RowParser.pm line 260` — blocks remaining tests
+- RowParser.pm line 260 crash still occurs in END block cleanup (non-blocking — all real tests pass first)
 
-**Result so far**: 12 / 17 real tests pass (5 GC failures are expected and acceptable).
+**Full test suite results** (92 test files):
+- **15 fully passing** (no failures at all)
+- **36 GC-only failures** (all real tests pass, only `weaken`-based GC leak tests fail)
+- **12 tests with real failures** (see Blocking Issues below)
+- **27 skipped** (DB-specific: Pg, Oracle, MSSQL, etc.; threads; fork)
+- **2 zero-test** (MySQL-specific, result_set_column)
 
-## Known Bugs (not yet blocking)
+**Effective pass rate**: 51/65 active test files have all real tests passing (78%).
+
+---
+
+## Blocking Issues — Not Quick Fixes
+
+### HIGH PRIORITY: VerifyError (bytecode compiler bug)
+
+**Symptom**: `java.lang.VerifyError: Bad type on operand stack` when compiling complex anonymous subroutines with many local variables.
+
+**Affected tests**: `t/00describe_environment.t` (crashes after already emitting `1..0` skip)
+
+**Root cause**: The JVM bytecode emitter generates incorrect stack map frames when a subroutine has many locals and complex control flow (ternary chains, nested `eval`, `for` loops). The JVM verifier rejects the class because `java/lang/Object` on the stack is not assignable to `RuntimeScalar`.
+
+**What's needed to fix**:
+- Debug the bytecode emitter's stack map frame generation (likely in `EmitSubroutine.java` or related emit classes)
+- The anonymous sub `anon2920` in the test has ~100 local variable slots and deeply nested control flow
+- May need to split large subroutines or fix how the stack map calculator handles branch merging
+- This is the same class of bug as the File::stat VerifyError (see Known Bugs below)
+
+**Impact**: Currently low for DBIx::Class (test already skips), but affects any complex Perl subroutine. Could block other CPAN modules.
+
+### SYSTEMIC: GC / `weaken` / `isweak` absence
+
+**Symptom**: Every DBIx::Class test file appends 5+ garbage collection leak tests that always fail.
+
+**Affected tests**: All 36 "GC-only" failures, plus the GC portion of all 12 "real failure" tests.
+
+**Root cause**: JVM uses tracing GC, not reference counting. PerlOnJava cannot implement `weaken`/`isweak` from `Scalar::Util`. DBIx::Class uses `Test::DBIx::Class::LeakTracer` which inserts `is_refcount`-based leak tests at END time.
+
+**What's needed to fix**:
+- **Option A (hard)**: Implement reference counting alongside JVM GC using a side table mapping object IDs to manual ref counts. Would require wrapping every `RuntimeScalar` assignment. Massive performance impact.
+- **Option B (pragmatic)**: Accept these as known failures. The GC tests verify Perl-specific memory patterns that don't apply to JVM. Real functionality works correctly.
+- **Option C (workaround)**: Patch DBIx::Class's test infrastructure to skip leak tests when `Scalar::Util::weaken` is not functional. Could set `$ENV{DBIC_SKIP_LEAK_TESTS}` or similar.
+
+**Impact**: Makes test output noisy (287 GC-only sub-test failures) but does NOT affect functionality.
+
+### RowParser.pm line 260 crash (post-test cleanup)
+
+**Symptom**: `Not a HASH reference at RowParser.pm line 260` — occurs 8 times across the test suite, always in END blocks or cleanup after tests have already completed.
+
+**Root cause**: During END-block teardown, `_resolve_collapse` is called with stale or partially-destroyed data structures. The code does `$my_cols->{$_}{via_fk}` where `$my_cols->{$_}` may have been clobbered during object destruction. Since PerlOnJava lacks `DESTROY`/`DEMOLISH`, circular references persist and cleanup code may run in unexpected order.
+
+**What's needed to fix**:
+- Investigate exactly which END block triggers the call
+- May be related to `weaken` absence — objects that should be dead are still alive
+- Could potentially be fixed by adding defensive `ref()` checks in RowParser.pm, but that's patching the module rather than fixing the engine
+
+**Impact**: Non-blocking — all real tests complete before the crash. Only affects test harness exit code.
+
+---
+
+## Remaining Real Failures (12 tests)
+
+### Tests needing DBI/Storage fixes
+
+| Test | Failing | Root cause | Fix needed |
+|------|---------|------------|------------|
+| `t/64db.t` | tests 3-4 | `column_info()` not implemented in DBI shim | Implement `$dbh->column_info()` using JDBC `DatabaseMetaData.getColumns()` |
+| `t/752sqlite.t` | test 6 | Transaction state tracking incomplete — `$dbh->{AutoCommit}` not updated on BEGIN/COMMIT | Track txn state in DBI `do()` or implement `begin_work`/`commit`/`rollback` that update `AutoCommit` |
+
+### Tests needing caller/carp fixes
+
+| Test | Failing | Root cause | Fix needed |
+|------|---------|------------|------------|
+| `t/106dbic_carp.t` | tests 2-3 | DBIx::Class::Carp callsite detection — `caller()` returns wrong package/line | Fix `caller()` to return correct info through `namespace::clean`'d frames |
+| `t/100populate.t` | test 2 | Exception message doesn't include expected callsite info | Same caller/carp issue as above |
+
+### Tests needing serialization/Storable fixes
+
+| Test | Failing | Root cause | Fix needed |
+|------|---------|------------|------------|
+| `t/84serialize.t` | test 2 | `Storable::dclone` fails on blessed DBI handle objects | Need `dclone` to handle Java-backed objects or provide STORABLE_freeze/thaw hooks in DBI |
+
+### Tests needing module loading fixes
+
+| Test | Failing | Root cause | Fix needed |
+|------|---------|------------|------------|
+| `t/90ensure_class_loaded.t` | tests 14,17,28 | PAR (Perl Archive) detection + `$INC{...}` manipulation edge cases | Fix `%INC` handling for modules that set `$INC{file}` without returning true |
+| `t/40resultsetmanager.t` | tests 2-4 | Deprecated `ResultSetManager` uses source filtering (`Module::Pluggable` + runtime class creation) | Likely needs `Module::Pluggable` fixes or is acceptable as deprecated-feature failure |
+| `t/53lean_startup.t` | test 5 | Module loading tracking — test checks exact set of loaded modules | PerlOnJava loads extra modules; would need to match exact Perl load footprint |
+
+### Tests needing misc fixes
+
+| Test | Failing | Root cause | Fix needed |
+|------|---------|------------|------------|
+| `t/40compose_connection.t` | (GC only) | Actually all real tests pass — has 7 GC failures instead of 5 | No fix needed (mis-categorized by test harness due to extra GC tests) |
+| `t/52leaks.t` | test 4 | Dedicated leak testing — "how did we get so far?!" means previous leak tests should have aborted | `weaken` absence; same systemic issue as GC tests |
+| `t/85utf8.t` | test 7 | Warning about incorrect `use utf8` ordering not issued | May need to implement `utf8` pragma ordering detection |
+| `t/93single_accessor_object.t` | (GC only) | Actually all real tests pass — has 8 GC failures | No fix needed |
+
+---
+
+## Known Bugs
 
 ### File::stat VerifyError
 - `use File::stat` triggers `java.lang.VerifyError: Bad type on operand stack`
 - Root cause: bytecode generation issue with `Class::Struct` + `use overload` (`-X` operator)
 - Minimal repro: `use Class::Struct; use overload ("-X" => sub { "" }, fallback => 1); struct( 'Foo' => [dev => "\$", ino => "\$"] );`
-- Impact: Path::Class cannot load; DBIx::Class may work without it depending on test requirements
+- Impact: Path::Class cannot load; DBIx::Class works without it
+- Same class of bug as the t/00describe_environment.t VerifyError (see HIGH PRIORITY above)
 
 ## Summary
 
@@ -226,15 +327,23 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
   - 5.6: Added DBI `execute_for_fetch` and `bind_param` methods
   - 5.7: Fixed `&func` (no parens) to share caller's `@_` by alias — unblocks Hash::Merge
   - 5.8: Fixed DBI `execute()` to return row count per DBI spec — unblocks UPDATE operations
+- [x] Phase 5 steps 5.9–5.12 (2026-04-01)
+  - 5.9: Set `$dbh->{Driver}` with `DBI::dr` object — DBIC now detects SQLite driver
+  - 5.10: Fixed `get_info()` to accept numeric DBI constants and return scalar
+  - 5.11: Added DBI SQL type constants (`SQL_BIGINT`, `SQL_INTEGER`, etc.)
+  - 5.12: Fixed `bind_columns` + `fetch` to update bound scalar references — unblocks ALL join/prefetch queries
+  - Result: 51/65 active tests now pass all real tests (was ~15/65 before)
 
 ### Next Steps
-1. Investigate "Not a HASH reference" at RowParser.pm line 260 (triggered by join/prefetch queries)
-2. Continue triaging t/60core.t failures after fixing RowParser issue
-3. Run broader DBIx::Class test suite once core tests pass
+1. **Quick wins**: Implement `column_info()` in DBI (fixes t/64db.t) and `AutoCommit` txn tracking (fixes t/752sqlite.t)
+2. **Medium**: Fix caller/carp callsite detection (fixes t/106dbic_carp.t, t/100populate.t)
+3. **Long-term**: Investigate VerifyError bytecode compiler bug (HIGH PRIORITY for broader CPAN compat)
+4. **Pragmatic**: Accept GC-only failures as known JVM limitation; consider adding skip-leak-tests env var
 
 ### Open Questions
-- Will `weaken`/`isweak` absence cause problems beyond memory leaks?
-- Does File::stat VerifyError block any DBIx::Class tests?
+- `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
+- VerifyError: is this specific to `overload`-heavy code or a general large-subroutine issue?
+- RowParser crash: is it safe to ignore since all real tests pass before it fires?
 
 ## Related Documents
 
