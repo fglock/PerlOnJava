@@ -174,11 +174,19 @@ public class ScopedSymbolTable {
     /**
      * Exits the current scope by popping the top SymbolTable from the stack.
      * Also removes the top state of warnings, features, and strict options.
+     * <p>
+     * The child scope's local variable index is propagated to the parent scope
+     * to prevent slot reuse across conditional branches. Without this, the JVM
+     * verifier can fail with VerifyError when the same slot holds different types
+     * (e.g., int vs reference, or RuntimeScalar vs RegexState) in different branches,
+     * causing ASM's COMPUTE_FRAMES to merge them as Top or java/lang/Object.
      *
      * @param scopeIndex The index representing the starting point of the scope to exit.
      */
     public void exitScope(int scopeIndex) {
         clearVisibleVariablesCache();
+        // Capture the child scope's max local variable index before popping
+        int childIndex = symbolTableStack.peek().index;
         // Pop entries from the stacks until reaching the specified scope index
         while (symbolTableStack.size() > scopeIndex) {
             symbolTableStack.pop();
@@ -190,6 +198,13 @@ public class ScopedSymbolTable {
             warningFatalStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
+        }
+        // Propagate the child scope's index to the parent to prevent slot reuse.
+        // This ensures that local variable slots allocated inside conditional branches
+        // (e.g., if/else blocks) are not reused in subsequent code, avoiding type
+        // conflicts at JVM branch merge points.
+        if (symbolTableStack.peek().index < childIndex) {
+            symbolTableStack.peek().index = childIndex;
         }
     }
 
