@@ -199,9 +199,7 @@ public class VersionHelper {
                     String hint = getDidYouMeanHint(wantVersion, wantDisplay);
                     throw new PerlCompilerException("Perl v" + wantDisplay + " required" + hint + "--this is only " + hasVersion.toString() + ", stopped");
                 } else {
-                    String hasStr = normalizeVersion(hasVersion);
-                    String wantStr = normalizeVersion(wantVersion);
-                    throw new PerlCompilerException(perlClassName + " version " + wantStr + " required--this is only version " + hasVersion);
+                    throw new PerlCompilerException(perlClassName + " version " + wantVersion + " required--this is only version " + hasVersion);
                 }
             }
         }

@@ -219,6 +219,24 @@ All reported regressions have been investigated. The issues fall into two catego
 
 ### How to Check Regressions
 
+When a unit test fails on a feature branch, always verify whether it also fails on master before trying to fix it:
+
+```bash
+# 1. Save your work
+git diff > /tmp/my-changes.patch
+
+# 2. Switch to master and do a clean build
+git checkout master
+make clean ; make
+
+# 3. If the test passes on master, it's a regression you introduced — fix it
+# 4. If the test also fails on master, it's pre-existing — don't waste time on it
+
+# 5. Switch back to your branch
+git checkout feature/your-branch
+git apply /tmp/my-changes.patch
+```
+
 ```bash
 # Run specific test
 cd perl5_t/t && ../../jperl <test>.t
