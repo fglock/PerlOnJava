@@ -51,6 +51,10 @@ public class StringParser {
      * @return ParsedString object containing the parsed string and updated token index.
      */
     public static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens, int index, boolean redo, Parser parser) {
+        return parseRawStringWithDelimiter(ctx, tokens, index, redo, parser, false);
+    }
+
+    public static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens, int index, boolean redo, Parser parser, boolean isRegex) {
         int tokPos = index;  // Current position in the tokens list
         char startDelim = 0;  // Starting delimiter
         char endDelim = 0;  // Ending delimiter
@@ -160,7 +164,7 @@ public class StringParser {
                         break;
 
                     case ESCAPE:
-                        if (!isPair && ch == endDelim) {
+                        if (isRegex && !isPair && ch == endDelim) {
                             // Delimiter escape (e.g., \/ in qr/.../):
                             // Remove the preceding backslash that was already appended in STRING state.
                             // In Perl 5, delimiter escaping is resolved before \Q processing,
@@ -263,9 +267,13 @@ public class StringParser {
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
+        return parseRawStrings(parser, ctx, tokens, tokenIndex, stringCount, false);
+    }
+
+    public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount, boolean isRegex) {
         int pos = tokenIndex;
         boolean redo = (stringCount == 3);
-        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo, parser); // use redo flag to extract 2 strings
+        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo, parser, isRegex); // use redo flag to extract 2 strings
         if (stringCount == 1) {
             return ast;
         }
@@ -647,7 +655,12 @@ public class StringParser {
             case "m", "qr", "/", "//", "/=" -> 2;
             default -> 1;    // m{str}modifier
         };
-        rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts);
+        // Regex operators need delimiter escape resolution (e.g., \/ → / in qr/.../\Q...\E/)
+        boolean isRegex = switch (operator) {
+            case "m", "qr", "/", "//", "/=", "s" -> true;
+            default -> false;
+        };
+        rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts, isRegex);
         parser.tokenIndex = rawStr.next;
 
         switch (operator) {
