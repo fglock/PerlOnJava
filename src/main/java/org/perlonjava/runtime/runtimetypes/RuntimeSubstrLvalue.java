@@ -18,6 +18,12 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
     private final int length;
 
     /**
+     * Flag indicating the substr offset was out of bounds.
+     * When true, assignment to this lvalue should die.
+     */
+    private boolean outOfBounds;
+
+    /**
      * Constructs a new RuntimeSubstrLvalue.
      *
      * @param parent The parent RuntimeScalar containing the original string.
@@ -29,9 +35,18 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         this.lvalue = parent;
         this.offset = offset;
         this.length = length;
+        this.outOfBounds = false;
 
         this.type = RuntimeScalarType.STRING;
         this.value = str;
+    }
+
+    /**
+     * Marks this lvalue as out-of-bounds. Assignment will die.
+     */
+    public RuntimeSubstrLvalue setOutOfBounds() {
+        this.outOfBounds = true;
+        return this;
     }
 
     /**
@@ -50,6 +65,13 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
      */
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
+        // Die on assignment if the original substr was out of bounds
+        if (outOfBounds) {
+            WarnDie.die(new RuntimeScalar("substr outside of string"),
+                    RuntimeScalarCache.scalarEmptyString);
+            return this;
+        }
+
         // Update the local type and value
         this.type = value.type;
         this.value = value.value;

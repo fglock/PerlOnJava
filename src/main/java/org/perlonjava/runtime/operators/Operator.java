@@ -298,6 +298,7 @@ public class Operator {
                         return new RuntimeScalar();
                     }
                     var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
+                    lvalue.setOutOfBounds();
                     lvalue.type = RuntimeScalarType.UNDEF;
                     lvalue.value = null;
                     return lvalue;
@@ -325,6 +326,7 @@ public class Operator {
                 return new RuntimeScalar();
             }
             var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, length);
+            lvalue.setOutOfBounds();
             lvalue.type = RuntimeScalarType.UNDEF;
             lvalue.value = null;
             return lvalue;

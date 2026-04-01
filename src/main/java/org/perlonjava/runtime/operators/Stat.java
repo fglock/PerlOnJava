@@ -27,9 +27,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class Stat {
 
     static NativeStatFields lastNativeStatFields;
-    
+
     // FFM POSIX implementation
     private static final FFMPosixInterface posix = FFMPosix.get();
+
+    /**
+     * Checks if a glob argument is the special underscore glob (*_ or \*_).
+     */
+    private static boolean isUnderscoreGlob(RuntimeScalar arg) {
+        if (arg.value instanceof RuntimeGlob rg) {
+            return rg.globName != null && rg.globName.endsWith("::_");
+        }
+        if (arg.value instanceof RuntimeIO rio) {
+            return rio.globName != null && rio.globName.endsWith("::_");
+        }
+        return false;
+    }
 
     static NativeStatFields nativeStat(String path, boolean followLinks) {
         try {
@@ -230,6 +243,14 @@ public class Stat {
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+            // Check if this is the special underscore glob (*_ or \*_)
+            if (isUnderscoreGlob(arg)) {
+                // lstat on *_ or \*_ after stat should croak
+                if (!lastStatWasLstat) {
+                    throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
+                }
+                return lstatLastHandle();
+            }
             // Perl: lstat on a filehandle reverts to regular stat (fstat)
             return stat(arg);
         }
