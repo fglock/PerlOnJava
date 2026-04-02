@@ -297,7 +297,8 @@ public class StatementResolver {
 
                                 // Parse attributes first (e.g., :prototype())
                                 while (peek(parser).text.equals(":")) {
-                                    String attrProto = SubroutineParser.consumeAttributes(parser, attributes);
+                                    String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                            null, subName, null);
                                     if (attrProto != null) {
                                         prototype = attrProto;
                                     }
@@ -324,6 +325,22 @@ public class StatementResolver {
                                         // Signatures not enabled - always parse as prototype
                                         prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
                                     }
+
+                                    // Emit illegal proto warning for (proto) syntax (like normal subs do)
+                                    if (prototype != null) {
+                                        SubroutineParser.emitIllegalProtoWarning(parser, prototype, subName);
+                                    }
+
+                                    // Parse attributes after prototype (e.g., my sub foo(bar) : prototype(baz) {})
+                                    String prevAttrProto = null;
+                                    while (peek(parser).text.equals(":")) {
+                                        String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                                prototype, subName, prevAttrProto);
+                                        if (attrProto != null) {
+                                            prevAttrProto = prototype;
+                                            prototype = attrProto;
+                                        }
+                                    }
                                 }
 
                                 // Now check if there's a body
@@ -337,9 +354,14 @@ public class StatementResolver {
                                     // Parse the rest as an anonymous sub
                                     Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
 
-                                    // Store prototype in the sub if present
-                                    if (prototype != null && anonSub instanceof SubroutineNode subNode) {
-                                        varDecl.setAnnotation("prototype", prototype);
+                                    // Apply pre-parsed prototype and attributes to the SubroutineNode.
+                                    // parseSubroutineDefinition returns a SubroutineNode with prototype=null
+                                    // since we already consumed the prototype/attribute tokens.
+                                    if ((prototype != null || !attributes.isEmpty()) && anonSub instanceof SubroutineNode subNode) {
+                                        String finalProto = prototype != null ? prototype : subNode.prototype;
+                                        List<String> finalAttrs = !attributes.isEmpty() ? attributes : subNode.attributes;
+                                        anonSub = new SubroutineNode(subNode.name, finalProto, finalAttrs,
+                                                subNode.block, subNode.useTryCatch, subNode.tokenIndex);
                                     }
 
                                     // NOW add &subName to symbol table AFTER parsing the body
