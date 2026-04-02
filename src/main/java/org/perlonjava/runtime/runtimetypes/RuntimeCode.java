@@ -274,6 +274,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean isSymbolicReference = false;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
+    // Flag to indicate this was explicitly declared (sub foo; or sub foo { ... })
+    // as opposed to auto-created by getGlobalCodeRef() for lookups.
+    // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
+    public boolean isDeclared = false;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -2562,6 +2566,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         // Built-in operators are always considered "defined"
         if (this.isBuiltin) {
+            return true;
+        }
+        // Explicitly declared subs (sub foo; or sub foo { ... }) are considered defined
+        // even if the body hasn't been compiled yet. In Perl 5, defined(*foo{CODE})
+        // returns true for forward declarations.
+        if (this.isDeclared) {
             return true;
         }
         return this.constantValue != null || this.compilerSupplier != null 

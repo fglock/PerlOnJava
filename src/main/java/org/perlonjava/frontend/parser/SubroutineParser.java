@@ -623,6 +623,8 @@ public class SubroutineParser {
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeScalar codeRefScalar = GlobalVariable.getGlobalCodeRef(fullName);
             RuntimeCode codeRef = (RuntimeCode) codeRefScalar.value;
+            // Mark as explicitly declared so *{glob}{CODE} returns this code ref
+            codeRef.isDeclared = true;
 
             // Only set prototype/attributes on a forward declaration if the sub
             // doesn't already have a body. Perl 5 ignores prototype changes from
@@ -993,6 +995,11 @@ public class SubroutineParser {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
         }
+        // Mark as explicitly declared so *{glob}{CODE} returns this code ref.
+        // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
+        if (codeRef.value instanceof RuntimeCode declaredCode) {
+            declaredCode.isDeclared = true;
+        }
 
         // Register subroutine location for %DB::sub (only in debug mode)
         if (DebugState.debugMode && parser.ctx.errorUtil != null && block != null) {
@@ -1323,9 +1330,14 @@ public class SubroutineParser {
             if (i > 0) sb.append(" : ");
             sb.append(attrs.get(i).toString());
         }
-        throw new PerlCompilerException(parser.tokenIndex,
-                "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb,
-                parser.ctx.errorUtil);
+        String attrMsg = "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb;
+        if (!type.equals("CODE")) {
+            // Variable attributes (SCALAR, ARRAY, HASH) use Perl's "use attributes" style error format:
+            // "Invalid TYPE attribute: Name at FILE line LINE.\nBEGIN failed--compilation aborted at FILE line LINE.\n"
+            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+            throw new PerlCompilerException(attrMsg + loc + ".\nBEGIN failed--compilation aborted" + loc + ".\n");
+        }
+        throw new PerlCompilerException(parser.tokenIndex, attrMsg, parser.ctx.errorUtil);
     }
 
     static void throwInvalidAttributeError(String type, List<String> attrs, Parser parser) {
@@ -1334,9 +1346,13 @@ public class SubroutineParser {
             if (i > 0) sb.append(" : ");
             sb.append(attrs.get(i));
         }
-        throw new PerlCompilerException(parser.tokenIndex,
-                "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb,
-                parser.ctx.errorUtil);
+        String attrMsg = "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb;
+        if (!type.equals("CODE")) {
+            // Variable attributes (SCALAR, ARRAY, HASH) use Perl's "use attributes" style error format
+            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+            throw new PerlCompilerException(attrMsg + loc + ".\nBEGIN failed--compilation aborted" + loc + ".\n");
+        }
+        throw new PerlCompilerException(parser.tokenIndex, attrMsg, parser.ctx.errorUtil);
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {

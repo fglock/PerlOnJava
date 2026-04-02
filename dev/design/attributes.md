@@ -168,7 +168,7 @@ Variable attribute dispatch happens in the **emitter/compiler** — when a `my`/
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete, Phase 2 next
+### Current Status: Phase 7 partially complete (isDeclared + Attribute::Handlers + error format)
 
 ### Completed Phases
 
@@ -184,15 +184,32 @@ Variable attribute dispatch happens in the **emitter/compiler** — when a `my`/
   - Added prototype/illegalproto validation and warnings to `SubroutineParser.consumeAttributes()`
   - Files: `Attributes.java`, `attributes.pm`, `Warnings.java`, `WarningFlags.java`, `SubroutineParser.java`
 
+- [x] Phase 5 (partial): :const attribute and MODIFY_CODE_ATTRIBUTES dispatch (2026-04-02)
+  - Deep-copy bug fix in const folding (`Attributes.java`)
+  - InterpretedCode override bypass for constantValue
+  - MODIFY_CODE_ATTRIBUTES dispatch for interpreter backend
+  - Files: `Attributes.java`, `InterpretedCode.java`, `OpcodeHandlerExtended.java`, `BytecodeCompiler.java`
+
+- [x] Phase 6 (partial): Detect scalar dereference in declarations (2026-04-02)
+  - Added `checkForDereference()` in `OperatorParser.java`
+  - Throws "Can't declare scalar dereference in 'my'" etc.
+
+- [x] Phase 7 (partial): isDeclared flag + Attribute::Handlers + error format (2026-04-02)
+  - Added `isDeclared` flag to `RuntimeCode` for explicitly declared subs
+  - Updated `getGlobSlot("CODE")` to return code refs for declared subs
+  - Fixed `Attribute::Handlers` `findsym()` — now all 4 attrhand.t tests pass
+  - Fixed variable attribute error format with BEGIN failed suffix
+  - Files: `RuntimeCode.java`, `RuntimeGlob.java`, `SubroutineParser.java`
+
 ### Current Test Results (2026-04-02)
 
 | File | Before | After | Delta |
 |------|--------|-------|-------|
-| attrs.t | 49/130 → 111/158* | 134/158 | +23 |
-| attrproto.t | 3/52 | 48/52 | +45 |
-| attrhand.t | 0/0 | 0/0 | — |
-| uni/attrs.t | 10/34 | 23/34 | +13 |
-| **Total** | **62/216** | **205/244** | **+81** |
+| attrs.t | 49/130 → 111/158* | 152/158 | +41 |
+| attrproto.t | 3/52 | 51/52 | +48 |
+| attrhand.t | 0/0 | 4/4 | +4 |
+| uni/attrs.t | 10/34 | 29/34 | +19 |
+| **Total** | **62/216** | **236/248** | **+112** |
 
 \* attrs.t grew from 130 to 158 tests because the test no longer crashes partway through.
 
@@ -355,13 +372,23 @@ Implement `:const` in `Attributes.java._modify_attrs()`:
 - **Tests fixed:** attrs.t 20, 32, 44-45, 87, 155-157; uni/attrs.t 8, 16, 20-21, 23
 - **Effort:** Medium
 
-#### Phase 7: Closure prototype error (LOW — 4 tests)
+#### Phase 7: Closure prototype feature (LOW — 4 tests)
 
-Calling a closure prototype (a stub with captured lexicals) should die with "Closure prototype called". This is a runtime feature in `RuntimeCode.apply()`.
+PerlOnJava does not have the "closure prototype" concept that Perl 5 has. In Perl 5, when a named sub is compiled that closes over lexical variables, the initial CV (before cloning) is a "closure prototype" — it has the captured variable slots but they are not yet bound to specific pad instances. This prototype is accessible via `MODIFY_CODE_ATTRIBUTES` (`$_[1]` before the sub is fully instantiated). Calling a closure prototype should die with "Closure prototype called".
 
-- **Files:** `RuntimeCode.java`
+**What needs to be implemented:**
+1. Detect when a RuntimeCode is a closure prototype (has captured variable slots but the closure hasn't been instantiated/cloned yet)
+2. In `RuntimeCode.apply()`, check for the prototype state and die with "Closure prototype called" instead of executing the body
+3. The prototype should still be referenceable (test 126: `\&{$proto}` should return a ref to it)
+
+**Test details:**
+- Test 124: `eval { $proto->() }` — should die with `/^Closure prototype called/`
+- Test 125: `eval { () = &$proto }` — should die with `/^Closure prototype called/`
+- Test 126: `\&{$proto}` — should return a reference (referencing closure prototype)
+
+- **Files:** `RuntimeCode.java`, possibly `EmitSubroutine.java`
 - **Tests fixed:** attrs.t 124-126; uni/attrs.t 30-31
-- **Effort:** Small-Medium
+- **Effort:** Medium — requires implementing a new concept in the runtime
 
 #### Phase 8: Attribute::Handlers (LOW — 4 tests)
 

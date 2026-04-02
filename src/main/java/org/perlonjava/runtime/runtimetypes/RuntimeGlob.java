@@ -356,7 +356,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // mechanism where a sub deletes itself from the stash.
                 RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
                 if (codeRef != null && codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
-                    if (code.defined()) {
+                    if (code.defined() || code.isDeclared) {
                         yield codeRef;
                     }
                 }
