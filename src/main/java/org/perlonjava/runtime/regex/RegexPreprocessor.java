@@ -56,6 +56,7 @@ public class RegexPreprocessor {
     static boolean deferredUnicodePropertyEncountered;
     static boolean inlinePFlagEncountered;
     static boolean branchResetEncountered;
+    static boolean backslashKEncountered;
 
     static void markDeferredUnicodePropertyEncountered() {
         deferredUnicodePropertyEncountered = true;
@@ -73,6 +74,14 @@ public class RegexPreprocessor {
         return branchResetEncountered;
     }
 
+    static void markBackslashK() {
+        backslashKEncountered = true;
+    }
+
+    static boolean hadBackslashK() {
+        return backslashKEncountered;
+    }
+
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -88,6 +97,7 @@ public class RegexPreprocessor {
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
         branchResetEncountered = false;
+        backslashKEncountered = false;
 
         // First, escape invalid quantifier braces (Perl compatibility)
         // DISABLED: Causes test regressions - needs more work
