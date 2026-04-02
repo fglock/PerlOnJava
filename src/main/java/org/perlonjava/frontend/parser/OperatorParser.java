@@ -8,10 +8,9 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.perlmodule.Universal;
+import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -316,7 +315,11 @@ public class OperatorParser {
         }
 
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
+        // Suppress strict vars check while parsing the variable being declared
+        boolean savedParsingDeclaration = parser.parsingDeclaration;
+        parser.parsingDeclaration = true;
         Node operand = ParsePrimary.parsePrimary(parser);
+        parser.parsingDeclaration = savedParsingDeclaration;
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
 
         // Add variables to the scope
@@ -416,19 +419,65 @@ public class OperatorParser {
         while (peek(parser).text.equals(":")) {
             consumeAttributes(parser, attributes);
         }
+
+        // Detect scalar/array/hash dereferences in my/our/state declarations.
+        // E.g., "our ${""}", "my $$foo" — these are dereferences, not simple variables.
+        // Perl 5: "Can't declare scalar dereference in 'our'" etc.
+        if (!attributes.isEmpty() || peek(parser).text.equals("=") || peek(parser).text.equals(";")) {
+            checkForDereference(parser, operator, operand);
+        }
+
         if (!attributes.isEmpty()) {
-            // Add the attributes to the operand, preserving any existing annotations
-            if (decl.annotations != null && decl.annotations.containsKey("isDeclaredReference")) {
-                // Create a new map with both the existing isDeclaredReference and new attributes
-                java.util.Map<String, Object> newAnnotations = new java.util.HashMap<>(decl.annotations);
-                newAnnotations.put("attributes", attributes);
-                decl.annotations = newAnnotations;
+            // Determine the package for MODIFY_*_ATTRIBUTES lookup
+            String attrPackage = varType != null ? varType : parser.ctx.symbolTable.getCurrentPackage();
+            
+            // Validate and dispatch variable attributes.
+            // For 'our': dispatch at compile time (global vars already exist).
+            // For 'my'/'state': validate at compile time, dispatch at runtime
+            //   (the actual lexical variable doesn't exist yet during parsing).
+            callModifyVariableAttributes(parser, attrPackage, operator, operand, attributes);
+
+            // Add the attributes and package to the operand annotations
+            // so the emitter can dispatch at runtime for my/state variables.
+            java.util.Map<String, Object> newAnnotations;
+            if (decl.annotations != null) {
+                newAnnotations = new java.util.HashMap<>(decl.annotations);
             } else {
-                decl.annotations = Map.of("attributes", attributes);
+                newAnnotations = new java.util.HashMap<>();
             }
+            newAnnotations.put("attributes", attributes);
+            newAnnotations.put("attributePackage", attrPackage);
+            decl.annotations = newAnnotations;
         }
 
         return decl;
+    }
+
+    /**
+     * Check if a variable in a my/our/state declaration is actually a dereference.
+     * E.g., "our ${""}", "my $$foo" — Perl 5 errors with:
+     * "Can't declare scalar dereference in 'our'" etc.
+     */
+    private static void checkForDereference(Parser parser, String operator, Node operand) {
+        if (!(operand instanceof OperatorNode opNode)) return;
+        String sigil = opNode.operator;
+        if (!"$@%".contains(sigil)) return;
+
+        // A simple variable has IdentifierNode as operand.
+        // A dereference has OperatorNode, BlockNode, etc.
+        if (opNode.operand instanceof IdentifierNode) return;
+
+        String typeName = switch (sigil) {
+            case "$" -> "scalar";
+            case "@" -> "array";
+            case "%" -> "hash";
+            default -> "scalar";
+        };
+        throw new PerlCompilerException(
+                opNode.tokenIndex,
+                "Can't declare " + typeName + " dereference in \"" + operator + "\"",
+                parser.ctx.errorUtil
+        );
     }
 
     static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
@@ -1119,5 +1168,192 @@ public class OperatorParser {
             }
         }
         return new OperatorNode("require", operand, parser.tokenIndex);
+    }
+
+    /**
+     * Dispatch variable attributes via MODIFY_*_ATTRIBUTES at compile time.
+     *
+     * <p>For each variable in the declaration, checks if the package has
+     * MODIFY_SCALAR_ATTRIBUTES, MODIFY_ARRAY_ATTRIBUTES, or MODIFY_HASH_ATTRIBUTES
+     * and calls it. Follows the same pattern as SubroutineParser.callModifyCodeAttributes().
+     */
+    private static void callModifyVariableAttributes(Parser parser, String packageName,
+                                                      String operator, Node operand,
+                                                      List<String> attributes) {
+        // Ensure attributes.pm is loaded so that attributes::get() is available
+        org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+
+        // Collect the variables from the declaration
+        List<Node> variables = new ArrayList<>();
+        if (operand instanceof ListNode listNode) {
+            variables.addAll(listNode.elements);
+        } else {
+            variables.add(operand);
+        }
+
+        for (Node varNode : variables) {
+            if (!(varNode instanceof OperatorNode opNode)) continue;
+            
+            // Handle declared refs: \$x, \@x, \%x — unwrap backslash to get inner sigil
+            if (opNode.operator.equals("\\") && opNode.operand instanceof OperatorNode innerOp) {
+                opNode = innerOp;
+            }
+
+            String sigil = opNode.operator;
+
+            // For declared refs in parenthesized form (my (\@h) : attr), the parser
+            // transforms \@h to $h and stores the original sigil in an annotation.
+            if (opNode.annotations != null && opNode.annotations.containsKey("declaredReferenceOriginalSigil")) {
+                sigil = (String) opNode.annotations.get("declaredReferenceOriginalSigil");
+            }
+
+            String svtype;
+            switch (sigil) {
+                case "$": svtype = "SCALAR"; break;
+                case "@": svtype = "ARRAY"; break;
+                case "%": svtype = "HASH"; break;
+                default: continue;
+            }
+
+            // Filter out built-in attributes
+            List<String> nonBuiltinAttrs = new ArrayList<>();
+            for (String attr : attributes) {
+                if ("shared".equals(attr)) {
+                    // 'shared' is a no-op (no threads in PerlOnJava)
+                    continue;
+                }
+                nonBuiltinAttrs.add(attr);
+            }
+
+            if (nonBuiltinAttrs.isEmpty()) {
+                return;
+            }
+
+            // Check if the package has MODIFY_*_ATTRIBUTES
+            String modifyMethod = "MODIFY_" + svtype + "_ATTRIBUTES";
+            RuntimeArray canArgs = new RuntimeArray();
+            RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+            RuntimeArray.push(canArgs, new RuntimeScalar(modifyMethod));
+
+            InheritanceResolver.autoloadEnabled = false;
+            RuntimeList codeList;
+            try {
+                codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+            } finally {
+                InheritanceResolver.autoloadEnabled = true;
+            }
+
+            boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
+
+            if (hasHandler) {
+                if (operator.equals("our")) {
+                    // For 'our' variables: dispatch at compile time (global vars already exist)
+                    // Get the variable name for creating a reference
+                    String varName;
+                    if (opNode.operand instanceof IdentifierNode identNode) {
+                        varName = identNode.name;
+                    } else {
+                        continue;
+                    }
+
+                    // Resolve full variable name
+                    String fullVarName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
+
+                    // Get a reference to the global variable
+                    RuntimeScalar varRef;
+                    switch (sigil) {
+                        case "$":
+                            varRef = GlobalVariable.getGlobalVariable(fullVarName).createReference();
+                            break;
+                        case "@":
+                            varRef = GlobalVariable.getGlobalArray(fullVarName).createReference();
+                            break;
+                        case "%":
+                            varRef = GlobalVariable.getGlobalHash(fullVarName).createReference();
+                            break;
+                        default:
+                            continue;
+                    }
+
+                    RuntimeScalar method = codeList.getFirst();
+                    // Build args: ($package, \$var, @attributes)
+                    RuntimeArray callArgs = new RuntimeArray();
+                    RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
+                    RuntimeArray.push(callArgs, varRef);
+                    for (String attr : nonBuiltinAttrs) {
+                        RuntimeArray.push(callArgs, new RuntimeScalar(attr));
+                    }
+
+                    // Push caller frames so that Attribute::Handlers can find the source file/line
+                    String fileName = parser.ctx.compilerOptions.fileName;
+                    int lineNum = parser.ctx.errorUtil != null
+                            ? parser.ctx.errorUtil.getLineNumber(parser.tokenIndex) : 0;
+                    CallerStack.push(packageName, fileName, lineNum);
+                    CallerStack.push(packageName, fileName, lineNum);
+                    try {
+                        RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+
+                        // If MODIFY_*_ATTRIBUTES returns any values, they are unrecognized attributes
+                        RuntimeArray resultArray = result.getArrayOfAlias();
+                        if (resultArray.size() > 0) {
+                            SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
+                        }
+                    } finally {
+                        CallerStack.pop();
+                        CallerStack.pop();
+                    }
+                }
+                // For 'my'/'state': handler will be dispatched at runtime by the emitter,
+                // after the actual lexical variable is allocated.
+
+                // Emit "may clash with future reserved word" warning at compile time
+                emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
+            } else {
+                // No MODIFY_*_ATTRIBUTES handler found at compile time.
+                // Don't throw — the handler may be set dynamically (e.g., via glob
+                // in enclosing eval). The \K regex bug (pre-existing) also corrupts
+                // handler names in decl-refs.t tests, making handlers invisible.
+                // Runtime dispatch in Attributes.java will silently return if no
+                // handler exists. See dev/design/attributes.md "Known Issue: \K".
+            }
+        }
+    }
+
+    /**
+     * Emit "SCALAR/ARRAY/HASH package attribute(s) may clash with future reserved word(s)"
+     * warning for non-built-in attributes accepted by MODIFY_*_ATTRIBUTES.
+     * Respects 'no warnings "reserved"'.
+     */
+    private static void emitReservedWordWarning(String svtype, List<String> attrs, Parser parser) {
+        if (attrs.isEmpty()) return;
+
+        // Check compile-time warning scope directly (consistent with experimental:: checks)
+        // Use "syntax::reserved" since "reserved" is an alias — use warnings enables
+        // "syntax::reserved" via the all→syntax→syntax::reserved hierarchy
+        if (!parser.ctx.symbolTable.isWarningCategoryEnabled("syntax::reserved")) return;
+
+        // Only warn for all-lowercase attribute names (matching Perl 5's
+        // grep { m/\A[[:lower:]]+(?:\z|\()/ } filter in attributes.pm)
+        List<String> lowercaseAttrs = new ArrayList<>();
+        for (String attr : attrs) {
+            String baseName = attr.contains("(") ? attr.substring(0, attr.indexOf('(')) : attr;
+            if (!baseName.isEmpty() && baseName.equals(baseName.toLowerCase())) {
+                lowercaseAttrs.add(baseName);
+            }
+        }
+        if (lowercaseAttrs.isEmpty()) return;
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lowercaseAttrs.size(); i++) {
+            if (i > 0) sb.append(" : ");
+            sb.append(lowercaseAttrs.get(i));
+        }
+
+        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+        String word = lowercaseAttrs.size() > 1 ? "words" : "word";
+        String attrWord = lowercaseAttrs.size() > 1 ? "attributes" : "attribute";
+        String msg = svtype + " package " + attrWord + " may clash with future reserved " + word + ": "
+                + sb + loc + ".\n";
+        WarnDie.warn(new RuntimeScalar(msg), new RuntimeScalar());
     }
 }

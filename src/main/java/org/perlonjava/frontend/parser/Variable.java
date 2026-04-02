@@ -7,6 +7,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -239,6 +240,10 @@ public class Variable {
                 }
             }
 
+            // Check strict vars at parse time — catches undeclared variables in
+            // lazily-compiled named sub bodies that would otherwise be missed
+            checkStrictVarsAtParseTime(parser, sigil, varName);
+
             // Normal variable: create a simple variable reference node
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
@@ -250,6 +255,122 @@ public class Variable {
         // Parse the expression with the appropriate precedence
         operand = parser.parseExpression(parser.getPrecedence("$") + 1);
         return new OperatorNode(sigil, operand, parser.tokenIndex);
+    }
+
+    /**
+     * Check strict vars at parse time for an unqualified variable.
+     * This catches undeclared variables inside lazily-compiled named sub bodies
+     * that would otherwise only be detected at call time (or never).
+     * Mirrors the exemption logic from EmitVariable.java and BytecodeCompiler.java.
+     */
+    private static void checkStrictVarsAtParseTime(Parser parser, String sigil, String varName) {
+        // Only check $, @, % sigils (not *, &, $#)
+        if (!sigil.equals("$") && !sigil.equals("@") && !sigil.equals("%")) return;
+
+        // Skip when parsing a my/our/state declaration — the variable is being declared
+        if (parser.parsingDeclaration) return;
+
+        // Only apply inside named subroutine bodies.  Named subs are compiled
+        // lazily, so the existing code-generation strict check never fires at
+        // compile time for them.  All other contexts (file-level, anonymous
+        // subs, eval STRING) are handled correctly by the code-generation check.
+        if (!parser.ctx.symbolTable.isInSubroutineBody()) return;
+        String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
+        if (currentSub == null || currentSub.isEmpty()) return;
+
+        // Check if strict vars is enabled in the current scope
+        if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS)) return;
+
+        // Variable declared lexically (my, our, state) — always allowed
+        if (parser.ctx.symbolTable.getSymbolEntry(sigil + varName) != null) return;
+
+        // For $name{...} (hash element) or $name[...] (array element), check the
+        // container variable too: $hash{key} is valid if %hash is declared,
+        // and $array[0] is valid if @array is declared.
+        // Similarly, @name{...} is a hash slice (valid if %name is declared).
+        if (sigil.equals("$") || sigil.equals("@")) {
+            int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            if (peekIdx < parser.tokens.size()) {
+                String nextText = parser.tokens.get(peekIdx).text;
+                if (nextText.equals("{") && parser.ctx.symbolTable.getSymbolEntry("%" + varName) != null) return;
+                if (nextText.equals("[") && parser.ctx.symbolTable.getSymbolEntry("@" + varName) != null) return;
+            }
+        }
+
+        // Qualified names (Pkg::var) — always allowed
+        if (varName.contains("::")) return;
+
+        // Regex capture variables ($1, $2, ...) but not $01, $02
+        if (ScalarUtils.isInteger(varName) && !varName.startsWith("0")) return;
+
+        // Sort variables $a and $b
+        if (sigil.equals("$") && (varName.equals("a") || varName.equals("b"))) return;
+
+        // Built-in special length-one vars ($_, $!, $;, $0, etc.)
+        if (sigil.equals("$") && varName.length() == 1 && !Character.isLetter(varName.charAt(0))) return;
+
+        // Built-in special scalar vars (${^GLOBAL_PHASE}, $ARGV, $STDIN, etc.)
+        if (sigil.equals("$") && !varName.isEmpty() && varName.charAt(0) < 32) return;
+        if (sigil.equals("$") && (varName.equals("ARGV") || varName.equals("ARGVOUT")
+                || varName.equals("ENV") || varName.equals("INC") || varName.equals("SIG")
+                || varName.equals("STDIN") || varName.equals("STDOUT") || varName.equals("STDERR"))) return;
+
+        // Built-in special container vars (%ENV, %SIG, @ARGV, @INC, etc.)
+        if (sigil.equals("%") && (varName.equals("SIG") || varName.equals("ENV")
+                || varName.equals("INC") || varName.equals("+") || varName.equals("-"))) return;
+        if (sigil.equals("@") && (varName.equals("ARGV") || varName.equals("INC")
+                || varName.equals("_") || varName.equals("F"))) return;
+
+        // Non-ASCII length-1 scalars under 'no utf8' (Latin-1 range)
+        if (sigil.equals("$") && varName.length() == 1) {
+            char c = varName.charAt(0);
+            if (c > 127 && c <= 255
+                    && !parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) return;
+        }
+
+        // Check if variable already exists in the global registry (from use vars, etc.)
+        String normalizedName = NameNormalizer.normalizeVariableName(
+                varName, parser.ctx.symbolTable.getCurrentPackage());
+        boolean existsGlobally = false;
+        if (sigil.equals("$")) {
+            existsGlobally = GlobalVariable.existsGlobalVariable(normalizedName);
+            // For $hash{...} and $array[...], also check global container
+            if (!existsGlobally) {
+                int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                if (peekIdx < parser.tokens.size()) {
+                    String nextText = parser.tokens.get(peekIdx).text;
+                    if (nextText.equals("{") && GlobalVariable.existsGlobalHash(normalizedName)) existsGlobally = true;
+                    if (nextText.equals("[") && GlobalVariable.existsGlobalArray(normalizedName)) existsGlobally = true;
+                }
+            }
+        } else if (sigil.equals("@")) {
+            existsGlobally = GlobalVariable.existsGlobalArray(normalizedName);
+            // For @hash{...} (hash slice), also check global hash
+            if (!existsGlobally) {
+                int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                if (peekIdx < parser.tokens.size()) {
+                    String nextText = parser.tokens.get(peekIdx).text;
+                    if (nextText.equals("{") && GlobalVariable.existsGlobalHash(normalizedName)) existsGlobally = true;
+                }
+            }
+        } else if (sigil.equals("%") && !normalizedName.endsWith("::"))
+            existsGlobally = GlobalVariable.existsGlobalHash(normalizedName);
+
+        // Single-letter scalars require declaration even if they exist globally
+        if (sigil.equals("$") && varName.length() == 1
+                && Character.isLetter(varName.charAt(0))
+                && !varName.equals("a") && !varName.equals("b")) {
+            existsGlobally = false;
+        }
+
+        if (existsGlobally) return;
+
+        // Undeclared variable under strict vars
+        throw new PerlCompilerException(parser.tokenIndex,
+                "Global symbol \"" + sigil + varName
+                        + "\" requires explicit package name (did you forget to declare \"my "
+                        + sigil + varName + "\"?)",
+                parser.ctx.errorUtil);
     }
 
     /**

@@ -95,6 +95,26 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
+     * Gets the caller location string (e.g., " at file.pl line 42") at the specified level.
+     * Used by warnIf/warnIfAtLevel to append location info to warning messages.
+     *
+     * @param level The stack level (0 = immediate caller of the warnings:: function)
+     * @return A RuntimeScalar containing the location string
+     */
+    private static RuntimeScalar getCallerLocation(int level) {
+        RuntimeList callerInfo = RuntimeCode.caller(
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)),
+            RuntimeContextType.LIST
+        );
+        if (callerInfo.size() >= 3) {
+            String file = callerInfo.elements.get(1).toString();
+            String line = callerInfo.elements.get(2).toString();
+            return new RuntimeScalar(" at " + file + " line " + line);
+        }
+        return new RuntimeScalar("");
+    }
+
+    /**
      * Walks up the call stack past frames in warnings-registered packages to find
      * the "external caller" whose warning bits should be checked. This implements
      * Perl 5's _error_loc() behavior: skip frames in any package that has used
@@ -485,19 +505,63 @@ public class Warnings extends PerlModuleBase {
         // For custom (registered) categories, walk past the registered package
         // to find the external caller's warning bits
         String bits;
+        int bitsLevel = 0; // track which level the bits came from (for location info)
         if (WarningFlags.isCustomCategory(category)) {
             bits = findExternalCallerBits();
+            // findExternalCallerBits walks up; approximate the level
+            // by re-checking which level matches
+            for (int level = 0; level < 50; level++) {
+                String candidateBits = getWarningBitsAtLevel(level);
+                if (candidateBits == bits) {
+                    bitsLevel = level;
+                    break;
+                }
+            }
         } else {
-            bits = getWarningBitsAtLevel(0);
+            // Walk up the call stack to find the first caller NOT in an internal
+            // package (attributes, warnings). This is the "responsible caller"
+            // whose location should be reported. This approximates Perl 5's
+            // _error_loc() behavior.
+            String pkg0 = getCallerPackageAtLevel(0);
+            boolean isInternalPkg = "attributes".equals(pkg0) || "warnings".equals(pkg0);
+            if (isInternalPkg) {
+                for (int level = 1; level < 50; level++) {
+                    String pkg = getCallerPackageAtLevel(level);
+                    if (pkg == null) break; // ran out of callers
+                    if (!"attributes".equals(pkg) && !"warnings".equals(pkg)) {
+                        bitsLevel = level;
+                        break;
+                    }
+                }
+            }
+            // Get bits from the external caller level first
+            bits = getWarningBitsAtLevel(bitsLevel);
+            // If bits are null at external caller level (e.g., eval STRING doesn't
+            // propagate ${^WARNING_BITS}), continue searching up the stack for bits
+            if (bits == null || !WarningFlags.isEnabledInBits(bits, category)) {
+                for (int level = bitsLevel + 1; level < 50; level++) {
+                    String candidateBits = getWarningBitsAtLevel(level);
+                    if (candidateBits != null && WarningFlags.isEnabledInBits(candidateBits, category)) {
+                        bits = candidateBits;
+                        break;
+                    }
+                    // Stop if we've run out of callers
+                    String pkg = getCallerPackageAtLevel(level);
+                    if (pkg == null) break;
+                }
+            }
         }
         
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         
+        // Get caller location from the level where warning bits were found
+        RuntimeScalar where = getCallerLocation(bitsLevel);
+        
         if (!categoryEnabled) {
             // Category not enabled via lexical warnings - fall back to $^W
             if (isWarnFlagSet()) {
-                WarnDie.warn(message, new RuntimeScalar(""));
+                WarnDie.warn(message, where);
             }
             return new RuntimeScalar().getList();
         }
@@ -505,9 +569,9 @@ public class Warnings extends PerlModuleBase {
         // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
         if (WarningFlags.isFatalInBits(bits, category)) {
-            WarnDie.die(message, new RuntimeScalar(""));
+            WarnDie.die(message, where);
         } else {
-            WarnDie.warn(message, new RuntimeScalar(""));
+            WarnDie.warn(message, where);
         }
         
         return new RuntimeScalar().getList();
@@ -536,10 +600,13 @@ public class Warnings extends PerlModuleBase {
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         
+        // Get caller location for warning/error messages
+        RuntimeScalar where = getCallerLocation(level);
+        
         if (!categoryEnabled) {
             // Category not enabled via lexical warnings - fall back to $^W
             if (isWarnFlagSet()) {
-                WarnDie.warn(message, new RuntimeScalar(""));
+                WarnDie.warn(message, where);
             }
             return new RuntimeScalar().getList();
         }
@@ -547,11 +614,149 @@ public class Warnings extends PerlModuleBase {
         // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
         if (WarningFlags.isFatalInBits(bits, category)) {
-            WarnDie.die(message, new RuntimeScalar(""));
+            WarnDie.die(message, where);
         } else {
-            WarnDie.warn(message, new RuntimeScalar(""));
+            WarnDie.warn(message, where);
         }
         
         return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Convenience method to emit a warning under a specific warning category.
+     * Used by the parser for compile-time warnings (e.g., illegalproto).
+     *
+     * @param category The warning category (e.g., "illegalproto")
+     * @param message  The warning message text
+     * @param location The location suffix (e.g., " at file.pl line 42")
+     */
+    public static void warnWithCategory(String category, String message, String location) {
+        WarnDie.warnWithCategory(
+                new RuntimeScalar(message),
+                new RuntimeScalar(location),
+                category);
+    }
+
+    /**
+     * Emit a warning with category checking, using the Perl caller stack.
+     *
+     * <p>This is designed for Java code (like {@link Attributes}) that needs to emit
+     * categorized warnings respecting the lexical warning context of the Perl caller.
+     * It walks past {@code attributes} and {@code warnings} package frames to find
+     * the "responsible caller" whose warning bits should be checked.
+     *
+     * <p>Unlike {@link org.perlonjava.runtime.operators.WarnDie#warnWithCategory},
+     * which scans the Java call stack, this method uses {@code caller()} to walk the
+     * Perl call stack, ensuring correct behavior when Java-implemented modules
+     * (like {@code attributes::_modify_attrs}) are called from Perl code with
+     * {@code use warnings}.
+     *
+     * @param category The warning category (e.g., "illegalproto", "prototype")
+     * @param message  The warning message text (without location suffix)
+     */
+    public static void emitCategoryWarning(String category, String message) {
+        // Check scope-based runtime suppression first
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return;
+        }
+
+        // Walk up the Perl call stack past internal frames (attributes, warnings,
+        // and Java-implemented module frames that have empty package names)
+        int locationLevel = 0;
+        for (int level = 0; level < 50; level++) {
+            String pkg = getCallerPackageAtLevel(level);
+            if (pkg == null) break;
+            if (!pkg.isEmpty() && !"attributes".equals(pkg) && !"warnings".equals(pkg)) {
+                locationLevel = level;
+                break;
+            }
+        }
+
+        // Get warning bits from the external caller level
+        String bits = getWarningBitsAtLevel(locationLevel);
+
+        // If bits are null at the immediate caller, prefer the compile-time scope
+        // (this happens during BEGIN/use processing inside eval, where runtime
+        // warning bits are not propagated but the parser's symbol table has them)
+        boolean compileTimeScopeDecided = false;
+        if (bits == null || !WarningFlags.isEnabledInBits(bits, category)) {
+            try {
+                ScopedSymbolTable scope = org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope();
+                if (scope != null) {
+                    // Use the Perl5-format bits string for the check, because
+                    // it correctly maps aliases (e.g., "illegalproto" and
+                    // "syntax::illegalproto" both map to Perl5 offset 47).
+                    // The internal BitSet positions in ScopedSymbolTable assign
+                    // separate positions to these, so isWarningCategoryEnabled()
+                    // would fail when the qualified form is enabled but the
+                    // bare form is checked (or vice versa).
+                    String compileBits = scope.getWarningBitsString();
+                    if (compileBits != null && WarningFlags.isEnabledInBits(compileBits, category)) {
+                        bits = compileBits;
+                    }
+                    // The compile-time scope is the authoritative source during
+                    // BEGIN/use processing. Don't search further up the runtime stack.
+                    compileTimeScopeDecided = true;
+                }
+            } catch (Exception ignored) {
+                // If compilation scope isn't available, continue with runtime bits
+            }
+        }
+
+        // If still no bits found and compile-time scope didn't decide,
+        // search up the runtime stack as a last resort
+        if (!compileTimeScopeDecided && (bits == null || !WarningFlags.isEnabledInBits(bits, category))) {
+            for (int level = locationLevel + 1; level < 50; level++) {
+                String candidateBits = getWarningBitsAtLevel(level);
+                if (candidateBits != null && WarningFlags.isEnabledInBits(candidateBits, category)) {
+                    bits = candidateBits;
+                    break;
+                }
+                String pkg = getCallerPackageAtLevel(level);
+                if (pkg == null) break;
+            }
+        }
+
+        boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        RuntimeScalar where = getCallerLocation(locationLevel);
+
+        if (!categoryEnabled) {
+            if (isWarnFlagSet()) {
+                WarnDie.warn(new RuntimeScalar(message), where);
+            }
+            return;
+        }
+
+        // Category enabled -- check FATAL
+        if (WarningFlags.isFatalInBits(bits, category)) {
+            WarnDie.die(new RuntimeScalar(message), where);
+        } else {
+            WarnDie.warn(new RuntimeScalar(message), where);
+        }
+    }
+
+    /**
+     * Emit a warning using the Perl caller stack for location info.
+     *
+     * <p>This is for unconditional (default-on) warnings emitted by Java code.
+     * It walks past {@code attributes} and {@code warnings} package frames
+     * to find the right caller location.
+     *
+     * @param message The warning message text (without location suffix)
+     */
+    public static void emitWarningFromCaller(String message) {
+        // Walk past internal frames for location (attributes, warnings,
+        // and Java-implemented module frames that have empty package names)
+        int locationLevel = 0;
+        for (int level = 0; level < 50; level++) {
+            String pkg = getCallerPackageAtLevel(level);
+            if (pkg == null) break;
+            if (!pkg.isEmpty() && !"attributes".equals(pkg) && !"warnings".equals(pkg)) {
+                locationLevel = level;
+                break;
+            }
+        }
+        RuntimeScalar where = getCallerLocation(locationLevel);
+        WarnDie.warn(new RuntimeScalar(message), where);
     }
 }

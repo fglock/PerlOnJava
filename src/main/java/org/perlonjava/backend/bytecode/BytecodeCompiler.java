@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
+import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -2348,6 +2349,9 @@ public class BytecodeCompiler implements Visitor {
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
 
+                        // Runtime attribute dispatch for state variables with attributes
+                        emitVarAttrsIfNeeded(node, reg, sigil);
+
                         // If this is a declared reference, create a reference to it
                         if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
                             int refReg = allocateRegister();
@@ -2380,6 +2384,9 @@ public class BytecodeCompiler implements Visitor {
                         }
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
+
+                    // Runtime attribute dispatch for my variables with attributes
+                    emitVarAttrsIfNeeded(node, reg, sigil);
 
                     // If this is a declared reference, create a reference to it
                     if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
@@ -4158,9 +4165,19 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand != null) {
                 // Special case: \&name — CODE is already a reference type.
                 // Emit LOAD_GLOBAL_CODE directly without CREATE_REF, matching JVM compiler.
+                // Also set isSymbolicReference so defined(\&stub) returns true, matching
+                // the JVM backend's createCodeReference behavior.
                 if (node.operand instanceof OperatorNode operandOp
                         && operandOp.operator.equals("&")
-                        && operandOp.operand instanceof IdentifierNode) {
+                        && operandOp.operand instanceof IdentifierNode idNode) {
+                    // Set isSymbolicReference before loading, so defined(\&Name) returns true
+                    String subName = NameNormalizer.normalizeVariableName(
+                            idNode.name, getCurrentPackage());
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
+                    if (codeRef.type == RuntimeScalarType.CODE
+                            && codeRef.value instanceof RuntimeCode rc) {
+                        rc.isSymbolicReference = true;
+                    }
                     node.operand.accept(this);
                     // lastResultReg already holds the CODE scalar — no wrapping needed
                     return;
@@ -4327,6 +4344,32 @@ public class BytecodeCompiler implements Visitor {
         stringPool.add(str);
         stringPoolIndex.put(str, index);
         return index;
+    }
+
+    /**
+     * Emit DISPATCH_VAR_ATTRS opcode if the node has variable attributes.
+     * Called after a my/state variable is initialized in its register.
+     */
+    @SuppressWarnings("unchecked")
+    void emitVarAttrsIfNeeded(OperatorNode node, int varReg, String sigil) {
+        if (node.annotations == null || !node.annotations.containsKey("attributes")) return;
+
+        List<String> attrs = (List<String>) node.annotations.get("attributes");
+        String packageName = (String) node.annotations.get("attributePackage");
+        if (packageName == null) packageName = getCurrentPackage();
+
+        String fileName = sourceName;
+        int lineNum = sourceLine;
+
+        // Store metadata in constant pool as Object[]
+        Object[] data = new Object[]{
+                packageName, sigil, attrs.toArray(new String[0]), fileName, lineNum
+        };
+        int constIdx = addToConstantPool(data);
+
+        emit(Opcodes.DISPATCH_VAR_ATTRS);
+        emitReg(varReg);
+        emit(constIdx);
     }
 
     private int addToConstantPool(Object obj) {
@@ -4789,6 +4832,11 @@ public class BytecodeCompiler implements Visitor {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
+            // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
+            if (subCode.attributes != null && !subCode.attributes.isEmpty()
+                    && subCode.packageName != null) {
+                Attributes.runtimeDispatchModifyCodeAttributes(subCode.packageName, codeScalar);
+            }
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);

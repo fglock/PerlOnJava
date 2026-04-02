@@ -1459,6 +1459,13 @@ public class EmitVariable {
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
 
+                    // Emit runtime attribute dispatch for my/state variables.
+                    // For 'our', attributes were already dispatched at compile time.
+                    if (!operator.equals("our") && node.annotations != null
+                            && node.annotations.containsKey("attributes")) {
+                        emitRuntimeAttributeDispatch(emitterVisitor, node, varIndex, sigil);
+                    }
+
                     // For declared references in non-void context, return a reference to the variable
                     if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                         // Load the variable back from the local variable slot
@@ -1487,5 +1494,51 @@ public class EmitVariable {
         }
         throw new PerlCompilerException(
                 node.tokenIndex, "Not implemented: " + node.operator, emitterVisitor.ctx.errorUtil);
+    }
+
+    /**
+     * Emit bytecode to call Attributes.runtimeDispatchModifyVariableAttributes()
+     * for my/state variable declarations that have non-builtin attributes.
+     *
+     * <p>This is called after the variable is stored in its JVM local slot, so
+     * the reference passed to MODIFY_*_ATTRIBUTES points to the actual lexical.
+     */
+    @SuppressWarnings("unchecked")
+    private static void emitRuntimeAttributeDispatch(EmitterVisitor emitterVisitor,
+                                                      OperatorNode node, int varIndex, String sigil) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+
+        List<String> attributes = (List<String>) node.annotations.get("attributes");
+        String packageName = (String) node.annotations.get("attributePackage");
+        if (packageName == null) {
+            packageName = ctx.symbolTable.getCurrentPackage();
+        }
+        String fileName = ctx.compilerOptions.fileName;
+        int lineNum = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.getIndex()) : 0;
+
+        // Push args: (String packageName, RuntimeBase variable, String sigil, String[] attrs, String fileName, int lineNum)
+        mv.visitLdcInsn(packageName);
+        mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+        mv.visitLdcInsn(sigil);
+
+        // Create String[] for attributes
+        mv.visitIntInsn(Opcodes.BIPUSH, attributes.size());
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+        for (int i = 0; i < attributes.size(); i++) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitIntInsn(Opcodes.BIPUSH, i);
+            mv.visitLdcInsn(attributes.get(i));
+            mv.visitInsn(Opcodes.AASTORE);
+        }
+
+        mv.visitLdcInsn(fileName);
+        mv.visitLdcInsn(lineNum);
+
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/perlmodule/Attributes",
+                "runtimeDispatchModifyVariableAttributes",
+                "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;I)V",
+                false);
     }
 }

@@ -274,6 +274,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean isSymbolicReference = false;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
+    // Flag to indicate this was explicitly declared (sub foo; or sub foo { ... })
+    // as opposed to auto-created by getGlobalCodeRef() for lookups.
+    // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
+    public boolean isDeclared = false;
+    // Flag to indicate this is a closure prototype (the template CV before cloning).
+    // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
+    // Calling a closure prototype should die with "Closure prototype called".
+    public boolean isClosurePrototype = false;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -318,6 +326,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (EVAL_TRACE) {
             System.err.println("[eval-trace] " + msg);
         }
+    }
+
+    /**
+     * Create a callable clone of this RuntimeCode for closure prototype support.
+     * The original will be marked as a closure prototype (non-callable);
+     * the clone is the actual closure that can be called.
+     */
+    public RuntimeCode cloneForClosure() {
+        RuntimeCode clone;
+        if (this.subroutine != null) {
+            clone = new RuntimeCode(this.subroutine, this.prototype);
+        } else {
+            clone = new RuntimeCode(this.methodHandle, this.codeObject, this.prototype);
+        }
+        clone.attributes = this.attributes != null ? new java.util.ArrayList<>(this.attributes) : null;
+        clone.packageName = this.packageName;
+        clone.subName = this.subName;
+        clone.isStatic = this.isStatic;
+        clone.isDeclared = this.isDeclared;
+        clone.constantValue = this.constantValue;
+        clone.compilerSupplier = this.compilerSupplier;
+        // isClosurePrototype stays false for the clone (it's callable)
+        return clone;
     }
 
     /**
@@ -1775,6 +1806,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Add hinthash (element 10): Compile-time %^H hash reference
                 res.add(RuntimeScalarCache.scalarUndef);
             }
+        } else if (frame >= stackTraceSize) {
+            // Fallback: check CallerStack for synthetic frames pushed during compile-time
+            // operations (e.g., MODIFY_*_ATTRIBUTES called from Java).
+            // The excess frames beyond the Java stack trace are served from CallerStack.
+            int callerStackFrame = frame - stackTraceSize;
+            CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
+            if (info != null) {
+                if (ctx == RuntimeContextType.SCALAR) {
+                    res.add(new RuntimeScalar(info.packageName()));
+                } else {
+                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(info.filename()));
+                    res.add(new RuntimeScalar(info.line()));
+                }
+            }
         }
         return res;
     }
@@ -1855,12 +1901,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // Check for closure prototype — calling one should die
+            if (code.isClosurePrototype) {
+                throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
+            }
+
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+                // Transfer fields that were set on the old code (e.g., by :const attribute)
+                if (savedConstantValue != null && code.constantValue == null) {
+                    code.constantValue = savedConstantValue;
+                }
+                if (savedAttributes != null && code.attributes == null) {
+                    code.attributes = savedAttributes;
+                }
             }
 
             // Check if it's an unfilled forward declaration (not defined)
@@ -2079,12 +2139,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // Check for closure prototype — calling one should die
+            if (code.isClosurePrototype) {
+                throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
+            }
+
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+                // Transfer fields that were set on the old code (e.g., by :const attribute)
+                if (savedConstantValue != null && code.constantValue == null) {
+                    code.constantValue = savedConstantValue;
+                }
+                if (savedAttributes != null && code.attributes == null) {
+                    code.attributes = savedAttributes;
+                }
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -2211,12 +2285,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // Check for closure prototype — calling one should die
+            if (code.isClosurePrototype) {
+                throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
+            }
+
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+                // Transfer fields that were set on the old code (e.g., by :const attribute)
+                if (savedConstantValue != null && code.constantValue == null) {
+                    code.constantValue = savedConstantValue;
+                }
+                if (savedAttributes != null && code.attributes == null) {
+                    code.attributes = savedAttributes;
+                }
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -2537,6 +2625,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (this.isBuiltin) {
             return true;
         }
+        // Note: isDeclared is NOT checked here. In Perl 5, defined(&foo) returns
+        // false for forward declarations (sub foo;). The isDeclared flag is used
+        // only by RuntimeGlob.getGlobSlot("CODE") for *foo{CODE} visibility.
         return this.constantValue != null || this.compilerSupplier != null 
                 || this.subroutine != null || this.methodHandle != null;
     }

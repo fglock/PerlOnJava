@@ -257,6 +257,7 @@ public class GlobalContext {
         PerlIO.initialize();
         IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
         Version.initialize();   // Initialize version module for version objects
+        Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
         DynaLoader.initialize();
         XSLoader.initialize();  // XSLoader will load other classes on-demand
         // Filter::Util::Call will be loaded via XSLoader when needed

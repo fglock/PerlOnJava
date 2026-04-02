@@ -745,8 +745,8 @@ After rebasing `feature/test-failure-fixes` onto latest master, the following re
 
 ## Recommended Next Steps
 
-1. **(?{...}) non-fatal workaround** (Medium) - change `UNIMPLEMENTED_CODE_BLOCK` from fatal to `(?:)` fallback - 500+ tests
-2. **64-bit integer ops** (Medium-Hard) - unsigned semantics, overflow handling
-3. **caller() extended fields** (Medium-Hard) - wantarray, evaltext, is_require
-4. **Attribute system** (Medium-Hard) - attributes.pm module, MODIFY_*_ATTRIBUTES callbacks
+1. ~~**(?{...}) non-fatal workaround**~~ - **NOT AN OPTION** - silently replacing code blocks with no-ops would mask real failures and produce incorrect test results
+2. **64-bit integer ops** (Medium-Hard) - Note: PerlOnJava declares itself as 32-bit, so many of these test failures may be expected/irrelevant
+3. **Attribute system** (Medium-Hard) - attributes.pm module, MODIFY_*_ATTRIBUTES callbacks - **NEXT TARGET**
+4. **caller() extended fields** (Medium-Hard) - wantarray, evaltext, is_require
 5. **op/for.t glob/read-only regression** (Medium) - from master's GlobalVariable.java changes

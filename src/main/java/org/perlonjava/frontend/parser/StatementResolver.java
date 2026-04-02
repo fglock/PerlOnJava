@@ -151,6 +151,13 @@ public class StatementResolver {
                         // Parse signature if present (optional)
                         String prototype = null;
                         ListNode signatureAST = null;
+
+                        // Enter a scope for the implicit $self and any signature parameters.
+                        // This scope is exited after the method body is parsed so that
+                        // the parse-time strict vars check can find $self and parameters.
+                        int methodScopeIndex = parser.ctx.symbolTable.enterScope();
+                        parser.ctx.symbolTable.addVariable("$self", "my", null);
+
                         if (peek(parser).text.equals("(")) {
                             // Parse the signature properly to generate parameter declarations
                             // Pass true for isMethod flag to account for implicit $self in error messages
@@ -158,6 +165,7 @@ public class StatementResolver {
                             // Note: SignatureParser consumes the closing )
                         }
 
+                        try {
                         // Check for forward declaration (method name;) or full definition (method name {...})
                         if (peek(parser).text.equals(";")) {
                             // Forward declaration - just consume the semicolon
@@ -209,6 +217,9 @@ public class StatementResolver {
                                 method.setAnnotation("signatureAST", signatureAST);
                             }
                             yield method;
+                        }
+                        } finally {
+                            parser.ctx.symbolTable.exitScope(methodScopeIndex);
                         }
                     }
                     yield null;
@@ -297,7 +308,8 @@ public class StatementResolver {
 
                                 // Parse attributes first (e.g., :prototype())
                                 while (peek(parser).text.equals(":")) {
-                                    String attrProto = SubroutineParser.consumeAttributes(parser, attributes);
+                                    String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                            null, subName, null);
                                     if (attrProto != null) {
                                         prototype = attrProto;
                                     }
@@ -324,6 +336,22 @@ public class StatementResolver {
                                         // Signatures not enabled - always parse as prototype
                                         prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
                                     }
+
+                                    // Emit illegal proto warning for (proto) syntax (like normal subs do)
+                                    if (prototype != null) {
+                                        SubroutineParser.emitIllegalProtoWarning(parser, prototype, subName);
+                                    }
+
+                                    // Parse attributes after prototype (e.g., my sub foo(bar) : prototype(baz) {})
+                                    String prevAttrProto = null;
+                                    while (peek(parser).text.equals(":")) {
+                                        String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                                prototype, subName, prevAttrProto);
+                                        if (attrProto != null) {
+                                            prevAttrProto = prototype;
+                                            prototype = attrProto;
+                                        }
+                                    }
                                 }
 
                                 // Now check if there's a body
@@ -337,13 +365,22 @@ public class StatementResolver {
                                     // Parse the rest as an anonymous sub
                                     Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
 
-                                    // Store prototype in the sub if present
-                                    if (prototype != null && anonSub instanceof SubroutineNode subNode) {
-                                        varDecl.setAnnotation("prototype", prototype);
+                                    // Apply pre-parsed prototype and attributes to the SubroutineNode.
+                                    // parseSubroutineDefinition returns a SubroutineNode with prototype=null
+                                    // since we already consumed the prototype/attribute tokens.
+                                    if ((prototype != null || !attributes.isEmpty()) && anonSub instanceof SubroutineNode subNode) {
+                                        String finalProto = prototype != null ? prototype : subNode.prototype;
+                                        List<String> finalAttrs = !attributes.isEmpty() ? attributes : subNode.attributes;
+                                        anonSub = new SubroutineNode(subNode.name, finalProto, finalAttrs,
+                                                subNode.block, subNode.useTryCatch, subNode.tokenIndex);
                                     }
 
                                     // NOW add &subName to symbol table AFTER parsing the body
                                     // This makes the sub "invisible inside itself" during compilation
+                                    // Store prototype in varDecl annotation for call-site parsing
+                                    if (prototype != null) {
+                                        varDecl.setAnnotation("prototype", prototype);
+                                    }
                                     if (hadForwardDecl) {
                                         parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
                                     } else {
@@ -448,6 +485,14 @@ public class StatementResolver {
                             // Generate unique hidden variable name
                             String hiddenVarName = methodName + "__lexmethod_" + parser.tokenIndex;
 
+                            // Enter scope for $self and signature parameters early,
+                            // so they are visible during parse-time strict vars check.
+                            int scopeIndex = parser.ctx.symbolTable.enterScope();
+                            OperatorNode tempSelf = new OperatorNode("my",
+                                    new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex),
+                                    parser.tokenIndex);
+                            parser.ctx.symbolTable.addVariable("$self", "my", tempSelf);
+
                             // Parse signature if present
                             ListNode signatureAST = null;
                             if (peek(parser).text.equals("(")) {
@@ -455,23 +500,13 @@ public class StatementResolver {
                                 signatureAST = SignatureParser.parseSignature(parser, methodName, true);
                             }
 
+                            try {
                             // Parse the method body
                             BlockNode block = null;
                             if (peek(parser).text.equals("{")) {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
                                 boolean wasInMethod = parser.isInMethod;
                                 parser.isInMethod = true; // Set method context for lexical method
-
-                                // Enter scope for the lexical method's body
-                                int scopeIndex = parser.ctx.symbolTable.enterScope();
-
-                                // Add temp $self to THIS scope (the method's inner scope)
-                                // so field access works during parsing
-                                // This will be matched by the actual `my $self = shift;` injected during transformation
-                                OperatorNode tempSelf = new OperatorNode("my",
-                                        new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex),
-                                        parser.tokenIndex);
-                                parser.ctx.symbolTable.addVariable("$self", "my", tempSelf);
 
                                 // Parse the block contents (without creating another scope)
                                 List<Node> elements = new ArrayList<>();
@@ -482,9 +517,6 @@ public class StatementResolver {
                                     }
                                 }
                                 block = new BlockNode(elements, parser.tokenIndex);
-
-                                // Exit the method's scope (this removes temp $self)
-                                parser.ctx.symbolTable.exitScope(scopeIndex);
 
                                 parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
@@ -524,6 +556,9 @@ public class StatementResolver {
                             parser.ctx.symbolTable.addVariable("&" + methodName, declaration, varDecl);
 
                             yield assignment;
+                            } finally {
+                                parser.ctx.symbolTable.exitScope(scopeIndex);
+                            }
                         } else {
                             throw new RuntimeException("Method name expected after 'my method'");
                         }

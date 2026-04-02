@@ -57,12 +57,16 @@ public class ReferenceOperators {
                 str = ref(runtimeScalar.tiedFetch()).toString();
                 break;
             case CODE:
-                if (!((RuntimeCode) runtimeScalar.value).defined()) {
-                    str = "";
-                    break;
+                // ref() always returns "CODE" for CODE-typed scalars, regardless of whether
+                // the subroutine is defined. In Perl, ref(\&stub) returns "CODE" even for
+                // forward-declared subs without a body. The defined() check only matters
+                // for defined(&name), not for ref().
+                if (runtimeScalar.value == null) {
+                    str = "CODE";
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "CODE" : NameNormalizer.getBlessStr(blessId);
                 }
-                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "CODE" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOB:
                 // For globs, check what slots are filled
@@ -136,8 +140,12 @@ public class ReferenceOperators {
                 str = (filledSlots == 1) ? slotType : "";
                 break;
             case REGEX:
-                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "Regexp" : NameNormalizer.getBlessStr(blessId);
+                if (runtimeScalar.value == null) {
+                    str = "Regexp";
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "Regexp" : NameNormalizer.getBlessStr(blessId);
+                }
                 break;
             case REFERENCE:
                 // Handle nested references
@@ -150,20 +158,36 @@ public class ReferenceOperators {
                         default -> "SCALAR";
                     };
                 }
-                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
+                if (runtimeScalar.value == null) {
+                    str = ref;
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
+                }
                 break;
             case ARRAYREFERENCE:
-                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
+                if (runtimeScalar.value == null) {
+                    str = "ARRAY";
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
+                }
                 break;
             case HASHREFERENCE:
-                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
+                if (runtimeScalar.value == null) {
+                    str = "HASH";
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
+                }
                 break;
             case GLOBREFERENCE:
-                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);
+                if (runtimeScalar.value == null) {
+                    str = "GLOB";
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);
+                }
                 break;
             case FORMAT:
                 str = "FORMAT";

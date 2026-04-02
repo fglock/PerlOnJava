@@ -314,16 +314,86 @@ public class EmitSubroutine {
             // Set prototype if needed
             if (node.prototype != null) {
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                mv.visitFieldInsn(Opcodes.GETFIELD,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "getCode",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeCode;",
-                        false);
+                        "value",
+                        "Ljava/lang/Object;");
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
                 mv.visitLdcInsn(node.prototype);
                 mv.visitFieldInsn(Opcodes.PUTFIELD,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "prototype",
                         "Ljava/lang/String;");
+            }
+        }
+
+        // Set attributes if needed (after try-catch, both paths leave RuntimeScalar on stack)
+        if (node.attributes != null && !node.attributes.isEmpty()) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value",
+                    "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            // Create a new ArrayList and populate it
+            mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "java/util/ArrayList",
+                    "<init>",
+                    "()V",
+                    false);
+            for (String attr : node.attributes) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(attr);
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+                        "java/util/List",
+                        "add",
+                        "(Ljava/lang/Object;)Z",
+                        true);
+                mv.visitInsn(Opcodes.POP); // pop boolean return of add()
+            }
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "attributes",
+                    "Ljava/util/List;");
+        }
+
+        // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes.
+        // Named subs have their dispatch in SubroutineParser.handleNamedSub at compile time.
+        // Anonymous subs need runtime dispatch because the code ref only exists at runtime.
+        if (node.name == null && node.attributes != null && !node.attributes.isEmpty()) {
+            java.util.Set<String> builtinAttrs = java.util.Set.of("lvalue", "method", "const");
+            boolean hasNonBuiltin = false;
+            for (String attr : node.attributes) {
+                String name = attr.startsWith("-") ? attr.substring(1) : attr;
+                int parenIdx = name.indexOf('(');
+                String baseName = parenIdx >= 0 ? name.substring(0, parenIdx) : name;
+                if (!builtinAttrs.contains(baseName) && !baseName.equals("prototype")) {
+                    hasNonBuiltin = true;
+                    break;
+                }
+            }
+            if (hasNonBuiltin) {
+                // Determine if this sub is a closure (captures outer lexical variables).
+                // Closures get closure prototype semantics: MODIFY_CODE_ATTRIBUTES receives
+                // the prototype (non-callable), and the expression result is a callable clone.
+                boolean isClosure = visibleVariables.size() > skipVariables;
+
+                // Stack: [RuntimeScalar(codeRef)]
+                mv.visitInsn(Opcodes.DUP);
+                // Stack: [codeRef, codeRef]
+                mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+                mv.visitInsn(Opcodes.SWAP);
+                // Stack: [codeRef, pkg, codeRef]
+                mv.visitInsn(isClosure ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                // Stack: [codeRef, pkg, codeRef, isClosure]
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/perlmodule/Attributes",
+                        "runtimeDispatchModifyCodeAttributes",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V",
+                        false);
+                // Stack: [codeRef] (codeRef.value now points to clone if isClosure)
             }
         }
 

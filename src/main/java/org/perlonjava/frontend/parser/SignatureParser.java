@@ -164,6 +164,14 @@ public class SignatureParser {
             paramName = consumeToken().text;
         }
 
+        // Register the parameter variable in the symbol table immediately so that
+        // (1) default value expressions for later parameters can reference it, and
+        // (2) the parse-time strict vars check can find it in the sub body.
+        // The scope was entered by SubroutineParser before calling parseSignature().
+        if (paramName != null) {
+            parser.ctx.symbolTable.addVariable(sigil + paramName, "my", null);
+        }
+
         if (paramName != null && paramName.equals("_")) {
             parser.throwError(paramStartIndex, "Can't use global " + sigil + "_ in subroutine signature");
         }

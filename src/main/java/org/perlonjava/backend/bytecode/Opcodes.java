@@ -2124,6 +2124,14 @@ public class Opcodes {
      */
     public static final short ARRAY_SLICE_DELETE_LOCAL = 450;
 
+    // variable attribute dispatch
+    /**
+     * Dispatch MODIFY_*_ATTRIBUTES at runtime for my/state variable declarations.
+     * Format: DISPATCH_VAR_ATTRS var_reg const_idx
+     * const_idx points to Object[] in constant pool: [packageName, sigil, String[] attrs, fileName, lineNum]
+     */
+    public static final short DISPATCH_VAR_ATTRS = 451;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

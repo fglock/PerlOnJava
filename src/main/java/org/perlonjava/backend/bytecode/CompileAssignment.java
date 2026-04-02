@@ -362,6 +362,10 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(persistId);
 
                                 bytecodeCompiler.registerVariable(varName, reg);
+
+                                // Runtime attribute dispatch for state variables with attributes
+                                bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
+
                                 bytecodeCompiler.lastResultReg = reg;
                                 return;
                             }
@@ -375,9 +379,23 @@ public class CompileAssignment {
                             // Now allocate register for new lexical variable and add to symbol table
                             int reg = bytecodeCompiler.addVariable(varName, "my");
 
-                            bytecodeCompiler.emit(Opcodes.MY_SCALAR);
-                            bytecodeCompiler.emitReg(reg);
-                            bytecodeCompiler.emitReg(valueReg);
+                            boolean hasAttrs = leftOp.annotations != null
+                                    && leftOp.annotations.containsKey("attributes");
+                            if (hasAttrs) {
+                                // When attributes are present (e.g., my $x : TieLoop = $i),
+                                // we must create the scalar first, dispatch attributes (which
+                                // may tie the variable), then assign the value so STORE fires.
+                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
+                                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitReg(valueReg);
+                            } else {
+                                bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitReg(valueReg);
+                            }
 
                             bytecodeCompiler.lastResultReg = reg;
                             return;
@@ -431,6 +449,9 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(arrayReg);
                             bytecodeCompiler.emitReg(listReg);
+
+                            // Runtime attribute dispatch for my variables with attributes
+                            bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, arrayReg, "@");
 
                             if (rhsContext == RuntimeContextType.SCALAR) {
                                 int countReg = bytecodeCompiler.allocateRegister();
@@ -489,6 +510,9 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(hashReg);
                             bytecodeCompiler.emitReg(listReg);
+
+                            // Runtime attribute dispatch for my variables with attributes
+                            bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, hashReg, "%");
 
                             bytecodeCompiler.lastResultReg = hashReg;
                             return;

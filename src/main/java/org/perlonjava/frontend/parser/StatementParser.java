@@ -344,28 +344,50 @@ public class StatementParser {
         // Parse the catch block
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        // Suppress strict vars check for the catch variable — catch ($e) implicitly
+        // declares $e as a lexical variable, similar to my $e.
+        boolean savedParsingDeclaration = parser.parsingDeclaration;
+        parser.parsingDeclaration = true;
         Node catchParameter = parser.parseExpression(0); // Parse the exception variable
+        parser.parsingDeclaration = savedParsingDeclaration;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node catchBlock = ParseBlock.parseBlock(parser);
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Parse the optional finally block
-        Node finallyBlock = null;
-        if (TokenUtils.peek(parser).text.equals("finally")) {
-            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "finally"
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            finallyBlock = ParseBlock.parseBlock(parser);
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        // Register the catch variable in a scope so the parse-time strict vars
+        // check can find it inside the catch block body.
+        int catchScopeIndex = -1;
+        if (catchParameter instanceof OperatorNode catchOp
+                && "$@%".contains(catchOp.operator)
+                && catchOp.operand instanceof IdentifierNode catchId) {
+            catchScopeIndex = parser.ctx.symbolTable.enterScope();
+            parser.ctx.symbolTable.addVariable(catchOp.operator + catchId.name, "my", null);
         }
 
-        return new BinaryOperatorNode("->",
-                new SubroutineNode(null, null, null,
-                        new BlockNode(List.of(
+        try {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+            Node catchBlock = ParseBlock.parseBlock(parser);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+            // Parse the optional finally block
+            Node finallyBlock = null;
+            if (TokenUtils.peek(parser).text.equals("finally")) {
+                TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "finally"
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                finallyBlock = ParseBlock.parseBlock(parser);
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            }
+
+            return new BinaryOperatorNode("->",
+                    new SubroutineNode(null, null, null,
+                            new BlockNode(List.of(
                                 new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
                         false, index),
                 atUnderscoreArgs(parser),
                 index);
+        } finally {
+            if (catchScopeIndex >= 0) {
+                parser.ctx.symbolTable.exitScope(catchScopeIndex);
+            }
+        }
     }
 
     /**

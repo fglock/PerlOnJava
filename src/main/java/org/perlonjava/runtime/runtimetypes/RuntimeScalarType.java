@@ -29,7 +29,11 @@ public class RuntimeScalarType {
 
     // Get blessing ID as an integer
     public static int blessedId(RuntimeScalar runtimeScalar) {
-        return (runtimeScalar.type & REFERENCE_BIT) != 0 ? ((RuntimeBase) runtimeScalar.value).blessId : 0;
+        if ((runtimeScalar.type & REFERENCE_BIT) != 0) {
+            if (runtimeScalar.value == null) return 0;
+            return ((RuntimeBase) runtimeScalar.value).blessId;
+        }
+        return 0;
     }
 
     public static boolean isReference(RuntimeScalar runtimeScalar) {

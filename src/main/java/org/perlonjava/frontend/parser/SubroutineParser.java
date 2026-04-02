@@ -536,17 +536,45 @@ public class SubroutineParser {
             }
         }
 
+        // Build display name for attribute warnings
+        String attrSubDisplayName;
+        if (subName != null) {
+            attrSubDisplayName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        } else {
+            attrSubDisplayName = parser.ctx.symbolTable.getCurrentPackage() + "::__ANON__";
+        }
+
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
+        // Track prevAttrPrototype to detect ":prototype(X) : prototype(Y)" across colon-separated calls
+        String prevAttrProto = null;
         while (peek(parser).text.equals(":")) {
-            prototype = consumeAttributes(parser, attributes);
+            String attrPrototype = consumeAttributes(parser, attributes, null, attrSubDisplayName, prevAttrProto);
+            if (attrPrototype != null) {
+                prevAttrProto = attrPrototype; // remember for "discards earlier" warning in next call
+                prototype = attrPrototype;
+            }
+        }
+
+        // Ensure attributes.pm is loaded when attribute syntax is used, so that
+        // attributes::get() is available (Perl 5 implicitly loads attributes.pm)
+        if (!attributes.isEmpty()) {
+            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
         }
 
         ListNode signature = null;
+        // Scope index for signature parameter variables (for strict vars checking).
+        // Entered before parseSignature() so that default value expressions can
+        // reference earlier parameters, and exited after the block body is parsed.
+        int signatureScopeIndex = -1;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek(parser).text.equals("(")) {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signatures feature enabled");
+                // Enter a scope for signature parameter variables so the parse-time
+                // strict vars check can find them.  SignatureParser.parseParameter()
+                // registers each parameter directly in this scope.
+                signatureScopeIndex = parser.ctx.symbolTable.enterScope();
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser, subName);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signature AST: " + signature);
@@ -567,9 +595,33 @@ public class SubroutineParser {
                     }
                 }
 
+                // Emit "Illegal character in prototype" warning for (proto) syntax
+                // For (proto) syntax, Perl uses "?" as the name for anonymous subs
+                {
+                    String protoDisplayName;
+                    if (subName != null) {
+                        protoDisplayName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                    } else {
+                        protoDisplayName = "?";
+                    }
+                    emitIllegalProtoWarning(parser, prototype, protoDisplayName);
+                }
+
+                // Build display name for :prototype() warnings
+                // For :prototype(), Perl uses the full qualified name or __ANON__
+                String subDisplayName;
+                if (subName != null) {
+                    subDisplayName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                } else {
+                    subDisplayName = parser.ctx.symbolTable.getCurrentPackage() + "::__ANON__";
+                }
+
                 // While there are attributes after the prototype (denoted by a colon ':'), we keep parsing them.
                 while (peek(parser).text.equals(":")) {
-                    consumeAttributes(parser, attributes);
+                    String attrPrototype = consumeAttributes(parser, attributes, prototype, subDisplayName);
+                    if (attrPrototype != null) {
+                        prototype = attrPrototype;
+                    }
                 }
             }
         }
@@ -577,9 +629,68 @@ public class SubroutineParser {
         if (wantName && subName != null && !peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-            codeRef.prototype = prototype;
-            codeRef.attributes = attributes;
+            RuntimeScalar codeRefScalar = GlobalVariable.getGlobalCodeRef(fullName);
+            RuntimeCode codeRef = (RuntimeCode) codeRefScalar.value;
+            // Mark as explicitly declared so *{glob}{CODE} returns this code ref
+            codeRef.isDeclared = true;
+
+            // Only set prototype/attributes on a forward declaration if the sub
+            // doesn't already have a body. Perl 5 ignores prototype changes from
+            // forward redeclarations of already-defined subs.
+            boolean hasBody = codeRef.subroutine != null || codeRef.methodHandle != null
+                    || codeRef.compilerSupplier != null;
+            if (!hasBody) {
+                codeRef.prototype = prototype;
+                codeRef.attributes = attributes;
+            } else {
+                // When redeclaring an existing sub with attributes (e.g., sub X : method),
+                // merge the new attributes into the existing ones. This matches Perl's behavior
+                // where `sub X { ... } sub X : method` adds the method attribute to X.
+                if (attributes != null && !attributes.isEmpty()) {
+                    if (codeRef.attributes == null) {
+                        codeRef.attributes = new java.util.ArrayList<>(attributes);
+                    } else {
+                        for (String attr : attributes) {
+                            if (!codeRef.attributes.contains(attr)) {
+                                codeRef.attributes.add(attr);
+                            }
+                        }
+                    }
+                }
+
+                // Emit "Prototype mismatch" warning when redeclaring with different prototype
+                String oldProto = codeRef.prototype;
+                if (prototype != null || oldProto != null) {
+                    String oldDisplay = oldProto == null ? ": none" : " (" + oldProto + ")";
+                    String newDisplay = prototype == null ? "none" : "(" + prototype + ")";
+                    String oldForCompare = oldProto == null ? "none" : "(" + oldProto + ")";
+                    if (!oldForCompare.equals(newDisplay)) {
+                        String location = "";
+                        if (parser.ctx.errorUtil != null) {
+                            int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                            location = " at " + parser.ctx.compilerOptions.fileName + " line " + line + ".\n";
+                        }
+                        String msg = "Prototype mismatch: sub " + fullName + oldDisplay + " vs " + newDisplay + location;
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(""));
+                    }
+                }
+            }
+
+            // Validate attributes on forward declarations too
+            if (attributes != null && !attributes.isEmpty()) {
+                String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
+                // For cross-package declarations like "sub Y::bar : foo", use the
+                // original CV's package (where the code was first compiled), not
+                // the syntactic target package. This matches Perl 5 behavior.
+                if (codeRef.packageName != null) {
+                    packageToUse = codeRef.packageName;
+                } else if (subName.contains("::")) {
+                    packageToUse = subName.substring(0, subName.lastIndexOf("::"));
+                }
+                callModifyCodeAttributes(packageToUse, codeRefScalar, attributes, parser, currentIndex);
+            }
+
             ListNode result = new ListNode(parser.tokenIndex);
             result.setAnnotation("compileTimeOnly", true);
             return result;
@@ -624,6 +735,10 @@ public class SubroutineParser {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
         } finally {
+            // Exit the signature scope if we entered one
+            if (signatureScopeIndex >= 0) {
+                parser.ctx.symbolTable.exitScope(signatureScopeIndex);
+            }
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
@@ -631,6 +746,34 @@ public class SubroutineParser {
     }
 
     static String consumeAttributes(Parser parser, List<String> attributes) {
+        return consumeAttributes(parser, attributes, null, null, null);
+    }
+
+    /**
+     * Parse attributes after a colon. Returns a prototype string if :prototype(...) is found.
+     *
+     * @param parser     The parser
+     * @param attributes List to accumulate parsed attribute strings
+     * @param priorPrototype The prototype set by (proto) syntax, for "overridden" warning (may be null)
+     * @param subDisplayName The sub name for warning messages (may be null for anon subs)
+     * @return The prototype string from :prototype(...), or null if not found
+     */
+    static String consumeAttributes(Parser parser, List<String> attributes, String priorPrototype, String subDisplayName) {
+        return consumeAttributes(parser, attributes, priorPrototype, subDisplayName, null);
+    }
+
+    /**
+     * Parse attributes after a colon. Returns a prototype string if :prototype(...) is found.
+     *
+     * @param parser     The parser
+     * @param attributes List to accumulate parsed attribute strings
+     * @param parenPrototype The prototype from (proto) syntax, for "overridden" warning (may be null)
+     * @param subDisplayName The sub name for warning messages (may be null for anon subs)
+     * @param prevAttrPrototype Prototype from a previous :prototype(...) call, for "discards" warning (may be null)
+     * @return The prototype string from :prototype(...), or null if not found
+     */
+    static String consumeAttributes(Parser parser, List<String> attributes, String parenPrototype,
+                                     String subDisplayName, String prevAttrPrototype) {
         // Consume the colon
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
 
@@ -643,20 +786,81 @@ public class SubroutineParser {
 
         String prototype = null;
 
-        String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
-        if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
-            String argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+        // Loop to handle space-separated attributes after a single colon
+        // e.g., `: locked method` parses both `locked` and `method`
+        while (peek(parser).type == LexerTokenType.IDENTIFIER) {
+            String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
+            if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
+                String argString;
+                try {
+                    // Parse the parenthesized parameter using raw string parsing.
+                    // Unlike q(), Perl's attribute parameter parsing preserves backslashes:
+                    // :Foo(\() gives parameter \( not ( — backslash is kept literally.
+                    StringParser.ParsedString rawStr = StringParser.parseRawStrings(
+                            parser, parser.ctx, parser.tokens, parser.tokenIndex, 1);
+                    parser.tokenIndex = rawStr.next;
+                    argString = rawStr.buffers.getFirst();
+                } catch (PerlCompilerException e) {
+                    // Rethrow with Perl-compatible message for unterminated parens
+                    if (e.getMessage() != null && e.getMessage().contains("Can't find string terminator")) {
+                        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                        throw new PerlCompilerException(
+                                "Unterminated attribute parameter in attribute list" + loc + ".\n");
+                    }
+                    throw e;
+                }
 
-            if (attrString.equals("prototype")) {
-                //  :prototype($)
-                prototype = argString;
+                if (attrString.equals("prototype")) {
+                    //  :prototype($)
+                    // Validate prototype characters first (Perl emits this before "overridden")
+                    emitIllegalProtoWarning(parser, argString, subDisplayName);
+                    // Emit "Prototype overridden" warning if prior prototype was set from (proto) syntax
+                    if (parenPrototype != null && subDisplayName != null) {
+                        String msg = "Prototype '" + parenPrototype + "' overridden by attribute 'prototype("
+                                + argString + ")' in " + subDisplayName;
+                        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(loc));
+                    }
+                    // Emit "discards earlier prototype" warning if :prototype was already set
+                    // (either in this same call or from a previous :prototype() call)
+                    String existingAttrProto = prototype != null ? prototype : prevAttrPrototype;
+                    if (existingAttrProto != null && subDisplayName != null) {
+                        String msg = "Attribute prototype(" + argString
+                                + ") discards earlier prototype attribute in same sub";
+                        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                        org.perlonjava.runtime.operators.WarnDie.warn(
+                                new RuntimeScalar(msg), new RuntimeScalar(loc));
+                    }
+                    prototype = argString;
+                }
+
+                attrString += "(" + argString + ")";
             }
 
-            attrString += "(" + argString + ")";
+            // Consume the attribute name (an identifier) and add it to the attributes list.
+            attributes.add(attrString);
         }
 
-        // Consume the attribute name (an identifier) and add it to the attributes list.
-        attributes.add(attrString);
+        // Check for invalid separator characters after attributes
+        // Valid separators are: colon (:), semicolon (;), opening/closing brace ({, }), assignment (=), EOF
+        if (!attributes.isEmpty()) {
+            LexerToken nextToken = peek(parser);
+            if (nextToken.type == LexerTokenType.OPERATOR) {
+                String t = nextToken.text;
+                if (!t.equals(":") && !t.equals(";") && !t.equals("{") && !t.equals("}") && !t.equals("=")
+                        && !t.equals("(") && !t.equals(",") && !t.equals(")")
+                        && !t.equals("$") && !t.equals("@") && !t.equals("%")) {
+                    // Check for :: (double colon is invalid separator in attr list)
+                    if (t.equals("::") || (t.length() == 1 && !Character.isWhitespace(t.charAt(0)))) {
+                        throw new PerlCompilerException(parser.tokenIndex,
+                                "Invalid separator character '" + t.charAt(0) + "' in attribute list",
+                                parser.ctx.errorUtil);
+                    }
+                }
+            }
+        }
+
         return prototype;
     }
 
@@ -803,6 +1007,11 @@ public class SubroutineParser {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
         }
+        // Mark as explicitly declared so *{glob}{CODE} returns this code ref.
+        // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
+        if (codeRef.value instanceof RuntimeCode declaredCode) {
+            declaredCode.isDeclared = true;
+        }
 
         // Register subroutine location for %DB::sub (only in debug mode)
         if (DebugState.debugMode && parser.ctx.errorUtil != null && block != null) {
@@ -815,15 +1024,35 @@ public class SubroutineParser {
         // Initialize placeholder metadata (accessed via codeRef.value)
         RuntimeCode placeholder = (RuntimeCode) codeRef.value;
         placeholder.prototype = prototype;
-        placeholder.attributes = attributes;
+        // Preserve existing attributes from forward declarations when the new definition
+        // doesn't specify attributes. In Perl, `sub PS : lvalue; sub PS { }` preserves
+        // the lvalue attribute. Only overwrite if the new definition specifies attributes.
+        if (attributes != null && !attributes.isEmpty()) {
+            placeholder.attributes = attributes;
+        } else if (placeholder.attributes == null) {
+            placeholder.attributes = attributes;
+        }
+        // else: preserve existing attributes (e.g., from forward declaration)
         placeholder.subName = subName;
-        placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
 
         // Call MODIFY_CODE_ATTRIBUTES if attributes are present
-        // In Perl, this is called at compile time after the sub is defined
+        // In Perl, this is called at compile time after the sub is defined.
+        // The dispatch package is the CvSTASH of the existing code ref (if any),
+        // not the current package. E.g., *Y::bar = \&X::foo; sub Y::bar : attr
+        // dispatches X::MODIFY_CODE_ATTRIBUTES because the code ref's stash is X.
         if (attributes != null && !attributes.isEmpty()) {
-            callModifyCodeAttributes(packageToUse, codeRef, attributes, parser);
+            String attrPackage = (placeholder.packageName != null && !placeholder.packageName.isEmpty())
+                    ? placeholder.packageName
+                    : packageToUse;
+            callModifyCodeAttributes(attrPackage, codeRef, attributes, parser, block.tokenIndex);
         }
+
+        // Set packageName from the sub's fully-qualified name (CvSTASH equivalent).
+        // For `sub X::foo { }` in package main, packageName should be "X", not "main".
+        int lastSep = fullName.lastIndexOf("::");
+        placeholder.packageName = lastSep >= 0
+                ? fullName.substring(0, lastSep)
+                : parser.ctx.symbolTable.getCurrentPackage();
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
@@ -1042,9 +1271,34 @@ public class SubroutineParser {
      * the package's MODIFY_CODE_ATTRIBUTES method is called at compile time with
      * ($package, \&code, @attributes). If it returns any values, those are
      * unrecognized attributes and an error is thrown.
+     *
+     * If no MODIFY_CODE_ATTRIBUTES handler exists, non-built-in attributes
+     * are rejected with an error.
      */
     private static void callModifyCodeAttributes(String packageName, RuntimeScalar codeRef,
-                                                  List<String> attributes, Parser parser) {
+                                                  List<String> attributes, Parser parser,
+                                                  int declTokenIndex) {
+        // Built-in CODE attributes that are always recognized
+        java.util.Set<String> builtinAttrs = java.util.Set.of("lvalue", "method", "const");
+
+        // Filter out built-in and prototype(...) attributes — these are always valid
+        List<String> nonBuiltinAttrs = new java.util.ArrayList<>();
+        for (String attr : attributes) {
+            String name = attr;
+            if (name.startsWith("-")) name = name.substring(1);
+            // Strip (args) for matching
+            int parenIdx = name.indexOf('(');
+            String baseName = parenIdx >= 0 ? name.substring(0, parenIdx) : name;
+            if (!builtinAttrs.contains(baseName) && !baseName.equals("prototype")) {
+                nonBuiltinAttrs.add(attr);
+            }
+        }
+
+        // If all attributes are built-in, nothing more to check
+        if (nonBuiltinAttrs.isEmpty()) {
+            return;
+        }
+
         // Check if the package has MODIFY_CODE_ATTRIBUTES
         RuntimeArray canArgs = new RuntimeArray();
         RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
@@ -1058,33 +1312,73 @@ public class SubroutineParser {
             InheritanceResolver.autoloadEnabled = true;
         }
 
-        if (codeList.size() == 1) {
-            RuntimeScalar method = codeList.getFirst();
-            if (method.getBoolean()) {
-                // Build args: ($package, \&code, @attributes)
-                RuntimeArray callArgs = new RuntimeArray();
-                RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
-                RuntimeArray.push(callArgs, codeRef);
-                for (String attr : attributes) {
-                    RuntimeArray.push(callArgs, new RuntimeScalar(attr));
-                }
+        boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
 
+        if (hasHandler) {
+            RuntimeScalar method = codeList.getFirst();
+            // Build args: ($package, \&code, @attributes)
+            RuntimeArray callArgs = new RuntimeArray();
+            RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
+            RuntimeArray.push(callArgs, codeRef);
+            for (String attr : nonBuiltinAttrs) {
+                RuntimeArray.push(callArgs, new RuntimeScalar(attr));
+            }
+
+            // Push caller frames so that Attribute::Handlers can find the source file/line
+            // via `caller 2`. Frame 0 = the MODIFY handler, frame 1 = attributes dispatch,
+            // frame 2 = the original source location where the attribute was declared.
+            String fileName = parser.ctx.compilerOptions.fileName;
+            int lineNum = parser.ctx.errorUtil != null
+                    ? parser.ctx.errorUtil.getLineNumber(declTokenIndex) : 0;
+            CallerStack.push(packageName, fileName, lineNum);
+            CallerStack.push(packageName, fileName, lineNum);
+            try {
                 RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
 
                 // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized attributes
                 RuntimeArray resultArray = result.getArrayOfAlias();
                 if (resultArray.size() > 0) {
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < resultArray.size(); i++) {
-                        if (i > 0) sb.append(", ");
-                        sb.append("\"").append(resultArray.get(i).toString()).append("\"");
-                    }
-                    throw new PerlCompilerException(parser.tokenIndex,
-                            "Invalid CODE attribute" + (resultArray.size() > 1 ? "s" : "") + ": " + sb,
-                            parser.ctx.errorUtil);
+                    throwInvalidAttributeError("CODE", resultArray, parser);
                 }
+            } finally {
+                CallerStack.pop();
+                CallerStack.pop();
             }
+        } else {
+            // No MODIFY_CODE_ATTRIBUTES handler — all non-built-in attributes are invalid
+            throwInvalidAttributeError("CODE", nonBuiltinAttrs, parser);
         }
+    }
+
+    static void throwInvalidAttributeError(String type, RuntimeArray attrs, Parser parser) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < attrs.size(); i++) {
+            if (i > 0) sb.append(" : ");
+            sb.append(attrs.get(i).toString());
+        }
+        String attrMsg = "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb;
+        if (!type.equals("CODE")) {
+            // Variable attributes (SCALAR, ARRAY, HASH) use Perl's "use attributes" style error format:
+            // "Invalid TYPE attribute: Name at FILE line LINE.\nBEGIN failed--compilation aborted at FILE line LINE.\n"
+            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+            throw new PerlCompilerException(attrMsg + loc + ".\nBEGIN failed--compilation aborted" + loc + ".\n");
+        }
+        throw new PerlCompilerException(parser.tokenIndex, attrMsg, parser.ctx.errorUtil);
+    }
+
+    static void throwInvalidAttributeError(String type, List<String> attrs, Parser parser) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < attrs.size(); i++) {
+            if (i > 0) sb.append(" : ");
+            sb.append(attrs.get(i));
+        }
+        String attrMsg = "Invalid " + type + " attribute" + (attrs.size() > 1 ? "s" : "") + ": " + sb;
+        if (!type.equals("CODE")) {
+            // Variable attributes (SCALAR, ARRAY, HASH) use Perl's "use attributes" style error format
+            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+            throw new PerlCompilerException(attrMsg + loc + ".\nBEGIN failed--compilation aborted" + loc + ".\n");
+        }
+        throw new PerlCompilerException(parser.tokenIndex, attrMsg, parser.ctx.errorUtil);
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
@@ -1100,4 +1394,30 @@ public class SubroutineParser {
         return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
     }
 
+    /**
+     * Validates prototype characters and emits "Illegal character in prototype" warnings.
+     * Valid prototype characters: $ @ % & * ; + \ [ ] _
+     *
+     * @param parser The parser (for location info)
+     * @param proto  The prototype string to validate
+     * @param subDisplayName The sub name for the warning message (may be null)
+     */
+    static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
+        if (proto == null || proto.isEmpty()) return;
+        // Check if any character is illegal
+        boolean hasIllegal = false;
+        for (int i = 0; i < proto.length(); i++) {
+            char c = proto.charAt(i);
+            if ("$@%&*;+\\[]_ ".indexOf(c) < 0) {
+                hasIllegal = true;
+                break;
+            }
+        }
+        if (hasIllegal) {
+            String name = subDisplayName != null ? subDisplayName : "?";
+            String msg = "Illegal character in prototype for " + name + " : " + proto;
+            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+            Warnings.warnWithCategory("illegalproto", msg, loc);
+        }
+    }
 }

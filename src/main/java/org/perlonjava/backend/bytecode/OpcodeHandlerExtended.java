@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.operators.*;
+import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -890,6 +891,13 @@ public class OpcodeHandlerExtended {
         RuntimeScalar codeRef = new RuntimeScalar(closureCode);
         closureCode.__SUB__ = codeRef;
         registers[rd] = codeRef;
+
+        // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
+        // Pass isClosure=true since CREATE_CLOSURE always creates a closure
+        if (closureCode.attributes != null && !closureCode.attributes.isEmpty()
+                && closureCode.packageName != null) {
+            Attributes.runtimeDispatchModifyCodeAttributes(closureCode.packageName, codeRef, true);
+        }
         return pc;
     }
 

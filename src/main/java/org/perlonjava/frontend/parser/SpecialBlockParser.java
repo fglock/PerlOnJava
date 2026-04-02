@@ -53,14 +53,22 @@ public class SpecialBlockParser {
 
         // ADJUST blocks have implicit $self, so set isInMethod flag
         boolean wasInMethod = parser.isInMethod;
+        int adjustScopeIndex = -1;
         if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
             parser.isInMethod = true;
+            // Register $self in a scope so the parse-time strict vars check
+            // can find it inside ADJUST block bodies.
+            adjustScopeIndex = parser.ctx.symbolTable.enterScope();
+            parser.ctx.symbolTable.addVariable("$self", "my", null);
         }
 
         // Parse the block content
         BlockNode block = ParseBlock.parseBlock(parser);
 
-        // Restore the isInMethod flag
+        // Restore the isInMethod flag and exit ADJUST scope
+        if (adjustScopeIndex >= 0) {
+            parser.ctx.symbolTable.exitScope(adjustScopeIndex);
+        }
         parser.isInMethod = wasInMethod;
 
         // Consume the closing brace '}'
