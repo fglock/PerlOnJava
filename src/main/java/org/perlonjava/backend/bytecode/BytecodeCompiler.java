@@ -1071,11 +1071,12 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emitInt(intValue);
             } else if (isLargeInteger) {
-                // Large integer - store as string to preserve precision (32-bit Perl emulation)
-                int strIdx = addToStringPool(value);
-                emit(Opcodes.LOAD_STRING);
+                // Large integer - store as double to match Perl 5 IV-to-NV promotion
+                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
+                int constIdx = addToConstantPool(doubleScalar);
+                emit(Opcodes.LOAD_CONST);
                 emitReg(rd);
-                emit(strIdx);
+                emit(constIdx);
             } else {
                 // Floating-point number - create RuntimeScalar with double value
                 RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));

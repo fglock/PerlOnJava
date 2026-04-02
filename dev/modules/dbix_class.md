@@ -567,14 +567,14 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | Context-Preserve | **100%** | 14/14 | None |
 | namespace-clean | **99.4%** | 2086/2099 | Stash symbol deletion edge cases |
 | Hash-Merge | **99.4%** | 845/850 | GC/weaken |
-| SQL-Abstract-Classic | **98.5%** | 1210/1228 | Overload fallback detection (17), IS NULL (1) |
+| SQL-Abstract-Classic | **100%** | 1311/1311 | None |
 | Class-Accessor-Grouped | **97.8%** | 543/555 | GC/weaken |
 | Moo | **97.3%** | 816/839 | weaken, DEMOLISH, `no Moo` cleanup |
-| MRO-Compat | **84.6%** | 22/26 | `mro::get_isarev` / `pkg_gen` missing |
-| Sub-Quote | **77.0%** | 137/178 | `%^H` hints preservation through eval |
+| MRO-Compat | **100%** | 26/26 | None |
+| Sub-Quote | **98.6%** | 2716/2755 | GC/weaken (27), hints propagation (5), line directives (3), Sub::Name (2), hints hash (1), use integer (2) |
 | Config-Any | ~80-90% | 58/113 (runner artifact) | Passes individually; parallel runner issue |
 
-**Aggregate: 97.6%** (5,773/5,918 across all dependency modules)
+**Aggregate: 99.3%** (8,379/8,435 across all dependency modules)
 
 ### Implementation Plan (Phase 5 continued)
 
@@ -594,13 +594,18 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | 5.42 | SQL condition / Storable sort order | 10 | ✅ Done — binary Storable serializer matching Perl 5 |
 | 5.43 | Custom opaque relationship SQL | 2 | ✅ Done — fixed PerlOnJava autovivification bug |
 
-#### Tier 3 — Dependency Module Fixes
+#### Tier 3+ — Dependency Module Fixes
 
 | Step | What | Tests Fixed | Status |
 |------|------|------------|--------|
-| 5.44 | Nested ref-of-ref detection (`ref()` chain) | 4 (SQL-Abstract) | ✅ Done |
-| 5.45 | `caller()` hints: `$^H` and `%^H` return values | ~5 (Sub-Quote) | Pending |
-| 5.46 | `mro::get_isarev` dynamic scan + `pkg_gen` auto-increment | 4 (MRO-Compat) | Pending |
+| 5.44 | Nested ref-of-ref detection (`ref()` chain) | 4 (SQL-Abstract) | Done |
+| 5.45 | `caller()` hints: `$^H` and `%^H` return values | 53 (Sub-Quote) | Done |
+| 5.46 | `mro::get_isarev` dynamic scan + `pkg_gen` auto-increment | 4 (MRO-Compat) | Done |
+| 5.47 | BytecodeCompiler sub-compiler pragma inheritance | 2 (Sub-Quote) | Done |
+| 5.48 | `warn()` returns 1 (was undef) | 1 (SQL-Abstract IS NULL) | Done |
+| 5.49 | Overload fallback semantics and autogeneration | 17 (SQL-Abstract overload) | Done |
+| 5.50 | B.pm SV flags rewrite (IOK/NOK/POK) | quotify.t countable | Done |
+| 5.51 | Large integer literals stored as DOUBLE not STRING | 6 (quotify.t) | Done |
 
 #### Systemic — Not planned for short-term
 
@@ -610,7 +615,7 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 
 ### Progress Tracking
 
-#### Current Status: Tier 3 in progress
+#### Current Status: Tier 3+ complete (steps 5.44-5.51)
 
 #### Key Test Results (2026-04-02)
 
@@ -652,16 +657,77 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
   in Perl 5 ≥ 5.17, but PerlOnJava's overload doesn't support this derivation),
   1 in `t/02where.t` (`{like => undef}` generates `requestor NULL` instead of `IS NULL`)
 
+**Step 5.45 (2026-04-02):**
+- Implemented `caller()[8]` ($^H hints) and `caller()[10]` (%^H hint hash) return values
+- Created parallel infrastructure to existing `callerBitsStack`: `callSiteHints`,
+  `callerHintsStack`, `callSiteHintHash`, `callerHintHashStack` in `WarningBitsRegistry.java`
+- Wired emission in `EmitCompilerFlag.java` and `BytecodeCompiler.java`
+- Updated `RuntimeCode.java` to read hints at caller frames and push/pop at all 3 apply() sites
+- Updated `PerlLanguageProvider.java` for BEGIN block hints propagation
+- Sub-Quote improved from 137/178 to 188/237 (different test count due to hints.t newly countable)
+
+**Step 5.46 (2026-04-02):**
+- Fixed `mro::get_isarev` to dynamically scan all @ISA arrays instead of hardcoded class names
+- Implemented `GlobalVariable.getAllIsaArrays()` (was empty stub)
+- Made `Mro.incrementPackageGeneration()` public; called from `RuntimeGlob.java` on CODE assignment
+- Added lazy @ISA change detection in `get_pkg_gen()` via `pkgGenIsaState` map
+- Files changed: `GlobalVariable.java`, `Mro.java`, `RuntimeGlob.java`
+- MRO-Compat now 26/26 (was 22/26) — 100%
+
+**Step 5.47 (2026-04-02):**
+- Fixed BytecodeCompiler sub-compiler not inheriting pragma flags (strict/warnings/features)
+- Root cause: Sub::Quote generates `sub { BEGIN { $^H = 1538; } ... }` in eval STRING;
+  the sub-compiler created for the sub body didn't inherit the parent's pragma state
+- Added `getEffectiveSymbolTable()` helper with fallback to `this.symbolTable` when
+  `emitterContext` is null. Updated 5 pragma check methods to use it.
+- Added `inheritPragmaFlags()` method called in both named and anonymous sub compilation
+- Sub-Quote hints.t improved from 11/18 to 13/18; overall Sub-Quote: 190/237 (was 188/237)
+
+**Step 5.48 (2026-04-02):**
+- Fixed `warn()` return value — Perl 5 `warn()` always returns 1; PerlOnJava returned undef
+- Root cause: `WarnDie.java` line 199 returned `new RuntimeScalar()` (undef) instead of `new RuntimeScalar(1)`
+- Impact: SQL-Abstract-Classic `{like => undef}` generated `requestor NULL` instead of `requestor IS NULL`
+  because `$self->belch(...) && 'is'` short-circuited on falsy return from warn/belch
+- Files changed: `WarnDie.java`
+
+**Step 5.49 (2026-04-02):**
+- Fixed overload fallback semantics and autogeneration
+- Bug A: `tryOverloadFallback()` returned null when no `()` glob existed, blocking autogeneration.
+  Perl 5 says: no fallback specified → allow autogeneration
+- Bug B: `prepare()` was CALLING the `()` method (which is `\&overload::nil`, returns undef)
+  instead of READING the SCALAR slot `${"Class::()"}` which holds the actual fallback value
+- Rewrote `OverloadContext.prepare()` to walk hierarchy and read SCALAR slot
+- Rewrote `tryOverloadFallback()` with correct 3-state semantics (undef/0/1)
+- Added `tryTwoArgumentOverload()` with autogeneration varargs for compound ops
+- Updated all 10 compound assignment methods in `MathOperators.java` to pass base operator
+- Files changed: `OverloadContext.java`, `MathOperators.java`
+
+**Step 5.50 (2026-04-02):**
+- Rewrote B.pm SV flags for proper integer/float/string distinction
+- Updated SV flag constants to standard Perl 5 values (SVf_IOK=0x100, SVf_NOK=0x200,
+  SVf_POK=0x400, SVp_IOK=0x1000, SVp_NOK=0x2000, SVp_POK=0x4000)
+- Rewrote `FLAGS()` method to use `builtin::created_as_number()` for proper type detection
+- Added export functions for all new constants
+- Files changed: `B.pm`
+
+**Step 5.51 (2026-04-02):**
+- Fixed large integer literals (>= 2^31) stored as STRING instead of DOUBLE
+- In Perl 5, integers that overflow IV are promoted to NV (double), not PV (string)
+- JVM emitter (`EmitLiteral.java`): changed `isLargeInteger` boxed branch from
+  `new RuntimeScalar(String)` to `new RuntimeScalar(double)`
+- Bytecode interpreter (`BytecodeCompiler.java`): changed from `LOAD_STRING` to
+  `LOAD_CONST` with double-valued `RuntimeScalar`
+- Impact: quotify.t goes from 2586/2592 to 2592/2592 (6 large-integer tests fixed)
+- Files changed: `EmitLiteral.java`, `BytecodeCompiler.java`
+
 ### Next Steps
-1. Step 5.45: Fix `caller()[8]` ($^H) and `caller()[10]` (%^H) to return actual values — fixes Sub-Quote hints preservation
-2. Step 5.46: Fix `mro::get_isarev` dynamic scan + `mro::get_pkg_gen` auto-increment — fixes MRO-Compat
-3. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-4. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
+1. Investigate remaining Sub-Quote failures: warning bits propagation, `use integer` overload in eval'd subs
+2. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+3. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
 - RowParser crash: is it safe to ignore since all real tests pass before it fires?
-- Multi-create FK: is this a `last_insert_id` issue or a `new_related` insert ordering issue?
 
 ## Related Documents
 

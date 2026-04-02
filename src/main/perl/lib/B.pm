@@ -20,7 +20,7 @@ our $VERSION = '1.88';
 
 # Export functionality
 use Exporter 'import';
-our @EXPORT_OK = qw(svref_2object perlstring CVf_ANON SVf_IOK SVf_POK);
+our @EXPORT_OK = qw(svref_2object perlstring CVf_ANON SVf_IOK SVf_NOK SVf_POK SVp_IOK SVp_NOK SVp_POK);
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
@@ -28,10 +28,14 @@ our %EXPORT_TAGS = (
 # Flag indicating this is a stub implementation with limited introspection
 our $INCOMPLETE = 1;
 
-# SV flags (very partial)
+# SV flags - using standard Perl 5 values
 use constant {
-    SVf_IOK => 0x0001,
-    SVf_POK => 0x0002,
+    SVf_IOK => 0x00000100,
+    SVf_NOK => 0x00000200,
+    SVf_POK => 0x00000400,
+    SVp_IOK => 0x00001000,
+    SVp_NOK => 0x00002000,
+    SVp_POK => 0x00004000,
 };
 
 # CV flags
@@ -59,17 +63,37 @@ package B::SV {
         my $self = shift;
         my $r = $self->{ref};
 
-        # For the debugger source arrays (@{"_<..."}), perl stores lines as PVIV with IOK.
-        # This stub implementation marks any defined, non-empty scalar as having IOK.
-        # Also mark strings with SVf_POK for CPAN::Meta::YAML compatibility.
         if (ref($r) eq 'SCALAR') {
             my $v = $$r;
             my $flags = 0;
-            if (defined($v) && length($v)) {
-                $flags |= B::SVf_IOK();
-                # If the value is a string (not purely numeric), set POK
-                $flags |= B::SVf_POK() unless Scalar::Util::looks_like_number($v);
+
+            return 0 unless defined $v;
+
+            # Use builtin introspection to determine creation type
+            no warnings 'experimental::builtin';
+
+            if (builtin::created_as_number($v)) {
+                # Value was originally created as a number
+                # Determine integer vs float
+                no warnings 'numeric';
+                if ($v == $v) {  # not NaN
+                    # Check if it's an integer (no fractional part)
+                    # Use int() comparison; Inf fails this check (good, it's NOK)
+                    my $is_int = ($v == int($v)) && $v != 9**9**9 && $v != -9**9**9;
+                    if ($is_int) {
+                        $flags |= B::SVf_IOK() | B::SVp_IOK();
+                    } else {
+                        $flags |= B::SVf_NOK() | B::SVp_NOK();
+                    }
+                } else {
+                    # NaN
+                    $flags |= B::SVf_NOK() | B::SVp_NOK();
+                }
+            } elsif (length($v)) {
+                # Value was created as a string (or is non-empty)
+                $flags |= B::SVf_POK() | B::SVp_POK();
             }
+
             return $flags;
         }
 
@@ -230,10 +254,22 @@ sub svref_2object {
 sub CVf_ANON() { return 0x0004; }
 
 # Export SVf_IOK as a function
-sub SVf_IOK() { return 0x0001; }
+sub SVf_IOK() { return 0x00000100; }
+
+# Export SVf_NOK as a function
+sub SVf_NOK() { return 0x00000200; }
 
 # Export SVf_POK as a function
-sub SVf_POK() { return 0x0002; }
+sub SVf_POK() { return 0x00000400; }
+
+# Export SVp_IOK as a function
+sub SVp_IOK() { return 0x00001000; }
+
+# Export SVp_NOK as a function
+sub SVp_NOK() { return 0x00002000; }
+
+# Export SVp_POK as a function
+sub SVp_POK() { return 0x00004000; }
 
 # Convert a string to its Perl source representation
 # This is used by modules like Specio for code generation

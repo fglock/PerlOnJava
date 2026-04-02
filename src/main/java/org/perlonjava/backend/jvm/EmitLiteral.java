@@ -443,15 +443,15 @@ public class EmitLiteral {
                         "getScalarInt",
                         "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (isLargeInteger) {
-                // Store large integers as strings to preserve precision
-                // This emulates 32-bit Perl behavior
-                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit large integer as string");
+                // Store large integers as doubles - matches Perl 5 behavior where
+                // integers that overflow IV are promoted to NV (double), not PV (string)
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit large integer as double");
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(value);
+                mv.visitLdcInsn(Double.valueOf(value));
                 mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "<init>", "(Ljava/lang/String;)V", false);
+                        "<init>", "(D)V", false);
             } else {
                 // Create new RuntimeScalar for floating-point values
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
@@ -466,8 +466,7 @@ public class EmitLiteral {
             if (isInteger) {
                 mv.visitLdcInsn(Integer.parseInt(value));
             } else if (isLargeInteger) {
-                // For large integers in unboxed context, we have to convert to double
-                // but this will lose precision - same as 32-bit Perl
+                // Large integers promoted to double - matches Perl 5 IV-to-NV promotion
                 mv.visitLdcInsn(Double.parseDouble(value));
             } else {
                 mv.visitLdcInsn(Double.parseDouble(value));
