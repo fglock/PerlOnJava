@@ -170,9 +170,14 @@ public class Version extends PerlModuleBase {
             // Count the number of dots
             long dotCount = version.chars().filter(ch -> ch == '.').count();
 
-            // If exactly one dot and short, prepend "v" for internal processing
-            // but keep the original for stringify() and qv flag
-            if (dotCount == 1 && version.length() < 4) {
+            if (dotCount >= 2) {
+                // Two or more dots means dotted-decimal format (e.g., "0.1.2", "1.2.3")
+                // Perl 5 treats these as v-strings with is_qv=true
+                isVString = true;
+                version = "v" + version;
+            } else if (dotCount == 1 && version.length() < 4) {
+                // If exactly one dot and short, prepend "v" for internal processing
+                // but keep the original for stringify() and qv flag
                 version = "v" + version;
                 // Note: originalVersionStr stays as the user's input (e.g., "1.0")
                 // Note: isVString remains false - this is a decimal version

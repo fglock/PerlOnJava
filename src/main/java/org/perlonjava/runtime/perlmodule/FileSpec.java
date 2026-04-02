@@ -78,16 +78,37 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for canonpath() method");
         }
         String path = args.get(1).toString();
-        String quotedSeparator = Matcher.quoteReplacement(File.separator);
-        String canonPath = path.replaceAll("[/\\\\]+", quotedSeparator)
-                .replaceAll(Pattern.quote(File.separator) + "\\." + Pattern.quote(File.separator), quotedSeparator);
+        // Implement Perl 5's File::Spec::Unix::canonpath logic:
+        // 1. Collapse multiple slashes into one
+        // 2. Collapse /./  and also /. at end of string
+        // 3. Remove leading ./  (unless path is exactly "./")
+        // 4. Remove trailing /  (unless path is exactly "/")
+        String sep = File.separator;
+        String quotedSep = Pattern.quote(sep);
+        String replSep = Matcher.quoteReplacement(sep);
         
-        // Remove leading ./ unless the path is exactly "./"
-        // This matches Perl's File::Spec::Unix behavior
-        if (!canonPath.equals("." + File.separator)) {
-            while (canonPath.startsWith("." + File.separator)) {
-                canonPath = canonPath.substring(2);
+        // Collapse multiple separators into one
+        String canonPath = path.replaceAll("[/\\\\]+", replSep);
+        
+        // Collapse /./ and /. at end: (?:/\.)+(?:/|$) -> /
+        // This handles both /./bar -> /bar and foo/. -> foo
+        canonPath = canonPath.replaceAll("(?:" + quotedSep + "\\.)+(?=" + quotedSep + "|$)", "");
+        
+        // Remove leading ./ unless the path is exactly "./" or "."
+        if (!canonPath.equals("." + sep) && !canonPath.equals(".")) {
+            while (canonPath.startsWith("." + sep)) {
+                canonPath = canonPath.substring(1 + sep.length());
             }
+        }
+        
+        // Remove trailing / unless the path is exactly "/"
+        if (!canonPath.equals(sep) && canonPath.endsWith(sep)) {
+            canonPath = canonPath.substring(0, canonPath.length() - sep.length());
+        }
+        
+        // If we ended up with empty string, return "."
+        if (canonPath.isEmpty()) {
+            canonPath = ".";
         }
         
         return new RuntimeScalar(canonPath).getList();

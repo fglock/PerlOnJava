@@ -239,16 +239,26 @@ $os_name =~ s/\s+/_/g;
     installsitearch => $user_home . '/.perlonjava/lib',
     installsitebin => $user_home . '/.perlonjava/bin',
     installsitescript => $user_home . '/.perlonjava/bin',
-    installsiteman1dir => '',
-    installsiteman3dir => '',
+    installsiteman1dir => $user_home . '/.perlonjava/man/man1',
+    installsiteman3dir => $user_home . '/.perlonjava/man/man3',
     
     # Core installation paths (read-only, in JAR)
     installprivlib => 'jar:PERL5LIB',
     installarchlib => 'jar:PERL5LIB',
     installbin => 'jar:PERL5BIN',
     installscript => 'jar:PERL5BIN',
-    installman1dir => '',
-    installman3dir => '',
+    installman1dir => $user_home . '/.perlonjava/man/man1',
+    installman3dir => $user_home . '/.perlonjava/man/man3',
+
+    # Man page directories
+    man1dir => $user_home . '/.perlonjava/man/man1',
+    man3dir => $user_home . '/.perlonjava/man/man3',
+    man1direxp => $user_home . '/.perlonjava/man/man1',
+    man3direxp => $user_home . '/.perlonjava/man/man3',
+    siteman1dir => $user_home . '/.perlonjava/man/man1',
+    siteman3dir => $user_home . '/.perlonjava/man/man3',
+    siteman1direxp => $user_home . '/.perlonjava/man/man1',
+    siteman3direxp => $user_home . '/.perlonjava/man/man3',
 
     # Man page section suffixes
     man1ext => '1',

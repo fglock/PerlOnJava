@@ -45,12 +45,20 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         // Save the current global reference
         var originalVariable = GlobalVariable.globalVariables.get(fullName);
 
-        // System.out.println("Saving state for " + fullName + " with value " + value + " put " + originalVariable.hashCode());
-
         localizedStack.push(new SavedGlobalState(fullName, originalVariable));
 
         // Replace this variable in the global symbol table with the new one
         GlobalVariable.globalVariables.put(fullName, newLocal);
+
+        // Also update all glob aliases to point to the new local variable.
+        // This implements Perl 5 semantics where after `*verbose = *Verbose`,
+        // `local $verbose = 1` also affects `$Verbose`.
+        java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
+        for (String alias : aliasGroup) {
+            if (!alias.equals(fullName)) {
+                GlobalVariable.globalVariables.put(alias, newLocal);
+            }
+        }
     }
 
     @Override
@@ -60,10 +68,16 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
 
-                // System.out.println("Restoring state for " + saved.fullName + " put back " + saved.originalVariable.hashCode());
-
                 // Restore the original variable in the global symbol table
                 GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);
+
+                // Also restore all glob aliases to the original shared variable
+                java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
+                for (String alias : aliasGroup) {
+                    if (!alias.equals(saved.fullName)) {
+                        GlobalVariable.globalVariables.put(alias, saved.originalVariable);
+                    }
+                }
             }
         }
     }
