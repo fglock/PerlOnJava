@@ -114,6 +114,9 @@ PERL_PARAMS_UTIL_PP=1 ./jcpan -t Class::Load
 - [xs_fallback.md](xs_fallback.md) - XS fallback mechanism
 - [pure-perl-exporter.md](pure-perl-exporter.md) - Pure Perl Exporter
 
+### CPAN Compatibility
+- [cpan_patch_plan.md](cpan_patch_plan.md) - Strategy for patching CPAN modules for JVM compatibility
+
 ### Specific Modules
 - [moose_support.md](moose_support.md) - Moose support (in progress)
 - [moo_support.md](moo_support.md) - Moo support (working)
