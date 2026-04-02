@@ -1059,6 +1059,12 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("DEFINED r").append(rd).append(" = defined(r").append(rs).append(")\n");
                         break;
+                    case Opcodes.DEFINED_CODE:
+                        rd = interpretedCode.bytecode[pc++];
+                        int definedCodeNameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DEFINED_CODE r").append(rd).append(" = defined(&")
+                          .append(interpretedCode.stringPool[definedCodeNameIdx]).append(")\n");
+                        break;
                     case Opcodes.DEFINED_GLOB:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

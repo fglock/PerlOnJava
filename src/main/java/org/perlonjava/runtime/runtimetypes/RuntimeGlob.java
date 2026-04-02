@@ -187,7 +187,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case TIED_SCALAR:
                 return set(value.tiedFetch());
             case CODE:
-                GlobalVariable.getGlobalCodeRef(this.globName).set(value);
+                GlobalVariable.defineGlobalCodeRef(this.globName).set(value);
 
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
@@ -204,6 +204,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // *STDOUT = $new_handle
                 if (value.value instanceof RuntimeGlob runtimeGlob) {
                     this.set(runtimeGlob);
+                } else if (value.value instanceof RuntimeIO runtimeIO) {
+                    // *glob = *{$old}{IO} — restore the IO slot
+                    this.setIO(runtimeIO);
                 }
                 return value;
             case ARRAYREFERENCE:

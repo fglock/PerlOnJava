@@ -592,7 +592,7 @@ public class BytecodeInterpreter {
                             // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                             // =================================================================
 
-                            case Opcodes.DEFINED, Opcodes.DEFINED_GLOB, Opcodes.REF, Opcodes.BLESS, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
+                            case Opcodes.DEFINED, Opcodes.DEFINED_CODE, Opcodes.DEFINED_GLOB, Opcodes.REF, Opcodes.BLESS, Opcodes.ISA, Opcodes.SMARTMATCH, Opcodes.PROTOTYPE,
                                  Opcodes.QUOTE_REGEX, Opcodes.QUOTE_REGEX_O -> {
                                 pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                             }
@@ -2286,6 +2286,16 @@ public class BytecodeInterpreter {
                 RuntimeBase v = registers[rs];
                 boolean defined = v != null && v.scalar().getDefinedBoolean();
                 registers[rd] = defined ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+            case Opcodes.DEFINED_CODE -> {
+                // defined(&name) - check stash via definedGlobalCodeRefAsScalar
+                // This does a fresh stash lookup, matching the JVM backend and Perl 5
+                // behavior where eval("defined(&name)") checks the stash, not cached CVs.
+                int rd = bytecode[pc++];
+                int nameIdx = bytecode[pc++];
+                String name = code.stringPool[nameIdx];
+                registers[rd] = GlobalVariable.definedGlobalCodeRefAsScalar(name);
                 return pc;
             }
             case Opcodes.DEFINED_GLOB -> {

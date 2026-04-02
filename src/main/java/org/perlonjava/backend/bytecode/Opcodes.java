@@ -2147,6 +2147,16 @@ public class Opcodes {
      */
     public static final short LIST_SLICE = 453;
 
+    /**
+     * Check if a named code reference is defined via stash lookup.
+     * Unlike DEFINED on a cached code ref, this does a fresh stash lookup
+     * via definedGlobalCodeRefAsScalar, matching the JVM backend and Perl 5
+     * behavior for eval("defined(&name)").
+     * Format: DEFINED_CODE rd name_string_idx
+     * Effect: rd = GlobalVariable.definedGlobalCodeRefAsScalar(name)
+     */
+    public static final short DEFINED_CODE = 454;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

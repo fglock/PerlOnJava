@@ -1817,10 +1817,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Add hinthash (element 10): Compile-time %^H hash reference
-                // TODO: Proper implementation requires lexical scoping of %^H during compilation.
-                // Currently %^H is a plain global that leaks across scope boundaries,
-                // so the snapshot is always stale. Return undef until %^H scoping is implemented.
-                res.add(RuntimeScalarCache.scalarUndef);
+                RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+                if (!hintHash.elements.isEmpty()) {
+                    // Return a snapshot of the current %^H
+                    RuntimeHash snapshot = new RuntimeHash();
+                    snapshot.setFromList(hintHash.getList());
+                    res.add(snapshot.createReference());
+                } else {
+                    res.add(RuntimeScalarCache.scalarUndef);
+                }
             }
         } else if (frame >= stackTraceSize) {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
