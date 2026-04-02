@@ -175,7 +175,8 @@ public class Attributes extends PerlModuleBase {
                     }
                     boolean hadAttr = code.attributes.contains(attrName);
                     // Check if sub has a callable body (can actually be invoked)
-                    boolean hasCallableBody = code.subroutine != null || code.methodHandle != null;
+                    boolean hasCallableBody = code.subroutine != null || code.methodHandle != null
+                            || code instanceof org.perlonjava.backend.bytecode.InterpretedCode;
                     // Check if sub has an actual body (not just a stub from \&foo)
                     boolean isDefinedSub = hasCallableBody
                             || code.constantValue != null || code.compilerSupplier != null

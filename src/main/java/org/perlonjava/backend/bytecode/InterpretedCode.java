@@ -233,6 +233,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      */
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
+        // Return cached constant value if this sub has been const-folded
+        if (constantValue != null) {
+            return new RuntimeList(constantValue);
+        }
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
@@ -253,6 +257,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
 
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
+        // Return cached constant value if this sub has been const-folded
+        if (constantValue != null) {
+            return new RuntimeList(constantValue);
+        }
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
         // Push warning bits for FATAL warnings support

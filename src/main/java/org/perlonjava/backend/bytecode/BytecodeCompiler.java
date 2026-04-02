@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
+import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -4799,6 +4800,11 @@ public class BytecodeCompiler implements Visitor {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
+            // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
+            if (subCode.attributes != null && !subCode.attributes.isEmpty()
+                    && subCode.packageName != null) {
+                Attributes.runtimeDispatchModifyCodeAttributes(subCode.packageName, codeScalar);
+            }
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);
