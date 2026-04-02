@@ -424,22 +424,26 @@ public class OperatorParser {
         }
 
         if (!attributes.isEmpty()) {
-            // Dispatch variable attributes at compile time
             // Determine the package for MODIFY_*_ATTRIBUTES lookup
             String attrPackage = varType != null ? varType : parser.ctx.symbolTable.getCurrentPackage();
             
-            // Dispatch attributes for each variable in the declaration
+            // Validate and dispatch variable attributes.
+            // For 'our': dispatch at compile time (global vars already exist).
+            // For 'my'/'state': validate at compile time, dispatch at runtime
+            //   (the actual lexical variable doesn't exist yet during parsing).
             callModifyVariableAttributes(parser, attrPackage, operator, operand, attributes);
 
-            // Add the attributes to the operand, preserving any existing annotations
-            if (decl.annotations != null && decl.annotations.containsKey("isDeclaredReference")) {
-                // Create a new map with both the existing isDeclaredReference and new attributes
-                java.util.Map<String, Object> newAnnotations = new java.util.HashMap<>(decl.annotations);
-                newAnnotations.put("attributes", attributes);
-                decl.annotations = newAnnotations;
+            // Add the attributes and package to the operand annotations
+            // so the emitter can dispatch at runtime for my/state variables.
+            java.util.Map<String, Object> newAnnotations;
+            if (decl.annotations != null) {
+                newAnnotations = new java.util.HashMap<>(decl.annotations);
             } else {
-                decl.annotations = Map.of("attributes", attributes);
+                newAnnotations = new java.util.HashMap<>();
             }
+            newAnnotations.put("attributes", attributes);
+            newAnnotations.put("attributePackage", attrPackage);
+            decl.annotations = newAnnotations;
         }
 
         return decl;
@@ -1226,74 +1230,68 @@ public class OperatorParser {
             boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
 
             if (hasHandler) {
-                // Get the variable name for creating a reference
-                String varName;
-                if (opNode.operand instanceof IdentifierNode identNode) {
-                    varName = identNode.name;
-                } else {
-                    continue;
-                }
-
-                // Resolve full variable name
-                String fullVarName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
-
-                // Get or create a reference to the variable
-                RuntimeScalar varRef;
-                switch (sigil) {
-                    case "$":
-                        RuntimeScalar scalar = operator.equals("our")
-                                ? GlobalVariable.getGlobalVariable(fullVarName)
-                                : new RuntimeScalar();
-                        varRef = scalar.createReference();
-                        break;
-                    case "@":
-                        RuntimeArray array = operator.equals("our")
-                                ? GlobalVariable.getGlobalArray(fullVarName)
-                                : new RuntimeArray();
-                        varRef = array.createReference();
-                        break;
-                    case "%":
-                        RuntimeHash hash = operator.equals("our")
-                                ? GlobalVariable.getGlobalHash(fullVarName)
-                                : new RuntimeHash();
-                        varRef = hash.createReference();
-                        break;
-                    default:
-                        continue;
-                }
-
-                RuntimeScalar method = codeList.getFirst();
-                // Build args: ($package, \$var, @attributes)
-                RuntimeArray callArgs = new RuntimeArray();
-                RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
-                RuntimeArray.push(callArgs, varRef);
-                for (String attr : nonBuiltinAttrs) {
-                    RuntimeArray.push(callArgs, new RuntimeScalar(attr));
-                }
-
-                // Push caller frames so that Attribute::Handlers can find the source file/line
-                // via `caller 2`.
-                String fileName = parser.ctx.compilerOptions.fileName;
-                int lineNum = parser.ctx.errorUtil != null
-                        ? parser.ctx.errorUtil.getLineNumber(parser.tokenIndex) : 0;
-                CallerStack.push(packageName, fileName, lineNum);
-                CallerStack.push(packageName, fileName, lineNum);
-                try {
-                    RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
-
-                    // If MODIFY_*_ATTRIBUTES returns any values, they are unrecognized attributes
-                    RuntimeArray resultArray = result.getArrayOfAlias();
-                    if (resultArray.size() > 0) {
-                        SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
+                if (operator.equals("our")) {
+                    // For 'our' variables: dispatch at compile time (global vars already exist)
+                    // Get the variable name for creating a reference
+                    String varName;
+                    if (opNode.operand instanceof IdentifierNode identNode) {
+                        varName = identNode.name;
                     } else {
-                        // All attrs were accepted by the handler. Issue "may clash with future
-                        // reserved word" warning for non-built-in attrs (respects 'no warnings "reserved"')
-                        emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
+                        continue;
                     }
-                } finally {
-                    CallerStack.pop();
-                    CallerStack.pop();
+
+                    // Resolve full variable name
+                    String fullVarName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
+
+                    // Get a reference to the global variable
+                    RuntimeScalar varRef;
+                    switch (sigil) {
+                        case "$":
+                            varRef = GlobalVariable.getGlobalVariable(fullVarName).createReference();
+                            break;
+                        case "@":
+                            varRef = GlobalVariable.getGlobalArray(fullVarName).createReference();
+                            break;
+                        case "%":
+                            varRef = GlobalVariable.getGlobalHash(fullVarName).createReference();
+                            break;
+                        default:
+                            continue;
+                    }
+
+                    RuntimeScalar method = codeList.getFirst();
+                    // Build args: ($package, \$var, @attributes)
+                    RuntimeArray callArgs = new RuntimeArray();
+                    RuntimeArray.push(callArgs, new RuntimeScalar(packageName));
+                    RuntimeArray.push(callArgs, varRef);
+                    for (String attr : nonBuiltinAttrs) {
+                        RuntimeArray.push(callArgs, new RuntimeScalar(attr));
+                    }
+
+                    // Push caller frames so that Attribute::Handlers can find the source file/line
+                    String fileName = parser.ctx.compilerOptions.fileName;
+                    int lineNum = parser.ctx.errorUtil != null
+                            ? parser.ctx.errorUtil.getLineNumber(parser.tokenIndex) : 0;
+                    CallerStack.push(packageName, fileName, lineNum);
+                    CallerStack.push(packageName, fileName, lineNum);
+                    try {
+                        RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+
+                        // If MODIFY_*_ATTRIBUTES returns any values, they are unrecognized attributes
+                        RuntimeArray resultArray = result.getArrayOfAlias();
+                        if (resultArray.size() > 0) {
+                            SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
+                        }
+                    } finally {
+                        CallerStack.pop();
+                        CallerStack.pop();
+                    }
                 }
+                // For 'my'/'state': handler will be dispatched at runtime by the emitter,
+                // after the actual lexical variable is allocated.
+
+                // Emit "may clash with future reserved word" warning at compile time
+                emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
             } else {
                 // No MODIFY_*_ATTRIBUTES handler — all non-built-in attributes are invalid
                 SubroutineParser.throwInvalidAttributeError(svtype, nonBuiltinAttrs, parser);

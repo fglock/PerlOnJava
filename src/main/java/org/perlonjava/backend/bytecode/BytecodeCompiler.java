@@ -2382,6 +2382,9 @@ public class BytecodeCompiler implements Visitor {
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
 
+                    // Runtime attribute dispatch for my variables with attributes
+                    emitVarAttrsIfNeeded(node, reg, sigil);
+
                     // If this is a declared reference, create a reference to it
                     if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
                         int refReg = allocateRegister();
@@ -4338,6 +4341,32 @@ public class BytecodeCompiler implements Visitor {
         stringPool.add(str);
         stringPoolIndex.put(str, index);
         return index;
+    }
+
+    /**
+     * Emit DISPATCH_VAR_ATTRS opcode if the node has variable attributes.
+     * Called after a my/state variable is initialized in its register.
+     */
+    @SuppressWarnings("unchecked")
+    void emitVarAttrsIfNeeded(OperatorNode node, int varReg, String sigil) {
+        if (node.annotations == null || !node.annotations.containsKey("attributes")) return;
+
+        List<String> attrs = (List<String>) node.annotations.get("attributes");
+        String packageName = (String) node.annotations.get("attributePackage");
+        if (packageName == null) packageName = getCurrentPackage();
+
+        String fileName = sourceName;
+        int lineNum = sourceLine;
+
+        // Store metadata in constant pool as Object[]
+        Object[] data = new Object[]{
+                packageName, sigil, attrs.toArray(new String[0]), fileName, lineNum
+        };
+        int constIdx = addToConstantPool(data);
+
+        emit(Opcodes.DISPATCH_VAR_ATTRS);
+        emitReg(varReg);
+        emit(constIdx);
     }
 
     private int addToConstantPool(Object obj) {

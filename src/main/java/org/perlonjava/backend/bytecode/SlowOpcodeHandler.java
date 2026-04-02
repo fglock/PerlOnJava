@@ -1369,4 +1369,27 @@ public class SlowOpcodeHandler {
 
         return pc;
     }
+
+    /**
+     * Dispatch MODIFY_*_ATTRIBUTES at runtime for my/state variable declarations.
+     * Format: DISPATCH_VAR_ATTRS var_reg const_idx
+     * const_idx points to Object[] in constant pool: [packageName, sigil, String[] attrs, fileName, lineNum]
+     */
+    public static int executeDispatchVarAttrs(int[] bytecode, int pc,
+                                               RuntimeBase[] registers, Object[] constants) {
+        int varReg = bytecode[pc++];
+        int constIdx = bytecode[pc++];
+
+        Object[] data = (Object[]) constants[constIdx];
+        String packageName = (String) data[0];
+        String sigil = (String) data[1];
+        String[] attributes = (String[]) data[2];
+        String fileName = (String) data[3];
+        int lineNum = (Integer) data[4];
+
+        org.perlonjava.runtime.perlmodule.Attributes.runtimeDispatchModifyVariableAttributes(
+                packageName, registers[varReg], sigil, attributes, fileName, lineNum);
+
+        return pc;
+    }
 }

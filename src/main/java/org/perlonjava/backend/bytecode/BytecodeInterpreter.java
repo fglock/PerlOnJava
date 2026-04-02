@@ -1956,6 +1956,10 @@ public class BytecodeInterpreter {
                                 pc = SlowOpcodeHandler.executeArrayKVSliceDelete(bytecode, pc, registers);
                             }
 
+                            case Opcodes.DISPATCH_VAR_ATTRS -> {
+                                pc = SlowOpcodeHandler.executeDispatchVarAttrs(bytecode, pc, registers, code.constants);
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(
