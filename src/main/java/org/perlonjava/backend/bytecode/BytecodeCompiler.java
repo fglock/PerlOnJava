@@ -5326,22 +5326,35 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Step 7: Check condition
-            int condReg = allocateRegister();
-            if (node.condition != null) {
-                // Evaluate condition in SCALAR context (need boolean result)
-                compileNode(node.condition, -1, RuntimeContextType.SCALAR);
-                condReg = lastResultReg;
-            } else {
-                // No condition means infinite loop - load true
-                emit(Opcodes.LOAD_INT);
-                emitReg(condReg);
-                emitInt(1);
-            }
+            // Check if condition is a compile-time constant (e.g., "do {} until TRUE_CONST")
+            String currentPackage = symbolTable.getCurrentPackage();
+            Boolean constantCondition = ConstantFoldingVisitor.getConstantConditionValue(node.condition, currentPackage);
 
-            // Step 8: If condition is true, jump back to start
-            emit(Opcodes.GOTO_IF_TRUE);
-            emitReg(condReg);
-            emitInt(loopStartPc);
+            if (constantCondition != null) {
+                if (constantCondition) {
+                    // Condition is constant true — infinite loop, jump back unconditionally
+                    emit(Opcodes.GOTO);
+                    emitInt(loopStartPc);
+                }
+                // else: condition is constant false — don't jump back, body runs exactly once
+            } else {
+                int condReg = allocateRegister();
+                if (node.condition != null) {
+                    // Evaluate condition in SCALAR context (need boolean result)
+                    compileNode(node.condition, -1, RuntimeContextType.SCALAR);
+                    condReg = lastResultReg;
+                } else {
+                    // No condition means infinite loop - load true
+                    emit(Opcodes.LOAD_INT);
+                    emitReg(condReg);
+                    emitInt(1);
+                }
+
+                // Step 8: If condition is true, jump back to start
+                emit(Opcodes.GOTO_IF_TRUE);
+                emitReg(condReg);
+                emitInt(loopStartPc);
+            }
 
         } else {
             // while/for loop: condition checked before body

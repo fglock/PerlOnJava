@@ -358,7 +358,8 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeScalar s1 = (RuntimeScalar) registers[rd];
-        s1.set(MathOperators.integerDivide(s1, (RuntimeScalar) registers[rs]));
+        RuntimeScalar s2 = (registers[rs] instanceof RuntimeScalar) ? (RuntimeScalar) registers[rs] : registers[rs].scalar();
+        registers[rd] = MathOperators.integerDivideAssignWarn(s1, s2);
         return pc;
     }
 

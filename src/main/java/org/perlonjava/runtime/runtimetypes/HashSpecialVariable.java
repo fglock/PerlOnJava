@@ -78,8 +78,20 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
                 for (String name : namedGroups.keySet()) {
                     String matchedValue = matcher.group(name);
-                    if (matchedValue != null) {
-                        entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+                    if (this.mode == Id.CAPTURE_ALL) {
+                        // For %-, values are always array refs (even for non-participating groups)
+                        RuntimeArray arr = new RuntimeArray();
+                        if (matchedValue != null) {
+                            arr.push(new RuntimeScalar(matchedValue));
+                        } else {
+                            arr.push(new RuntimeScalar()); // undef for non-participating groups
+                        }
+                        entries.add(new SimpleEntry<>(name, arr.createReference()));
+                    } else {
+                        // For %+, only include groups that actually matched
+                        if (matchedValue != null) {
+                            entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+                        }
                     }
                 }
             }
@@ -165,11 +177,23 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
             Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
+                // Check if this is a valid named group
+                if (!matcher.pattern().namedGroups().containsKey(name)) {
+                    return scalarUndef;
+                }
                 String matchedValue = matcher.group(name);
-                if (matchedValue != null) {
-                    if (this.mode == Id.CAPTURE_ALL) {
-                        return new RuntimeArray(new RuntimeScalar(matchedValue)).createReference();
+                if (this.mode == Id.CAPTURE_ALL) {
+                    // For %-, always return array ref (with undef for non-participating groups)
+                    RuntimeArray arr = new RuntimeArray();
+                    if (matchedValue != null) {
+                        arr.push(new RuntimeScalar(matchedValue));
                     } else {
+                        arr.push(new RuntimeScalar()); // undef
+                    }
+                    return arr.createReference();
+                } else {
+                    // For %+, return the matched value or undef
+                    if (matchedValue != null) {
                         return new RuntimeScalar(matchedValue);
                     }
                 }
@@ -192,6 +216,22 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     @Override
     public boolean containsKey(Object key) {
+        if (this.mode == Id.CAPTURE_ALL) {
+            // For %-, all named groups exist (even non-participating ones)
+            Matcher matcher = RuntimeRegex.globalMatcher;
+            if (matcher != null && key instanceof String name) {
+                return matcher.pattern().namedGroups().containsKey(name);
+            }
+            return false;
+        }
+        if (this.mode == Id.CAPTURE) {
+            // For %+, only groups that actually captured
+            Matcher matcher = RuntimeRegex.globalMatcher;
+            if (matcher != null && key instanceof String name) {
+                return matcher.pattern().namedGroups().containsKey(name) && matcher.group(name) != null;
+            }
+            return false;
+        }
         return super.containsKey(key);
     }
 

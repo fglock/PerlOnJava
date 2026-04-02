@@ -305,7 +305,7 @@ public class PerlLanguageProvider {
             // Propagate $^H changes back to the caller's scope so subsequent
             // code in the same lexical block sees the updated hints
             if (savedCurrentScope != null) {
-                savedCurrentScope.propagateStrictOptionsToAllLevels(ctx.symbolTable.getStrictOptions());
+                savedCurrentScope.setStrictOptions(ctx.symbolTable.getStrictOptions());
                 // Also update per-call-site hints so caller()[8] and caller()[10] are correct
                 WarningBitsRegistry.setCallSiteHints(ctx.symbolTable.getStrictOptions());
                 WarningBitsRegistry.snapshotCurrentHintHash();

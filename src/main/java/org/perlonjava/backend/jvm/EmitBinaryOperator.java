@@ -214,9 +214,16 @@ public class EmitBinaryOperator {
         };
 
         // Check if we have an operator handler for this compound operator
-        OperatorHandler operatorHandler = shouldUseWarnVariant 
-                ? OperatorHandler.getWarn(node.operator)
-                : OperatorHandler.get(node.operator);
+        // Under "use integer", use the integer warn variant for /=
+        boolean isInteger = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+        OperatorHandler operatorHandler;
+        if (shouldUseWarnVariant && isInteger && node.operator.equals("/=")) {
+            operatorHandler = OperatorHandler.get("/=_int_warn");
+        } else {
+            operatorHandler = shouldUseWarnVariant 
+                    ? OperatorHandler.getWarn(node.operator)
+                    : OperatorHandler.get(node.operator);
+        }
 
         if (operatorHandler != null) {
             // Use the new *Assign methods which check for compound overloads first
