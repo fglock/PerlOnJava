@@ -192,6 +192,7 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.35 | Fix `last_insert_id()` to use connection-level SQL queries | `DBI.java` | DONE |
 | 5.36 | Fix `%{{ expr }}` parser disambiguation inside dereference context | `Parser.java`, `StatementResolver.java`, `Variable.java` | DONE |
 | 5.37 | Fix `//=`, `||=`, `&&=` short-circuit in bytecode interpreter | `BytecodeCompiler.java` | DONE |
+| 5.57 | Fix post-rebase regressions: integer `/=` warn, do{}until const fold, vec 32-bit, strict propagation, caller hints, %- CAPTURE_ALL, large int literals | Multiple files | DONE |
 
 **t/60core.t results** (142 tests emitted, updated after step 5.56):
 - **125 ok**: All real tests pass
@@ -652,7 +653,7 @@ instead of relying on DESTROY.
 
 ### Progress Tracking
 
-#### Current Status: Step 5.56 complete (DBI Active flag lifecycle)
+#### Current Status: Step 5.57 complete (post-rebase regression fixes)
 
 #### Key Test Results (2026-04-02)
 
@@ -821,6 +822,34 @@ instead of relying on DESTROY.
   to call finish() on scope exit
 - Files changed: `DBI.java`
 - Commit: `3de38f462`
+
+**Step 5.57 (2026-04-02) — Post-rebase regression fixes:**
+- Fixed 6 post-rebase regressions in Perl test suite:
+  - **op/assignwarn.t** (116/116): Created `integerDivideWarn()` and `integerDivideAssignWarn()`
+    for uninitialized value warnings with `/=` under `use integer`. Root cause: bytecode
+    interpreter's `INTEGER_DIV_ASSIGN` called `integerDivide()` which used `getLong()` without
+    checking for undef. Updated both bytecode interpreter (`InlineOpcodeHandler.java`) and JVM
+    backend (`EmitBinaryOperator.java` + `OperatorHandler.java`).
+  - **op/while.t** test 26 (23/26): Added constant condition optimization to `do{}while/until`
+    loops. Three fixes: (1) `resolveConstantSubBoolean` now returns true for reference constants
+    without calling `getBoolean()` (which triggered overloaded `bool` at compile time);
+    (2) `getConstantConditionValue` handles `not`/`!` operators (used for `until` conditions);
+    (3) `emitDoWhile` checks for constant conditions in both JVM (`EmitStatement.java`) and
+    bytecode (`BytecodeCompiler.java`) backends.
+  - **op/vec.t** (74/78, matches master): Fixed unsigned 32-bit vec values by using `getLong()`
+    for both 32-bit and 64-bit widths. Root cause: values > 0x7FFFFFFF clamped to
+    `Integer.MAX_VALUE` via double→int narrowing. Files: `Vec.java`, `RuntimeVecLvalue.java`.
+  - **Strict options propagation**: `propagateStrictOptionsToAllLevels` → `setStrictOptions`
+    in `PerlLanguageProvider.java`.
+  - **caller()[10] hints**: Reverted to scalarUndef in `RuntimeCode.java`.
+  - **%- CAPTURE_ALL**: Returns array refs in `HashSpecialVariable.java`.
+  - **Large integer literals**: `EmitLiteral.java` uses DOUBLE fallback for values exceeding
+    long range.
+- Files changed: `MathOperators.java`, `OperatorHandler.java`, `InlineOpcodeHandler.java`,
+  `EmitBinaryOperator.java`, `ConstantFoldingVisitor.java`, `EmitStatement.java`,
+  `BytecodeCompiler.java`, `Vec.java`, `RuntimeVecLvalue.java`, `PerlLanguageProvider.java`,
+  `RuntimeCode.java`, `HashSpecialVariable.java`, `EmitLiteral.java`
+- Commit: `3cc2ff1e8`
 
 ### DBIx::Class Full Test Suite Results (updated 2026-04-02)
 
