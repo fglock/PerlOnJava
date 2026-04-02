@@ -1858,9 +1858,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+                // Transfer fields that were set on the old code (e.g., by :const attribute)
+                if (savedConstantValue != null && code.constantValue == null) {
+                    code.constantValue = savedConstantValue;
+                }
+                if (savedAttributes != null && code.attributes == null) {
+                    code.attributes = savedAttributes;
+                }
             }
 
             // Check if it's an unfilled forward declaration (not defined)
@@ -2082,9 +2091,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+                // Transfer fields that were set on the old code (e.g., by :const attribute)
+                if (savedConstantValue != null && code.constantValue == null) {
+                    code.constantValue = savedConstantValue;
+                }
+                if (savedAttributes != null && code.attributes == null) {
+                    code.attributes = savedAttributes;
+                }
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -2214,9 +2232,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
+                RuntimeList savedConstantValue = code.constantValue;
+                java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
+                // Transfer fields that were set on the old code (e.g., by :const attribute)
+                if (savedConstantValue != null && code.constantValue == null) {
+                    code.constantValue = savedConstantValue;
+                }
+                if (savedAttributes != null && code.attributes == null) {
+                    code.attributes = savedAttributes;
+                }
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call

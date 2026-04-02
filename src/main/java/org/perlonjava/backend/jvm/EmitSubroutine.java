@@ -359,6 +359,34 @@ public class EmitSubroutine {
                     "Ljava/util/List;");
         }
 
+        // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes.
+        // Named subs have their dispatch in SubroutineParser.handleNamedSub at compile time.
+        // Anonymous subs need runtime dispatch because the code ref only exists at runtime.
+        if (node.name == null && node.attributes != null && !node.attributes.isEmpty()) {
+            java.util.Set<String> builtinAttrs = java.util.Set.of("lvalue", "method", "const");
+            boolean hasNonBuiltin = false;
+            for (String attr : node.attributes) {
+                String name = attr.startsWith("-") ? attr.substring(1) : attr;
+                int parenIdx = name.indexOf('(');
+                String baseName = parenIdx >= 0 ? name.substring(0, parenIdx) : name;
+                if (!builtinAttrs.contains(baseName) && !baseName.equals("prototype")) {
+                    hasNonBuiltin = true;
+                    break;
+                }
+            }
+            if (hasNonBuiltin) {
+                // Stack: [RuntimeScalar(codeRef)]
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/perlmodule/Attributes",
+                        "runtimeDispatchModifyCodeAttributes",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
