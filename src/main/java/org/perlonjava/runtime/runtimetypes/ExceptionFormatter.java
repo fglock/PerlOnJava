@@ -95,11 +95,47 @@ public class ExceptionFormatter {
         // Multiple execute() frames can occur for the same call level (for internal ops).
         // InterpretedCode.apply marks the END of a call level, so we reset after seeing it.
         boolean addedFrameForCurrentLevel = false;
+        
+        // Track consecutive runSpecialBlock frames to avoid consuming CallerStack entries
+        // twice for the overloaded 3-arg/4-arg method pair.
+        boolean lastWasRunSpecialBlock = false;
 
         for (var element : t.getStackTrace()) {
             if (System.getenv("DEBUG_CALLER") != null) {
                 System.err.println("DEBUG ExceptionFormatter: element class=" + element.getClassName() + " method=" + element.getMethodName() + " file=" + element.getFileName() + " line=" + element.getLineNumber());
             }
+            
+            boolean isRunSpecialBlock = element.getClassName().equals("org.perlonjava.frontend.parser.SpecialBlockParser") &&
+                    element.getMethodName().equals("runSpecialBlock");
+            
+            if (isRunSpecialBlock && !lastWasRunSpecialBlock) {
+                // BEGIN/END/etc wrapper: the CallerStack entry pushed by runSpecialBlock has
+                // the CORRECT package, file, and line for the BEGIN block context. Use it to
+                // correct the preceding anon class frame, which may have wrong source mapper
+                // data when its tokenIndex falls in a gap in ByteCodeSourceMapper entries.
+                var callerInfo = CallerStack.peek(callerStackIndex);
+                if (callerInfo != null) {
+                    if (!stackTrace.isEmpty()) {
+                        var lastEntry = stackTrace.getLast();
+                        lastEntry.set(0, callerInfo.packageName());
+                        if (callerInfo.filename() != null) {
+                            lastEntry.set(1, callerInfo.filename());
+                        }
+                        lastEntry.set(2, String.valueOf(callerInfo.line()));
+                    }
+                    lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
+                    callerStackIndex++;
+                    if (System.getenv("DEBUG_CALLER") != null) {
+                        System.err.println("DEBUG ExceptionFormatter: runSpecialBlock corrected frame with CallerStack[" + (callerStackIndex - 1) + "] pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line());
+                    }
+                }
+                lastWasRunSpecialBlock = true;
+                continue;
+            }
+            lastWasRunSpecialBlock = isRunSpecialBlock;
+            // Skip the second (overloaded) runSpecialBlock frame
+            if (isRunSpecialBlock) continue;
+            
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
                 // Artificial caller stack entry created at `use` statement
