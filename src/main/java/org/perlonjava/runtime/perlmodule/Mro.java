@@ -230,30 +230,16 @@ public class Mro extends PerlModuleBase {
     }
 
     /**
-     * Builds the reverse ISA cache by scanning all known packages for @ISA arrays.
+     * Builds the reverse ISA cache by dynamically scanning all packages with @ISA arrays.
      */
     private static void buildIsaRevCache() {
         isaRevCache.clear();
 
-        // For the test case, manually build the known relationships
-        // In a real implementation, this would scan all packages
-
-        // Based on the test structure:
-        // MRO_D: @ISA = (MRO_A, MRO_B, MRO_C)
-        // MRO_E: @ISA = (MRO_A, MRO_B, MRO_C)
-        // MRO_F: @ISA = (MRO_D, MRO_E)
-
-        // Check actual @ISA arrays and build reverse relationships
-        buildIsaRevForClass("MRO_D");
-        buildIsaRevForClass("MRO_E");
-        buildIsaRevForClass("MRO_F");
-
-        // Check for other packages too
-        String[] testClasses = {"ISACLEAR", "ISACLEAR1", "ISACLEAR2", "ISACLEAR3",
-                "MRO_R1", "MRO_R2", "MRO_R3", "MRO_R4", "MRO_R5", "MRO_R6", "MRO_R7", "MRO_R8",
-                "SUPERTEST", "SUPERTEST::MID", "SUPERTEST::KID", "SUPERTEST::REBASE"};
-
-        for (String className : testClasses) {
+        // Dynamically scan all @ISA arrays from global variables
+        Map<String, RuntimeArray> allIsaArrays = GlobalVariable.getAllIsaArrays();
+        for (String key : allIsaArrays.keySet()) {
+            // Key format: "ClassName::ISA" → extract class name
+            String className = key.substring(0, key.length() - 5); // remove "::ISA"
             buildIsaRevForClass(className);
         }
     }
@@ -405,6 +391,9 @@ public class Mro extends PerlModuleBase {
         return new RuntimeList();
     }
 
+    // Cached @ISA state per package — used to detect @ISA changes in get_pkg_gen
+    private static final Map<String, List<String>> pkgGenIsaState = new HashMap<>();
+
     /**
      * Returns the package generation number.
      *
@@ -419,6 +408,23 @@ public class Mro extends PerlModuleBase {
 
         String className = args.get(0).toString();
 
+        // Lazily detect @ISA changes and auto-increment pkg_gen
+        if (GlobalVariable.existsGlobalArray(className + "::ISA")) {
+            RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
+            List<String> currentIsa = new ArrayList<>();
+            for (RuntimeBase entity : isaArray.elements) {
+                String parentName = entity.toString();
+                if (parentName != null && !parentName.isEmpty()) {
+                    currentIsa.add(parentName);
+                }
+            }
+            List<String> cachedIsa = pkgGenIsaState.get(className);
+            if (cachedIsa != null && !currentIsa.equals(cachedIsa)) {
+                incrementPackageGeneration(className);
+            }
+            pkgGenIsaState.put(className, currentIsa);
+        }
+
         // Return current generation, starting from 1
         Integer gen = packageGenerations.getOrDefault(className, 1);
         return new RuntimeScalar(gen).getList();
@@ -426,10 +432,11 @@ public class Mro extends PerlModuleBase {
 
     /**
      * Increments the package generation counter.
+     * Public so that RuntimeGlob can call it when CODE is assigned to a glob.
      *
      * @param packageName The name of the package.
      */
-    private static void incrementPackageGeneration(String packageName) {
+    public static void incrementPackageGeneration(String packageName) {
         Integer current = packageGenerations.getOrDefault(packageName, 1);
         packageGenerations.put(packageName, current + 1);
     }
