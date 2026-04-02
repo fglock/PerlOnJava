@@ -281,33 +281,13 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             RuntimeGlob io = GlobalVariable.globalIORefs.remove(fullKey);
             RuntimeScalar format = GlobalVariable.globalFormatRefs.remove(fullKey);
 
-            // Count how many slots exist
-            int slotCount = 0;
-            if (code != null && code.getDefinedBoolean()) slotCount++;
-            if (scalar != null && scalar.getDefinedBoolean()) slotCount++;
-            if (array != null && !array.elements.isEmpty()) slotCount++;
-            if (hash != null && !hash.elements.isEmpty()) slotCount++;
-            if (io != null) slotCount++;
-            if (format != null && format.getDefinedBoolean()) slotCount++;
-
-            // If only CODE slot exists, return it directly (Perl behavior)
-            if (slotCount == 1 && code != null && code.getDefinedBoolean()) {
-                return code;
-            }
-
-            // Otherwise, create a detached glob with all slots
-            // For now, just return the CODE slot if it exists, otherwise return the glob
-            if (code != null && code.getDefinedBoolean()) {
-                return code;
-            }
-
-            // Return a glob reference - create a new RuntimeGlob that will be detached
-            RuntimeScalar result = new RuntimeGlob(fullKey);
-
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
 
-            return result;
+            // Return a detached glob with all saved non-CODE slots.
+            // Matches RuntimeStash.deleteGlob() behavior: the returned glob lets callers
+            // access old slot values (e.g., *{$old}{SCALAR} in namespace::clean).
+            return RuntimeGlob.createDetachedWithSlots(scalar, array, hash, io);
         }
         return scalarUndef;
     }

@@ -216,7 +216,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Tied Scalars**: Support for tying scalars to classes is implemented. See also [Tied Arrays](#arrays-hashes-and-lists), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
-- ❌  **Variable attributes**: Variable attributes are not yet supported.
+- 🚧  **Variable attributes**: `my $x : attr` supported via `MODIFY_SCALAR_ATTRIBUTES` etc.
 
 ---
 
@@ -339,7 +339,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ✅  **`Forcing main package`**: Identifiers starting with `::` are in `main` package.
 - ✅  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are supported.
-- 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
+- 🚧  **Subroutine attributes**: `:lvalue`, `:prototype`, and custom attributes via `MODIFY_CODE_ATTRIBUTES`/`FETCH_CODE_ATTRIBUTES`.
 - ✅  **CORE operator references**: `\&CORE::X` returns callable CODE refs for built-in functions with correct prototypes: `my $r = \&CORE::length; $r->("hello")`
 
 ---
@@ -645,7 +645,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `defer`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
   - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `refaliasing`.
 - 🚧  **warnings** pragma
-- ❌  **attributes** pragma
+- 🚧  **attributes** pragma: `MODIFY_*_ATTRIBUTES`/`FETCH_*_ATTRIBUTES` callbacks for subroutines and variables.
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
