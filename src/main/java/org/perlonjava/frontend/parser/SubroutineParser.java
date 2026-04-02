@@ -633,6 +633,21 @@ public class SubroutineParser {
                 codeRef.prototype = prototype;
                 codeRef.attributes = attributes;
             } else {
+                // When redeclaring an existing sub with attributes (e.g., sub X : method),
+                // merge the new attributes into the existing ones. This matches Perl's behavior
+                // where `sub X { ... } sub X : method` adds the method attribute to X.
+                if (attributes != null && !attributes.isEmpty()) {
+                    if (codeRef.attributes == null) {
+                        codeRef.attributes = new java.util.ArrayList<>(attributes);
+                    } else {
+                        for (String attr : attributes) {
+                            if (!codeRef.attributes.contains(attr)) {
+                                codeRef.attributes.add(attr);
+                            }
+                        }
+                    }
+                }
+
                 // Emit "Prototype mismatch" warning when redeclaring with different prototype
                 String oldProto = codeRef.prototype;
                 if (prototype != null || oldProto != null) {
@@ -984,7 +999,15 @@ public class SubroutineParser {
         // Initialize placeholder metadata (accessed via codeRef.value)
         RuntimeCode placeholder = (RuntimeCode) codeRef.value;
         placeholder.prototype = prototype;
-        placeholder.attributes = attributes;
+        // Preserve existing attributes from forward declarations when the new definition
+        // doesn't specify attributes. In Perl, `sub PS : lvalue; sub PS { }` preserves
+        // the lvalue attribute. Only overwrite if the new definition specifies attributes.
+        if (attributes != null && !attributes.isEmpty()) {
+            placeholder.attributes = attributes;
+        } else if (placeholder.attributes == null) {
+            placeholder.attributes = attributes;
+        }
+        // else: preserve existing attributes (e.g., from forward declaration)
         placeholder.subName = subName;
         placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
 

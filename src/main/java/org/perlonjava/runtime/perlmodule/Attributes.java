@@ -270,6 +270,11 @@ public class Attributes extends PerlModuleBase {
 
         if (svref.type == CODE) {
             RuntimeCode code = (RuntimeCode) svref.value;
+            // For blessed CODE refs, return the blessed class (like Perl's SvSTASH)
+            if (code.blessId != 0) {
+                return new RuntimeScalar(NameNormalizer.getBlessStr(code.blessId)).getList();
+            }
+            // For non-blessed CODE refs, return the compilation package
             if (code.packageName != null) {
                 return new RuntimeScalar(code.packageName).getList();
             }

@@ -57,10 +57,10 @@ public class ReferenceOperators {
                 str = ref(runtimeScalar.tiedFetch()).toString();
                 break;
             case CODE:
-                if (!((RuntimeCode) runtimeScalar.value).defined()) {
-                    str = "";
-                    break;
-                }
+                // ref() always returns "CODE" for CODE-typed scalars, regardless of whether
+                // the subroutine is defined. In Perl, ref(\&stub) returns "CODE" even for
+                // forward-declared subs without a body. The defined() check only matters
+                // for defined(&name), not for ref().
                 blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "CODE" : NameNormalizer.getBlessStr(blessId);
                 break;

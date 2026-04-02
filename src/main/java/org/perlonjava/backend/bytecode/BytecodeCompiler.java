@@ -4158,9 +4158,19 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand != null) {
                 // Special case: \&name — CODE is already a reference type.
                 // Emit LOAD_GLOBAL_CODE directly without CREATE_REF, matching JVM compiler.
+                // Also set isSymbolicReference so defined(\&stub) returns true, matching
+                // the JVM backend's createCodeReference behavior.
                 if (node.operand instanceof OperatorNode operandOp
                         && operandOp.operator.equals("&")
-                        && operandOp.operand instanceof IdentifierNode) {
+                        && operandOp.operand instanceof IdentifierNode idNode) {
+                    // Set isSymbolicReference before loading, so defined(\&Name) returns true
+                    String subName = NameNormalizer.normalizeVariableName(
+                            idNode.name, getCurrentPackage());
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
+                    if (codeRef.type == RuntimeScalarType.CODE
+                            && codeRef.value instanceof RuntimeCode rc) {
+                        rc.isSymbolicReference = true;
+                    }
                     node.operand.accept(this);
                     // lastResultReg already holds the CODE scalar — no wrapping needed
                     return;
