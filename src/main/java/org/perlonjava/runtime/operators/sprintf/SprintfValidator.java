@@ -124,6 +124,14 @@ public class SprintfValidator {
             return new SprintfValidationResult(SprintfValidationResult.Status.INVALID_APPEND_ERROR, "INVALID");
         }
 
+        // Quad formats (ll, L, q) with integer conversions are not supported (ivsize=4, no use64bitint)
+        if (spec.lengthModifier.equals("ll") || spec.lengthModifier.equals("L") || spec.lengthModifier.equals("q")) {
+            String intConversions = "diuDUoOxXbB";
+            if (intConversions.indexOf(spec.conversionChar) >= 0) {
+                return new SprintfValidationResult(SprintfValidationResult.Status.INVALID_APPEND_ERROR, "INVALID");
+            }
+        }
+
         return new SprintfValidationResult(SprintfValidationResult.Status.VALID);
     }
 
