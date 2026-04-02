@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.operators.sprintf.FormatSpecifier;
 import org.perlonjava.runtime.operators.sprintf.SprintfFormatParser;
+import org.perlonjava.runtime.operators.sprintf.SprintfNumericFormatter;
 import org.perlonjava.runtime.operators.sprintf.SprintfValueFormatter;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -91,6 +92,25 @@ public class SprintfOperator {
 
                 // Check if spec is invalid FIRST
                 if (!spec.isValid) {
+                    // Inf/NaN values take priority over format invalidity.
+                    // In Perl, sprintf("%lld", Inf) returns "Inf" with no warning,
+                    // even though %lld is invalid on 32-bit Perl.
+                    if (argIndex < list.size()) {
+                        RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex);
+                        double doubleValue = value.getDouble();
+                        if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
+                            SprintfNumericFormatter numFmt = new SprintfNumericFormatter();
+                            String formatted = numFmt.formatSpecialValue(doubleValue, spec.flags,
+                                    spec.width != null ? spec.width : 0, spec.conversionChar);
+                            result.append(formatted);
+                            charsWritten += formatted.length();
+                            // Track as valid to prevent "Redundant argument" warning
+                            hasValidSpecifier = true;
+                            maxArgIndexUsed = Math.max(maxArgIndexUsed, argIndex);
+                            argIndex++; // Inf/NaN consumes the argument
+                            continue;
+                        }
+                    }
                     String formatted = processFormatSpecifier(spec, list, argIndex, formatter, -1, bytesMode);
                     result.append(formatted);
                     charsWritten += formatted.length();
