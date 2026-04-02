@@ -619,7 +619,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=", "(+");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -646,7 +646,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=", "(-");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -673,7 +673,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=", "(*");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -700,7 +700,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=", "(/");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -727,7 +727,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=", "(%");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -750,7 +750,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=", "(+");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -768,7 +768,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=", "(-");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -786,7 +786,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=", "(*");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -804,7 +804,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=", "(/");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -822,7 +822,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=", "(%");
             if (result != null) {
                 arg1.set(result);
                 return arg1;

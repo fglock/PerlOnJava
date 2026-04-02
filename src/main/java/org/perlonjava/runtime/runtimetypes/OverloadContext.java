@@ -60,21 +60,31 @@ public class OverloadContext {
      */
     final RuntimeScalar methodOverloaded;
     /**
-     * The fallback method handler
+     * Whether the "()" fallback glob was found in the class hierarchy
      */
-    final RuntimeScalar methodFallback;
+    final boolean hasFallbackGlob;
+    /**
+     * The fallback value from the SCALAR slot of the "()" glob.
+     * Perl overload semantics:
+     *   null (no glob found) or undef → allow autogeneration, die on failure
+     *   true (1)                      → allow autogeneration, return undef on failure
+     *   false (0)                     → deny autogeneration entirely
+     */
+    final RuntimeScalar fallbackValue;
 
     /**
      * Private constructor to create an OverloadContext instance.
      *
      * @param perlClassName    The Perl class name
      * @param methodOverloaded The overloaded method handler
-     * @param methodFallback   The fallback method handler
+     * @param hasFallbackGlob  Whether "()" glob was found
+     * @param fallbackValue    The SCALAR slot value of "()" glob
      */
-    private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, RuntimeScalar methodFallback) {
+    private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, boolean hasFallbackGlob, RuntimeScalar fallbackValue) {
         this.perlClassName = perlClassName;
         this.methodOverloaded = methodOverloaded;
-        this.methodFallback = methodFallback;
+        this.hasFallbackGlob = hasFallbackGlob;
+        this.fallbackValue = fallbackValue;
     }
 
     /**
@@ -110,18 +120,35 @@ public class OverloadContext {
 
         // Look for overload markers in the class hierarchy
         RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
-        RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
+        RuntimeScalar methodFallbackCode = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
+
+        // Determine fallback value by reading the SCALAR slot of the "()" glob.
+        // Perl's overload.pm stores: CODE slot = \&overload::nil (marker), SCALAR slot = fallback value
+        boolean hasFallbackGlob = (methodFallbackCode != null);
+        RuntimeScalar fallbackValue = null;
+        if (hasFallbackGlob) {
+            java.util.List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
+            for (String className : linearizedClasses) {
+                String effectiveClassName = GlobalVariable.resolveStashAlias(className);
+                String normalizedName = NameNormalizer.normalizeVariableName("()", effectiveClassName);
+                if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
+                    fallbackValue = GlobalVariable.getGlobalVariable(normalizedName);
+                    break;
+                }
+            }
+        }
 
         if (TRACE_OVERLOAD_CONTEXT) {
             System.err.println("  methodOverloaded ((): " + (methodOverloaded != null ? "FOUND" : "NULL"));
-            System.err.println("  methodFallback (): " + (methodFallback != null ? "FOUND" : "NULL"));
+            System.err.println("  hasFallbackGlob (): " + hasFallbackGlob);
+            System.err.println("  fallbackValue: " + (fallbackValue != null ? fallbackValue.toString() : "null"));
             System.err.flush();
         }
 
         // Create context if overloading is enabled
         OverloadContext context = null;
-        if (methodOverloaded != null || methodFallback != null) {
-            context = new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+        if (methodOverloaded != null || hasFallbackGlob) {
+            context = new OverloadContext(perlClassName, methodOverloaded, hasFallbackGlob, fallbackValue);
             // Cache the result
             InheritanceResolver.cacheOverloadContext(blessId, context);
         }
@@ -147,37 +174,77 @@ public class OverloadContext {
     }
 
     public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName) {
+        return tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, overloadName, methodName, (String[]) null);
+    }
+
+    /**
+     * Tries overloaded binary operator with autogeneration support.
+     * @param autogenNames Additional overload names to try as autogeneration candidates (e.g., "(+" for "(+=")
+     */
+    public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName, String... autogenNames) {
+        OverloadContext ctx1 = null;
+        OverloadContext ctx2 = null;
+
         if (blessId < 0) {
             // Try primary overload method
-            OverloadContext ctx = prepare(blessId);
-            if (ctx != null) {
-                RuntimeScalar result = ctx.tryOverload(overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
+            ctx1 = prepare(blessId);
+            if (ctx1 != null) {
+                RuntimeScalar result = ctx1.tryOverload(overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
                 if (result != null) return result;
             }
         }
         if (blessId2 < 0) {
             // Try swapped overload
-            OverloadContext ctx = prepare(blessId2);
-            if (ctx != null) {
-                RuntimeScalar result = ctx.tryOverload(overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
+            ctx2 = prepare(blessId2);
+            if (ctx2 != null) {
+                RuntimeScalar result = ctx2.tryOverload(overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
                 if (result != null) return result;
             }
         }
-        if (blessId < 0) {
+
+        // Try autogeneration: try alternative operator names (e.g., "+" for "+=")
+        if (autogenNames != null) {
+            for (String autogenName : autogenNames) {
+                if (autogenName == null) continue;
+                if (ctx1 != null) {
+                    RuntimeScalar result = ctx1.tryOverload(autogenName, new RuntimeArray(arg1, arg2, scalarFalse));
+                    if (result != null) return result;
+                }
+                if (ctx2 != null) {
+                    RuntimeScalar result = ctx2.tryOverload(autogenName, new RuntimeArray(arg2, arg1, scalarTrue));
+                    if (result != null) return result;
+                }
+            }
+        }
+
+        if (ctx1 != null) {
             // Try first nomethod
-            OverloadContext ctx = prepare(blessId);
-            if (ctx != null) {
-                RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg1, arg2, scalarFalse, new RuntimeScalar(methodName)));
-                if (result != null) return result;
-            }
+            RuntimeScalar result = ctx1.tryOverload("(nomethod", new RuntimeArray(arg1, arg2, scalarFalse, new RuntimeScalar(methodName)));
+            if (result != null) return result;
         }
-        if (blessId2 < 0) {
+        if (ctx2 != null) {
             // Try swapped nomethod
-            OverloadContext ctx = prepare(blessId2);
-            if (ctx != null) {
-                RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg2, arg1, scalarTrue, new RuntimeScalar(methodName)));
-                return result;
+            RuntimeScalar result = ctx2.tryOverload("(nomethod", new RuntimeArray(arg2, arg1, scalarTrue, new RuntimeScalar(methodName)));
+            if (result != null) return result;
+        }
+
+        // All overload attempts failed. Check fallback semantics.
+        // If an overload context exists, the fallback value determines behavior:
+        //   fallback=1 (true):  allow native operation (return null)
+        //   fallback=undef/not specified: die
+        //   fallback=0 (false): die
+        OverloadContext activeCtx = (ctx1 != null) ? ctx1 : ctx2;
+        if (activeCtx != null) {
+            // Check if fallback explicitly allows native operations (fallback => 1)
+            if (activeCtx.hasFallbackGlob && activeCtx.fallbackValue != null
+                    && activeCtx.fallbackValue.getDefinedBoolean() && activeCtx.fallbackValue.getBoolean()) {
+                // fallback => 1: allow native operation
+                return null;
             }
+            // fallback => 0, undef, or not specified: die
+            String className = activeCtx.perlClassName;
+            throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
+                    + "argument in overloaded package " + className);
         }
         return null;
     }
@@ -188,24 +255,27 @@ public class OverloadContext {
 
     /**
      * Attempts to execute fallback overloading methods if primary method fails.
+     * Implements Perl 5 autogeneration semantics based on the fallback value:
+     *   - No "()" glob found:       treat as fallback=undef → allow autogeneration
+     *   - fallback=undef:           allow autogeneration, die on failure
+     *   - fallback=1 (true):        allow autogeneration, return undef on failure
+     *   - fallback=0 (false):       deny autogeneration entirely
      *
      * @param runtimeScalar   The scalar value to process
      * @param fallbackMethods Variable number of fallback method names to try in sequence
      * @return RuntimeScalar result from successful fallback execution, or null if all attempts fail
      */
     public RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String... fallbackMethods) {
-        if (methodFallback == null) return null;
+        // Check if autogeneration is explicitly denied (fallback => 0)
+        if (hasFallbackGlob && fallbackValue != null && fallbackValue.getDefinedBoolean() && !fallbackValue.getBoolean()) {
+            return null;
+        }
 
-        // Execute fallback method to determine if alternative methods should be tried
-        RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
-
-        // If fallback returns undefined or true, try alternative conversion methods
-        if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-            // Try each fallback method in sequence
-            for (String fallbackMethod : fallbackMethods) {
-                RuntimeScalar result = this.tryOverload(fallbackMethod, new RuntimeArray(runtimeScalar));
-                if (result != null) return result;
-            }
+        // All other cases: try autogeneration
+        // (no glob found, fallback=undef, fallback=1)
+        for (String fallbackMethod : fallbackMethods) {
+            RuntimeScalar result = this.tryOverload(fallbackMethod, new RuntimeArray(runtimeScalar));
+            if (result != null) return result;
         }
         return null;
     }
