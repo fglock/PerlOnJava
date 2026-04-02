@@ -78,6 +78,12 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for canonpath() method");
         }
         String path = args.get(1).toString();
+        
+        // Empty string stays empty (Perl 5 behavior)
+        if (path.isEmpty()) {
+            return new RuntimeScalar("").getList();
+        }
+        
         // Implement Perl 5's File::Spec::Unix::canonpath logic:
         // 1. Collapse multiple slashes into one
         // 2. Collapse /./  and also /. at end of string
@@ -106,7 +112,7 @@ public class FileSpec extends PerlModuleBase {
             canonPath = canonPath.substring(0, canonPath.length() - sep.length());
         }
         
-        // If we ended up with empty string, return "."
+        // If we reduced to empty string from a non-empty input, return "."
         if (canonPath.isEmpty()) {
             canonPath = ".";
         }
@@ -424,6 +430,10 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for splitdir() method");
         }
         String directories = args.get(1).toString();
+        // Empty string returns empty list (Perl 5 behavior)
+        if (directories.isEmpty()) {
+            return new RuntimeList(new ArrayList<>());
+        }
         String[] dirs = directories.split(Pattern.quote(File.separator), -1);
         List<RuntimeScalar> dirList = new ArrayList<>();
         for (String dir : dirs) {
