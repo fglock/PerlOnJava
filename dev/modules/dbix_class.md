@@ -571,10 +571,10 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | Class-Accessor-Grouped | **97.8%** | 543/555 | GC/weaken |
 | Moo | **97.3%** | 816/839 | weaken, DEMOLISH, `no Moo` cleanup |
 | MRO-Compat | **100%** | 26/26 | None |
-| Sub-Quote | **98.6%** | 2716/2755 | GC/weaken (27), hints propagation (5), line directives (3), Sub::Name (2), hints hash (1), use integer (2) |
+| Sub-Quote | **98.7%** | 2720/2755 | GC/weaken (28), hints propagation (5), syntax error line numbering (1), use integer (1) |
 | Config-Any | ~80-90% | 58/113 (runner artifact) | Passes individually; parallel runner issue |
 
-**Aggregate: 99.3%** (8,379/8,435 across all dependency modules)
+**Aggregate: 99.3%** (8,383/8,435 across all dependency modules)
 
 ### Implementation Plan (Phase 5 continued)
 
@@ -720,8 +720,27 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 - Impact: quotify.t goes from 2586/2592 to 2592/2592 (6 large-integer tests fixed)
 - Files changed: `EmitLiteral.java`, `BytecodeCompiler.java`
 
+**Step 5.52 (2026-04-01):**
+- Fixed `caller(0)` returning wrong file/line in eval STRING with `#line` directives
+- Root cause: ExceptionFormatter's frame skip logic assumed first frame is sub's own
+  location (true for JVM), but interpreter frames from CallerStack are already the call site
+- Added `StackTraceResult` record to `ExceptionFormatter` with `firstFrameFromInterpreter` flag
+- `callerWithSub()` now conditionally skips based on frame type
+- Fixed eval STRING's `ErrorMessageUtil` to use `evalCtx.compilerOptions.fileName`
+- Fixed sub naming: `SubroutineParser` uses fully qualified names via `NameNormalizer`
+- Files changed: `ExceptionFormatter.java`, `RuntimeCode.java`, `SubroutineParser.java`
+
+**Step 5.53 (2026-04-01):**
+- Fixed interpreter list slice: `(list)[indices]` was compiled as `[list]->[indices]`
+  (array ref dereference returning one scalar instead of proper list slice)
+- Added `LIST_SLICE` opcode (452) that calls `RuntimeList.getSlice()` for proper
+  multi-element list slice semantics
+- Files changed: `Opcodes.java`, `CompileBinaryOperator.java`,
+  `BytecodeInterpreter.java`, `Disassemble.java`
+- Impact: Sub-Quote goes from 52/56 to 54/56 (tests 48,50,55,56 fixed)
+
 ### Next Steps
-1. Investigate remaining Sub-Quote failures: warning bits propagation, `use integer` overload in eval'd subs
+1. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
 2. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
 3. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
