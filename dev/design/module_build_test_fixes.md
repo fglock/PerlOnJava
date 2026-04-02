@@ -385,6 +385,16 @@ System.setProperty("user.dir", absoluteDir.toPath().normalize().toString());
 | `src/main/java/.../PipeInputChannel.java` | stderr through Perl STDERR handle |
 | `src/main/java/.../PipeOutputChannel.java` | stdout/stderr through Perl handles |
 | `src/main/java/.../GlobalRuntimeScalar.java` | Glob alias + local propagation |
+| `src/main/java/.../ExceptionFormatter.java` | caller(0) fix for BEGIN blocks in large files |
+
+### Round 4: caller(0) fix for BEGIN blocks (2026-04-02)
+
+**Problem:** `caller(0)` inside closures called from BEGIN blocks in large files (e.g., `ExtUtils::ParseXS::Node.pm` with 6631 lines and 62 BEGIN blocks) returned wrong package names for ~30 of the 62 calls. The JVM stack trace's anon class frame for the BEGIN wrapper had a tokenIndex falling in a gap in `ByteCodeSourceMapper` entries (tokenIndex 110-2498), causing `floorEntry()` to return a stale package from a much earlier BEGIN block.
+
+**Fix:** `ExceptionFormatter.formatThrowable()` now detects `SpecialBlockParser.runSpecialBlock` frames and uses the CallerStack entry (which has the correct package, file, and line from parse time) to correct the preceding anon class stack frame. A `lastWasRunSpecialBlock` flag prevents double-processing for the overloaded 3-arg/4-arg method pair.
+
+**Files modified:**
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ExceptionFormatter.java` — Added runSpecialBlock frame handling
 
 ### Next Steps (if pursuing 100%)
 
