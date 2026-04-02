@@ -4,8 +4,8 @@
 
 **Module**: DBIx::Class 0.082844  
 **Test command**: `./jcpan -t DBIx::Class`  
-**Branch**: `feature/dbix-class-support`  
-**PR**: https://github.com/fglock/PerlOnJava/pull/415  
+**Branch**: `feature/dbix-class-fixes`  
+**PR**: https://github.com/fglock/PerlOnJava/pull/415 (original), PR TBD (current)  
 **Status**: Phase 5 — Fix runtime issues iteratively
 
 ## Dependency Tree
@@ -189,6 +189,9 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.29 | Add STORABLE_freeze/thaw hook support to Storable dclone/freeze/thaw | `Storable.java` | DONE |
 | 5.30 | Fix stale PreparedStatement after ROLLBACK in execute() | `DBI.java` | DONE |
 | 5.31 | Fix interpreter context propagation for subroutine bodies | `BytecodeCompiler.java`, `BytecodeInterpreter.java`, opcode handlers | DONE |
+| 5.35 | Fix `last_insert_id()` to use connection-level SQL queries | `DBI.java` | DONE |
+| 5.36 | Fix `%{{ expr }}` parser disambiguation inside dereference context | `Parser.java`, `StatementResolver.java`, `Variable.java` | DONE |
+| 5.37 | Fix `//=`, `||=`, `&&=` short-circuit in bytecode interpreter | `BytecodeCompiler.java` | DONE |
 
 **t/60core.t results** (17 tests emitted):
 - **ok 1–12**: Basic CRUD, update, dirty columns — all pass
@@ -321,6 +324,8 @@ A `DestroyGuard` could work similarly:
 | `t/64db.t` | **FIXED** (4/4 real pass) | `column_info()` implemented via SQLite PRAGMA (step 5.13) |
 | `t/752sqlite.t` | **FIXED** (34/34 real pass) | AutoCommit tracking + BEGIN/COMMIT/ROLLBACK interception (steps 5.14-5.15); `prepare_cached` per-dbh cache (step 5.16) |
 | `t/00describe_environment.t` | **FIXED** (fully passing) | `$^S` correctly reports 1 inside `$SIG{__DIE__}` for `require` failures in `eval {}` (step 5.17) |
+| `t/83cache.t` | **FIXED** (all real tests pass) | Prefetch result collapsing fixed by `//=` short-circuit fix (step 5.37). Row collapser eval-generated code now correctly deduplicates joined rows. |
+| `t/90join_torture.t` | **FIXED** (all real tests pass) | Same `//=` short-circuit fix (step 5.37). Test 4 "Two artists returned" now correctly returns 2 collapsed artists instead of 12 raw joined rows. |
 | `t/106dbic_carp.t` | **FIXED** (3/3 real pass) | `__LINE__` inside `@{[]}` string interpolation returns correct line number (step 5.18) |
 | `t/100populate.t` | **MOSTLY FIXED** (52/60 real pass) | JDBC error normalization (5.25), regex `\Q` delimiter escaping (5.26), deferred bind_param (5.27-5.28), stale PreparedStatement retry (5.30). Tests 37-42 fail (SQL trace expects BEGIN but gets INSERT — transaction_depth patch in _insert_bulk was in previous cpan build dir and was lost on rebuild). Test 53 ("populate is atomic") related. Test 59 still fails (literal+bind attr normalization in execute_for_fetch) |
 
@@ -516,6 +521,10 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 - [x] Phase 5 step 5.34 (2026-04-01)
   - 5.34a: Fixed ternary-as-lvalue with LIST assignment branches — In `EmitVariable.handleAssignOperator()`, detect when the LHS ternary has LIST assignment branches (via `LValueVisitor.getContext()`). For LIST assignment branches, emit in void context (side effects only) and use the outer RHS as result. Scalar assignment branches (which return writable lvalues) use the normal code path. Enables `wantarray ? @rv = eval $src : $rv[0] = eval $src` (Class::Accessor::Grouped pattern).
   - 5.34b: Confirmed File::stat VerifyError is already fixed — `use File::stat` works natively with JVM backend (no interpreter fallback). Both `Class::Struct + use overload` and `eval { &{"Fcntl::S_IF..."} }` patterns compile correctly.
+- [x] Phase 5 steps 5.35–5.37 (2026-04-01)
+  - 5.35: Fixed `last_insert_id()` — replaced statement-level `getGeneratedKeys()` with connection-level SQL queries (`SELECT last_insert_rowid()` for SQLite, `LASTVAL()` for PostgreSQL, etc.). The old approach broke when any `prepare()` call between INSERT and `last_insert_id()` overwrote the stored statement handle. Fixes t/79aliasing.t, t/87ordered.t, t/101populate_rs.t auto-increment detection.
+  - 5.36: Fixed `%{{ expr }}` parser disambiguation — added `insideDereference` flag to Parser.java. In `Variable.parseBracedVariable()`, sets flag before calling `ParseBlock.parseBlock()`. In `StatementResolver.isHashLiteral()`, when inside dereference context with no block indicators, defaults to hash (true) instead of block (false). Fixes `%{{ map { ... } @list }}` (RowParser.pm `__unique_numlist`) and `values %{{ func() }}` (Ordered.pm) patterns. Unblocks t/79aliasing.t, t/87ordered.t, t/101populate_rs.t.
+  - 5.37: Fixed `//=`, `||=`, `&&=` short-circuit in bytecode interpreter — the bytecode compiler (`BytecodeCompiler.handleCompoundAssignment()`) was eagerly evaluating the RHS before the `DEFINED_OR_ASSIGN`/`LOGICAL_AND_ASSIGN`/`LOGICAL_OR_ASSIGN` opcode checked the condition. Side effects like `$result_pos++` always executed, breaking DBIx::Class's eval-generated row collapser code. Added `handleShortCircuitAssignment()` that compiles LHS first, emits `GOTO_IF_TRUE`/`GOTO_IF_FALSE` to conditionally skip RHS evaluation, and only assigns via `SET_SCALAR` when needed. Fixes prefetch result collapsing in t/83cache.t test 7 and t/90join_torture.t test 4.
 
 ### Test Suite Summary (87 files)
 
