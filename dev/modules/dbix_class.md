@@ -567,7 +567,7 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | Context-Preserve | **100%** | 14/14 | None |
 | namespace-clean | **99.4%** | 2086/2099 | Stash symbol deletion edge cases |
 | Hash-Merge | **99.4%** | 845/850 | GC/weaken |
-| SQL-Abstract-Classic | **98.2%** | 1206/1228 | Nested ref-of-ref detection (`ref(\\\%h)`) |
+| SQL-Abstract-Classic | **98.5%** | 1210/1228 | Overload fallback detection (17), IS NULL (1) |
 | Class-Accessor-Grouped | **97.8%** | 543/555 | GC/weaken |
 | Moo | **97.3%** | 816/839 | weaken, DEMOLISH, `no Moo` cleanup |
 | MRO-Compat | **84.6%** | 22/26 | `mro::get_isarev` / `pkg_gen` missing |
@@ -596,11 +596,11 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 
 #### Tier 3 — Dependency Module Fixes
 
-| Step | What | Tests Fixed | Effort |
+| Step | What | Tests Fixed | Status |
 |------|------|------------|--------|
-| 5.44 | Nested ref-of-ref detection (`ref()` chain) | 22 (SQL-Abstract) | Small |
-| 5.45 | Sub-Quote `%^H` hints preservation | 15 (Sub-Quote) | Medium |
-| 5.46 | `mro::get_isarev` / `pkg_gen` | 4 (MRO-Compat) | Medium |
+| 5.44 | Nested ref-of-ref detection (`ref()` chain) | 4 (SQL-Abstract) | ✅ Done |
+| 5.45 | `caller()` hints: `$^H` and `%^H` return values | ~5 (Sub-Quote) | Pending |
+| 5.46 | `mro::get_isarev` dynamic scan + `pkg_gen` auto-increment | 4 (MRO-Compat) | Pending |
 
 #### Systemic — Not planned for short-term
 
@@ -610,7 +610,7 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 
 ### Progress Tracking
 
-#### Current Status: Tier 2 complete, Tier 3 pending
+#### Current Status: Tier 3 in progress
 
 #### Key Test Results (2026-04-02)
 
@@ -640,10 +640,23 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
   hashes (one per `hashDeref()` call). Fix caches the autovivification hash in the scalar's
   value field so subsequent hashDeref() calls reuse the same hash.
 
+**Step 5.44 (2026-04-02):**
+- Fixed `ref()` for nested references: `ref(\\$x)` returned "SCALAR" instead of "REF"
+- Root cause: `REFERENCE` type missing from inner switch in `ReferenceOperators.ref()` —
+  when a REFERENCE pointed to another REFERENCE, it fell to `default -> "SCALAR"`
+- Also fixed parallel bug in `builtin::reftype` in `Builtin.java`
+- Files changed: `ReferenceOperators.java`, `Builtin.java`
+- SQL-Abstract-Classic `t/09refkind.t` now 13/13 (was 9/13)
+- Remaining 18 SQL-Abstract failures: 17 in `t/23_is_X_value.t` (overload fallback
+  detection — `use overload bool` without `fallback` should allow auto-stringification
+  in Perl 5 ≥ 5.17, but PerlOnJava's overload doesn't support this derivation),
+  1 in `t/02where.t` (`{like => undef}` generates `requestor NULL` instead of `IS NULL`)
+
 ### Next Steps
-1. Implement Tier 3 dependency fixes (steps 5.44-5.46) — improves SQL-Abstract, Sub-Quote, MRO-Compat
-2. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-3. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
+1. Step 5.45: Fix `caller()[8]` ($^H) and `caller()[10]` (%^H) to return actual values — fixes Sub-Quote hints preservation
+2. Step 5.46: Fix `mro::get_isarev` dynamic scan + `mro::get_pkg_gen` auto-increment — fixes MRO-Compat
+3. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+4. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
