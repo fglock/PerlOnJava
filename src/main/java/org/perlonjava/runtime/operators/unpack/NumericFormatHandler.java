@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators.unpack;
 
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.operators.UnpackState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -213,100 +214,13 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-            // For UTF-8 strings, q/Q formats read CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
-            if (state.isUTF8Data() && state.isCharacterMode()) {
-                // Read 8 character codes and assemble into a long
-                // Respects current byte order (little-endian by default, can be changed by < or >)
-                ByteBuffer buffer = state.getBuffer();
-                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
-
-                for (int i = 0; i < count; i++) {
-                    if (state.remainingCodePoints() < 8) {
-                        break;
-                    }
-                    long value;
-                    if (isBigEndian) {
-                        value = ((long) (state.nextCodePoint() & 0xFF) << 56) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 48) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 40) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 32) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 24) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 16) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 8) |
-                                (long) (state.nextCodePoint() & 0xFF);
-                    } else {
-                        value = (long) (state.nextCodePoint() & 0xFF) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 8) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 16) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 24) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 32) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 40) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 48) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 56);
-                    }
-
-                    if (signed) {
-                        output.add(new RuntimeScalar(value));
-                    } else {
-                        // For unsigned Q format, preserve precision
-                        if (value < 0) {
-                            output.add(new RuntimeScalar(Long.toUnsignedString(value)));
-                        } else if (value > 9007199254740992L) { // 2^53
-                            output.add(new RuntimeScalar(Long.toString(value)));
-                        } else {
-                            output.add(new RuntimeScalar(value));
-                        }
-                    }
-                }
-                return;
-            }
-
-            // For non-UTF-8 strings, use original byte buffer logic
-            // Save current mode
-            boolean wasCharacterMode = state.isCharacterMode();
-
-            // Switch to byte mode for numeric reading
-            if (wasCharacterMode) {
-                state.switchToByteMode();
-            }
-
-            ByteBuffer buffer = state.getBuffer();
-
-            for (int i = 0; i < count; i++) {
-                if (buffer.remaining() < 8) {
-                    break;
-                }
-                // Read 8 bytes for quad/Perl IV formats
-                long value = buffer.getLong();
-                if (signed) {
-                    output.add(new RuntimeScalar(value));
-                } else {
-                    // For unsigned Q format, we need to preserve precision
-                    // For 32-bit Perl emulation, values > 2^53 lose precision as doubles
-                    if (value < 0) {
-                        // Negative values represent large unsigned values
-                        // Store as string to preserve full unsigned value
-                        output.add(new RuntimeScalar(Long.toUnsignedString(value)));
-                    } else if (value > 9007199254740992L) { // 2^53
-                        // Positive values > 2^53 lose precision as doubles
-                        // Store as string to preserve exact value
-                        output.add(new RuntimeScalar(Long.toString(value)));
-                    } else {
-                        // Value can be stored exactly
-                        output.add(new RuntimeScalar(value));
-                    }
-                }
-            }
-
-            // Restore original mode
-            if (wasCharacterMode) {
-                state.switchToCharacterMode();
-            }
+            // 64-bit quads not supported (ivsize=4, no use64bitint)
+            throw new PerlCompilerException("Invalid type '" + (signed ? "q" : "Q") + "' in unpack");
         }
 
         @Override
         public int getFormatSize() {
-            return 8; // j, J, q, Q are all 8-byte formats
+            return 8; // q, Q are 8-byte formats (j, J use LongHandler at 4 bytes)
         }
     }
 

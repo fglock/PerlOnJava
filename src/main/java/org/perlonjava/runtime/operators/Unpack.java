@@ -32,8 +32,8 @@ public class Unpack {
         handlers.put('v', new NumericFormatHandler.VAXShortHandler());
         handlers.put('q', new NumericFormatHandler.QuadHandler(true));   // signed 64-bit quad
         handlers.put('Q', new NumericFormatHandler.QuadHandler(false));  // unsigned 64-bit quad
-        handlers.put('j', new NumericFormatHandler.QuadHandler(true));   // signed Perl IV
-        handlers.put('J', new NumericFormatHandler.QuadHandler(false));  // unsigned Perl UV
+        handlers.put('j', new NumericFormatHandler.LongHandler(true));   // signed Perl IV (ivsize=4)
+        handlers.put('J', new NumericFormatHandler.LongHandler(false));  // unsigned Perl UV (uvsize=4)
         handlers.put('f', new NumericFormatHandler.FloatHandler());
         handlers.put('F', new NumericFormatHandler.DoubleHandler());  // F is double-precision like d
         handlers.put('d', new NumericFormatHandler.DoubleHandler());
@@ -668,9 +668,10 @@ public class Unpack {
             case 'q':
             case 'Q':
             case 'd':
+                return 8;
             case 'j':
             case 'J':
-                return 8;
+                return 4; // ivsize=4
             case 'w':
             case 'u':
             case 'U':

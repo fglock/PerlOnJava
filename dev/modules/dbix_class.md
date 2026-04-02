@@ -193,6 +193,7 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.36 | Fix `%{{ expr }}` parser disambiguation inside dereference context | `Parser.java`, `StatementResolver.java`, `Variable.java` | DONE |
 | 5.37 | Fix `//=`, `||=`, `&&=` short-circuit in bytecode interpreter | `BytecodeCompiler.java` | DONE |
 | 5.57 | Fix post-rebase regressions: integer `/=` warn, do{}until const fold, vec 32-bit, strict propagation, caller hints, %- CAPTURE_ALL, large int literals | Multiple files | DONE |
+| 5.58 | Fix pack/unpack 32-bit consistency: j/J use ivsize=4 bytes, disable q/Q (no use64bitint) | `NumericPackHandler.java`, `NumericFormatHandler.java`, `Unpack.java`, `PackParser.java` | DONE |
 
 **t/60core.t results** (142 tests emitted, updated after step 5.56):
 - **125 ok**: All real tests pass
@@ -653,7 +654,7 @@ instead of relying on DESTROY.
 
 ### Progress Tracking
 
-#### Current Status: Step 5.57 complete (post-rebase regression fixes)
+#### Current Status: Step 5.58 complete (pack/unpack 32-bit consistency)
 
 #### Key Test Results (2026-04-02)
 
@@ -669,6 +670,12 @@ instead of relying on DESTROY.
 | t/60core.t | 17 (12 cached + 5 GC) | Reduced from 50 by step 5.56 (Active flag lifecycle fix). Remaining 12 need DESTROY. |
 
 #### Completed Work
+
+**Step 5.58 (2026-04-02) — Pack/unpack 32-bit consistency:**
+- `j`/`J` format now uses 4 bytes (matching `ivsize=4`) instead of hardcoded 8 bytes
+- `q`/`Q` format now throws "Invalid type" (matching 32-bit Perl without `use64bitint`)
+- op/pack.t: +5 passes (14665 ok, was 14660); op/64bitint.t: fully skipped
+- Files: `NumericPackHandler.java`, `NumericFormatHandler.java`, `Unpack.java`, `PackParser.java`
 
 **Step 5.41-5.42 (2026-04-01):**
 - Binary Storable serializer matching Perl 5 sort order (`Storable.java`)

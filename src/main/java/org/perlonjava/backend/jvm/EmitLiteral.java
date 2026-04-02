@@ -464,9 +464,7 @@ public class EmitLiteral {
                             Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                             "<init>", "(J)V", false);
                 } else {
-                    // Value exceeds long range (e.g., unsigned 64-bit) — store as double.
-                    // This loses precision for values > 2^53 but maintains consistency with
-                    // how unary minus and other operators handle these values.
+                    // Value exceeds long range — store as double (Perl NV promotion)
                     mv.visitLdcInsn(Double.valueOf(value));
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
