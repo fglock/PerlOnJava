@@ -417,9 +417,52 @@ The infrastructure (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) is no
 
 2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, we access `RuntimeCode.attributes` from Java. For CODE refs this is straightforward. For variable refs, we only need to validate built-in attrs (`shared`) and return unrecognized ones — no actual flag-setting needed since `shared` is a no-op.
 
-3. **Attribute::Handlers**: The module exists at `src/main/perl/lib/Attribute/Handlers.pm` and the core dependencies (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) are now implemented. Remaining blockers are likely edge cases in Attribute::Handlers internals. **Decision: Defer — only 4 tests, needs investigation.**
+3. **Attribute::Handlers**: The module exists at `src/main/perl/lib/Attribute/Handlers.pm` and the core dependencies (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) are now implemented. All core attrhand.t tests pass (4/4). Remaining edge cases are in multi.t (DESTROY, END handler warning) and linerep.t (eval context file/line).
 
 4. **`our` variable attribute timing**: The perldoc says `our` attributes are applied at compile-time. This means the emitter needs to call `attributes::->import()` immediately during parsing (like `callModifyCodeAttributes` does for subs), not defer to runtime. **Decision: Handle in Phase 3.**
+
+### Progress Tracking
+
+#### Current Status: Phase 8 completed (2026-04-02)
+
+#### Test Scores After Phase 8
+
+| Test File | Score | Change |
+|-----------|-------|--------|
+| attrs.t | 152/158 | unchanged |
+| uni/attrs.t | 29/34 | unchanged |
+| attrproto.t | 51/52 | unchanged |
+| attrhand.t | 4/4 | unchanged |
+| AH/caller.t | 2/2 | unchanged |
+| AH/constants.t | 1/1 | unchanged |
+| AH/data_convert.t | 8/8 | unchanged |
+| AH/linerep.t | 15/18 | +2 (filename/linenum for CODE attrs) |
+| AH/multi.t | 45/51 | **NEW** (was crash/0) |
+
+**Total: 307/328 (93.6%)**
+
+#### Phase 8 Fixes (2026-04-02)
+
+1. **RuntimeScalarType.java**: Added null check in `blessedId()` for reference-typed scalars with null value
+2. **ScalarSpecialVariable.java**: Fixed `${^LAST_SUCCESSFUL_PATTERN}` to return undef when no regex match yet (was REGEX(null))
+3. **ReferenceOperators.java**: Added null-safety checks in `ref()` for CODE, REGEX, REFERENCE, ARRAYREFERENCE, HASHREFERENCE, GLOBREFERENCE types
+4. **SubroutineParser.java**: Push CallerStack frames in `callModifyCodeAttributes()` with source file/line
+5. **OperatorParser.java**: Push CallerStack frames in `callModifyVariableAttributes()` with source file/line
+6. **RuntimeCode.java**: Added CallerStack fallback in `callerWithSub()` for frames beyond Java stack trace
+
+#### Remaining Failures
+
+| Test | Count | Category | Notes |
+|------|-------|----------|-------|
+| attrs.t 41-42, uni 17-18 | 4 | Phase 3: `my` var attribute dispatch | Ref points to temp, not lexical |
+| attrs.t 87, uni 23 | 2 | Strict error masked (#49472) | Pre-existing strict checking issue |
+| attrs.t 124-125, uni 30-31 | 4 | Phase 7: Closure prototype | Not implemented |
+| attrs.t 154 | 1 | TODO test (expected failure) | RT #3605 ternary/attribute parsing |
+| attrproto.t 48 | 1 | Lexical sub in eval STRING | Pre-existing eval bug |
+| linerep.t 16-17 | 2 | eval context file/line | `#line` directive not respected in eval |
+| linerep.t 18 | 1 | `my` var ref identity | Same as Phase 3 issue |
+| multi.t 45-47,49-50 | 5 | DESTROY not implemented | PerlOnJava limitation |
+| multi.t 52 | 1 | END handler warning | Minor edge case |
 
 ### PR
 - https://github.com/fglock/PerlOnJava/pull/420
