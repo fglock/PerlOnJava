@@ -606,16 +606,20 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | 5.49 | Overload fallback semantics and autogeneration | 17 (SQL-Abstract overload) | Done |
 | 5.50 | B.pm SV flags rewrite (IOK/NOK/POK) | quotify.t countable | Done |
 | 5.51 | Large integer literals stored as DOUBLE not STRING | 6 (quotify.t) | Done |
+| 5.52 | `caller()` in eval STRING with `#line` directives | Sub-Quote | Done |
+| 5.53 | Interpreter LIST_SLICE implementation | 4 (Sub-Quote) | Done |
+| 5.54 | LIST_SLICE opcode collision + scalar context | 2 (op/pack.t) | Done |
+| 5.55 | Storable nfreeze/thaw STORABLE_freeze/thaw hooks | 115 (t/84serialize.t) | Done |
 
 #### Systemic — Not planned for short-term
 
 - DESTROY / TxnScopeGuard (6 txn_scope_guard + 45 cached stmt + 12 populate = ~63 tests)
-- GC / weaken / isweak (147 files with GC-only noise)
-- UTF8 flag semantics (14 tests in t/85utf8.t)
+- GC / weaken / isweak (~44 files with GC-only noise)
+- UTF8 flag semantics (8 tests in t/85utf8.t)
 
 ### Progress Tracking
 
-#### Current Status: Tier 3+ complete (steps 5.44-5.51)
+#### Current Status: Steps 5.52-5.55 complete
 
 #### Key Test Results (2026-04-02)
 
@@ -739,10 +743,86 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
   `BytecodeInterpreter.java`, `Disassemble.java`
 - Impact: Sub-Quote goes from 52/56 to 54/56 (tests 48,50,55,56 fixed)
 
+**Step 5.54 (2026-04-01):**
+- Fixed opcode collision: `LIST_SLICE` and `VIVIFY_LVALUE` both assigned opcode 452 in
+  `Opcodes.java`. Changed `LIST_SLICE` to 453.
+- Fixed interpreter LIST_SLICE scalar context conversion: `getSlice()` returns a
+  `RuntimeList` but in SCALAR context it should return the last element (via `.scalar()`),
+  not the count. Added context conversion in `BytecodeInterpreter.java` after
+  `list.getSlice(indices)` call, checking the `context` parameter and calling `.scalar()`
+  for scalar context or returning empty list for void context.
+- Impact: op/pack.t tests 4173 and 4267 fixed — both use `(unpack(...))[0]` syntax which
+  triggers LIST_SLICE in interpreter. The `is($$@)` prototype forces first arg to scalar
+  context, so LIST_SLICE must honor context.
+- Files changed: `Opcodes.java` (452→453), `BytecodeInterpreter.java`
+- Commit: `9e53afe78`
+
+**Step 5.55 (2026-04-01):**
+- Fixed Storable `nfreeze()`/`thaw()` to call `STORABLE_freeze`/`STORABLE_thaw` hooks on
+  blessed objects. Previously only `dclone()` (via `deepClone()`) called these hooks;
+  `serializeBinary()` and `deserializeBinary()` raw-serialized blessed objects without hooks.
+- Added `SX_HOOK` (type 19) to binary format for hook-serialized objects, containing:
+  class name, serialized string from freeze, and any extra refs
+- In `serializeBinary()`: check for STORABLE_freeze method before the existing SX_BLESS
+  code path. If found, call hook and emit SX_HOOK format.
+- In `deserializeBinary()`: new SX_HOOK case creates blessed object, reads serialized
+  string and extra refs, then calls STORABLE_thaw to reconstitute.
+- Impact: t/84serialize.t goes from 1 real failure to 0 real failures (115/115 real pass).
+  The `dclone_method` strategy now correctly chains: `deepClone` → `STORABLE_freeze` →
+  `nfreeze(handle)` → `serializeBinary` with hooks → compact 200-byte frozen data
+  (was 152KB without hooks, causing "Can't bless non-reference value" on thaw).
+- Files changed: `Storable.java`
+
+### DBIx::Class Full Test Suite Results (updated 2026-04-01)
+
+**92 test programs (66 active, 26 skipped)**
+
+| Category | Count | Details |
+|----------|-------|---------|
+| Fully passing | 15 | All subtests pass including GC |
+| GC-only failures | 44 | All real tests pass; only GC epilogue fails |
+| Real + GC failures | 4 | Have actual functional failures beyond GC |
+| Skipped | 26 | No DB driver / fork / threads |
+| Parse/skip errors | 3 | t/52leaks.t, t/71mysql.t, t/746sybase.t |
+
+**Programs with real (non-GC) failures:**
+
+| Test | Total Failed | GC Failures | Real Failures | Root Cause |
+|------|-------------|-------------|---------------|------------|
+| t/60core.t | 50 | 5 | 45 | "Unreachable cached statement still active" — DESTROY-related |
+| t/100populate.t | 17 | 5 | 12 | Transaction depth (DESTROY), JDBC batch execution |
+| t/85utf8.t | 13 | 5 | 8 | UTF-8 byte handling (JVM strings natively Unicode) |
+| t/60core.t test 38 | 1 | 0 | 1 | `-and` array condition in `find()` |
+
+**Previously miscounted as having real failures (actually all GC-only):**
+
+| Test | Total Failed | Actual Real | Explanation |
+|------|-------------|-------------|-------------|
+| t/40compose_connection.t | 7 | 0 | All 7 are GC (2 planned tests both pass) |
+| t/40resultsetmanager.t | 1 | 0 | GC test beyond plan (5 planned all pass) |
+| t/53lean_startup.t | 10 | 0 | All 10 are GC (6 planned tests all pass) |
+| t/84serialize.t | 5 | 0 | Was 1 real, **fixed by step 5.55** (115/115 pass) |
+| t/752sqlite.t | 30 | 0 | All GC (6 schemas × 5 GC) |
+| t/93single_accessor_object.t | 15 | 0 | All GC (3 schemas × 5 GC) |
+
+**Effective pass rate (excluding GC):** 59 of 63 active test programs pass all real tests (94%)
+
+### Sub-Quote Test Results (updated 2026-04-01)
+
+**5378/5421 (99.2%)**
+
+| Test File | Pass/Total | Key Failures |
+|-----------|-----------|--------------|
+| sub-quote.t | 54/56 | Test 24 (line numbering in %^H PRELUDE), test 27 (weaken) |
+| sub-defer.t | 43/59 | 16 failures all weaken-related |
+| hints.t | 13/18 | Tests 4-5 (${^WARNING_BITS} round-trip), test 8 (%^H in eval BEGIN), tests 9,14 (overload::constant) |
+| leaks.t | 5/9 | 4 failures all weaken-related |
+
 ### Next Steps
-1. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
-2. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-3. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
+1. Remaining real failures are systemic: DESTROY/TxnScopeGuard (57 tests), UTF-8 flag (8 tests), -and condition (1 test)
+2. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
+3. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+4. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?

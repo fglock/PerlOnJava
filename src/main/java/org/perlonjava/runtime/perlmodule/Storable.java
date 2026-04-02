@@ -76,6 +76,7 @@ public class Storable extends PerlModuleBase {
     private static final int SX_SV_UNDEF  = 14;  // Perl's immortal PL_sv_undef
     private static final int SX_BLESS     = 17;  // Blessed object
     private static final int SX_OBJECT    = 0;   // Already stored (backreference)
+    private static final int SX_HOOK      = 19;  // Storable hook (STORABLE_freeze/thaw)
     private static final int SX_CODE      = 26;  // Code reference
 
     // Magic byte to identify binary format (distinguishes from old YAML+GZIP format)
@@ -153,10 +154,47 @@ public class Storable extends PerlModuleBase {
             return;
         }
 
-        // Blessed objects: emit SX_BLESS + class name before the data
+        // Blessed objects: check for STORABLE_freeze hook first
         int blessId = RuntimeScalarType.blessedId(scalar);
         if (blessId != 0) {
             String className = NameNormalizer.getBlessStr(blessId);
+
+            // Check for STORABLE_freeze hook
+            RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
+                    "STORABLE_freeze", className, null, 0);
+
+            if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
+                // Track for circular reference detection before calling hook
+                if (scalar.value != null) seen.put(scalar.value, seen.size());
+
+                // Call STORABLE_freeze($self, $cloning=0)
+                RuntimeArray freezeArgs = new RuntimeArray();
+                RuntimeArray.push(freezeArgs, scalar);
+                RuntimeArray.push(freezeArgs, new RuntimeScalar(0)); // cloning = false
+                RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                RuntimeArray freezeArray = new RuntimeArray();
+                freezeResult.setArrayOfAlias(freezeArray);
+
+                // Emit SX_HOOK + class name + serialized string + extra refs
+                sb.append((char) SX_HOOK);
+                appendInt(sb, className.length());
+                sb.append(className);
+
+                // Serialized string (first element of freeze result)
+                String serialized = freezeArray.size() > 0 ? freezeArray.get(0).toString() : "";
+                appendInt(sb, serialized.length());
+                sb.append(serialized);
+
+                // Extra refs (remaining elements)
+                int extraRefs = Math.max(0, freezeArray.size() - 1);
+                appendInt(sb, extraRefs);
+                for (int i = 1; i <= extraRefs; i++) {
+                    serializeBinary(freezeArray.get(i), sb, seen);
+                }
+                return;
+            }
+
+            // No hook — emit SX_BLESS + class name before the data
             sb.append((char) SX_BLESS);
             appendInt(sb, className.length());
             sb.append(className);
@@ -251,6 +289,44 @@ public class Storable extends PerlModuleBase {
             case SX_OBJECT -> {
                 int refIdx = readInt(data, pos);
                 return refList.get(refIdx);
+            }
+            case SX_HOOK -> {
+                // Object with STORABLE_freeze/thaw hooks
+                int classLen = readInt(data, pos);
+                String hookClass = data.substring(pos[0], pos[0] + classLen);
+                pos[0] += classLen;
+
+                // Read serialized string
+                int serLen = readInt(data, pos);
+                String serialized = data.substring(pos[0], pos[0] + serLen);
+                pos[0] += serLen;
+
+                // Read extra refs
+                int extraRefCount = readInt(data, pos);
+                List<RuntimeScalar> extraRefs = new ArrayList<>();
+                for (int i = 0; i < extraRefCount; i++) {
+                    extraRefs.add(deserializeBinary(data, pos, refList));
+                }
+
+                // Create new blessed object
+                RuntimeHash newHash = new RuntimeHash();
+                result = newHash.createReference();
+                ReferenceOperators.bless(result, new RuntimeScalar(hookClass));
+                refList.add(result);
+
+                // Call STORABLE_thaw($new_obj, $cloning=0, $serialized, @extra_refs)
+                RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
+                        "STORABLE_thaw", hookClass, null, 0);
+                if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
+                    RuntimeArray thawArgs = new RuntimeArray();
+                    RuntimeArray.push(thawArgs, result);
+                    RuntimeArray.push(thawArgs, new RuntimeScalar(0)); // cloning = false
+                    RuntimeArray.push(thawArgs, new RuntimeScalar(serialized));
+                    for (RuntimeScalar ref : extraRefs) {
+                        RuntimeArray.push(thawArgs, ref);
+                    }
+                    RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                }
             }
             case SX_HASH -> {
                 RuntimeHash hash = new RuntimeHash();
