@@ -1,11 +1,63 @@
 package DBI;
 use strict;
 use warnings;
+use Scalar::Util ();
 use XSLoader;
 
 our $VERSION = '1.643';
 
 XSLoader::load( 'DBI' );
+
+# Wrap Java DBI methods with HandleError support.
+# In real DBI, HandleError is called from C before RaiseError/die.
+# Since our Java methods just die with RaiseError, we wrap them in Perl
+# to intercept the die and call HandleError from Perl context (where
+# caller() works correctly for DBIC's __find_caller).
+{
+    my $orig_prepare = \&DBI::prepare;
+    my $orig_execute = \&DBI::execute;
+
+    no warnings 'redefine';
+
+    *DBI::prepare = sub {
+        my $result = eval { $orig_prepare->(@_) };
+        if ($@) {
+            return _handle_error($_[0], $@);
+        }
+        return $result;
+    };
+
+    *DBI::execute = sub {
+        my $result = eval { $orig_execute->(@_) };
+        if ($@) {
+            # For sth errors, try HandleError on the parent dbh first, then sth
+            my $sth_handle = $_[0];
+            my $parent_dbh = $sth_handle->{Database};
+            if ($parent_dbh && Scalar::Util::reftype($parent_dbh->{HandleError} || '') eq 'CODE') {
+                return _handle_error_with_handler($parent_dbh->{HandleError}, $@);
+            }
+            return _handle_error($sth_handle, $@);
+        }
+        return $result;
+    };
+}
+
+sub _handle_error {
+    my ($handle, $err) = @_;
+    if (ref($handle) && Scalar::Util::reftype($handle->{HandleError} || '') eq 'CODE') {
+        # Call HandleError — if it throws (as DBIC's does), propagate the exception
+        $handle->{HandleError}->($err, $handle, undef);
+        # If HandleError returns without dying, return undef (error handled)
+        return undef;
+    }
+    die $err;
+}
+
+sub _handle_error_with_handler {
+    my ($handler, $err) = @_;
+    $handler->($err, undef, undef);
+    return undef;
+}
 
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/runtime/perlmodule/DBI.java
@@ -484,7 +536,7 @@ sub _prepare_as_cached {
     my $sth = eval { $dbh->prepare($sql, $attr) };
     if ($@) {
         my $err = "$@";
-        $err =~ s/\bDBI prepare\(\) failed\b/DBI prepare_cached() failed/g;
+        $err =~ s/\bDBI prepare failed\b/DBI prepare_cached failed/g;
         die $err;
     }
     return $sth;

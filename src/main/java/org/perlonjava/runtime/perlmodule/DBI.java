@@ -89,7 +89,7 @@ public class DBI extends PerlModuleBase {
             setError(handle, sqlEx);
             if (secondHandle != null) setError(secondHandle, sqlEx);
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + "() failed: " + getGlobalVariable("DBI::errstr"));
+        RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + " failed: " + getGlobalVariable("DBI::errstr"));
         if (handle.get("RaiseError").getBoolean()) {
             throw new PerlCompilerException(msg.toString());
         }
