@@ -331,6 +331,19 @@ public class Attributes extends PerlModuleBase {
      * @param codeRef     The RuntimeScalar wrapping the anonymous sub's RuntimeCode
      */
     public static void runtimeDispatchModifyCodeAttributes(String packageName, RuntimeScalar codeRef) {
+        runtimeDispatchModifyCodeAttributes(packageName, codeRef, false);
+    }
+
+    /**
+     * Dispatch MODIFY_CODE_ATTRIBUTES at runtime for anonymous subs.
+     * When {@code isClosure} is true, marks the original code as a closure prototype
+     * (non-callable) and replaces the RuntimeScalar's value with a callable clone.
+     *
+     * @param packageName The package to look up MODIFY_CODE_ATTRIBUTES in
+     * @param codeRef     The RuntimeScalar wrapping the anonymous sub's RuntimeCode
+     * @param isClosure   Whether the sub captures lexical variables (is a closure)
+     */
+    public static void runtimeDispatchModifyCodeAttributes(String packageName, RuntimeScalar codeRef, boolean isClosure) {
         if (codeRef.type != CODE) return;
         RuntimeCode code = (RuntimeCode) codeRef.value;
         if (code.attributes == null || code.attributes.isEmpty()) return;
@@ -377,9 +390,6 @@ public class Attributes extends PerlModuleBase {
 
             RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
 
-            // After handler returns, check the state of the code ref
-            RuntimeCode codeAfter = (RuntimeCode) codeRef.value;
-
             // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized
             RuntimeArray resultArray = result.getArrayOfAlias();
             if (resultArray.size() > 0) {
@@ -390,6 +400,20 @@ public class Attributes extends PerlModuleBase {
                 }
                 throw new PerlCompilerException(
                         "Invalid CODE attribute" + (resultArray.size() > 1 ? "s" : "") + ": " + sb);
+            }
+
+            // For closures: mark the original code as a prototype and replace
+            // codeRef's value with a callable clone. The MODIFY_CODE_ATTRIBUTES
+            // handler may have captured codeRef (e.g., $proto = $_[1]), so the
+            // handler's captured reference will point to the prototype (non-callable),
+            // while the expression result (codeRef) gets the callable clone.
+            if (isClosure) {
+                RuntimeCode originalCode = (RuntimeCode) codeRef.value;
+                RuntimeCode clone = originalCode.cloneForClosure();
+                clone.__SUB__ = new RuntimeScalar(clone);
+                originalCode.isClosurePrototype = true;
+                codeRef.type = CODE;
+                codeRef.value = clone;
             }
         } else {
             // No MODIFY_CODE_ATTRIBUTES handler — all non-builtin attrs are invalid

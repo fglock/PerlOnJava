@@ -375,15 +375,25 @@ public class EmitSubroutine {
                 }
             }
             if (hasNonBuiltin) {
+                // Determine if this sub is a closure (captures outer lexical variables).
+                // Closures get closure prototype semantics: MODIFY_CODE_ATTRIBUTES receives
+                // the prototype (non-callable), and the expression result is a callable clone.
+                boolean isClosure = visibleVariables.size() > skipVariables;
+
                 // Stack: [RuntimeScalar(codeRef)]
                 mv.visitInsn(Opcodes.DUP);
+                // Stack: [codeRef, codeRef]
                 mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
                 mv.visitInsn(Opcodes.SWAP);
+                // Stack: [codeRef, pkg, codeRef]
+                mv.visitInsn(isClosure ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                // Stack: [codeRef, pkg, codeRef, isClosure]
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/perlmodule/Attributes",
                         "runtimeDispatchModifyCodeAttributes",
-                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V",
                         false);
+                // Stack: [codeRef] (codeRef.value now points to clone if isClosure)
             }
         }
 

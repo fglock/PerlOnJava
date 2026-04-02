@@ -278,6 +278,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // as opposed to auto-created by getGlobalCodeRef() for lookups.
     // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
     public boolean isDeclared = false;
+    // Flag to indicate this is a closure prototype (the template CV before cloning).
+    // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
+    // Calling a closure prototype should die with "Closure prototype called".
+    public boolean isClosurePrototype = false;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -322,6 +326,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (EVAL_TRACE) {
             System.err.println("[eval-trace] " + msg);
         }
+    }
+
+    /**
+     * Create a callable clone of this RuntimeCode for closure prototype support.
+     * The original will be marked as a closure prototype (non-callable);
+     * the clone is the actual closure that can be called.
+     */
+    public RuntimeCode cloneForClosure() {
+        RuntimeCode clone;
+        if (this.subroutine != null) {
+            clone = new RuntimeCode(this.subroutine, this.prototype);
+        } else {
+            clone = new RuntimeCode(this.methodHandle, this.codeObject, this.prototype);
+        }
+        clone.attributes = this.attributes != null ? new java.util.ArrayList<>(this.attributes) : null;
+        clone.packageName = this.packageName;
+        clone.subName = this.subName;
+        clone.isStatic = this.isStatic;
+        clone.isDeclared = this.isDeclared;
+        clone.constantValue = this.constantValue;
+        clone.compilerSupplier = this.compilerSupplier;
+        // isClosurePrototype stays false for the clone (it's callable)
+        return clone;
     }
 
     /**
@@ -1874,6 +1901,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // Check for closure prototype — calling one should die
+            if (code.isClosurePrototype) {
+                throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
+            }
+
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
@@ -2107,6 +2139,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // Check for closure prototype — calling one should die
+            if (code.isClosurePrototype) {
+                throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
+            }
+
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
@@ -2247,6 +2284,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray a = list.getArrayOfAlias();
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // Check for closure prototype — calling one should die
+            if (code.isClosurePrototype) {
+                throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
+            }
 
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
