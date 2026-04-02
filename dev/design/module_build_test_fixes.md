@@ -4,15 +4,15 @@
 
 Running `./jcpan -t Module::Build` on Module-Build-0.4234 initially produced **148 subtest failures across 22 of 53 test files**. After implementing fixes for Issues 1-9, the failure count dropped significantly.
 
-### Current Results (after fixes)
+### Current Results (after all fixes)
 
 | Metric | Before | After | Change |
 |--------|--------|-------|--------|
 | Test files | 53 | 53 | -- |
-| Failing test files | 22 | 12 | **-10** |
+| Failing test files | 22 | 3 | **-19** |
 | Total subtests | 1092 | 1155 | +63 (more tests running) |
-| Failing subtests | 148 | 49 | **-99** |
-| Pass rate | 86.4% | 95.8% | **+9.4%** |
+| Failing subtests | 148 | 4 | **-144** |
+| Pass rate | 86.4% | 99.65% | **+13.25%** |
 | Skipped test files | 4 | 4 | -- |
 
 ## Root Cause Summary
@@ -325,7 +325,16 @@ System.setProperty("user.dir", absoluteDir.toPath().normalize().toString());
 
 ## Progress Tracking
 
-### Current Status: All phases implemented, 95.8% pass rate achieved
+### Current Status: 99.65% pass rate (3/53 test files, 4/1155 subtests remaining)
+
+### Results Over Time
+
+| Round | Failing Files | Failing Subtests | Pass Rate |
+|-------|--------------|-----------------|-----------|
+| Before | 22/53 | 148/1092 | 86.4% |
+| Round 1 | 12/53 | 49/1155 | 95.8% |
+| Round 2 | 5/53 | 12/1155 | 99.0% |
+| Round 3 | 3/53 | 4/1155 | **99.65%** |
 
 ### Completed
 - [x] Run Module::Build tests and capture output (2026-04-02)
@@ -344,26 +353,43 @@ System.setProperty("user.dir", absoluteDir.toPath().normalize().toString());
   - SystemOperator.java: Child stdout/stderr routed through Perl handles
   - PipeInputChannel.java: stderr routed through Perl STDERR handle
   - PipeOutputChannel.java: stdout/stderr routed through Perl handles
-- [x] Re-ran ./jcpan -t Module::Build: 12/53 failing (was 22), 49/1155 subtests failed (was 148/1092)
+- [x] Round 2 fixes implemented (2026-04-02)
+  - GlobalRuntimeScalar.java: Glob alias + local propagation (fixes Test::Harness verbose mode)
+  - FileSpec.java: canonpath trailing /. and trailing / handling
+  - Version.java: is_qv for dotted-decimal strings (2+ dots)
+  - Config.pm: Man directory paths (man1dir, man3dir, etc.)
+- [x] Round 3 fixes implemented (2026-04-02)
+  - ExtUtils/MakeMaker.pm: realclean/distclean delete Makefile, PREREQ_PM comments, PL_FILES processing
+  - FileSpec.java: canonpath("") returns "" not ".", splitdir("") returns empty list
 
-### Remaining Failures (12 test files, 49 subtests)
+### Remaining Failures (3 test files, 4 subtests - all pre-existing)
 
-| Test File | Subtests Failed | Likely Cause |
-|-----------|----------------|--------------|
-| t/test_types.t | 20/25 | TAP output format (uppercased test names in verbose output) |
-| t/compat.t | 10/165 | Mixed: Makefile generation, PL_files, verbose output format |
-| t/manifypods.t | 4/33 | Pod-to-man conversion differences |
-| t/manifypods_with_utf8.t | 2/2 | Pod-to-man UTF-8 handling |
-| t/perl_mb_opt.t | 2/8 | Stdout capture still not working for some cases |
-| t/unit_run_test_harness.t | 2/9 | #8 (glob aliasing + local, deferred) |
-| t/test_file_exts.t | 2/3 | TAP output format |
-| t/test_type.t | 2/7 | TAP output format |
-| t/runthrough.t | 2/29 | Missing Compress::Zlib (pre-existing) |
-| t/basic.t | 1/58 | TAP output format |
-| t/install.t | 1/34 | EOF on closed handle (pre-existing) |
-| t/properties/needs_compiler.t | 1/27 | Compiler detection edge case |
+| Test File | Subtests Failed | Cause | Notes |
+|-----------|----------------|-------|-------|
+| t/install.t | 1/34 | EOF on closed handle | Pre-existing, unrelated to Module::Build |
+| t/properties/needs_compiler.t | 1/27 | ExtUtils::xsubpp not found | Pre-existing, PerlOnJava doesn't ship xsubpp |
+| t/runthrough.t | 2/29 | Missing Compress::Zlib + META.yml version | Pre-existing |
 
-### Open Questions
-- TAP output format issues: Test::Harness verbose output shows uppercased summaries instead of individual "ok N" lines — may need TAP::Formatter investigation
-- Should child process stderr routing use byte-level streams (to handle binary data) or line-based reading?
-- Does the glob aliasing fix risk breaking other `local`/glob interactions?
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/main/perl/lib/Config.pm` | Added man1ext, man3ext, man directory paths |
+| `src/main/perl/lib/File/Spec.pm` | Load File::Spec::Unix package |
+| `src/main/perl/lib/ExtUtils/MakeMaker.pm` | realclean/distclean cleanup, PREREQ_PM, PL_FILES |
+| `src/main/java/.../FileSpec.java` | canonpath, catdir, catfile, splitdir fixes |
+| `src/main/java/.../Version.java` | numify() zero padding, is_qv for dotted-decimal |
+| `src/main/java/.../LayeredIOHandle.java` | flock() delegation |
+| `src/main/java/.../Directory.java` | chdir path normalization |
+| `src/main/java/.../SystemOperator.java` | Child process stdout/stderr through Perl handles |
+| `src/main/java/.../PipeInputChannel.java` | stderr through Perl STDERR handle |
+| `src/main/java/.../PipeOutputChannel.java` | stdout/stderr through Perl handles |
+| `src/main/java/.../GlobalRuntimeScalar.java` | Glob alias + local propagation |
+
+### Next Steps (if pursuing 100%)
+
+1. **t/install.t test 19**: "EOF on closed handle" - Need to investigate why a filehandle is getting closed prematurely. Likely related to how PerlOnJava handles ConfigData.pm writing.
+
+2. **t/properties/needs_compiler.t test 27**: Would need to implement ExtUtils::CBuilder or ship a stub xsubpp. Low priority since PerlOnJava doesn't have XS support.
+
+3. **t/runthrough.t tests 17-18**: META.yml version parsing returns undef; Compress::Zlib not available. Could be fixed by porting Compress::Zlib or fixing META.yml parsing.
