@@ -2722,6 +2722,10 @@ public class BytecodeCompiler implements Visitor {
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
 
+                                // Runtime attribute dispatch for list variable declarations.
+                                // Attributes are stored on the parent my/state node, propagate to each element.
+                                emitVarAttrsIfNeeded(node, reg, sigil);
+
                                 varRegs.add(reg);
                                 wrapWithRef.add(isDeclaredReference);
                             }
