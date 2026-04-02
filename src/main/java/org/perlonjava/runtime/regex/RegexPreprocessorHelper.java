@@ -224,11 +224,12 @@ public class RegexPreprocessorHelper {
             return offset;
         } else if (nextChar == 'K') {
             // \K - keep assertion (reset start of match)
-            // Convert to positive lookbehind for everything before this point
-            // This is a simplified implementation
+            // Insert a zero-width named capture group to mark the \K position.
+            // During substitution, text before this position is preserved ("kept").
             sb.setLength(sb.length() - 1); // Remove the backslash
-            // Mark position but don't add anything - this needs special handling
-            // For now, just ignore it to avoid compilation errors
+            RegexPreprocessor.markBackslashK();
+            RegexPreprocessor.captureGroupCount++;
+            sb.append("(?<perlK>)");
             return offset;
         } else if ((nextChar == 'b' || nextChar == 'B') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \b{...} and \B{...} boundary assertions

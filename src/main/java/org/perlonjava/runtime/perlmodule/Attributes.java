@@ -512,13 +512,20 @@ public class Attributes extends PerlModuleBase {
                 CallerStack.pop();
                 CallerStack.pop();
             }
+        } else {
+            // No handler found at runtime — throw error.
+            // For 'our' variables, this is caught at compile time.
+            // For 'my'/'state', the compile-time check is deferred to here
+            // so that dynamically-set handlers (via glob in eval) are found.
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < nonBuiltinAttrs.size(); i++) {
+                if (i > 0) sb.append(" : ");
+                sb.append(nonBuiltinAttrs.get(i));
+            }
+            throw new PerlCompilerException(
+                    "Invalid " + svtype + " attribute"
+                            + (nonBuiltinAttrs.size() > 1 ? "s" : "") + ": " + sb);
         }
-        // If no handler found at runtime, silently return.
-        // For 'our' variables, the compile-time check already threw.
-        // For 'my'/'state', ideally we'd throw here, but the \K regex bug
-        // (pre-existing) corrupts handler names in decl-refs.t, causing
-        // false "Invalid attribute" errors. Deferring until \K is fixed.
-        // See dev/design/attributes.md "Known Issue: \K Regex Bug".
     }
 
     /**

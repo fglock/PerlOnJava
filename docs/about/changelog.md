@@ -21,6 +21,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
         open FH, "-|" or exec @cmd;
 - Bugfix: parser now handles `@{${...}}` nested dereference in push/unshift.
 - Bugfix: regex octal escapes `\10`-`\377` now work correctly.
+- Bugfix: `\K` (keep left) assertion now works in `m//` and `s///`.
 - Bugfix: operator override in Time::Hires now works.
 - Bugfix: internal temp variables are now pre-initialized.
 - Optimization: faster list assignment.

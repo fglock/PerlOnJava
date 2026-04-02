@@ -1310,11 +1310,12 @@ public class OperatorParser {
                 emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
             } else {
                 // No MODIFY_*_ATTRIBUTES handler found at compile time.
-                // Don't throw — the handler may be set dynamically (e.g., via glob
-                // in enclosing eval). The \K regex bug (pre-existing) also corrupts
-                // handler names in decl-refs.t tests, making handlers invisible.
-                // Runtime dispatch in Attributes.java will silently return if no
-                // handler exists. See dev/design/attributes.md "Known Issue: \K".
+                // For 'our': error immediately (global vars are compile-time).
+                // For 'my'/'state': defer to runtime dispatch — the handler may
+                // not be visible yet (e.g., set via glob in enclosing eval).
+                if (operator.equals("our")) {
+                    SubroutineParser.throwInvalidAttributeError(svtype, nonBuiltinAttrs, parser);
+                }
             }
         }
     }

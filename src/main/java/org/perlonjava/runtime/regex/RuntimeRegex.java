@@ -60,6 +60,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
     public static boolean lastMatchUsedPFlag = false;
+    // Tracks if the last match used \K, so matcherStart/matcherEnd/matcherSize adjust group offsets
+    public static boolean lastMatchUsedBackslashK = false;
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
@@ -85,6 +87,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
     private boolean deferredUserDefinedUnicodeProperties = false;
     private boolean hasBranchReset = false;  // True if pattern uses (?|...) branch reset
+    private boolean hasBackslashK = false;   // True if pattern uses \K (keep assertion)
 
     public RuntimeRegex() {
         this.regexFlags = null;
@@ -150,6 +153,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch() || RegexPreprocessor.hadInlinePFlag();
                 regex.hasBranchReset = RegexPreprocessor.hadBranchReset();
+                regex.hasBackslashK = RegexPreprocessor.hadBackslashK();
 
                 regex.patternString = patternString;
                 regex.javaPatternString = javaPattern;
@@ -403,6 +407,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
         regex.useGAssertion = resolvedRegex.useGAssertion;
         regex.patternFlags = resolvedRegex.patternFlags;
+        regex.hasBranchReset = resolvedRegex.hasBranchReset;
+        regex.hasBackslashK = resolvedRegex.hasBackslashK;
+        regex.hasCodeBlockCaptures = resolvedRegex.hasCodeBlockCaptures;
 
         // Only recompile if we have new modifiers that actually change the flags
         if (!modifierStr.isEmpty()) {
@@ -426,6 +433,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
                 regex.useGAssertion = recompiledRegex.useGAssertion;
                 regex.patternFlags = recompiledRegex.patternFlags;
+                regex.hasBranchReset = recompiledRegex.hasBranchReset;
+                regex.hasBackslashK = recompiledRegex.hasBackslashK;
+                regex.hasCodeBlockCaptures = recompiledRegex.hasCodeBlockCaptures;
             } else {
                 // Just update the flags without recompiling
                 regex.regexFlags = newFlags;
@@ -625,26 +635,53 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
                 globalMatcher = matcher;
                 globalMatchString = inputStr;
+                lastMatchUsedBackslashK = regex.hasBackslashK;
                 if (captureCount > 0) {
-                    lastCaptureGroups = new String[captureCount];
-                    for (int i = 0; i < captureCount; i++) {
-                        lastCaptureGroups[i] = matcher.group(i + 1);
+                    if (regex.hasBackslashK) {
+                        // Skip the internal perlK capture group
+                        int perlKGroup = getPerlKGroup(matcher);
+                        int userGroupCount = captureCount - 1;
+                        if (userGroupCount > 0) {
+                            lastCaptureGroups = new String[userGroupCount];
+                            int destIdx = 0;
+                            for (int i = 1; i <= captureCount; i++) {
+                                if (i == perlKGroup) continue;
+                                lastCaptureGroups[destIdx++] = matcher.group(i);
+                            }
+                        } else {
+                            lastCaptureGroups = null;
+                        }
+                    } else {
+                        lastCaptureGroups = new String[captureCount];
+                        for (int i = 0; i < captureCount; i++) {
+                            lastCaptureGroups[i] = matcher.group(i + 1);
+                        }
                     }
                 } else {
                     lastCaptureGroups = null;
                 }
-                lastMatchedString = matcher.group(0);
-                lastMatchStart = matcher.start();
+
+                // For \K, adjust match start/string so $& is only the post-\K portion
+                if (regex.hasBackslashK) {
+                    int keepEnd = matcher.end("perlK");
+                    lastMatchedString = inputStr.substring(keepEnd, matcher.end());
+                    lastMatchStart = keepEnd;
+                } else {
+                    lastMatchedString = matcher.group(0);
+                    lastMatchStart = matcher.start();
+                }
                 lastMatchEnd = matcher.end();
 
                 if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                     // Global match and no captures, in list context return the matched string
-                    String matchedStr = matcher.group(0);
+                    String matchedStr = regex.hasBackslashK ? lastMatchedString : matcher.group(0);
                     matchedGroups.add(new RuntimeScalar(matchedStr));
                 } else {
                     // save captures in return list if needed
                     if (ctx == RuntimeContextType.LIST) {
+                        int perlKGroup = regex.hasBackslashK ? getPerlKGroup(matcher) : -1;
                         for (int i = 1; i <= captureCount; i++) {
+                            if (i == perlKGroup) continue; // skip internal \K marker group
                             String matchedStr = matcher.group(i);
                             if (regex.hasBranchReset) {
                                 // For branch reset patterns (?|...), skip null groups
@@ -922,6 +959,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
 
+        // Track position for manual replacement when \K is used
+        int lastAppendEnd = 0;
+
         // Perform the substitution
         try {
             while (matcher.find()) {
@@ -930,16 +970,41 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Initialize $1, $2, @+, @- only when we have a match
                 globalMatcher = matcher;
                 globalMatchString = inputStr;
+                lastMatchUsedBackslashK = regex.hasBackslashK;
                 if (matcher.groupCount() > 0) {
-                    lastCaptureGroups = new String[matcher.groupCount()];
-                    for (int i = 0; i < matcher.groupCount(); i++) {
-                        lastCaptureGroups[i] = matcher.group(i + 1);
+                    if (regex.hasBackslashK) {
+                        // Skip the internal perlK capture group when populating $1, $2, etc.
+                        int perlKGroup = getPerlKGroup(matcher);
+                        int userGroupCount = matcher.groupCount() - 1;
+                        if (userGroupCount > 0) {
+                            lastCaptureGroups = new String[userGroupCount];
+                            int destIdx = 0;
+                            for (int i = 1; i <= matcher.groupCount(); i++) {
+                                if (i == perlKGroup) continue;
+                                lastCaptureGroups[destIdx++] = matcher.group(i);
+                            }
+                        } else {
+                            lastCaptureGroups = null;
+                        }
+                    } else {
+                        lastCaptureGroups = new String[matcher.groupCount()];
+                        for (int i = 0; i < matcher.groupCount(); i++) {
+                            lastCaptureGroups[i] = matcher.group(i + 1);
+                        }
                     }
                 } else {
                     lastCaptureGroups = null;
                 }
-                lastMatchedString = matcher.group(0);
-                lastMatchStart = matcher.start();
+
+                // For \K, adjust match start so $& is only the post-\K portion
+                if (regex.hasBackslashK) {
+                    int keepEnd = matcher.end("perlK");
+                    lastMatchStart = keepEnd;
+                    lastMatchedString = inputStr.substring(keepEnd, matcher.end());
+                } else {
+                    lastMatchStart = matcher.start();
+                    lastMatchedString = matcher.group(0);
+                }
                 lastMatchEnd = matcher.end();
 
                 String replacementStr;
@@ -955,19 +1020,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 if (replacementStr != null) {
-                    // In Java regex replacement strings:
-                    //
-                    // - $1, $2, etc. refer to capture groups from the pattern
-                    // - $0 refers to the entire match
-                    // - \ is used for escaping
-                    //
-                    // When you pass $x as the replacement string, Java interprets it as trying to reference capture group "x", which doesn't exist (capture groups are numbered, not named with letters in basic Java regex).
-
-                    // replacementStr = replacementStr.replaceAll("\\\\", "\\\\\\\\");
-
-                    // Append the text before the match and the replacement to the result buffer
-                    // matcher.appendReplacement(resultBuffer, replacementStr);
-                    matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
+                    if (regex.hasBackslashK) {
+                        // \K: preserve text before \K position, only replace after it
+                        int keepEnd = matcher.end("perlK");
+                        resultBuffer.append(inputStr, lastAppendEnd, keepEnd);
+                        resultBuffer.append(replacementStr);
+                        lastAppendEnd = matcher.end();
+                    } else {
+                        // Normal replacement: replace the entire match
+                        matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
+                    }
                 }
 
                 // If not a global match, break after the first replacement
@@ -980,7 +1042,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             found = 0;
         }
         // Append the remaining text after the last match to the result buffer
-        matcher.appendTail(resultBuffer);
+        if (regex.hasBackslashK) {
+            resultBuffer.append(inputStr, lastAppendEnd, inputStr.length());
+        } else {
+            matcher.appendTail(resultBuffer);
+        }
 
         if (found > 0) {
             String finalResult = resultBuffer.toString();
@@ -1099,10 +1165,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return scalarUndef;
         }
         try {
-            if (group < 0 || group > globalMatcher.groupCount()) {
+            // Adjust group number to skip the internal perlK group
+            int javaGroup = adjustGroupForBackslashK(group);
+            if (javaGroup < 0 || javaGroup > globalMatcher.groupCount()) {
                 return scalarUndef;
             }
-            int start = globalMatcher.start(group);
+            int start = globalMatcher.start(javaGroup);
             if (start == -1) {
                 return scalarUndef;
             }
@@ -1120,10 +1188,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return scalarUndef;
         }
         try {
-            if (group < 0 || group > globalMatcher.groupCount()) {
+            // Adjust group number to skip the internal perlK group
+            int javaGroup = adjustGroupForBackslashK(group);
+            if (javaGroup < 0 || javaGroup > globalMatcher.groupCount()) {
                 return scalarUndef;
             }
-            int end = globalMatcher.end(group);
+            int end = globalMatcher.end(javaGroup);
             if (end == -1) {
                 return scalarUndef;
             }
@@ -1137,8 +1207,27 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (globalMatcher == null) {
             return 0;
         }
+        int size = globalMatcher.groupCount();
+        // Subtract the internal perlK group if \K was used
+        if (lastMatchUsedBackslashK) {
+            size--;
+        }
         // +1 because groupCount is zero-based, and we include the entire match
-        return globalMatcher.groupCount() + 1;
+        return size + 1;
+    }
+
+    /**
+     * Adjust a Perl capture group number to a Java matcher group number,
+     * skipping the internal perlK named group when \K is active.
+     */
+    private static int adjustGroupForBackslashK(int perlGroup) {
+        if (!lastMatchUsedBackslashK || globalMatcher == null) {
+            return perlGroup;
+        }
+        int perlKGroup = getPerlKGroup(globalMatcher);
+        if (perlKGroup < 0) return perlGroup;
+        // Perl groups before perlK: same number. At or after: add 1.
+        return perlGroup >= perlKGroup ? perlGroup + 1 : perlGroup;
     }
 
     /**
@@ -1482,5 +1571,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         return null;
+    }
+
+    /**
+     * Get the group number of the internal perlK named capture group.
+     * This group is inserted by the preprocessor at the \K position.
+     */
+    private static int getPerlKGroup(Matcher matcher) {
+        Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
+        Integer group = namedGroups.get("perlK");
+        return group != null ? group : -1;
     }
 }

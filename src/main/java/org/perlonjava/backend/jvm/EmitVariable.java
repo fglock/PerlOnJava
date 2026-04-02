@@ -1180,6 +1180,13 @@ public class EmitVariable {
         if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleMyOperator: ListNode operand, contextType=" + ctx.contextType + ", annotations=" + node.annotations);
+
+            // Propagate attribute annotations from the parent declaration to each child.
+            // When my ($x,$y) : attr is parsed, the "attributes" annotation is on the
+            // parent OperatorNode but must be carried to each individual variable node
+            // so that runtime attribute dispatch fires for each variable.
+            boolean hasParentAttrs = node.annotations != null && node.annotations.containsKey("attributes");
+
             for (Node element : listNode.elements) {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
@@ -1205,6 +1212,11 @@ public class EmitVariable {
                         if (scalarVarNode.annotations != null && Boolean.TRUE.equals(scalarVarNode.annotations.get("isDeclaredReference"))) {
                             myNode.setAnnotation("isDeclaredReference", true);
                         }
+                        if (hasParentAttrs) {
+                            myNode.annotations = myNode.annotations != null ? new java.util.HashMap<>(myNode.annotations) : new java.util.HashMap<>();
+                            myNode.annotations.put("attributes", node.annotations.get("attributes"));
+                            myNode.annotations.put("attributePackage", node.annotations.get("attributePackage"));
+                        }
                         myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                     } else if (operatorNode.operand instanceof ListNode nestedList) {
                         // Handle my(\($d, $e)) - nested list with backslash
@@ -1220,16 +1232,30 @@ public class EmitVariable {
                                 // Create a my node for each variable
                                 OperatorNode myNode = new OperatorNode(operator, scalarVarNode, listNode.tokenIndex);
                                 myNode.setAnnotation("isDeclaredReference", true);
+                                if (hasParentAttrs) {
+                                    myNode.annotations.put("attributes", node.annotations.get("attributes"));
+                                    myNode.annotations.put("attributePackage", node.annotations.get("attributePackage"));
+                                }
                                 myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                             }
                         }
                     } else {
                         // Unknown structure, fall through to default handling
                         OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
+                        if (hasParentAttrs) {
+                            myNode.annotations = new java.util.HashMap<>();
+                            myNode.annotations.put("attributes", node.annotations.get("attributes"));
+                            myNode.annotations.put("attributePackage", node.annotations.get("attributePackage"));
+                        }
                         myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                     }
                 } else {
                     OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
+                    if (hasParentAttrs) {
+                        myNode.annotations = new java.util.HashMap<>();
+                        myNode.annotations.put("attributes", node.annotations.get("attributes"));
+                        myNode.annotations.put("attributePackage", node.annotations.get("attributePackage"));
+                    }
                     myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                 }
             }
