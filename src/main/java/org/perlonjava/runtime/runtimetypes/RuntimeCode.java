@@ -1782,7 +1782,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(RuntimeScalarCache.scalarUndef);
 
                 // Add hints (element 8): Compile-time $^H value
-                res.add(new RuntimeScalar(0));
+                // Use per-call-site hints from callerHintsStack
+                int hints = WarningBitsRegistry.getCallerHintsAtFrame(frame - 1);
+                res.add(new RuntimeScalar(hints >= 0 ? hints : 0));
 
                 // Add bitmask (element 9): Compile-time warnings bitmask
                 // First try per-call-site bits from callerBitsStack (accurate per-statement)
@@ -1804,7 +1806,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Add hinthash (element 10): Compile-time %^H hash reference
-                res.add(RuntimeScalarCache.scalarUndef);
+                // Use per-call-site hint hash from callerHintHashStack
+                java.util.Map<String, RuntimeScalar> hintHashMap = WarningBitsRegistry.getCallerHintHashAtFrame(frame - 1);
+                if (hintHashMap != null) {
+                    RuntimeHash hintHash = new RuntimeHash();
+                    hintHash.elements.putAll(hintHashMap);
+                    res.add(hintHash.createReference());
+                } else {
+                    res.add(RuntimeScalarCache.scalarUndef);
+                }
             }
         } else if (frame >= stackTraceSize) {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
@@ -1976,10 +1986,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Save caller's call-site warning bits so caller()[9] can retrieve them
             WarningBitsRegistry.pushCallerBits();
+            // Save caller's $^H so caller()[8] can retrieve them
+            WarningBitsRegistry.pushCallerHints();
+            // Save caller's %^H so caller()[10] can retrieve them
+            WarningBitsRegistry.pushCallerHintHash();
             try {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(a, callContext);
             } finally {
+                WarningBitsRegistry.popCallerHintHash();
+                WarningBitsRegistry.popCallerHints();
                 WarningBitsRegistry.popCallerBits();
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
@@ -2177,10 +2193,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits();
+                // Save caller's $^H so caller()[8] can retrieve them
+                WarningBitsRegistry.pushCallerHints();
+                // Save caller's %^H so caller()[10] can retrieve them
+                WarningBitsRegistry.pushCallerHintHash();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
+                    WarningBitsRegistry.popCallerHintHash();
+                    WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent();
@@ -2323,10 +2345,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits();
+                // Save caller's $^H so caller()[8] can retrieve them
+                WarningBitsRegistry.pushCallerHints();
+                // Save caller's %^H so caller()[10] can retrieve them
+                WarningBitsRegistry.pushCallerHintHash();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
+                    WarningBitsRegistry.popCallerHintHash();
+                    WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent();

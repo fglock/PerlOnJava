@@ -14,6 +14,7 @@ import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.util.*;
 
@@ -5572,6 +5573,10 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
         symbolTable.warningDisabledStack.pop();
         symbolTable.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+
+        // Update per-call-site $^H and %^H for caller()[8] and caller()[10]
+        WarningBitsRegistry.setCallSiteHints(node.getStrictOptions());
+        WarningBitsRegistry.snapshotCurrentHintHash();
 
         lastResultReg = -1;
     }

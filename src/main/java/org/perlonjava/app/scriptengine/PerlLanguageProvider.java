@@ -20,6 +20,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
@@ -304,7 +305,10 @@ public class PerlLanguageProvider {
             // Propagate $^H changes back to the caller's scope so subsequent
             // code in the same lexical block sees the updated hints
             if (savedCurrentScope != null) {
-                savedCurrentScope.setStrictOptions(ctx.symbolTable.getStrictOptions());
+                savedCurrentScope.propagateStrictOptionsToAllLevels(ctx.symbolTable.getStrictOptions());
+                // Also update per-call-site hints so caller()[8] and caller()[10] are correct
+                WarningBitsRegistry.setCallSiteHints(ctx.symbolTable.getStrictOptions());
+                WarningBitsRegistry.snapshotCurrentHintHash();
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
         }
