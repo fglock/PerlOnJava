@@ -6,9 +6,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.UNDEF;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.VSTRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 // TODO - create test cases
 // $ perl -E ' use version; say version->declare("v1.2.3"); say version->declare("1.2.3"); say version->declare("1.2"); say version->declare("1.2.3.4"); say version->declare("1"); say version->declare(" 1.2.4 ")->normal; say version->new(1.2); say version->new(1.2)->normal; say version->new("1.200000"); say version->new("1.2"); '
@@ -486,7 +484,23 @@ public class Version extends PerlModuleBase {
         }
 
         RuntimeScalar pkg = args.get(0);
-        String packageName = pkg.toString();
+        String packageName;
+
+        // Handle blessed references: extract class name like ref($pkg) || $pkg
+        switch (pkg.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBase) pkg.value).blessId;
+                if (blessId != 0) {
+                    packageName = NameNormalizer.getBlessStr(blessId);
+                } else {
+                    packageName = pkg.toString();
+                }
+                break;
+            default:
+                packageName = pkg.toString();
+        }
 
         // Get the package's $VERSION
         RuntimeScalar hasVersion = getGlobalVariable(packageName + "::VERSION");

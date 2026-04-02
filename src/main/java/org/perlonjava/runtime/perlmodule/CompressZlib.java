@@ -3,9 +3,12 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.Inflater;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -33,9 +36,13 @@ public class CompressZlib extends PerlModuleBase {
             cz.registerMethod("inflate", "inflateMethod", null);
             cz.registerMethod("deflate", "deflateMethod", null);
             cz.registerMethod("flush", null);
+            cz.registerMethod("gzopen", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Compress::Zlib method: " + e.getMessage());
         }
+
+        // Initialize gzFile methods (gzread, gzwrite, gzreadline, gzeof, gzclose)
+        CompressZlibGzFile.initialize();
     }
 
     public static RuntimeList Z_OK(RuntimeArray args, int ctx) {
@@ -230,5 +237,56 @@ public class CompressZlib extends PerlModuleBase {
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
         outputScalar.type = RuntimeScalarType.BYTE_STRING;
         return outputScalar.getList();
+    }
+
+    /**
+     * gzopen($filename, $mode)
+     * Opens a gzip file for reading ('rb') or writing ('wb').
+     * Returns a blessed Compress::Zlib::gzFile object, or undef on error.
+     */
+    public static RuntimeList gzopen(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            return scalarUndef.getList();
+        }
+
+        // Skip 'self' if called as Compress::Zlib->gzopen() (class method)
+        int argOffset = 0;
+        String firstArg = args.get(0).toString();
+        if (firstArg.equals("Compress::Zlib") || firstArg.contains("::")) {
+            argOffset = 1;
+        }
+
+        if (args.size() < argOffset + 2) {
+            return scalarUndef.getList();
+        }
+
+        String filename = args.get(argOffset).toString();
+        String mode = args.get(argOffset + 1).toString();
+
+        try {
+            RuntimeHash self = new RuntimeHash();
+            self.put("_mode", new RuntimeScalar(mode));
+            self.put("_eof", new RuntimeScalar(0));
+
+            if (mode.startsWith("r")) {
+                // Read mode
+                InputStream fis = new FileInputStream(filename);
+                GZIPInputStream gis = new GZIPInputStream(fis);
+                self.put("_stream", new RuntimeScalar(gis));
+            } else if (mode.startsWith("w")) {
+                // Write mode - check for compression level
+                OutputStream fos = new FileOutputStream(filename);
+                GZIPOutputStream gos = new GZIPOutputStream(fos);
+                self.put("_stream", new RuntimeScalar(gos));
+            } else {
+                return scalarUndef.getList();
+            }
+
+            RuntimeScalar ref = self.createReference();
+            ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Zlib::gzFile"));
+            return ref.getList();
+        } catch (IOException e) {
+            return scalarUndef.getList();
+        }
     }
 }

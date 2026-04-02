@@ -24,6 +24,7 @@ XSLoader::load('Compress::Zlib');
 our @EXPORT = qw(
     inflateInit
     deflateInit
+    gzopen
     Z_OK
     Z_STREAM_END
     Z_STREAM_ERROR
