@@ -96,19 +96,28 @@ Useless use of attribute "const"
 | `MODIFY_CODE_ATTRIBUTES` dispatch | Done | `SubroutineParser.callModifyCodeAttributes()` (line 1046) |
 | `:=` error detection | Done | `SubroutineParser.consumeAttributes()` (line 638) |
 | Empty attr list (`: =`) handling | Done | `SubroutineParser.consumeAttributes()` (line 640) |
+| `attributes.pm` module | Done | `src/main/perl/lib/attributes.pm` |
+| `Attributes.java` backend | Done | `src/main/java/org/perlonjava/runtime/perlmodule/Attributes.java` |
+| `_modify_attrs`, `_fetch_attrs`, `_guess_stash`, `reftype` | Done | `Attributes.java` |
+| `:prototype(...)` via `use attributes` | Done | `Attributes.applyCodeAttribute()` |
+| Compile-time warning scope for categorized warnings | Done | `Warnings.emitCategoryWarning()` |
+| Warning category alias sync (illegalproto <-> syntax::illegalproto) | Done | `WarningFlags.java` hierarchy |
 
 ### What Is Missing
 
 | Component | Impact |
 |-----------|--------|
-| `attributes.pm` module | ~50 tests — needed for `use attributes`, `attributes::get`, `attributes->import` |
-| `MODIFY_SCALAR/ARRAY/HASH_ATTRIBUTES` dispatch | ~26 tests — variable attrs parsed but never dispatched |
-| `FETCH_*_ATTRIBUTES` callbacks | ~3 tests — needed for `attributes::get` user-defined attrs |
-| Variable attribute errors ("Invalid SCALAR attribute") | ~18 tests — currently silently ignored |
-| `_modify_attrs` / `_fetch_attrs` / `_guess_stash` (XS equivalents) | Needed by `attributes.pm` |
-| Attribute removal (`-lvalue`, `-method`) | ~5 tests |
-| `:const` attribute support | ~7 tests |
-| `Attribute::Handlers` integration | 4 tests (low priority) |
+| `attributes::get()` returning built-in attrs (lvalue, method) | ~8 tests (attrs.t 35-40) |
+| `FETCH_*_ATTRIBUTES` merging in `get()` | ~2 tests (attrs.t 35, 40) |
+| Variable attribute dispatch (`MODIFY_SCALAR/ARRAY/HASH_ATTRIBUTES`) | ~12 tests |
+| `:const` attribute support | ~2 tests (attrs.t 140, 145) |
+| Closure prototype handling | ~4 tests (attrs.t 124-126, uni 30-31) |
+| `my sub` attribute parsing after prototype | ~4 tests (attrproto.t 48-51) |
+| Error message `"BEGIN failed--compilation aborted"` suffix | ~3 tests (attrs.t 155-157) |
+| `Can't declare scalar dereference` error detection | ~2 tests (attrs.t 44-45) |
+| `MODIFY_CODE_ATTRIBUTES` returning custom error | ~2 tests (attrs.t 32, uni 16) |
+| Variable attribute tie integration | ~2 tests (attrs.t 41-42) |
+| `Attribute::Handlers` integration | 4 tests (attrhand.t) — low priority |
 
 ## Implementation Strategy
 
@@ -131,213 +140,9 @@ attributes.pm (Perl)           Attributes.java (Java)
 
 Variable attribute dispatch happens in the **emitter/compiler** — when a `my`/`our`/`state` declaration has attributes in its AST annotations, the emitter generates code to call `attributes::->import(PKG, \$var, @attrs)` at the appropriate time (compile-time for `our`, run-time for `my`/`state`).
 
-## Components
-
-### 1. Java Module: `Attributes.java`
-
-**New file:** `src/main/java/org/perlonjava/perlmodule/Attributes.java`
-
-Implements the XS-equivalent functions that `attributes.pm` calls:
-
-```java
-public class Attributes extends PerlModuleBase {
-    public Attributes() {
-        super("attributes", false);
-    }
-
-    public void initialize() {
-        // Register XS-equivalent functions
-        registerMethod("_modify_attrs", null, null);  // built-in attr application
-        registerMethod("_fetch_attrs", null, null);    // built-in attr retrieval
-        registerMethod("_guess_stash", null, null);    // package name lookup
-        registerMethod("reftype", null, null);         // underlying ref type
-    }
-}
-```
-
-#### `_modify_attrs($svref, @attrs)`
-
-- For CODE refs: validates `lvalue`, `method`, `prototype(...)`, `const`; applies them to `RuntimeCode`; returns unrecognized attrs
-- For SCALAR/ARRAY/HASH refs: validates `shared`; returns unrecognized attrs
-- Handles `-attr` prefix for removal (removes from `RuntimeCode.attributes`)
-- Emits `misc` warnings for `lvalue`/`-lvalue` on already-defined subs
-
-#### `_fetch_attrs($svref)`
-
-- For CODE refs: returns the built-in attributes from `RuntimeCode.attributes` (filtered to `lvalue`, `method`, `const`)
-- For SCALAR/ARRAY/HASH refs: returns empty list (no built-in variable attrs in PerlOnJava)
-
-#### `_guess_stash($svref)`
-
-- For CODE refs: returns `RuntimeCode.packageName` (the original compilation package)
-- For other refs: returns `undef` (caller will use `caller()` as fallback)
-
-#### `reftype($svref)`
-
-- Returns the underlying reference type ignoring bless: `"CODE"`, `"SCALAR"`, `"ARRAY"`, `"HASH"`, `"REF"`, `"GLOB"`, `"REGEXP"`
-
-### 2. Perl Module: `attributes.pm`
-
-**New file:** `src/main/perl/lib/attributes.pm`
-
-Port of the system Perl `attributes.pm` (116 lines of code before POD). The Perl-side logic handles:
-
-- `import()`: Exporter integration when called without a ref; otherwise validates via `_modify_attrs` + `MODIFY_*_ATTRIBUTES` dispatch + error/warning generation
-- `get()`: Combines `_fetch_attrs` + `FETCH_*_ATTRIBUTES` dispatch
-- `reftype()`: Delegates to Java `reftype`
-- Warning messages: "may clash with future reserved word", "lvalue attribute applied/removed"
-- Error messages: "Invalid TYPE attribute(s)"
-
-```perl
-package attributes;
-our $VERSION = 0.36;
-@EXPORT_OK = qw(get reftype);
-@EXPORT = ();
-%EXPORT_TAGS = (ALL => [@EXPORT, @EXPORT_OK]);
-
-use strict;
-
-sub croak { require Carp; goto &Carp::croak; }
-sub carp  { require Carp; goto &Carp::carp;  }
-
-my %msg = (
-    lvalue  => 'lvalue attribute applied to already-defined subroutine',
-    -lvalue => 'lvalue attribute removed from already-defined subroutine',
-    const   => 'Useless use of attribute "const"',
-);
-
-sub _modify_attrs_and_deprecate {
-    my $svtype = shift;
-    grep {
-        $svtype eq 'CODE' && exists $msg{$_} ? do {
-            require warnings;
-            warnings::warnif('misc', $msg{$_});
-            0;
-        } : 1
-    } _modify_attrs(@_);
-}
-
-sub import {
-    @_ > 2 && ref $_[2] or do {
-        require Exporter;
-        goto &Exporter::import;
-    };
-    my (undef, $home_stash, $svref, @attrs) = @_;
-    my $svtype = uc reftype($svref);
-    my $pkgmeth;
-    $pkgmeth = UNIVERSAL::can($home_stash, "MODIFY_${svtype}_ATTRIBUTES")
-        if defined $home_stash && $home_stash ne '';
-    my @badattrs;
-    if ($pkgmeth) {
-        my @pkgattrs = _modify_attrs_and_deprecate($svtype, $svref, @attrs);
-        @badattrs = $pkgmeth->($home_stash, $svref, @pkgattrs);
-        if (!@badattrs && @pkgattrs) {
-            require warnings;
-            return unless warnings::enabled('reserved');
-            @pkgattrs = grep { m/\A[[:lower:]]+(?:\z|\()/ } @pkgattrs;
-            if (@pkgattrs) {
-                for my $attr (@pkgattrs) { $attr =~ s/\(.+\z//s; }
-                my $s = ((@pkgattrs == 1) ? '' : 's');
-                carp "$svtype package attribute$s " .
-                    "may clash with future reserved word$s: " .
-                    join(' : ', @pkgattrs);
-            }
-        }
-    } else {
-        @badattrs = _modify_attrs_and_deprecate($svtype, $svref, @attrs);
-    }
-    if (@badattrs) {
-        croak "Invalid $svtype attribute" .
-            ((@badattrs == 1) ? '' : 's') . ": " .
-            join(' : ', @badattrs);
-    }
-}
-
-sub get ($) {
-    @_ == 1 && ref $_[0] or
-        croak 'Usage: ' . __PACKAGE__ . '::get $ref';
-    my $svref = shift;
-    my $svtype = uc reftype($svref);
-    my $stash = _guess_stash($svref);
-    $stash = caller unless defined $stash;
-    my $pkgmeth;
-    $pkgmeth = UNIVERSAL::can($stash, "FETCH_${svtype}_ATTRIBUTES")
-        if defined $stash && $stash ne '';
-    return $pkgmeth ?
-        (_fetch_attrs($svref), $pkgmeth->($stash, $svref)) :
-        (_fetch_attrs($svref));
-}
-
-sub require_version { goto &UNIVERSAL::VERSION }
-
-1;
-```
-
-### 3. Variable Attribute Dispatch (Emitter Changes)
-
-**Modified file:** `src/main/java/org/perlonjava/astvisitor/EmitVariable.java` (or equivalent)
-
-When processing a `my`/`our`/`state` declaration node that has `"attributes"` in its annotations, the emitter must generate code equivalent to:
-
-```perl
-# For: my $x : Foo
-attributes::->import(__PACKAGE__, \$x, "Foo");
-
-# For typed: my ClassName $x : Foo  
-attributes::->import("ClassName", \$x, "Foo");
-
-# For list: my ($x, @y) : Foo
-attributes::->import(__PACKAGE__, \$x, "Foo");
-attributes::->import(__PACKAGE__, \@y, "Foo");
-```
-
-**Timing:**
-- `our` declarations: emit at compile-time (immediately during parse)
-- `my`/`state` declarations: emit as runtime code (part of the generated bytecode)
-
-**Implementation approach:** After the variable declaration node is emitted, check for the `"attributes"` annotation. If present, emit a method call to `attributes::->import(PKG, \$var, @attrs)` where PKG is the typed class name (if present) or the current package.
-
-### 4. Error Message Improvements in Parser
-
-**Modified file:** `SubroutineParser.java`
-
-The `consumeAttributes()` method needs two additional error detections:
-
-1. **Unterminated attribute parameter**: Already handled by `StringParser.parseRawString()` when `(` is not balanced — verify the error message matches `"Unterminated attribute parameter in attribute list"`
-
-2. **Invalid separator character**: After consuming an attribute, if the next token is not `:`, whitespace, `;`, `{`, or `=`, emit `"Invalid separator character 'X' in attribute list"`
-
-### 5. `callModifyCodeAttributes` Error Message Fix
-
-The existing `callModifyCodeAttributes` in `SubroutineParser.java` formats unrecognized attributes with commas: `"plugh", "xyzzy"`. Perl uses ` : ` as separator: `"plugh" : "xyzzy"`. Fix the separator in the StringBuilder loop.
-
-## Test Coverage Analysis
-
-### Currently Passing (62/216)
-
-| File | Pass/Total | What Works |
-|------|-----------|------------|
-| attrs.t | 49/130 | `:method`/`:lvalue` on subs, MODIFY_CODE_ATTRIBUTES, `:=` errors, empty attr lists, bug #66970 CV identity |
-| attrproto.t | 3/52 | Basic `:prototype(...)` override (tests 1-3) |
-| attrhand.t | 0/0 | Crashes immediately (needs `attributes.pm`) |
-| uni/attrs.t | 10/34 | Unicode CODE attrs, MODIFY_CODE_ATTRIBUTES die, deref errors, CV identity |
-
-### Expected Gains by Phase
-
-| Phase | Component | Estimated New Passes |
-|-------|-----------|---------------------|
-| 1 | `Attributes.java` + `attributes.pm` | +5 (loading, reftype, basic get) |
-| 2 | `attributes::get()` with `_fetch_attrs` | +8 (Group H in attrs.t) |
-| 3 | `attributes->import()` validation matrix | +32 (Group L in attrs.t) |
-| 4 | Variable attribute dispatch (MODIFY_SCALAR/ARRAY/HASH) | +20 (Groups E, F, J in attrs.t + uni) |
-| 5 | lvalue/const warnings + `-attr` removal | +12 (Groups T, W in attrs.t) |
-| 6 | `use attributes` prototype handling in attrproto.t | +15 |
-| 7 | Error message fixes (separator in callModifyCodeAttributes) | +3 |
-| **Total** | | **~95 new passes → ~157/216 (73%)** |
-
 ## Files to Modify
 
-### New Files
+### New Files (already created)
 
 | File | Purpose |
 |------|---------|
@@ -348,43 +153,11 @@ The existing `callModifyCodeAttributes` in `SubroutineParser.java` formats unrec
 
 | File | Change |
 |------|--------|
-| `SubroutineParser.java` | Fix error message separator (`, ` → ` : `); add "Invalid separator character" detection |
-| `EmitVariable.java` or `EmitOperator.java` | Emit `attributes::->import()` for variable declarations with attrs |
-| `BytecodeCompiler.java` | Same for interpreter backend |
-
-## Implementation Order
-
-### Phase 1: Java Backend + attributes.pm (foundation)
-
-1. Create `Attributes.java` with `_modify_attrs`, `_fetch_attrs`, `_guess_stash`, `reftype`
-2. Create `attributes.pm` with `import()`, `get()`, `reftype()`
-3. Fix `callModifyCodeAttributes` separator (`, ` → ` : `)
-4. Run tests, verify `use attributes` loads and `attributes::get` returns built-in attrs
-
-### Phase 2: Variable Attribute Dispatch
-
-5. In the JVM emitter: when a variable declaration has `"attributes"` annotation, emit `attributes::->import(PKG, \$var, @attrs)` calls
-6. In the bytecode interpreter: same
-7. Run tests, verify `MODIFY_SCALAR_ATTRIBUTES` is called for `my $x : Foo`
-
-### Phase 3: Polish and Edge Cases
-
-8. Add "Invalid separator character" error to parser
-9. Add "Unterminated attribute parameter" error message alignment
-10. Handle `-attr` removal in `_modify_attrs`
-11. Handle `:const` warning
-12. `use attributes __PACKAGE__, \&sub, "prototype(X)"` handling
-13. Run full test suite, measure improvement
-
-## Open Questions
-
-1. **Variable attribute storage**: Should variables store their attributes? Currently `RuntimeCode` has an `attributes` field, but `RuntimeScalar`/`RuntimeArray`/`RuntimeHash` do not. Most test cases only need the `MODIFY_*_ATTRIBUTES` callback (side effects like `tie`), not persistent storage. The `FETCH_*_ATTRIBUTES` tests are only for CODE refs. **Decision: Don't add storage to variables yet — not needed for any current test.**
-
-2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, we access `RuntimeCode.attributes` from Java. For CODE refs this is straightforward. For variable refs, we only need to validate built-in attrs (`shared`) and return unrecognized ones — no actual flag-setting needed since `shared` is a no-op.
-
-3. **Attribute::Handlers**: The module exists at `src/main/perl/lib/Attribute/Handlers.pm` but depends on `attributes.pm` + CHECK blocks. Getting attrhand.t to pass likely requires CHECK block support (see `op/blocks.t` in the test failures doc). **Decision: Defer — only 4 tests.**
-
-4. **`our` variable attribute timing**: The perldoc says `our` attributes are applied at compile-time. This means the emitter needs to call `attributes::->import()` immediately during parsing (like `callModifyCodeAttributes` does for subs), not defer to runtime. **Decision: Handle in Phase 2.**
+| `SubroutineParser.java` | Prototype warnings, attribute parsing, error message improvements |
+| `Warnings.java` | `emitCategoryWarning()`, `emitWarningFromCaller()` |
+| `WarningFlags.java` | Warning category alias sync |
+| `StatementResolver.java` | (Pending) `my sub` attribute parsing after prototype |
+| `EmitVariable.java` or `EmitOperator.java` | (Pending) Variable attribute dispatch |
 
 ## Related Documents
 
@@ -395,23 +168,231 @@ The existing `callModifyCodeAttributes` in `SubroutineParser.java` formats unrec
 
 ## Progress Tracking
 
-### Current Status: Phase 1 not started
+### Current Status: Phase 1 complete, Phase 2 next
 
 ### Completed Phases
-- (none yet)
 
-### Baseline Test Results (2026-04-01)
-- attrs.t: 49/130
-- attrproto.t: 3/52 (incomplete — crashes at test 19)
-- attrhand.t: 0/0 (crashes immediately)
-- uni/attrs.t: 10/34
-- **Total: 62/216 (28.7%)**
+- [x] Phase 1: Core attribute infrastructure (2026-04-01 — 2026-04-02)
+  - Created `Attributes.java` with `_modify_attrs`, `_fetch_attrs`, `_guess_stash`, `reftype`
+  - Created `attributes.pm` (ported from system Perl)
+  - Implemented `attributes::get()` and `attributes->import()` flow
+  - Implemented `:prototype(...)` via `use attributes` with proper warning emission
+  - Fixed compile-time warning scope for categorized warnings (`emitCategoryWarning()`)
+  - Synced warning category aliases (illegalproto <-> syntax::illegalproto, etc.)
+  - Added `emitWarningFromCaller()` for unconditional warnings with correct location
+  - Fixed error message separator in `callModifyCodeAttributes` (`, ` → ` : `)
+  - Added prototype/illegalproto validation and warnings to `SubroutineParser.consumeAttributes()`
+  - Files: `Attributes.java`, `attributes.pm`, `Warnings.java`, `WarningFlags.java`, `SubroutineParser.java`
 
-### Next Steps
-1. Create `Attributes.java` with `_modify_attrs`, `_fetch_attrs`, `_guess_stash`, `reftype`
-2. Create `attributes.pm` (port from system Perl)
-3. Fix error message separator in `callModifyCodeAttributes`
-4. Test Phase 1
+### Current Test Results (2026-04-02)
+
+| File | Before | After | Delta |
+|------|--------|-------|-------|
+| attrs.t | 49/130 → 111/158* | 134/158 | +23 |
+| attrproto.t | 3/52 | 48/52 | +45 |
+| attrhand.t | 0/0 | 0/0 | — |
+| uni/attrs.t | 10/34 | 23/34 | +13 |
+| **Total** | **62/216** | **205/244** | **+81** |
+
+\* attrs.t grew from 130 to 158 tests because the test no longer crashes partway through.
+
+### Remaining Failures Analysis
+
+#### attrproto.t: 4 remaining (48-51)
+
+**Root cause: `my sub` parser missing attribute loop after prototype**
+
+| Test | Issue |
+|------|-------|
+| 48 | `my sub lexsub1(bar) : prototype(baz) {}` — `:prototype(baz)` not parsed |
+| 49 | Illegal proto warning not emitted for `(bar)` on lexical sub |
+| 50 | Illegal proto warning not emitted for `(baz)` on lexical sub |
+| 51 | "Prototype overridden" warning not emitted |
+
+**Fix:** In `StatementResolver.java`, after parsing `(prototype)` for `my sub`, add:
+1. Call `emitIllegalProtoWarning()` for the parenthesized prototype
+2. A second `while (peek(parser).text.equals(":"))` attribute-parsing loop
+
+**Effort:** Small — straightforward parser fix.
+
+#### attrs.t: 24 remaining
+
+**Group A: `attributes::get` not returning built-in attrs (8 tests: 35-42)**
+
+| Test | Expected | Got | Issue |
+|------|----------|-----|-------|
+| 35 | `"method Z"` | `"method"` | `FETCH_CODE_ATTRIBUTES` result not merged with built-in attrs |
+| 36 | `"lvalue"` | `""` | `_fetch_attrs` not returning `lvalue` for predeclared subs |
+| 37 | `"lvalue method"` | `""` | Same — multiple built-in attrs not returned |
+| 38 | `"lvalue"` | `""` | `lvalue` on predeclared then defined sub not fetched |
+| 39 | `"method"` | `""` | `method` on already-defined sub not fetched |
+| 40 | `"method Z"` | `"Z"` | `method` from built-in + `Z` from FETCH not combined |
+| 41-42 | `2`, `4` | `1`, `2` | Variable `tie` via `MODIFY_SCALAR_ATTRIBUTES` — `my $x : A0` dispatch missing |
+
+**Root cause:** `_fetch_attrs` in `Attributes.java` doesn't return `lvalue`/`method` from `RuntimeCode.attributes`. Tests 41-42 need variable attribute dispatch from the parser/emitter.
+
+**Fix:**
+- Fix `_fetch_attrs` to filter and return built-in CODE attrs (`lvalue`, `method`, `const`)
+- For 41-42: implement variable attribute dispatch in emitter (Phase 2)
+
+**Group B: Variable attribute dispatch missing (4 tests: 27-28, 41-42)**
+
+| Test | Issue |
+|------|-------|
+| 27 | `my A $x : plugh` — `MODIFY_SCALAR_ATTRIBUTES` not called, no "may clash" warning |
+| 28 | Same for multiple attrs |
+| 41-42 | `my $x : A0` in loop — tie via MODIFY_SCALAR_ATTRIBUTES not happening |
+
+**Fix:** Implement variable attribute dispatch. When the parser sees `my $x : Foo`, generate `attributes::->import(__PACKAGE__, \$x, "Foo")`. This requires emitter changes.
+
+**Group C: Error detection issues (5 tests: 20, 44-45, 87, uni/23)**
+
+| Test | Expected | Got | Issue |
+|------|----------|-----|-------|
+| 20 | Error with quoted attr names | Error without quotes | Error message formatting: attrs need double-quoting |
+| 44 | `Can't declare scalar dereference in "our"` | `Invalid SCALAR attribute: foo` | Parser doesn't detect `our ${""} : foo` as dereference |
+| 45 | `Can't declare scalar dereference in "my"` | `Invalid SCALAR attribute: bar` | Same for `my $$foo : bar` |
+| 87 | `Global symbol "$nosuchvar" requires` | `Invalid CODE attribute: foo` | Strict error should be emitted instead of attr error |
+| 154 | (TODO test) No separator error | Gets separator error | `$a ? my $var : my $othervar` — `:` parsed as attr separator |
+
+**Fix:** Multiple parser improvements needed. Tests 44-45 need dereference detection. Test 87 needs strict checking before attribute validation. Test 154 is a known TODO.
+
+**Group D: `:const` attribute (2 tests: 140, 145)**
+
+| Test | Expected | Got | Issue |
+|------|----------|-----|-------|
+| 140 | `Useless use of attribute "const"` warning | No warning | `const` not handled in `_modify_attrs` |
+| 145 | `32487` (const closure value) | `undef` | `:Const` -> `const` via MODIFY_CODE_ATTRIBUTES not applied |
+
+**Fix:** Implement `:const` in `Attributes.java._modify_attrs()` — call the anon sub immediately and capture return value.
+
+**Group E: `MODIFY_CODE_ATTRIBUTES` returning custom error (2 tests: 32, uni/16)**
+
+| Test | Expected | Got |
+|------|----------|-----|
+| 32 | `X at ` (die in handler) | `Invalid CODE attribute: foo` |
+
+**Root cause:** When `MODIFY_CODE_ATTRIBUTES` dies, the die message should propagate. Currently the error is being replaced by the default "Invalid CODE attribute" message.
+
+**Group F: Closure prototype handling (3 tests: 124-126)**
+
+| Test | Expected | Got |
+|------|----------|-----|
+| 124 | `Closure prototype called` error | Empty `$@` |
+| 125 | `Closure prototype called` error | `Not a CODE reference` |
+| 126 | `undef` | `"referencing closure prototype"` |
+
+**Root cause:** Closure prototypes (stubs with captured lexicals) should die with "Closure prototype called" when invoked. This is a runtime feature, not an attribute-specific issue.
+
+**Group G: Error message suffix (3 tests: 155-157)**
+
+| Test | Expected | Got |
+|------|----------|-----|
+| 155 | `...at - line 1.\nBEGIN failed--compilation aborted at - line 1.` | `...at - line 1, near ""` |
+| 156 | Same pattern for arrays | Same |
+| 157 | Same pattern for hashes | Same |
+
+**Root cause:** `fresh_perl_is` tests run `./jperl` as a subprocess. The error message format is `"at - line 1."` + `"BEGIN failed--compilation aborted"` suffix. PerlOnJava produces `"at - line 1, near \"\""` instead.
+
+**Fix:** Two issues: (1) error location format, (2) missing "BEGIN failed" propagation.
+
+#### uni/attrs.t: 11 remaining
+
+These mirror attrs.t failures with Unicode identifiers:
+- Tests 8, 11-12, 16-18, 20-21, 23, 30-31 — same root causes as attrs.t groups A-F above
+
+### Next Steps (Priority Order)
+
+#### Phase 2: `attributes::get` built-in attrs (HIGH — 8 tests)
+
+Fix `_fetch_attrs` in `Attributes.java` to return built-in CODE attributes (`lvalue`, `method`, `const`) from `RuntimeCode.attributes`. This is a small Java change.
+
+- **Files:** `Attributes.java`
+- **Tests fixed:** attrs.t 35-40, uni/attrs.t equivalent
+- **Effort:** Small
+
+#### Phase 3: Variable attribute dispatch (MEDIUM — 6+ tests)
+
+When the parser encounters `my $x : Foo` or `our @arr : Bar`, generate calls to `attributes::->import(__PACKAGE__, \$var, @attrs)`. This requires:
+
+1. In the JVM emitter (`EmitVariable.java` or `EmitOperator.java`): when a variable declaration has `"attributes"` annotation, emit `attributes::->import(PKG, \$var, @attrs)`
+2. In the bytecode interpreter: same
+3. Timing: compile-time for `our`, run-time for `my`/`state`
+
+- **Files:** `EmitVariable.java`, `CompileAssignment.java` (interpreter)
+- **Tests fixed:** attrs.t 27-28, 41-42; uni/attrs.t 11-12, 17-18
+- **Effort:** Medium
+
+#### Phase 4: `my sub` attribute parsing (SMALL — 4 tests)
+
+Add attribute parsing after prototype in `StatementResolver.java` `my sub` path:
+1. Call `emitIllegalProtoWarning()` for `(proto)` syntax
+2. Add second `:` attribute loop after prototype
+
+- **Files:** `StatementResolver.java`
+- **Tests fixed:** attrproto.t 48-51
+- **Effort:** Small
+
+#### Phase 5: `:const` attribute (SMALL — 2 tests)
+
+Implement `:const` in `Attributes.java._modify_attrs()`:
+- When `const` is applied to an already-defined sub, emit "Useless use" warning
+- When `const` is applied during sub definition, invoke the sub immediately and replace with constant
+
+- **Files:** `Attributes.java`, possibly `SubroutineParser.java`
+- **Tests fixed:** attrs.t 140, 145
+- **Effort:** Small-Medium
+
+#### Phase 6: Error message improvements (MEDIUM — 7 tests)
+
+1. Quote attribute names in error messages with `"attr"` format (test 20)
+2. Detect `our ${""}` and `my $$foo` as dereferences before attribute processing (tests 44-45)
+3. Ensure `MODIFY_CODE_ATTRIBUTES` die propagates correctly (tests 32, uni/16)
+4. Fix "BEGIN failed--compilation aborted" error suffix (tests 155-157)
+5. Ensure strict errors take priority over attribute errors (test 87)
+
+- **Files:** `Attributes.java`, `SubroutineParser.java`, parser error handling
+- **Tests fixed:** attrs.t 20, 32, 44-45, 87, 155-157; uni/attrs.t 8, 16, 20-21, 23
+- **Effort:** Medium
+
+#### Phase 7: Closure prototype error (LOW — 4 tests)
+
+Calling a closure prototype (a stub with captured lexicals) should die with "Closure prototype called". This is a runtime feature in `RuntimeCode.apply()`.
+
+- **Files:** `RuntimeCode.java`
+- **Tests fixed:** attrs.t 124-126; uni/attrs.t 30-31
+- **Effort:** Small-Medium
+
+#### Phase 8: Attribute::Handlers (LOW — 4 tests)
+
+The infrastructure (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) is now in place. The remaining blockers are likely edge cases in glob manipulation, ref-identity comparison, or `undef &sub` syntax within `Attribute::Handlers.pm` internals.
+
+- **Files:** Possibly runtime fixes
+- **Tests fixed:** attrhand.t 1-4
+- **Effort:** Unknown — needs investigation
+
+### Estimated Final Results
+
+| Phase | Tests Fixed | Cumulative |
+|-------|-----------|------------|
+| Current | — | 205/244 (84%) |
+| Phase 2 | +8 | 213/244 (87%) |
+| Phase 3 | +6 | 219/244 (90%) |
+| Phase 4 | +4 | 223/244 (91%) |
+| Phase 5 | +2 | 225/244 (92%) |
+| Phase 6 | +12 | 237/244 (97%) |
+| Phase 7 | +4 | 241/244 (99%) |
+| Phase 8 | +4 | 244/244 (100%) |
+
+### Open Questions
+
+1. **Variable attribute storage**: Should variables store their attributes? Currently `RuntimeCode` has an `attributes` field, but `RuntimeScalar`/`RuntimeArray`/`RuntimeHash` do not. Most test cases only need the `MODIFY_*_ATTRIBUTES` callback (side effects like `tie`), not persistent storage. The `FETCH_*_ATTRIBUTES` tests are only for CODE refs. **Decision: Don't add storage to variables yet — not needed for any current test.**
+
+2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, we access `RuntimeCode.attributes` from Java. For CODE refs this is straightforward. For variable refs, we only need to validate built-in attrs (`shared`) and return unrecognized ones — no actual flag-setting needed since `shared` is a no-op.
+
+3. **Attribute::Handlers**: The module exists at `src/main/perl/lib/Attribute/Handlers.pm` and the core dependencies (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) are now implemented. Remaining blockers are likely edge cases in Attribute::Handlers internals. **Decision: Defer — only 4 tests, needs investigation.**
+
+4. **`our` variable attribute timing**: The perldoc says `our` attributes are applied at compile-time. This means the emitter needs to call `attributes::->import()` immediately during parsing (like `callModifyCodeAttributes` does for subs), not defer to runtime. **Decision: Handle in Phase 3.**
 
 ### PR
 - https://github.com/fglock/PerlOnJava/pull/420
