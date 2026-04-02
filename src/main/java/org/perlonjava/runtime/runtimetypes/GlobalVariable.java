@@ -336,6 +336,9 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global code reference.
      */
     public static RuntimeScalar getGlobalCodeRef(String key) {
+        if (key == null) {
+            return new RuntimeScalar();
+        }
         // First check if we have a pinned reference that survives stash deletion
         RuntimeScalar pinned = pinnedCodeRefs.get(key);
         if (pinned != null) {

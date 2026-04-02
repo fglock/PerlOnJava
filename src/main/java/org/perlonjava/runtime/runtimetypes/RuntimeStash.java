@@ -173,6 +173,7 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeArray savedArray = GlobalVariable.globalArrays.get(fullKey);
         RuntimeHash savedHash = GlobalVariable.globalHashes.get(fullKey);
         RuntimeGlob savedIO = GlobalVariable.globalIORefs.get(fullKey);
+        RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
 
         // Delete all slots from GlobalVariable
         // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
@@ -187,11 +188,11 @@ public class RuntimeStash extends RuntimeHash {
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
 
-        // Create a detached glob that holds the saved slot values.
+        // Create a detached glob that holds the saved slot values including CODE.
         // In Perl 5, delete $stash->{name} returns the glob with all its old slot values.
         // Use globName=null so getGlobSlot() uses local slots instead of GlobalVariable.
         RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
-                savedScalar, savedArray, savedHash, savedIO);
+                savedScalar, savedArray, savedHash, savedIO, savedCode);
 
         return detached;
     }

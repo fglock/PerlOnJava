@@ -2020,6 +2020,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, a, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, a, callContext);
             }
         }
 
@@ -2029,6 +2031,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, a, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, a, callContext);
             }
         }
 
@@ -2262,6 +2266,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, args, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, args, callContext);
             }
         }
 
@@ -2271,6 +2277,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, args, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, args, callContext);
             }
         }
 
@@ -2408,6 +2416,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, list, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, list, callContext);
             }
         }
 
@@ -2417,6 +2427,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, list, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, list, callContext);
             }
         }
 
@@ -2504,6 +2516,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // cause normalizeVariableName to look up the wrong name
         if (runtimeScalar.type == RuntimeScalarType.GLOB) {
             RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            // For detached globs (null globName, from stash delete), use local code slot
+            if (glob.globName == null) {
+                if (glob.codeSlot != null) {
+                    RuntimeScalar snapshot = new RuntimeScalar();
+                    snapshot.type = glob.codeSlot.type;
+                    snapshot.value = glob.codeSlot.value;
+                    return snapshot;
+                }
+                return new RuntimeScalar(); // undef
+            }
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(glob.globName);
             
             // Return a snapshot of the current code reference

@@ -25,6 +25,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     private RuntimeArray arraySlot;
     // Local hash slot for anonymous globs (when globName is null)
     private RuntimeHash hashSlot;
+    // Local code slot for detached globs (from stash delete)
+    public RuntimeScalar codeSlot;
 
     /**
      * Constructor for RuntimeGlob.
@@ -88,15 +90,25 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * Uses globName=null so getGlobSlot() reads from local slots.
      */
     public static RuntimeGlob createDetachedWithSlots(
-            RuntimeScalar scalar, RuntimeArray array, RuntimeHash hash, RuntimeGlob io) {
+            RuntimeScalar scalar, RuntimeArray array, RuntimeHash hash, RuntimeGlob io,
+            RuntimeScalar code) {
         RuntimeGlob glob = new RuntimeGlob(null);
         glob.scalarSlot = scalar != null ? scalar : new RuntimeScalar();
         glob.arraySlot = array;
         glob.hashSlot = hash;
+        glob.codeSlot = code;
         if (io != null) {
             glob.IO = io.IO;
         }
         return glob;
+    }
+
+    /**
+     * Overload without code parameter for backward compatibility.
+     */
+    public static RuntimeGlob createDetachedWithSlots(
+            RuntimeScalar scalar, RuntimeArray array, RuntimeHash hash, RuntimeGlob io) {
+        return createDetachedWithSlots(scalar, array, hash, io, null);
     }
 
     /**
@@ -376,6 +388,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar getGlobSlot(RuntimeScalar index) {
         return switch (index.toString()) {
             case "CODE" -> {
+                // For detached globs (null globName, from stash delete), use local code slot
+                if (this.globName == null) {
+                    yield this.codeSlot != null ? this.codeSlot : new RuntimeScalar();
+                }
                 // Only return CODE ref if it's in the stash (globalCodeRefs).
                 // We must NOT use getGlobalCodeRef() here because it returns pinned
                 // references that survive stash deletion. When checking *{glob}{CODE},
@@ -391,14 +407,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(); // Return undef if code doesn't exist
             }
             case "PACKAGE" -> {
-                // Return the package that owns this glob. If the package has been undefined,
-                // its bless id will have been anonymized to "__ANON__".
+                // Return the package that owns this glob.
+                if (this.globName == null) yield new RuntimeScalar();
                 int lastColonIndex = this.globName.lastIndexOf("::");
                 String pkg = lastColonIndex >= 0 ? this.globName.substring(0, lastColonIndex) : "main";
                 yield new RuntimeScalar(NameNormalizer.getBlessStrForClassName(pkg));
             }
             case "NAME" -> {
                 // Return the name of this glob (without the package prefix)
+                if (this.globName == null) yield new RuntimeScalar();
                 int lastColonIndex = this.globName.lastIndexOf("::");
                 String name = lastColonIndex >= 0 ? this.globName.substring(lastColonIndex + 2) : this.globName;
                 yield new RuntimeScalar(name);

@@ -1571,6 +1571,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB, GLOBREFERENCE -> {
                 // Get the CODE slot from the glob
                 RuntimeGlob glob = (RuntimeGlob) value;
+                // For detached globs (null globName, from stash delete), use local code slot
+                if (glob.globName == null) {
+                    yield glob.codeSlot != null ? glob.codeSlot : new RuntimeScalar();
+                }
                 yield GlobalVariable.getGlobalCodeRef(glob.globName);
             }
             default -> {
