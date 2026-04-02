@@ -372,6 +372,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Unicode Properties**: Add regex properties supported by Perl but missing in Java regex.
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
+- ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
 - ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
 
