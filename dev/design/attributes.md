@@ -423,23 +423,23 @@ The infrastructure (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) is no
 
 ### Progress Tracking
 
-#### Current Status: Phase 8 completed (2026-04-02)
+#### Current Status: Phase 8 completed + strict vars fix (2026-04-02)
 
-#### Test Scores After Phase 8
+#### Test Scores After Phase 8 + strict vars fix
 
 | Test File | Score | Change |
 |-----------|-------|--------|
-| attrs.t | 152/158 | unchanged |
-| uni/attrs.t | 29/34 | unchanged |
+| attrs.t | 158/159 | +6 (test 88 now passes; only TODO test 154 remains) |
+| uni/attrs.t | 35/35 | +6 (test 24 now passes; 100% pass rate) |
 | attrproto.t | 51/52 | unchanged |
 | attrhand.t | 4/4 | unchanged |
 | AH/caller.t | 2/2 | unchanged |
 | AH/constants.t | 1/1 | unchanged |
 | AH/data_convert.t | 8/8 | unchanged |
-| AH/linerep.t | 15/18 | +2 (filename/linenum for CODE attrs) |
-| AH/multi.t | 45/51 | **NEW** (was crash/0) |
+| AH/linerep.t | 15/18 | unchanged |
+| AH/multi.t | 45/51 | unchanged |
 
-**Total: 307/328 (93.6%)**
+**Total: 319/330 (96.7%)**
 
 #### Phase 8 Fixes (2026-04-02)
 
@@ -450,12 +450,24 @@ The infrastructure (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) is no
 5. **OperatorParser.java**: Push CallerStack frames in `callModifyVariableAttributes()` with source file/line
 6. **RuntimeCode.java**: Added CallerStack fallback in `callerWithSub()` for frames beyond Java stack trace
 
+#### Parse-time strict vars fix (2026-04-02)
+
+Implemented parse-time `strict 'vars'` checking to fix perl #49472 (attrs.t test 88, uni/attrs.t test 24).
+Named subroutine bodies are compiled lazily, so strict vars checking in the bytecode compiler never fired for
+undeclared variables inside named sub bodies. Added checking at parse time since parsing is always eager.
+
+1. **Variable.java**: Added `checkStrictVarsAtParseTime()` with comprehensive exemption logic
+2. **OperatorParser.java**: Set `parsingDeclaration` flag during `my`/`our`/`state` parsing
+3. **Parser.java**: Added `parsingDeclaration` flag
+4. **SignatureParser.java**: Register signature parameters in symbol table during parsing
+5. **SubroutineParser.java**: Enter scope for signature variables before parsing, exit after block body
+6. **StatementParser.java**: Register catch variable in scope, suppress strict check for `catch ($e)`
+
 #### Remaining Failures
 
 | Test | Count | Category | Notes |
 |------|-------|----------|-------|
 | attrs.t 41-42, uni 17-18 | 4 | Phase 3: `my` var attribute dispatch | Ref points to temp, not lexical |
-| attrs.t 87, uni 23 | 2 | Strict error masked (#49472) | Pre-existing strict checking issue |
 | attrs.t 124-125, uni 30-31 | 4 | Phase 7: Closure prototype | Not implemented |
 | attrs.t 154 | 1 | TODO test (expected failure) | RT #3605 ternary/attribute parsing |
 | attrproto.t 48 | 1 | Lexical sub in eval STRING | Pre-existing eval bug |
