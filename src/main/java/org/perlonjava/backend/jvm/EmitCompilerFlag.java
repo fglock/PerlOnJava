@@ -43,6 +43,21 @@ public class EmitCompilerFlag {
                 "setCallSiteBits",
                 "(Ljava/lang/String;)V", false);
 
+        // Emit runtime code to update per-call-site $^H (hints).
+        // This allows caller()[8] to return accurate hints for the current statement.
+        int hints = node.getStrictOptions();
+        mv.visitLdcInsn(hints);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/WarningBitsRegistry",
+                "setCallSiteHints",
+                "(I)V", false);
+
+        // Emit runtime code to snapshot %^H for caller()[10].
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/WarningBitsRegistry",
+                "snapshotCurrentHintHash",
+                "()V", false);
+
         // Emit runtime code for warning scope if needed
         int warningScopeId = node.getWarningScopeId();
         if (warningScopeId > 0) {

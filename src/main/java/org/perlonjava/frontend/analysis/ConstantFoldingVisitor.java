@@ -123,6 +123,14 @@ public class ConstantFoldingVisitor implements Visitor {
             }
         }
 
+        // Handle not/! operators (used for `until` conditions and explicit negation)
+        if (condition instanceof OperatorNode opNode && opNode.operand != null) {
+            if ("not".equals(opNode.operator) || "!".equals(opNode.operator)) {
+                Boolean innerValue = getConstantConditionValue(opNode.operand, currentPackage);
+                if (innerValue != null) return !innerValue;
+            }
+        }
+
         return null;
     }
 
@@ -143,6 +151,11 @@ public class ConstantFoldingVisitor implements Visitor {
                     }
                     RuntimeBase firstElement = constList.elements.getFirst();
                     if (firstElement instanceof RuntimeScalar scalar) {
+                        // References are always truthy in Perl — don't call getBoolean()
+                        // which could trigger overloaded bool at compile time
+                        if (RuntimeScalarType.isReference(scalar)) {
+                            return true;
+                        }
                         return scalar.getBoolean();
                     }
                 }

@@ -933,6 +933,12 @@ public class StatementResolver {
             // { %hash } or { @array } or { %{$ref} } - treat as hash constructor
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - starts with sigil (% or @)");
             return true;
+        } else if (parser.insideBracedDereference) {
+            // Inside %{...}, inner {} should default to hash constructor, not block.
+            // Perl 5 sets PL_expect = XTERM after %{, making the next { a hash constructor.
+            // Example: %{ {map { $_ => 1 } @_} } — inner {} is a hashref.
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - inside braced dereference context");
+            return true;
         } else {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
             return false; // Default: assume block when we can't determine

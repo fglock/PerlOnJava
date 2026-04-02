@@ -291,14 +291,36 @@ public class CompileBinaryOperator {
                 }
             }
 
-            // Handle ListNode case: (expr)[index] like (caller)[0]
-            // Transform to [expr]->[index] like JVM does
+            // Handle ListNode case: (expr)[indices] like (caller(0))[0] or (1,2,3,4)[1,2]
+            // Use proper list slice semantics: evaluate list, then slice by indices
             if (node.left instanceof ListNode listNode) {
-                // Create: ArrayLiteralNode containing the list elements
-                // Then: BinaryOperatorNode("->", arrayLiteral, node.right)
-                ArrayLiteralNode arrayLiteral = new ArrayLiteralNode(listNode.elements, listNode.getIndex());
-                BinaryOperatorNode arrowNode = new BinaryOperatorNode("->", arrayLiteral, node.right, node.getIndex());
-                arrowNode.accept(bytecodeCompiler);
+                // Compile the list in LIST context
+                bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LIST);
+                int listReg = bytecodeCompiler.lastResultReg;
+
+                // Compile the indices in LIST context
+                ListNode indices = ((ArrayLiteralNode) node.right).asListNode();
+                bytecodeCompiler.compileNode(indices, -1, RuntimeContextType.LIST);
+                int indicesReg = bytecodeCompiler.lastResultReg;
+
+                // Emit LIST_SLICE opcode: rd = list.getSlice(indices)
+                int sliceReg = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.LIST_SLICE);
+                bytecodeCompiler.emitReg(sliceReg);
+                bytecodeCompiler.emitReg(listReg);
+                bytecodeCompiler.emitReg(indicesReg);
+
+                // Handle context conversion: LIST_SLICE returns a RuntimeList,
+                // but in scalar context we need to extract the scalar value
+                if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
+                    int scalarReg = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.LIST_TO_SCALAR);
+                    bytecodeCompiler.emitReg(scalarReg);
+                    bytecodeCompiler.emitReg(sliceReg);
+                    bytecodeCompiler.lastResultReg = scalarReg;
+                } else {
+                    bytecodeCompiler.lastResultReg = sliceReg;
+                }
                 return;
             }
 

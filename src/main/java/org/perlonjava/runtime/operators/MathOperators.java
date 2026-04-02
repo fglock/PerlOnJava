@@ -619,7 +619,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=", "(+");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -646,7 +646,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=", "(-");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -673,7 +673,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=", "(*");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -700,7 +700,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=", "(/");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -727,7 +727,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=", "(%");
             if (result != null) {
                 // Compound overload found - assign result back to lvalue
                 arg1.set(result);
@@ -750,7 +750,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=", "(+");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -768,7 +768,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=", "(-");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -786,7 +786,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=", "(*");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -804,7 +804,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=", "(/");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -822,7 +822,7 @@ public class MathOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=", "(%");
             if (result != null) {
                 arg1.set(result);
                 return arg1;
@@ -851,6 +851,47 @@ public class MathOperators {
 
         long result = dividend / divisor;
         return new RuntimeScalar(result);
+    }
+
+    /**
+     * Performs integer division with uninitialized value warnings.
+     * This is used when "use integer" pragma is in effect and warnings are enabled.
+     *
+     * @param arg1 The dividend RuntimeScalar.
+     * @param arg2 The divisor RuntimeScalar.
+     * @return A new RuntimeScalar representing the integer division result.
+     */
+    public static RuntimeScalar integerDivideWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Convert to number with warning for uninitialized values
+        arg1 = arg1.getNumberWarn("integer division (/)");
+        arg2 = arg2.getNumberWarn("integer division (/)");
+        long dividend = arg1.getLong();
+        long divisor = arg2.getLong();
+
+        if (divisor == 0) {
+            throw new PerlCompilerException("Illegal division by zero");
+        }
+
+        long result = dividend / divisor;
+        return new RuntimeScalar(result);
+    }
+
+    /**
+     * Compound assignment: /= with uninitialized value warnings under "use integer".
+     */
+    public static RuntimeScalar integerDivideAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=", "(/");
+            if (result != null) {
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        RuntimeScalar result = integerDivideWarn(arg1, arg2);
+        arg1.set(result);
+        return arg1;
     }
 
     /**

@@ -4,6 +4,11 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
 /**
  * Registry for per-closure warning bits storage.
  * 
@@ -40,6 +45,27 @@ public class WarningBitsRegistry {
     // and pops it when the subroutine returns. This allows caller()[9] to return
     // the correct per-call-site warning bits.
     private static final ThreadLocal<Deque<String>> callerBitsStack = 
+        ThreadLocal.withInitial(ArrayDeque::new);
+    
+    // ThreadLocal tracking the compile-time $^H (hints) at the current call site.
+    // Updated at runtime when pragmas (use strict, etc.) are encountered.
+    // This provides per-statement hints for caller()[8].
+    private static final ThreadLocal<Integer> callSiteHints = 
+        ThreadLocal.withInitial(() -> 0);
+    
+    // ThreadLocal stack saving caller's $^H hints across subroutine calls.
+    // Mirrors callerBitsStack but for $^H instead of warning bits.
+    private static final ThreadLocal<Deque<Integer>> callerHintsStack = 
+        ThreadLocal.withInitial(ArrayDeque::new);
+    
+    // ThreadLocal tracking the compile-time %^H (hints hash) at the current call site.
+    // Updated at runtime when pragmas modify %^H.
+    // This provides per-statement hints hash for caller()[10].
+    private static final ThreadLocal<java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar>> callSiteHintHash = 
+        ThreadLocal.withInitial(java.util.HashMap::new);
+    
+    // ThreadLocal stack saving caller's %^H across subroutine calls.
+    private static final ThreadLocal<Deque<java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar>>> callerHintHashStack = 
         ThreadLocal.withInitial(ArrayDeque::new);
     
     /**
@@ -113,6 +139,10 @@ public class WarningBitsRegistry {
         currentBitsStack.get().clear();
         callSiteBits.remove();
         callerBitsStack.get().clear();
+        callSiteHints.remove();
+        callerHintsStack.get().clear();
+        callSiteHintHash.get().clear();
+        callerHintHashStack.get().clear();
     }
     
     /**
@@ -188,5 +218,131 @@ public class WarningBitsRegistry {
      */
     public static int size() {
         return registry.size();
+    }
+    
+    // ===== $^H (hints) support for caller()[8] =====
+    
+    /**
+     * Sets the compile-time $^H value for the current call site.
+     * Called at runtime when pragmas (use strict, etc.) are encountered.
+     *
+     * @param hints The $^H bitmask
+     */
+    public static void setCallSiteHints(int hints) {
+        callSiteHints.set(hints);
+    }
+    
+    /**
+     * Gets the $^H value for the current call site.
+     *
+     * @return The current call-site $^H value
+     */
+    public static int getCallSiteHints() {
+        return callSiteHints.get();
+    }
+    
+    /**
+     * Saves the current call-site $^H onto the caller stack.
+     * Called by RuntimeCode.apply() before entering a subroutine.
+     */
+    public static void pushCallerHints() {
+        callerHintsStack.get().push(callSiteHints.get());
+    }
+    
+    /**
+     * Restores the caller's $^H from the caller stack.
+     * Called by RuntimeCode.apply() after a subroutine returns.
+     */
+    public static void popCallerHints() {
+        Deque<Integer> stack = callerHintsStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+    
+    /**
+     * Gets the caller's $^H at a given frame depth.
+     * Frame 0 = immediate caller, frame 1 = caller's caller, etc.
+     * Used by caller()[8].
+     *
+     * @param frame The frame depth (0 = immediate caller)
+     * @return The $^H value, or -1 if not available
+     */
+    public static int getCallerHintsAtFrame(int frame) {
+        Deque<Integer> stack = callerHintsStack.get();
+        if (stack.isEmpty()) {
+            return -1;
+        }
+        int index = 0;
+        for (int hints : stack) {
+            if (index == frame) {
+                return hints;
+            }
+            index++;
+        }
+        return -1;
+    }
+    
+    // ===== %^H (hints hash) support for caller()[10] =====
+    
+    /**
+     * Sets the compile-time %^H snapshot for the current call site.
+     * Called at runtime when pragmas modify %^H.
+     *
+     * @param hintHash A snapshot of the %^H hash elements
+     */
+    public static void setCallSiteHintHash(java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> hintHash) {
+        callSiteHintHash.set(hintHash != null ? new java.util.HashMap<>(hintHash) : new java.util.HashMap<>());
+    }
+    
+    /**
+     * Snapshots the current global %^H hash into callSiteHintHash.
+     * Called from emitted bytecode when pragmas change.
+     */
+    public static void snapshotCurrentHintHash() {
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        setCallSiteHintHash(hintHash.elements);
+    }
+    
+    /**
+     * Saves the current call-site %^H onto the caller stack.
+     * Called by RuntimeCode.apply() before entering a subroutine.
+     */
+    public static void pushCallerHintHash() {
+        callerHintHashStack.get().push(new java.util.HashMap<>(callSiteHintHash.get()));
+    }
+    
+    /**
+     * Restores the caller's %^H from the caller stack.
+     * Called by RuntimeCode.apply() after a subroutine returns.
+     */
+    public static void popCallerHintHash() {
+        Deque<java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar>> stack = callerHintHashStack.get();
+        if (!stack.isEmpty()) {
+            stack.pop();
+        }
+    }
+    
+    /**
+     * Gets the caller's %^H at a given frame depth.
+     * Frame 0 = immediate caller, frame 1 = caller's caller, etc.
+     * Used by caller()[10].
+     *
+     * @param frame The frame depth (0 = immediate caller)
+     * @return A copy of the %^H hash elements, or null if not available
+     */
+    public static java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> getCallerHintHashAtFrame(int frame) {
+        Deque<java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar>> stack = callerHintHashStack.get();
+        if (stack.isEmpty()) {
+            return null;
+        }
+        int index = 0;
+        for (java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> hash : stack) {
+            if (index == frame) {
+                return hash.isEmpty() ? null : hash;
+            }
+            index++;
+        }
+        return null;
     }
 }

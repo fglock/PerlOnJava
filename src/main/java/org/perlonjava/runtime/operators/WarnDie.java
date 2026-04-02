@@ -189,14 +189,14 @@ public class WarnDie {
             // Restore $SIG{__WARN__}
             DynamicVariableManager.popToLocalLevel(level);
 
-            return res.scalar();
+            return new RuntimeScalar(1);  // Perl's warn() always returns 1
         }
 
         // Get the RuntimeIO for STDERR and write the message
         RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
         stderrIO.write(finalMessage.toString());
 
-        return new RuntimeScalar();
+        return new RuntimeScalar(1);  // Perl's warn() always returns 1
     }
 
     /**

@@ -89,7 +89,7 @@ public class DBI extends PerlModuleBase {
             setError(handle, sqlEx);
             if (secondHandle != null) setError(secondHandle, sqlEx);
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + "() failed: " + getGlobalVariable("DBI::errstr"));
+        RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + " failed: " + getGlobalVariable("DBI::errstr"));
         if (handle.get("RaiseError").getBoolean()) {
             throw new PerlCompilerException(msg.toString());
         }
@@ -192,6 +192,11 @@ public class DBI extends PerlModuleBase {
             // add attributes from dbh and attr: RaiseError, PrintError, FetchHashKeyName
             sth.setFromList(new RuntimeList(sth, dbh, attr.hashDeref()));
 
+            // sth starts inactive — Active becomes true only after execute() with results.
+            // The setFromList above copies dbh's Active=true, which is wrong for sth.
+            // Use mutable scalar (not scalarFalse) because Perl code does $sth->{Active} = 0
+            sth.put("Active", new RuntimeScalar(false));
+
             // Get connection from database handle
             Connection conn = (Connection) dbh.get("connection").value;
 
@@ -243,27 +248,50 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList last_insert_id(RuntimeArray args, int ctx) {
         // argument can be either a dbh or a sth
         RuntimeHash dbh = args.get(0).hashDeref();
-        RuntimeHash sth = null;
         String type = dbh.get("Type").toString();
-        if (type.equals("db")) {
-            sth = dbh.get("sth").hashDeref();
-        } else {
-            sth = dbh;
-            dbh = sth.get("Database").hashDeref();
+        if (!type.equals("db")) {
+            dbh = args.get(0).hashDeref().get("Database").hashDeref();
         }
 
         final RuntimeHash finalDbh = dbh;
-        final RuntimeHash finalSth = sth;
         return executeWithErrorHandling(() -> {
             Connection conn = (Connection) finalDbh.get("connection").value;
-            Statement stmt = (Statement) finalSth.get("statement").value;
-            ResultSet rs = stmt.getGeneratedKeys();
 
-            if (rs.next()) {
-                long id = rs.getLong(1);
-                return new RuntimeScalar(id).getList();
+            // Use database-specific SQL to retrieve the last auto-generated ID.
+            // This is more reliable than getGeneratedKeys() because it works
+            // regardless of which statement was most recently prepared/executed.
+            String jdbcUrl = finalDbh.get("Name").toString();
+            String sql;
+            if (jdbcUrl.contains("sqlite")) {
+                sql = "SELECT last_insert_rowid()";
+            } else if (jdbcUrl.contains("mysql") || jdbcUrl.contains("mariadb")) {
+                sql = "SELECT LAST_INSERT_ID()";
+            } else if (jdbcUrl.contains("postgresql")) {
+                sql = "SELECT lastval()";
+            } else if (jdbcUrl.contains("h2")) {
+                sql = "SELECT SCOPE_IDENTITY()";
+            } else {
+                // Generic fallback: try getGeneratedKeys() on the last statement
+                RuntimeScalar sthRef = finalDbh.get("sth");
+                if (sthRef != null && RuntimeScalarType.isReference(sthRef)) {
+                    RuntimeHash sth = sthRef.hashDeref();
+                    Statement stmt = (Statement) sth.get("statement").value;
+                    ResultSet rs = stmt.getGeneratedKeys();
+                    if (rs.next()) {
+                        long id = rs.getLong(1);
+                        return new RuntimeScalar(id).getList();
+                    }
+                }
+                return scalarUndef.getList();
             }
 
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    return new RuntimeScalar(id).getList();
+                }
+            }
             return scalarUndef.getList();
         }, finalDbh, "last_insert_id");
     }
@@ -349,6 +377,21 @@ public class DBI extends PerlModuleBase {
             // Bind parameters and execute the statement.
             // If the JDBC PreparedStatement is stale (e.g., invalidated by ROLLBACK),
             // re-prepare it and retry once.
+
+            // Close any previous ResultSet to prevent JDBC resource leaks
+            RuntimeScalar prevResultRef = sth.get("execute_result");
+            if (prevResultRef != null && RuntimeScalarType.isReference(prevResultRef)) {
+                try {
+                    RuntimeHash prevResult = prevResultRef.hashDeref();
+                    RuntimeScalar rsScalar = prevResult.get("resultset");
+                    if (rsScalar != null && rsScalar.value instanceof ResultSet) {
+                        ((ResultSet) rsScalar.value).close();
+                    }
+                } catch (Exception ignored) {
+                    // Best effort — old result set may already be closed
+                }
+            }
+
             boolean retried = false;
             boolean hasResultSet = false;
             while (true) {
@@ -426,6 +469,9 @@ public class DBI extends PerlModuleBase {
             sth.put("Executed", scalarTrue);
             dbh.put("Executed", scalarTrue);
 
+            // Set Active based on whether we have results to fetch
+            sth.put("Active", new RuntimeScalar(hasResultSet));
+
             // Store execution result in statement handle
             sth.put("execute_result", result.createReference());
 
@@ -486,6 +532,9 @@ public class DBI extends PerlModuleBase {
                 return row.createReference().getList();
             }
 
+            // No more rows — mark statement as inactive (like real DBI)
+            sth.put("Active", new RuntimeScalar(false));
+
             // Return empty array if no more rows
             return new RuntimeList();
         }, dbh, "fetchrow_arrayref");
@@ -542,6 +591,9 @@ public class DBI extends PerlModuleBase {
                 RuntimeScalar rowRef = row.createReference();
                 return rowRef.getList();
             }
+
+            // No more rows — mark statement as inactive (like real DBI)
+            sth.put("Active", new RuntimeScalar(false));
 
             // Return undef if no more rows
             return scalarUndef.getList();

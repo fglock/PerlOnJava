@@ -47,6 +47,17 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
     }
 
     static RuntimeArray createAutovivifiedArray(RuntimeScalar runtimeScalar) {
+        // If this scalar already has a pending autovivification array (from a
+        // previous arrayDeref() call that hasn't been vivified yet), reuse it.
+        // This is critical for list assignments like ($a->[0], $a->[1]) = (1, 2)
+        // where $a is undef: both LHS elements must share the same array.
+        if (runtimeScalar.value instanceof RuntimeArray existingArray
+                && existingArray.type == RuntimeArray.AUTOVIVIFY_ARRAY
+                && existingArray.elements instanceof AutovivificationArray ava
+                && ava.scalarToAutovivify == runtimeScalar) {
+            return existingArray;
+        }
+
         // Autovivification: When dereferencing an undefined scalar as an array,
         // Perl automatically creates a new array reference.
         var newArray = new RuntimeArray();
@@ -58,6 +69,11 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
         // scalars become references when used as such.
         newArray.type = RuntimeArray.AUTOVIVIFY_ARRAY;
         newArray.elements = new AutovivificationArray(runtimeScalar);
+
+        // Cache the array in the scalar's value field (type remains UNDEF).
+        // This allows subsequent arrayDeref() calls on the same still-undef scalar
+        // to find and reuse this array instead of creating a duplicate.
+        runtimeScalar.value = newArray;
 
         // Return the newly created array. At this point, the scalar is still UNDEF,
         // but will be autovivified to an array reference on first write operation.

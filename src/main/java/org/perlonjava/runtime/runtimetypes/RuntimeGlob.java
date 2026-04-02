@@ -174,6 +174,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
 
+                // Increment package generation counter for mro::get_pkg_gen
+                int lastColonIdx = this.globName.lastIndexOf("::");
+                if (lastColonIdx > 0) {
+                    String pkgName = this.globName.substring(0, lastColonIdx);
+                    org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(pkgName);
+                }
+
                 return value;
             case GLOB, GLOBREFERENCE:
                 // *STDOUT = $new_handle

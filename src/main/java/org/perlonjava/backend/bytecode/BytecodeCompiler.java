@@ -14,6 +14,7 @@ import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.util.*;
 
@@ -348,16 +349,46 @@ public class BytecodeCompiler implements Visitor {
         char c = name.charAt(0);
         // Allow if character is in Latin-1 extended range (128-255) and 'use utf8' is NOT enabled
         // Unicode characters above 255 (like Greek α = 945) should NOT be exempt
-        return c > 127 && c <= 255 && emitterContext != null && emitterContext.symbolTable != null
-                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
+        return c > 127 && c <= 255
+                && getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_UTF8) == false;
+    }
+
+    /**
+     * Returns the effective symbol table for pragma checks.
+     * Prefers emitterContext.symbolTable (when available), falls back to this.symbolTable.
+     * This ensures sub-compilers (which have null emitterContext) still enforce pragmas.
+     */
+    private ScopedSymbolTable getEffectiveSymbolTable() {
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            return emitterContext.symbolTable;
+        }
+        return symbolTable;
+    }
+
+    /**
+     * Copies pragma flags (strict, warnings, features) from this compiler's effective
+     * symbol table into a sub-compiler's symbol table. Called before compiling subroutine
+     * bodies so that BEGIN { $^H = ... } changes propagate into anonymous/named subs.
+     */
+    private void inheritPragmaFlags(BytecodeCompiler subCompiler) {
+        ScopedSymbolTable parentST = getEffectiveSymbolTable();
+        subCompiler.symbolTable.strictOptionsStack.pop();
+        subCompiler.symbolTable.strictOptionsStack.push(parentST.strictOptionsStack.peek());
+        subCompiler.symbolTable.featureFlagsStack.pop();
+        subCompiler.symbolTable.featureFlagsStack.push(parentST.featureFlagsStack.peek());
+        subCompiler.symbolTable.warningFlagsStack.pop();
+        subCompiler.symbolTable.warningFlagsStack.push((java.util.BitSet) parentST.warningFlagsStack.peek().clone());
+        subCompiler.symbolTable.warningFatalStack.pop();
+        subCompiler.symbolTable.warningFatalStack.push((java.util.BitSet) parentST.warningFatalStack.peek().clone());
+        subCompiler.symbolTable.warningDisabledStack.pop();
+        subCompiler.symbolTable.warningDisabledStack.push((java.util.BitSet) parentST.warningDisabledStack.peek().clone());
     }
 
     /**
      * Returns true if strict refs is currently enabled in the symbol table.
      */
     boolean isStrictRefsEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
     }
 
     /**
@@ -370,22 +401,15 @@ public class BytecodeCompiler implements Visitor {
      */
 
     boolean isIntegerEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_INTEGER);
     }
 
     boolean isNoOverloadingEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
     }
 
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
-        // Only check if strict vars is enabled
-        if (emitterContext == null || emitterContext.symbolTable == null) {
-            return false;  // No context, allow access
-        }
-
-        boolean strictEnabled = emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS);
+        boolean strictEnabled = getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_VARS);
         if (!strictEnabled) {
             return false;  // Strict vars not enabled, allow access
         }
@@ -1047,11 +1071,12 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emitInt(intValue);
             } else if (isLargeInteger) {
-                // Large integer - store as string to preserve precision (32-bit Perl emulation)
-                int strIdx = addToStringPool(value);
-                emit(Opcodes.LOAD_STRING);
+                // Large integer - store as double to match Perl 5 IV-to-NV promotion
+                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
+                int constIdx = addToConstantPool(doubleScalar);
+                emit(Opcodes.LOAD_CONST);
                 emitReg(rd);
-                emit(strIdx);
+                emit(constIdx);
             } else {
                 // Floating-point number - create RuntimeScalar with double value
                 RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
@@ -1804,17 +1829,59 @@ public class BytecodeCompiler implements Visitor {
     void handleCompoundAssignment(BinaryOperatorNode node) {
         String op = node.operator;
 
+        // Short-circuit operators (//=, ||=, &&=) must NOT evaluate the RHS eagerly.
+        // The RHS should only be evaluated if the short-circuit condition is not met.
+        if (op.equals("//=") || op.equals("||=") || op.equals("&&=")) {
+            handleShortCircuitAssignment(node);
+            return;
+        }
+
         // Compile the right operand first (the value to add/subtract/etc.)
         compileNode(node.right, -1, RuntimeContextType.SCALAR);
         int valueReg = lastResultReg;
 
         // Get the left operand register (the variable or expression being assigned to)
+        int targetReg = compileLhsForCompoundAssignment(node);
+
+        // Emit the appropriate compound assignment opcode
+        switch (op) {
+            case "+=" -> emit(Opcodes.ADD_ASSIGN);
+            case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
+            case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
+            case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
+            case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
+            case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
+            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
+            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
+            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
+            case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
+            case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
+            case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
+            case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
+            case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
+            case "<<=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
+            case ">>=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
+            default -> {
+                throwCompilerException("Unknown compound assignment operator: " + op);
+                return;
+            }
+        }
+
+        emitReg(targetReg);
+        emitReg(valueReg);
+
+        // The result is stored in targetReg
+        lastResultReg = targetReg;
+    }
+
+    /**
+     * Compile the left-hand side of a compound assignment and return its register.
+     */
+    private int compileLhsForCompoundAssignment(BinaryOperatorNode node) {
         int targetReg;
-        boolean isGlobal = false;
 
         // Check if left side is a simple variable reference
         if (node.left instanceof OperatorNode leftOp) {
-
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
                 String varName = "$" + ((IdentifierNode) leftOp.operand).name;
@@ -1824,7 +1891,6 @@ public class BytecodeCompiler implements Visitor {
                     targetReg = getVariableRegister(varName);
                 } else {
                     // Global variable - need to load it first
-                    isGlobal = true;
                     targetReg = allocateRegister();
                     // Strip sigil before normalizing (varName is "$x", need "x" for normalize)
                     String normalizedName = NameNormalizer.normalizeVariableName(
@@ -1846,50 +1912,68 @@ public class BytecodeCompiler implements Visitor {
             targetReg = lastResultReg;
         }
 
-        // Emit the appropriate compound assignment opcode
-        switch (op) {
-            case "+=" -> emit(Opcodes.ADD_ASSIGN);
-            case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
-            case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
-            case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
-            case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
-            case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
-            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
-            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
-            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
-            case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
-            case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
-            case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
-            case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
-            case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
-            case "<<=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
-            case ">>=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
-            case "&&=" -> emit(Opcodes.LOGICAL_AND_ASSIGN);             // Logical AND
-            case "||=" -> emit(Opcodes.LOGICAL_OR_ASSIGN);              // Logical OR
-            case "//=" -> emit(Opcodes.DEFINED_OR_ASSIGN);              // Defined-or
-            default -> {
-                throwCompilerException("Unknown compound assignment operator: " + op);
-                return;
-            }
+        return targetReg;
+    }
+
+    /**
+     * Handle short-circuit compound assignment operators (//=, ||=, &&=).
+     * These must NOT evaluate the RHS if the short-circuit condition is met:
+     * - //= : skip RHS if LHS is defined
+     * - ||= : skip RHS if LHS is truthy
+     * - &&= : skip RHS if LHS is falsy
+     */
+    private void handleShortCircuitAssignment(BinaryOperatorNode node) {
+        String op = node.operator;
+
+        // Step 1: Compile LHS first to get the target register
+        int targetReg = compileLhsForCompoundAssignment(node);
+
+        // Step 1.5: Vivify the LHS proxy so hash/array entries exist before the condition check.
+        // This matches Perl 5's behavior where $h{key} ||= expr creates the hash entry
+        // (with undef value) during lvalue resolution, before evaluating the boolean condition.
+        // Without this, `scalar keys %$h` in the RHS would see 0 keys instead of 1.
+        emit(Opcodes.VIVIFY_LVALUE);
+        emitReg(targetReg);
+
+        // Step 2: Emit conditional jump to skip RHS evaluation
+        int jumpPos;
+        if (op.equals("//=")) {
+            // For //=, check if LHS is defined using DEFINED opcode
+            int condReg = allocateRegister();
+            emit(Opcodes.DEFINED);
+            emitReg(condReg);
+            emitReg(targetReg);
+            jumpPos = bytecode.size();
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(condReg);
+            emitInt(0); // placeholder for end target
+        } else if (op.equals("||=")) {
+            // For ||=, skip RHS if LHS is truthy
+            jumpPos = bytecode.size();
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(targetReg);
+            emitInt(0); // placeholder for end target
+        } else {
+            // For &&=, skip RHS if LHS is falsy
+            jumpPos = bytecode.size();
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(targetReg);
+            emitInt(0); // placeholder for end target
         }
 
+        // Step 3: Compile RHS (only executed if short-circuit didn't trigger)
+        compileNode(node.right, -1, RuntimeContextType.SCALAR);
+        int valueReg = lastResultReg;
+
+        // Step 4: Assign RHS to LHS
+        emit(Opcodes.SET_SCALAR);
         emitReg(targetReg);
         emitReg(valueReg);
 
-        // If it's a global variable, store it back
-        if (isGlobal) {
-            OperatorNode leftOp = (OperatorNode) node.left;
-            String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+        // Step 5: Patch the forward jump to skip past the RHS evaluation
+        int endPc = bytecode.size();
+        patchIntOffset(jumpPos + 2, endPc);
 
-            // Check strict vars before compound assignment
-            if (shouldBlockGlobalUnderStrictVars(varName)) {
-                throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
-            }
-            // LOAD_GLOBAL_SCALAR loaded the live object; the compound-assign opcode
-            // already mutated it in-place via .set(), so no STORE_GLOBAL_SCALAR needed.
-        }
-
-        // The result is stored in targetReg
         lastResultReg = targetReg;
     }
 
@@ -4702,6 +4786,9 @@ public class BytecodeCompiler implements Visitor {
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
 
+        // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
+        inheritPragmaFlags(subCompiler);
+
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
         subCompiler.currentSubroutineBeginId = beginId;
         subCompiler.currentSubroutineClosureVars = new HashSet<>(closureVarNames);
@@ -4805,6 +4892,9 @@ public class BytecodeCompiler implements Visitor {
         subCompiler.isEvalString = false;
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
+
+        // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
+        inheritPragmaFlags(subCompiler);
         
         // Check if this subroutine is a defer block
         Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
@@ -5236,22 +5326,35 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Step 7: Check condition
-            int condReg = allocateRegister();
-            if (node.condition != null) {
-                // Evaluate condition in SCALAR context (need boolean result)
-                compileNode(node.condition, -1, RuntimeContextType.SCALAR);
-                condReg = lastResultReg;
-            } else {
-                // No condition means infinite loop - load true
-                emit(Opcodes.LOAD_INT);
-                emitReg(condReg);
-                emitInt(1);
-            }
+            // Check if condition is a compile-time constant (e.g., "do {} until TRUE_CONST")
+            String currentPackage = symbolTable.getCurrentPackage();
+            Boolean constantCondition = ConstantFoldingVisitor.getConstantConditionValue(node.condition, currentPackage);
 
-            // Step 8: If condition is true, jump back to start
-            emit(Opcodes.GOTO_IF_TRUE);
-            emitReg(condReg);
-            emitInt(loopStartPc);
+            if (constantCondition != null) {
+                if (constantCondition) {
+                    // Condition is constant true — infinite loop, jump back unconditionally
+                    emit(Opcodes.GOTO);
+                    emitInt(loopStartPc);
+                }
+                // else: condition is constant false — don't jump back, body runs exactly once
+            } else {
+                int condReg = allocateRegister();
+                if (node.condition != null) {
+                    // Evaluate condition in SCALAR context (need boolean result)
+                    compileNode(node.condition, -1, RuntimeContextType.SCALAR);
+                    condReg = lastResultReg;
+                } else {
+                    // No condition means infinite loop - load true
+                    emit(Opcodes.LOAD_INT);
+                    emitReg(condReg);
+                    emitInt(1);
+                }
+
+                // Step 8: If condition is true, jump back to start
+                emit(Opcodes.GOTO_IF_TRUE);
+                emitReg(condReg);
+                emitInt(loopStartPc);
+            }
 
         } else {
             // while/for loop: condition checked before body
@@ -5513,6 +5616,10 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
         symbolTable.warningDisabledStack.pop();
         symbolTable.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+
+        // Update per-call-site $^H and %^H for caller()[8] and caller()[10]
+        WarningBitsRegistry.setCallSiteHints(node.getStrictOptions());
+        WarningBitsRegistry.snapshotCurrentHintHash();
 
         lastResultReg = -1;
     }

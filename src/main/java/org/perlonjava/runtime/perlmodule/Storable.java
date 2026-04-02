@@ -62,8 +62,30 @@ public class Storable extends PerlModuleBase {
         }
     }
 
+    // Storable type bytes matching Perl 5's sort order.
+    // The numeric values determine serialization sort order for DBIC's
+    // condition deduplication (serialize() → nfreeze() → hash keys → sort).
+    private static final int SX_LSCALAR   = 1;   // Scalar (large) follows (length, data)
+    private static final int SX_ARRAY     = 2;   // Array
+    private static final int SX_HASH      = 3;   // Hash
+    private static final int SX_REF       = 4;   // Reference to object
+    private static final int SX_UNDEF     = 5;   // Undefined scalar
+    private static final int SX_INTEGER   = 6;   // Integer
+    private static final int SX_DOUBLE    = 7;   // Double
+    private static final int SX_SCALAR    = 10;  // Scalar (small, length < 256)
+    private static final int SX_SV_UNDEF  = 14;  // Perl's immortal PL_sv_undef
+    private static final int SX_BLESS     = 17;  // Blessed object
+    private static final int SX_OBJECT    = 0;   // Already stored (backreference)
+    private static final int SX_HOOK      = 19;  // Storable hook (STORABLE_freeze/thaw)
+    private static final int SX_CODE      = 26;  // Code reference
+
+    // Magic byte to identify binary format (distinguishes from old YAML+GZIP format)
+    private static final char BINARY_MAGIC = '\u00FF';
+
     /**
-     * Freezes data to binary using YAML + compression.
+     * Freezes data to a binary format matching Perl 5 Storable's sort order.
+     * Uses type bytes compatible with Perl 5's Storable so that string comparison
+     * of frozen output produces the same ordering as Perl 5.
      */
     public static RuntimeList freeze(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -72,16 +94,19 @@ public class Storable extends PerlModuleBase {
 
         try {
             RuntimeScalar data = args.get(0);
-            String yaml = serializeToYAML(data);
-            String compressed = compressString(yaml);
-            return new RuntimeScalar(compressed).getList();
+            StringBuilder sb = new StringBuilder();
+            sb.append(BINARY_MAGIC);
+            IdentityHashMap<Object, Integer> seen = new IdentityHashMap<>();
+            serializeBinary(data, sb, seen);
+            return new RuntimeScalar(sb.toString()).getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("freeze failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
         }
     }
 
     /**
-     * Thaws binary data back to objects.
+     * Thaws frozen data back to objects. Handles both binary format and
+     * legacy YAML+GZIP format for backward compatibility.
      */
     public static RuntimeList thaw(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -90,12 +115,309 @@ public class Storable extends PerlModuleBase {
 
         try {
             RuntimeScalar frozen = args.get(0);
-            String yaml = decompressString(frozen.toString());
-            RuntimeScalar data = deserializeFromYAML(yaml);
-            return data.getList();
+            String frozenStr = frozen.toString();
+
+            if (frozenStr.length() > 0 && frozenStr.charAt(0) == BINARY_MAGIC) {
+                // New binary format
+                int[] pos = {1}; // skip magic byte
+                List<RuntimeScalar> refList = new ArrayList<>();
+                RuntimeScalar data = deserializeBinary(frozenStr, pos, refList);
+                return data.getList();
+            } else {
+                // Legacy YAML+GZIP format (strip old type prefix if present)
+                if (frozenStr.length() > 0 && frozenStr.charAt(0) < '\u0010') {
+                    frozenStr = frozenStr.substring(1);
+                }
+                String yaml = decompressString(frozenStr);
+                RuntimeScalar data = deserializeFromYAML(yaml);
+                return data.getList();
+            }
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("thaw failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
         }
+    }
+
+    /**
+     * Recursively serializes a RuntimeScalar to binary format with Storable-compatible
+     * type bytes. Hash keys are sorted (canonical mode) for deterministic output.
+     */
+    private static void serializeBinary(RuntimeScalar scalar, StringBuilder sb, IdentityHashMap<Object, Integer> seen) {
+        if (scalar == null || scalar.type == RuntimeScalarType.UNDEF) {
+            sb.append((char) SX_SV_UNDEF);
+            return;
+        }
+
+        // Circular reference detection
+        if (scalar.value != null && seen.containsKey(scalar.value)) {
+            sb.append((char) SX_OBJECT);
+            appendInt(sb, seen.get(scalar.value));
+            return;
+        }
+
+        // Blessed objects: check for STORABLE_freeze hook first
+        int blessId = RuntimeScalarType.blessedId(scalar);
+        if (blessId != 0) {
+            String className = NameNormalizer.getBlessStr(blessId);
+
+            // Check for STORABLE_freeze hook
+            RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
+                    "STORABLE_freeze", className, null, 0);
+
+            if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
+                // Track for circular reference detection before calling hook
+                if (scalar.value != null) seen.put(scalar.value, seen.size());
+
+                // Call STORABLE_freeze($self, $cloning=0)
+                RuntimeArray freezeArgs = new RuntimeArray();
+                RuntimeArray.push(freezeArgs, scalar);
+                RuntimeArray.push(freezeArgs, new RuntimeScalar(0)); // cloning = false
+                RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                RuntimeArray freezeArray = new RuntimeArray();
+                freezeResult.setArrayOfAlias(freezeArray);
+
+                // Emit SX_HOOK + class name + serialized string + extra refs
+                sb.append((char) SX_HOOK);
+                appendInt(sb, className.length());
+                sb.append(className);
+
+                // Serialized string (first element of freeze result)
+                String serialized = freezeArray.size() > 0 ? freezeArray.get(0).toString() : "";
+                appendInt(sb, serialized.length());
+                sb.append(serialized);
+
+                // Extra refs (remaining elements)
+                int extraRefs = Math.max(0, freezeArray.size() - 1);
+                appendInt(sb, extraRefs);
+                for (int i = 1; i <= extraRefs; i++) {
+                    serializeBinary(freezeArray.get(i), sb, seen);
+                }
+                return;
+            }
+
+            // No hook — emit SX_BLESS + class name before the data
+            sb.append((char) SX_BLESS);
+            appendInt(sb, className.length());
+            sb.append(className);
+        }
+
+        switch (scalar.type) {
+            case RuntimeScalarType.HASHREFERENCE -> {
+                RuntimeHash hash = (RuntimeHash) scalar.value;
+                if (hash != null) seen.put(scalar.value, seen.size());
+                sb.append((char) SX_HASH);
+                int size = (hash != null) ? hash.size() : 0;
+                appendInt(sb, size);
+                if (hash != null) {
+                    // Canonical mode: sort keys for deterministic output
+                    // Perl 5's Storable writes VALUE first, then KEY (critical for sort order)
+                    TreeMap<String, RuntimeScalar> sorted = new TreeMap<>(hash.elements);
+                    for (Map.Entry<String, RuntimeScalar> entry : sorted.entrySet()) {
+                        serializeBinary(entry.getValue(), sb, seen);
+                        String key = entry.getKey();
+                        appendInt(sb, key.length());
+                        sb.append(key);
+                    }
+                }
+            }
+            case RuntimeScalarType.ARRAYREFERENCE -> {
+                RuntimeArray array = (RuntimeArray) scalar.value;
+                if (array != null) seen.put(scalar.value, seen.size());
+                sb.append((char) SX_ARRAY);
+                int size = (array != null) ? array.size() : 0;
+                appendInt(sb, size);
+                if (array != null) {
+                    for (RuntimeScalar element : array.elements) {
+                        serializeBinary(element, sb, seen);
+                    }
+                }
+            }
+            case RuntimeScalarType.REFERENCE -> {
+                if (scalar.value != null) seen.put(scalar.value, seen.size());
+                sb.append((char) SX_REF);
+                serializeBinary((RuntimeScalar) scalar.value, sb, seen);
+            }
+            case RuntimeScalarType.INTEGER -> {
+                sb.append((char) SX_INTEGER);
+                appendLong(sb, scalar.getLong());
+            }
+            case RuntimeScalarType.DOUBLE -> {
+                sb.append((char) SX_DOUBLE);
+                appendLong(sb, Double.doubleToLongBits(scalar.getDouble()));
+            }
+            case RuntimeScalarType.CODE -> {
+                sb.append((char) SX_CODE);
+            }
+            default -> {
+                // String types (STRING, BYTE_STRING, VSTRING, etc.)
+                if (scalar.value == null) {
+                    sb.append((char) SX_SV_UNDEF);
+                } else {
+                    String str = scalar.toString();
+                    if (str.length() < 256) {
+                        sb.append((char) SX_SCALAR);
+                        sb.append((char) str.length());
+                        sb.append(str);
+                    } else {
+                        sb.append((char) SX_LSCALAR);
+                        appendInt(sb, str.length());
+                        sb.append(str);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Deserializes binary data back to a RuntimeScalar.
+     */
+    private static RuntimeScalar deserializeBinary(String data, int[] pos, List<RuntimeScalar> refList) {
+        if (pos[0] >= data.length()) return new RuntimeScalar();
+
+        int type = data.charAt(pos[0]++) & 0xFF;
+
+        // Handle blessed prefix
+        String blessClass = null;
+        if (type == SX_BLESS) {
+            int classLen = readInt(data, pos);
+            blessClass = data.substring(pos[0], pos[0] + classLen);
+            pos[0] += classLen;
+            type = data.charAt(pos[0]++) & 0xFF;
+        }
+
+        RuntimeScalar result;
+        switch (type) {
+            case SX_OBJECT -> {
+                int refIdx = readInt(data, pos);
+                return refList.get(refIdx);
+            }
+            case SX_HOOK -> {
+                // Object with STORABLE_freeze/thaw hooks
+                int classLen = readInt(data, pos);
+                String hookClass = data.substring(pos[0], pos[0] + classLen);
+                pos[0] += classLen;
+
+                // Read serialized string
+                int serLen = readInt(data, pos);
+                String serialized = data.substring(pos[0], pos[0] + serLen);
+                pos[0] += serLen;
+
+                // Read extra refs
+                int extraRefCount = readInt(data, pos);
+                List<RuntimeScalar> extraRefs = new ArrayList<>();
+                for (int i = 0; i < extraRefCount; i++) {
+                    extraRefs.add(deserializeBinary(data, pos, refList));
+                }
+
+                // Create new blessed object
+                RuntimeHash newHash = new RuntimeHash();
+                result = newHash.createReference();
+                ReferenceOperators.bless(result, new RuntimeScalar(hookClass));
+                refList.add(result);
+
+                // Call STORABLE_thaw($new_obj, $cloning=0, $serialized, @extra_refs)
+                RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
+                        "STORABLE_thaw", hookClass, null, 0);
+                if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
+                    RuntimeArray thawArgs = new RuntimeArray();
+                    RuntimeArray.push(thawArgs, result);
+                    RuntimeArray.push(thawArgs, new RuntimeScalar(0)); // cloning = false
+                    RuntimeArray.push(thawArgs, new RuntimeScalar(serialized));
+                    for (RuntimeScalar ref : extraRefs) {
+                        RuntimeArray.push(thawArgs, ref);
+                    }
+                    RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                }
+            }
+            case SX_HASH -> {
+                RuntimeHash hash = new RuntimeHash();
+                result = hash.createReference();
+                refList.add(result);
+                int numKeys = readInt(data, pos);
+                for (int i = 0; i < numKeys; i++) {
+                    // Perl 5's Storable format: VALUE first, then KEY
+                    RuntimeScalar value = deserializeBinary(data, pos, refList);
+                    int keyLen = readInt(data, pos);
+                    String key = data.substring(pos[0], pos[0] + keyLen);
+                    pos[0] += keyLen;
+                    hash.put(key, value);
+                }
+            }
+            case SX_ARRAY -> {
+                RuntimeArray array = new RuntimeArray();
+                result = array.createReference();
+                refList.add(result);
+                int numElements = readInt(data, pos);
+                for (int i = 0; i < numElements; i++) {
+                    array.elements.add(deserializeBinary(data, pos, refList));
+                }
+            }
+            case SX_REF -> {
+                RuntimeScalar value = deserializeBinary(data, pos, refList);
+                result = value.createReference();
+                refList.add(result);
+            }
+            case SX_INTEGER -> {
+                result = new RuntimeScalar(readLong(data, pos));
+            }
+            case SX_DOUBLE -> {
+                result = new RuntimeScalar(Double.longBitsToDouble(readLong(data, pos)));
+            }
+            case SX_SCALAR -> {
+                int len = data.charAt(pos[0]++) & 0xFF;
+                result = new RuntimeScalar(data.substring(pos[0], pos[0] + len));
+                pos[0] += len;
+            }
+            case SX_LSCALAR -> {
+                int len = readInt(data, pos);
+                result = new RuntimeScalar(data.substring(pos[0], pos[0] + len));
+                pos[0] += len;
+            }
+            case SX_SV_UNDEF, SX_UNDEF -> {
+                result = new RuntimeScalar();
+            }
+            default -> {
+                result = new RuntimeScalar();
+            }
+        }
+
+        if (blessClass != null) {
+            ReferenceOperators.bless(result, new RuntimeScalar(blessClass));
+        }
+        return result;
+    }
+
+    /** Appends a 4-byte big-endian int to the buffer. */
+    private static void appendInt(StringBuilder sb, int value) {
+        sb.append((char) ((value >> 24) & 0xFF));
+        sb.append((char) ((value >> 16) & 0xFF));
+        sb.append((char) ((value >> 8) & 0xFF));
+        sb.append((char) (value & 0xFF));
+    }
+
+    /** Appends an 8-byte big-endian long to the buffer. */
+    private static void appendLong(StringBuilder sb, long value) {
+        for (int i = 56; i >= 0; i -= 8) {
+            sb.append((char) ((value >> i) & 0xFF));
+        }
+    }
+
+    /** Reads a 4-byte big-endian int from the data. */
+    private static int readInt(String data, int[] pos) {
+        int value = ((data.charAt(pos[0]) & 0xFF) << 24)
+                  | ((data.charAt(pos[0] + 1) & 0xFF) << 16)
+                  | ((data.charAt(pos[0] + 2) & 0xFF) << 8)
+                  | (data.charAt(pos[0] + 3) & 0xFF);
+        pos[0] += 4;
+        return value;
+    }
+
+    /** Reads an 8-byte big-endian long from the data. */
+    private static long readLong(String data, int[] pos) {
+        long value = 0;
+        for (int i = 0; i < 8; i++) {
+            value = (value << 8) | (data.charAt(pos[0]++) & 0xFF);
+        }
+        return value;
     }
 
     /**

@@ -427,14 +427,22 @@ public class EmitStatement {
         // Continue label (for next iteration)
         mv.visitLabel(continueLabel);
 
-        // Visit the condition node in scalar context
-        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // Check if condition is a compile-time constant (e.g., "do {} until TRUE_CONST")
+        String currentPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
+        Boolean constantCondition = ConstantFoldingVisitor.getConstantConditionValue(node.condition, currentPackage);
 
-        // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
-
-        // If condition is true, jump back to start
-        mv.visitJumpInsn(Opcodes.IFNE, startLabel);
+        if (constantCondition != null) {
+            if (constantCondition) {
+                // Condition is constant true — infinite loop, jump back unconditionally
+                mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+            }
+            // else: condition is constant false — don't jump back, body runs exactly once
+        } else {
+            // Non-constant condition — emit normal runtime evaluation
+            node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
+            mv.visitJumpInsn(Opcodes.IFNE, startLabel);
+        }
 
         // End of loop
         mv.visitLabel(endLabel);

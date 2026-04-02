@@ -138,19 +138,21 @@ public class Vec {
             data = newData;
         }
 
-        int val = value.getInt();
         ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
 
         if (bits == 64 && byteOffset + 8 <= data.length) {
             long longVal = value.getLong();
             buffer.putLong(byteOffset, longVal);
         } else if (bits == 32 && byteOffset + 4 <= data.length) {
-            buffer.putInt(byteOffset, val);
+            // Use getLong() and truncate to int to preserve bit pattern for unsigned
+            // 32-bit values (getInt() clamps values > Integer.MAX_VALUE via double→int)
+            buffer.putInt(byteOffset, (int) value.getLong());
         } else if (bits == 16 && byteOffset + 1 < data.length) {
-            buffer.putShort(byteOffset, (short) val);
+            buffer.putShort(byteOffset, (short) value.getInt());
         } else if (bits == 8 && byteOffset < data.length) {
-            buffer.put(byteOffset, (byte) val);
+            buffer.put(byteOffset, (byte) value.getInt());
         } else {
+            int val = value.getInt();
             for (int i = 0; i < bits; i++) {
                 int byteIndex = byteOffset + (bitOffset + i) / 8;
                 int bitIndex = (bitOffset + i) % 8;

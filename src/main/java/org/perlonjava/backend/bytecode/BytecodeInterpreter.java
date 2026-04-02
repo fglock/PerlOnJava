@@ -1960,6 +1960,27 @@ public class BytecodeInterpreter {
                                 pc = SlowOpcodeHandler.executeDispatchVarAttrs(bytecode, pc, registers, code.constants);
                             }
 
+                            case Opcodes.VIVIFY_LVALUE -> {
+                                // Vivify an lvalue proxy so the entry exists in the parent container.
+                                // For plain scalars this is a no-op.
+                                int reg = bytecode[pc++];
+                                RuntimeBase val = registers[reg];
+                                if (val instanceof RuntimeScalar rs) {
+                                    rs.vivifyLvalue();
+                                }
+                            }
+
+                            case Opcodes.LIST_SLICE -> {
+                                // List slice: rd = list.getSlice(indices)
+                                // Used for (list)[indices] syntax
+                                int rd = bytecode[pc++];
+                                int listReg = bytecode[pc++];
+                                int indicesReg = bytecode[pc++];
+                                RuntimeList list = registers[listReg].getList();
+                                RuntimeList indices = registers[indicesReg].getList();
+                                registers[rd] = list.getSlice(indices);
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(

@@ -77,7 +77,9 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
             RuntimeList args = new RuntimeList(
                     lvalue, new RuntimeScalar(offset), new RuntimeScalar(bits));
             // Use Vec.set to update the parent string
-            if (bits == 64) {
+            if (bits >= 32) {
+                // Use getLong() for 32-bit and 64-bit to preserve bit patterns for
+                // unsigned values > Integer.MAX_VALUE (getInt() clamps via double→int)
                 long newValue = value.getLong();
                 Vec.set(args, new RuntimeScalar(newValue));
             } else {

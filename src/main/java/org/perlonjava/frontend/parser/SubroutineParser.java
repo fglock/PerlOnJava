@@ -708,7 +708,12 @@ public class SubroutineParser {
         boolean previousInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
 
         // Set the current subroutine name (use empty string for anonymous subs)
-        parser.ctx.symbolTable.setCurrentSubroutine(subName != null ? subName : "");
+        // Use fully qualified name so ByteCodeSourceMapper records the declaration-time
+        // package, not whatever package might be set inside the sub body
+        String qualifiedSubName = subName != null
+                ? NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage())
+                : "";
+        parser.ctx.symbolTable.setCurrentSubroutine(qualifiedSubName);
         // We are now parsing inside a subroutine body (named or anonymous)
         parser.ctx.symbolTable.setInSubroutineBody(true);
 

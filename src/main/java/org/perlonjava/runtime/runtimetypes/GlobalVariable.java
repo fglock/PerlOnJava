@@ -818,12 +818,15 @@ public class GlobalVariable {
 
     /**
      * Gets all ISA arrays for reverse ISA cache building.
-     * This method should return all global arrays that end with "::ISA".
+     * Returns all global arrays whose key ends with "::ISA".
      */
     public static Map<String, RuntimeArray> getAllIsaArrays() {
         Map<String, RuntimeArray> result = new HashMap<>();
-        // Implementation depends on how GlobalVariable stores its data
-        // This is a placeholder - you'll need to implement based on your GlobalVariable structure
+        for (Map.Entry<String, RuntimeArray> entry : globalArrays.entrySet()) {
+            if (entry.getKey().endsWith("::ISA")) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
         return result;
     }
 }

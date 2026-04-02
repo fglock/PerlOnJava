@@ -252,6 +252,24 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Propagates strict options to ALL levels of the stack.
+     * Used by BEGIN block $^H propagation — compile-time hint changes
+     * must persist across scope exits within the same compilation unit.
+     *
+     * @param options The new strict options bitmask.
+     */
+    public void propagateStrictOptionsToAllLevels(int options) {
+        java.util.Deque<Integer> temp = new java.util.ArrayDeque<>();
+        while (!strictOptionsStack.isEmpty()) {
+            strictOptionsStack.pop();
+            temp.push(options);
+        }
+        while (!temp.isEmpty()) {
+            strictOptionsStack.push(temp.pop());
+        }
+    }
+
+    /**
      * Gets the current strict options bitmask.
      *
      * @return The current strict options.

@@ -443,15 +443,33 @@ public class EmitLiteral {
                         "getScalarInt",
                         "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (isLargeInteger) {
-                // Store large integers as strings to preserve precision
-                // This emulates 32-bit Perl behavior
-                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit large integer as string");
+                // Store large integers with precision preservation.
+                // Try long first (exact for values up to 2^63-1).
+                // RuntimeScalar(long) uses initializeWithLong() which stores values
+                // within 2^53 as DOUBLE and larger ones as STRING for full precision.
+                // Fall back to double for values that overflow long (e.g., unsigned 64-bit).
+                if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit large integer");
+                boolean fitsInLong = true;
+                long longVal = 0;
+                try {
+                    longVal = Long.parseLong(value);
+                } catch (NumberFormatException e) {
+                    fitsInLong = false;
+                }
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(value);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "<init>", "(Ljava/lang/String;)V", false);
+                if (fitsInLong) {
+                    mv.visitLdcInsn(longVal);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "<init>", "(J)V", false);
+                } else {
+                    // Value exceeds long range — store as double (Perl NV promotion)
+                    mv.visitLdcInsn(Double.valueOf(value));
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "<init>", "(D)V", false);
+                }
             } else {
                 // Create new RuntimeScalar for floating-point values
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
@@ -466,8 +484,8 @@ public class EmitLiteral {
             if (isInteger) {
                 mv.visitLdcInsn(Integer.parseInt(value));
             } else if (isLargeInteger) {
-                // For large integers in unboxed context, we have to convert to double
-                // but this will lose precision - same as 32-bit Perl
+                // For unboxed context, convert to double (only option for primitive numeric)
+                // This may lose precision for values beyond 2^53
                 mv.visitLdcInsn(Double.parseDouble(value));
             } else {
                 mv.visitLdcInsn(Double.parseDouble(value));

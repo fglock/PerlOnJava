@@ -107,6 +107,13 @@ public class EmitLogicalOperator {
         // and jump away during evaluation.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
 
+        // Vivify the LHS proxy so hash/array entries exist before the condition check.
+        // This matches Perl 5's behavior where $h{key} ||= expr creates the hash entry
+        // (with undef value) during lvalue resolution, before evaluating the boolean condition.
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                "vivifyLvalue", "()V", false);
+
         int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledLeft = leftSlot >= 0;
         if (!pooledLeft) {

@@ -153,7 +153,7 @@ public class ReferenceOperators {
                 if (runtimeScalar.value instanceof RuntimeScalar scalar) {
                     ref = switch (scalar.type) {
                         case VSTRING -> "VSTRING";
-                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
+                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
                         case GLOB -> "GLOB";
                         default -> "SCALAR";
                     };

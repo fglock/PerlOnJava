@@ -150,9 +150,7 @@ public class Builtin extends PerlModuleBase {
             case REFERENCE -> {
                 if (ref.value instanceof RuntimeScalar scalar) {
                     yield switch (scalar.type) {
-                        // case ARRAYREFERENCE -> "ARRAY";
-                        // case HASHREFERENCE -> "HASH";
-                        case CODE -> "CODE";
+                        case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, REGEX -> "REF";
                         case GLOB, GLOBREFERENCE -> "GLOB";
                         default -> "SCALAR";
                     };
