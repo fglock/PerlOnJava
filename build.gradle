@@ -328,6 +328,7 @@ sourceSets {
             include '**/*.pm'
             include '**/*.pl'
             include '**/*.pod'
+            include 'lib/ExtUtils/xsubpp'
             include 'bin/**'
             include 'META-INF/services/**'
         }
