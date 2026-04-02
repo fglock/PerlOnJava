@@ -16,7 +16,7 @@ use Errno;
 our @ISA = qw(IO::Socket);
 our $VERSION = "1.56";
 
-my $EINVAL = eval { Errno::EINVAL() } || 1;
+my $EINVAL = exists(&Errno::EINVAL) ? Errno::EINVAL() : 1;
 
 IO::Socket::INET->register_domain( AF_INET );
 

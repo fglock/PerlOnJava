@@ -1779,6 +1779,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Add hinthash (element 10): Compile-time %^H hash reference
                 res.add(RuntimeScalarCache.scalarUndef);
             }
+        } else if (frame >= stackTraceSize) {
+            // Fallback: check CallerStack for synthetic frames pushed during compile-time
+            // operations (e.g., MODIFY_*_ATTRIBUTES called from Java).
+            // The excess frames beyond the Java stack trace are served from CallerStack.
+            int callerStackFrame = frame - stackTraceSize;
+            CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
+            if (info != null) {
+                if (ctx == RuntimeContextType.SCALAR) {
+                    res.add(new RuntimeScalar(info.packageName()));
+                } else {
+                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(info.filename()));
+                    res.add(new RuntimeScalar(info.line()));
+                }
+            }
         }
         return res;
     }

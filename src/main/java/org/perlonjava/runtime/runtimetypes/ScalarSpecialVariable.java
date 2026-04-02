@@ -214,7 +214,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String lastCapture = RuntimeRegex.lastCaptureString();
                     yield lastCapture != null ? new RuntimeScalar(lastCapture) : scalarUndef;
                 }
-                case LAST_SUCCESSFUL_PATTERN -> new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern);
+                case LAST_SUCCESSFUL_PATTERN -> RuntimeRegex.lastSuccessfulPattern != null
+                        ? new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern) : scalarUndef;
                 case LAST_REGEXP_CODE_RESULT -> {
                     // $^R - Result of last (?{...}) code block
                     // Get the last matched regex and retrieve its code block result

@@ -680,7 +680,7 @@ public class SubroutineParser {
                 } else if (subName.contains("::")) {
                     packageToUse = subName.substring(0, subName.lastIndexOf("::"));
                 }
-                callModifyCodeAttributes(packageToUse, codeRefScalar, attributes, parser);
+                callModifyCodeAttributes(packageToUse, codeRefScalar, attributes, parser, currentIndex);
             }
 
             ListNode result = new ListNode(parser.tokenIndex);
@@ -1032,7 +1032,7 @@ public class SubroutineParser {
             String attrPackage = (placeholder.packageName != null && !placeholder.packageName.isEmpty())
                     ? placeholder.packageName
                     : packageToUse;
-            callModifyCodeAttributes(attrPackage, codeRef, attributes, parser);
+            callModifyCodeAttributes(attrPackage, codeRef, attributes, parser, block.tokenIndex);
         }
 
         // Set packageName from the sub's fully-qualified name (CvSTASH equivalent).
@@ -1264,7 +1264,8 @@ public class SubroutineParser {
      * are rejected with an error.
      */
     private static void callModifyCodeAttributes(String packageName, RuntimeScalar codeRef,
-                                                  List<String> attributes, Parser parser) {
+                                                  List<String> attributes, Parser parser,
+                                                  int declTokenIndex) {
         // Built-in CODE attributes that are always recognized
         java.util.Set<String> builtinAttrs = java.util.Set.of("lvalue", "method", "const");
 
@@ -1311,12 +1312,25 @@ public class SubroutineParser {
                 RuntimeArray.push(callArgs, new RuntimeScalar(attr));
             }
 
-            RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+            // Push caller frames so that Attribute::Handlers can find the source file/line
+            // via `caller 2`. Frame 0 = the MODIFY handler, frame 1 = attributes dispatch,
+            // frame 2 = the original source location where the attribute was declared.
+            String fileName = parser.ctx.compilerOptions.fileName;
+            int lineNum = parser.ctx.errorUtil != null
+                    ? parser.ctx.errorUtil.getLineNumber(declTokenIndex) : 0;
+            CallerStack.push(packageName, fileName, lineNum);
+            CallerStack.push(packageName, fileName, lineNum);
+            try {
+                RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
 
-            // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized attributes
-            RuntimeArray resultArray = result.getArrayOfAlias();
-            if (resultArray.size() > 0) {
-                throwInvalidAttributeError("CODE", resultArray, parser);
+                // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized attributes
+                RuntimeArray resultArray = result.getArrayOfAlias();
+                if (resultArray.size() > 0) {
+                    throwInvalidAttributeError("CODE", resultArray, parser);
+                }
+            } finally {
+                CallerStack.pop();
+                CallerStack.pop();
             }
         } else {
             // No MODIFY_CODE_ATTRIBUTES handler — all non-built-in attributes are invalid

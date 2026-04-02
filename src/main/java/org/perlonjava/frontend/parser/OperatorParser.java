@@ -1271,16 +1271,28 @@ public class OperatorParser {
                     RuntimeArray.push(callArgs, new RuntimeScalar(attr));
                 }
 
-                RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+                // Push caller frames so that Attribute::Handlers can find the source file/line
+                // via `caller 2`.
+                String fileName = parser.ctx.compilerOptions.fileName;
+                int lineNum = parser.ctx.errorUtil != null
+                        ? parser.ctx.errorUtil.getLineNumber(parser.tokenIndex) : 0;
+                CallerStack.push(packageName, fileName, lineNum);
+                CallerStack.push(packageName, fileName, lineNum);
+                try {
+                    RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
 
-                // If MODIFY_*_ATTRIBUTES returns any values, they are unrecognized attributes
-                RuntimeArray resultArray = result.getArrayOfAlias();
-                if (resultArray.size() > 0) {
-                    SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
-                } else {
-                    // All attrs were accepted by the handler. Issue "may clash with future
-                    // reserved word" warning for non-built-in attrs (respects 'no warnings "reserved"')
-                    emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
+                    // If MODIFY_*_ATTRIBUTES returns any values, they are unrecognized attributes
+                    RuntimeArray resultArray = result.getArrayOfAlias();
+                    if (resultArray.size() > 0) {
+                        SubroutineParser.throwInvalidAttributeError(svtype, resultArray, parser);
+                    } else {
+                        // All attrs were accepted by the handler. Issue "may clash with future
+                        // reserved word" warning for non-built-in attrs (respects 'no warnings "reserved"')
+                        emitReservedWordWarning(svtype, nonBuiltinAttrs, parser);
+                    }
+                } finally {
+                    CallerStack.pop();
+                    CallerStack.pop();
                 }
             } else {
                 // No MODIFY_*_ATTRIBUTES handler — all non-built-in attributes are invalid
