@@ -37,6 +37,27 @@ public class RuntimeStashEntry extends RuntimeGlob {
         return this;
     }
 
+    /**
+     * Override globDeref for stash entries to return a plain RuntimeGlob.
+     * This ensures that *{$stash{name}} = \$value goes through RuntimeGlob.set()
+     * (which only aliases slots) rather than RuntimeStashEntry.set() (which creates
+     * constant subs). Direct stash assignment $stash{name} = \$value still calls
+     * RuntimeStashEntry.set() and creates constant subs as expected.
+     */
+    @Override
+    public RuntimeGlob globDeref() {
+        RuntimeGlob pure = new RuntimeGlob(this.globName);
+        pure.IO = this.IO;
+        return pure;
+    }
+
+    @Override
+    public RuntimeGlob globDerefNonStrict(String packageName) {
+        RuntimeGlob pure = new RuntimeGlob(this.globName);
+        pure.IO = this.IO;
+        return pure;
+    }
+
 // Note on Stash Operations:
 //
 // In Perl, a typeglob is a structure that holds a symbol table entry and a key (or slot).

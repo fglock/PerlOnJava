@@ -1521,6 +1521,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
                     ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
+                } else if (runtimeScalar.type == REGEX) {
+                    // qr// objects are implicitly blessed into the Regexp class in Perl 5
+                    // This allows $qr->isa("Regexp"), $qr->can("..."), etc.
+                    perlClassName = "Regexp";
                 } else {
                     // Not auto-blessed
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");

@@ -154,7 +154,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // scalars that captured the glob value during the local scope.
             // This implements Perl's behavior where `my $fh = *FH` inside a local
             // scope retains the IO even after the scope ends.
-            value = value.createDetachedCopy();
+            // Skip detached copy for anonymous globs (null globName) since they
+            // don't participate in local/global scope and we need to preserve
+            // their local slots (e.g., from stash delete).
+            if (value.globName != null) {
+                value = value.createDetachedCopy();
+            }
         }
         this.value = value;
     }

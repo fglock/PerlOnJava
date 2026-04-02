@@ -82,6 +82,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
+     * Creates a detached glob with pre-populated local slots.
+     * Used by stash delete to return a glob that holds the old slot values
+     * after they've been removed from GlobalVariable.
+     * Uses globName=null so getGlobSlot() reads from local slots.
+     */
+    public static RuntimeGlob createDetachedWithSlots(
+            RuntimeScalar scalar, RuntimeArray array, RuntimeHash hash, RuntimeGlob io) {
+        RuntimeGlob glob = new RuntimeGlob(null);
+        glob.scalarSlot = scalar != null ? scalar : new RuntimeScalar();
+        glob.arraySlot = array;
+        glob.hashSlot = hash;
+        if (io != null) {
+            glob.IO = io.IO;
+        }
+        return glob;
+    }
+
+    /**
      * Returns a hash code based on the glob name.
      * This ensures that all copies of the same glob (including detached copies)
      * have the same hash code, which is necessary for correct stringification

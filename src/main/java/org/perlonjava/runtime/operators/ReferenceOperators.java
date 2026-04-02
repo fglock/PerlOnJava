@@ -83,12 +83,17 @@ public class ReferenceOperators {
 
                 // Special case: stash globs (ending with ::) should always return empty string
                 // because they represent the entire package stash, not a single slot
-                if (globName.endsWith("::")) {
+                if (globName != null && globName.endsWith("::")) {
                     str = "";
                     break;
                 }
 
                 // Check various slots
+                // Anonymous globs (null globName) don't have GlobalVariable entries
+                if (globName == null) {
+                    str = "";
+                    break;
+                }
                 boolean hasScalar = GlobalVariable.getGlobalVariable(globName).getDefinedBoolean();
                 boolean hasArray = GlobalVariable.getGlobalArray(globName).size() > 0;
                 boolean hasHash = GlobalVariable.getGlobalHash(globName).size() > 0;

@@ -107,8 +107,14 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
+            case REGEX:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
+                    if (object.type == REGEX) {
+                        // qr// objects are implicitly "Regexp" class
+                        perlClassName = "Regexp";
+                        break;
+                    }
                     return new RuntimeScalar(false).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
@@ -235,6 +241,7 @@ public class Universal extends PerlModuleBase {
             case HASHREFERENCE:
             case GLOBREFERENCE:
             case FORMAT:
+            case REGEX:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     return getScalarBoolean(
@@ -243,6 +250,7 @@ public class Universal extends PerlModuleBase {
                                     || type == REFERENCE && argString.equals("SCALAR")
                                     || type == GLOBREFERENCE && argString.equals("GLOB")
                                     || type == FORMAT && argString.equals("FORMAT")
+                                    || type == REGEX && argString.equals("Regexp")
                     ).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);

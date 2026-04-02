@@ -412,6 +412,10 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle GLOB type: extract CODE slot from the glob
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return existsGlobalCodeRefAsScalar(glob.globName);
+        }
         // Handle RuntimeCode objects by extracting the subroutine name
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
             // Use the RuntimeCode.defined() method to check if the subroutine actually exists
@@ -451,6 +455,14 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle GLOB type: extract CODE slot from the glob
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return definedGlobalCodeRefAsScalar(glob.globName);
+        }
+        // Handle CODE type directly
+        if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
+        }
         return definedGlobalCodeRefAsScalar(key.toString());
     }
 
@@ -470,6 +482,10 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar deleteGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle GLOB type: extract CODE slot from the glob
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return deleteGlobalCodeRefAsScalar(glob.globName);
+        }
         // Handle RuntimeCode objects by extracting the subroutine name
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
             String fullName = runtimeCode.packageName + "::" + runtimeCode.subName;
