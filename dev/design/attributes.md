@@ -421,9 +421,106 @@ The infrastructure (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) is no
 
 4. **`our` variable attribute timing**: The perldoc says `our` attributes are applied at compile-time. This means the emitter needs to call `attributes::->import()` immediately during parsing (like `callModifyCodeAttributes` does for subs), not defer to runtime. **Decision: Handle in Phase 3.**
 
+### Regressions in Other Tests (vs PR #417 baseline)
+
+Three tests regressed compared to the PR #417 baseline. These are NOT attribute test files,
+but they broke due to changes in the attribute-system branch.
+
+#### op/decl-refs.t: 322/408 → 174/408 (-148)
+
+**Root cause**: Two bugs in `callModifyVariableAttributes()` for `state` declared refs.
+
+1. **`state \@h : risible`** — `MODIFY_ARRAY_ATTRIBUTES` handler NOT called.
+   The handler exists and is found (`hasHandler=true`), but for `my`/`state` variables
+   the code at line 1294 says "handler will be dispatched at runtime by the emitter".
+   For declared refs (`state \@h`), the runtime dispatch is not working — the handler
+   is silently skipped. (For non-declared-ref forms like `state @h : risible`, it works.)
+
+2. **`state (\@h) : bumpy`** — sigil wrongly detected as `$` (SCALAR) instead of `@` (ARRAY).
+   The parenthesized declared-ref form `(\@h)` produces an AST where the OperatorNode's
+   operator is `\` (backslash), not `@`. The code at line 1197 (`String sigil = opNode.operator`)
+   gets `\`, which doesn't match any sigil case and `continue`s. But somehow the error says
+   "Invalid SCALAR attribute" — possibly a fallback that defaults to SCALAR. This causes
+   `die $@` in the template, aborting the test.
+
+**Reproduction**:
+```bash
+./jperl -e '
+use feature "declared_refs", "state";
+no warnings "experimental::declared_refs";
+sub MODIFY_ARRAY_ATTRIBUTES { print "handler: @_\n"; return; }
+eval q{ state \@h : risible };   # handler NOT called (silent)
+eval q{ state (\@h) : bumpy };   # "Invalid SCALAR attribute: bumpy" error
+'
+```
+
+**Fix needed**: In `callModifyVariableAttributes()`, handle the declared-ref case where
+the operand is a backslash OperatorNode — unwrap it to get the inner sigil. Also ensure
+the runtime dispatch path works for `state` declared refs.
+
+#### op/lexsub.t: 105/160 → 0/0 (-105)
+
+**Root cause**: Syntax error at line 370 (`p my @b;`) prevents the entire file from compiling.
+
+On the baseline, the file compiled and ran 105 tests. On our branch, a syntax error at
+line 370 causes 0 tests to run. The line is:
+```perl
+{
+  state sub p (\@) { ... }   # line 366: state sub with (\@) prototype
+  p(my @a);                   # line 369: works (parenthesized)
+  p my @b;                    # line 370: SYNTAX ERROR (unparenthesized)
+}
+```
+
+The `(\@)` prototype should tell the parser that `p` takes an array by reference,
+allowing `p my @b` without parentheses. On the baseline, this prototype was applied
+during parsing. On our branch, scope management changes (SubroutineParser.java:
+enter scope before parseSignature, exit after block body) may have affected how
+`state sub` prototypes are registered and visible for later prototype-aware parsing.
+
+**Investigation needed**: Check whether `state sub p (\@)` registers its prototype
+in the symbol table during parsing, and whether the scope changes moved this registration
+to a different scope level that's not visible at the call site (line 370).
+
+#### lib/deprecate.t: 4/10 → 0/10 (-4)
+
+**Root cause**: `defined(&foo)` returns true for forward-declared subs (`sub foo;`).
+
+In Perl 5, `sub foo;` (forward declaration) does NOT make `defined(&foo)` true.
+In PerlOnJava after Phase 7's `isDeclared` flag changes, it does. This breaks
+`File::Copy` which has:
+```perl
+sub syscopy;                    # line 22: forward declaration
+...
+unless (defined &syscopy) {     # line 315: should enter this block!
+    $Syscopy_is_copy = 1;
+    *syscopy = \&copy;          # line 326: sets up syscopy
+}
+```
+
+Because `defined &syscopy` wrongly returns true, the initialization block is skipped.
+When `copy()` later calls `syscopy()`, it dies with "Undefined subroutine &File::Copy::syscopy".
+
+**Reproduction**:
+```bash
+./jperl -e 'sub foo; print defined(&foo) ? "defined" : "undefined", "\n";'
+# Prints "defined" — should print "undefined"
+perl  -e 'sub foo; print defined(&foo) ? "defined" : "undefined", "\n";'
+# Prints "undefined" — correct
+```
+
+**Fix needed**: In `RuntimeGlob.java` or `RuntimeCode.java`, ensure that `defined(&sub)`
+returns false for forward declarations (subs that have `isDeclared=true` but no actual body).
+The `isDeclared` flag should only affect `getGlobSlot("CODE")` for attribute handler lookup,
+not `defined()` semantics.
+
+**Note**: Fixing this restores the baseline 4/10. The remaining 6/10 failures are
+pre-existing (unrelated to this branch) — caused by `caller()[7]` (is_require) always
+returning undef, which breaks `deprecate.pm`'s require-detection logic.
+
 ### Progress Tracking
 
-#### Current Status: Phase 8 completed + strict vars fix (2026-04-02)
+#### Current Status: Phase 8 completed + strict vars fix + regression investigation (2026-04-02)
 
 #### Test Scores After Phase 8 + strict vars fix
 
@@ -475,6 +572,24 @@ undeclared variables inside named sub bodies. Added checking at parse time since
 | linerep.t 18 | 1 | `my` var ref identity | Same as Phase 3 issue |
 | multi.t 45-47,49-50 | 5 | DESTROY not implemented | PerlOnJava limitation |
 | multi.t 52 | 1 | END handler warning | Minor edge case |
+
+#### Regressions Next Steps (Priority Order)
+
+1. **Fix `defined(&foo)` for forward declarations** (deprecate.t, EASY)
+   - In `RuntimeGlob.getGlobSlot("CODE")` or `defined()` check, treat subs with
+     `isDeclared=true` but no body as undefined for `defined()` purposes
+   - Restores deprecate.t from 0/10 → 4/10 (baseline)
+   - May fix other modules that use `sub foo;` forward declarations
+
+2. **Fix `state` declared-ref attribute dispatch** (decl-refs.t, MEDIUM)
+   - Unwrap backslash OperatorNode in `callModifyVariableAttributes()` to get inner sigil
+   - Ensure runtime dispatch handles declared refs for `my`/`state`
+   - Restores decl-refs.t from 174/408 → 322/408 (baseline)
+
+3. **Investigate lexsub.t state sub prototype registration** (lexsub.t, NEEDS INVESTIGATION)
+   - Check if scope management changes affected `state sub` prototype visibility
+   - The `(\@)` prototype must be visible at the call site for unparenthesized calls
+   - Restores lexsub.t from 0/0 → 105/160 (baseline)
 
 ### PR
 - https://github.com/fglock/PerlOnJava/pull/420
