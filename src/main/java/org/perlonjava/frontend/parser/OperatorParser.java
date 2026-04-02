@@ -415,6 +415,14 @@ public class OperatorParser {
         while (peek(parser).text.equals(":")) {
             consumeAttributes(parser, attributes);
         }
+
+        // Detect scalar/array/hash dereferences in my/our/state declarations.
+        // E.g., "our ${""}", "my $$foo" — these are dereferences, not simple variables.
+        // Perl 5: "Can't declare scalar dereference in 'our'" etc.
+        if (!attributes.isEmpty() || peek(parser).text.equals("=") || peek(parser).text.equals(";")) {
+            checkForDereference(parser, operator, operand);
+        }
+
         if (!attributes.isEmpty()) {
             // Dispatch variable attributes at compile time
             // Determine the package for MODIFY_*_ATTRIBUTES lookup
@@ -435,6 +443,33 @@ public class OperatorParser {
         }
 
         return decl;
+    }
+
+    /**
+     * Check if a variable in a my/our/state declaration is actually a dereference.
+     * E.g., "our ${""}", "my $$foo" — Perl 5 errors with:
+     * "Can't declare scalar dereference in 'our'" etc.
+     */
+    private static void checkForDereference(Parser parser, String operator, Node operand) {
+        if (!(operand instanceof OperatorNode opNode)) return;
+        String sigil = opNode.operator;
+        if (!"$@%".contains(sigil)) return;
+
+        // A simple variable has IdentifierNode as operand.
+        // A dereference has OperatorNode, BlockNode, etc.
+        if (opNode.operand instanceof IdentifierNode) return;
+
+        String typeName = switch (sigil) {
+            case "$" -> "scalar";
+            case "@" -> "array";
+            case "%" -> "hash";
+            default -> "scalar";
+        };
+        throw new PerlCompilerException(
+                opNode.tokenIndex,
+                "Can't declare " + typeName + " dereference in \"" + operator + "\"",
+                parser.ctx.errorUtil
+        );
     }
 
     static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
