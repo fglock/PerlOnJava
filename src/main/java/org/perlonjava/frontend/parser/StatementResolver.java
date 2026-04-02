@@ -9,6 +9,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -623,6 +624,7 @@ public class StatementResolver {
                 case "{" -> {
                     if (!isHashLiteral(parser)) {
                         int scopeIndex = parser.ctx.symbolTable.enterScope();
+                        HintHashRegistry.enterScope(); // Save compile-time %^H
 
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         BlockNode block = ParseBlock.parseBlock(parser);
@@ -648,18 +650,23 @@ public class StatementResolver {
                         }
 
                         parser.ctx.symbolTable.exitScope(scopeIndex);
+                        HintHashRegistry.exitScope(); // Restore compile-time %^H
+                        // Snapshot restored %^H for block boundary hint hash tracking
+                        int postBlockHintHashId = HintHashRegistry.snapshotCurrentHintHash();
 
                         if (label != null && label.equals("SKIP")) {
                             // Use a macro to emulate Test::More SKIP blocks
                             TestMoreHelper.handleSkipTest(parser, block);
                         }
 
-                        yield new For3Node(label,
+                        For3Node blockNode = new For3Node(label,
                                 true,
                                 null, null,
                                 null, block, continueNode,
                                 false, true,
                                 parser.tokenIndex);
+                        blockNode.setAnnotation("postBlockHintHashId", postBlockHintHashId);
+                        yield blockNode;
                     }
                     yield null;
                 }

@@ -52,11 +52,14 @@ public class EmitCompilerFlag {
                 "setCallSiteHints",
                 "(I)V", false);
 
-        // Emit runtime code to snapshot %^H for caller()[10].
+        // Emit runtime code to update per-call-site hint hash snapshot ID.
+        // This allows caller()[10] to return the compile-time %^H for the call site.
+        int hintHashId = node.getHintHashSnapshotId();
+        mv.visitLdcInsn(hintHashId);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/WarningBitsRegistry",
-                "snapshotCurrentHintHash",
-                "()V", false);
+                "org/perlonjava/runtime/HintHashRegistry",
+                "setCallSiteHintHashId",
+                "(I)V", false);
 
         // Emit runtime code for warning scope if needed
         int warningScopeId = node.getWarningScopeId();

@@ -15,6 +15,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.VersionHelper;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Universal;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -54,6 +55,7 @@ public class StatementParser {
         LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "while" "until"
 
         int scopeIndex = parser.ctx.symbolTable.enterScope();
+        HintHashRegistry.enterScope(); // Save compile-time %^H
 
         Node condition;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
@@ -83,9 +85,13 @@ public class StatementParser {
         }
 
         parser.ctx.symbolTable.exitScope(scopeIndex);
+        HintHashRegistry.exitScope(); // Restore compile-time %^H
+        int postBlockHintHashId = HintHashRegistry.snapshotCurrentHintHash();
 
-        return new For3Node(label, true, null,
+        For3Node result = new For3Node(label, true, null,
                 condition, null, body, continueNode, false, false, parser.tokenIndex);
+        result.setAnnotation("postBlockHintHashId", postBlockHintHashId);
+        return result;
     }
 
     /**
@@ -99,6 +105,7 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "for" or "foreach"
 
         int scopeIndex = parser.ctx.symbolTable.enterScope();
+        HintHashRegistry.enterScope(); // Save compile-time %^H
 
         // Parse optional loop variable
         Node varNode = null;
@@ -173,6 +180,10 @@ public class StatementParser {
                 // 1-argument for loop (foreach-like)
                 Node node = parseOneArgumentForLoop(parser, label, varNode, initialization);
                 parser.ctx.symbolTable.exitScope(scopeIndex);
+                HintHashRegistry.exitScope(); // Restore compile-time %^H
+                if (node instanceof AbstractNode an) {
+                    an.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
+                }
                 return node;
             }
         }
@@ -180,6 +191,10 @@ public class StatementParser {
         // 3-argument for loop
         Node node = parseThreeArgumentForLoop(parser, label, varNode, initialization);
         parser.ctx.symbolTable.exitScope(scopeIndex);
+        HintHashRegistry.exitScope(); // Restore compile-time %^H
+        if (node instanceof AbstractNode an) {
+            an.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
+        }
         return node;
     }
 
@@ -295,6 +310,7 @@ public class StatementParser {
         int scopeIndex = -1;
         if (enterNewScope) {
             scopeIndex = parser.ctx.symbolTable.enterScope();
+            HintHashRegistry.enterScope(); // Save compile-time %^H
         }
 
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
@@ -318,12 +334,17 @@ public class StatementParser {
         // Exit the scope if we entered one
         if (enterNewScope) {
             parser.ctx.symbolTable.exitScope(scopeIndex);
+            HintHashRegistry.exitScope(); // Restore compile-time %^H
         }
 
         // Use a macro to emulate Test::More SKIP blocks
         TestMoreHelper.handleSkipTest(parser, thenBranch);
 
-        return new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
+        IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
+        if (enterNewScope) {
+            result.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
+        }
+        return result;
     }
 
     /**
@@ -505,8 +526,7 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "given"
 
         int scopeIndex = parser.ctx.symbolTable.enterScope();
-
-        // Parse the condition and assign to $_
+        HintHashRegistry.enterScope(); // Save compile-time %^H
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         Node condition = parser.parseExpression(0);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
@@ -521,6 +541,8 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         parser.ctx.symbolTable.exitScope(scopeIndex);
+        HintHashRegistry.exitScope(); // Restore compile-time %^H
+        int postBlockHintHashId = HintHashRegistry.snapshotCurrentHintHash();
 
         // Create the complete block: { $_ = EXPR; blockContent }
         List<Node> statements = new ArrayList<>();
@@ -537,7 +559,9 @@ public class StatementParser {
         // Add all the statements from the block
         statements.addAll(blockContent.elements);
 
-        return new BlockNode(statements, index, parser);
+        BlockNode givenBlock = new BlockNode(statements, index, parser);
+        givenBlock.setAnnotation("postBlockHintHashId", postBlockHintHashId);
+        return givenBlock;
     }
 
     /**
@@ -788,6 +812,8 @@ public class StatementParser {
         // If warningScopeId > 0, this node needs to emit runtime code for local ${^WARNING_SCOPE}
         java.util.BitSet fatalFlags = (java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone();
         java.util.BitSet disabledFlags = (java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone();
+        // Snapshot compile-time %^H for caller()[10] support
+        int hintHashSnapshotId = HintHashRegistry.snapshotCurrentHintHash();
         CompilerFlagNode result = new CompilerFlagNode(
                 (java.util.BitSet) ctx.symbolTable.warningFlagsStack.getLast().clone(),
                 fatalFlags,
@@ -795,9 +821,10 @@ public class StatementParser {
                 ctx.symbolTable.featureFlagsStack.getLast(),
                 ctx.symbolTable.strictOptionsStack.getLast(),
                 warningScopeId,
+                hintHashSnapshotId,
                 parser.tokenIndex);
         // Only mark as compileTimeOnly if no runtime code is needed
-        if (warningScopeId == 0) {
+        if (warningScopeId == 0 && hintHashSnapshotId == 0) {
             result.setAnnotation("compileTimeOnly", true);
         }
         return result;
@@ -1038,6 +1065,7 @@ public class StatementParser {
             //              so methods can capture class-level lexical variables
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
+            HintHashRegistry.enterScope(); // Save compile-time %^H
 
             boolean isClass = packageNode.getBooleanAnnotation("isClass");
 
@@ -1126,8 +1154,10 @@ public class StatementParser {
 
             // Exit the outer scope (from line 644)
             parser.ctx.symbolTable.exitScope(scopeIndex);
+            HintHashRegistry.exitScope(); // Restore compile-time %^H
 
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            block.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
             return block;
         }
         return null;

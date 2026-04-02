@@ -18,6 +18,7 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.ForkOpenCompleteException;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.debugger.DebugHooks;
@@ -580,6 +581,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // caller scope, so snapshot and restore it across compilation.
             RuntimeHash capturedHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
             Map<String, RuntimeScalar> savedHintHash = new HashMap<>(capturedHintHash.elements);
+
+            // Restore %^H from the call site's compile-time snapshot for eval STRING.
+            // At runtime, %^H is normally empty. But eval STRING needs to inherit the
+            // compile-time %^H that was active when the eval statement was compiled,
+            // so that pragmas like 'use mypragma' are visible inside eval.
+            java.util.Map<String, String> callSiteHints = HintHashRegistry.getCurrentCallSiteHintHash();
+            if (callSiteHints != null) {
+                for (java.util.Map.Entry<String, String> entry : callSiteHints.entrySet()) {
+                    capturedHintHash.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                }
+            }
 
             // eval may include lexical pragmas (use strict/warnings/features). We need those flags
             // during codegen of the eval body, but they must NOT leak back into the caller scope.
@@ -1817,14 +1829,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Add hinthash (element 10): Compile-time %^H hash reference
-                RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-                if (!hintHash.elements.isEmpty()) {
-                    // Return a snapshot of the current %^H
+                // Use the per-call-site hint hash registry to get the %^H snapshot
+                // that was active when the calling code was compiled.
+                // Falls back to the global %^H for compile-time calls (BEGIN blocks).
+                java.util.Map<String, String> callerHintHash = HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                if (callerHintHash != null) {
                     RuntimeHash snapshot = new RuntimeHash();
-                    snapshot.setFromList(hintHash.getList());
+                    for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                        snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                    }
                     res.add(snapshot.createReference());
                 } else {
-                    res.add(RuntimeScalarCache.scalarUndef);
+                    // Fallback: check global %^H (for compile-time calls in BEGIN blocks)
+                    RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+                    if (!hintHash.elements.isEmpty()) {
+                        RuntimeHash snapshot = new RuntimeHash();
+                        snapshot.setFromList(hintHash.getList());
+                        res.add(snapshot.createReference());
+                    } else {
+                        res.add(RuntimeScalarCache.scalarUndef);
+                    }
                 }
             }
         } else if (frame >= stackTraceSize) {
@@ -1999,13 +2023,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarningBitsRegistry.pushCallerBits();
             // Save caller's $^H so caller()[8] can retrieve them
             WarningBitsRegistry.pushCallerHints();
-            // Save caller's %^H so caller()[10] can retrieve them
-            WarningBitsRegistry.pushCallerHintHash();
+            // Save caller's call-site hint hash so caller()[10] can retrieve them
+            HintHashRegistry.pushCallerHintHash();
             try {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(a, callContext);
             } finally {
-                WarningBitsRegistry.popCallerHintHash();
+                HintHashRegistry.popCallerHintHash();
                 WarningBitsRegistry.popCallerHints();
                 WarningBitsRegistry.popCallerBits();
                 if (warningBits != null) {
@@ -2210,13 +2234,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerBits();
                 // Save caller's $^H so caller()[8] can retrieve them
                 WarningBitsRegistry.pushCallerHints();
-                // Save caller's %^H so caller()[10] can retrieve them
-                WarningBitsRegistry.pushCallerHintHash();
+                // Save caller's call-site hint hash so caller()[10] can retrieve them
+                HintHashRegistry.pushCallerHintHash();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
-                    WarningBitsRegistry.popCallerHintHash();
+                    HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
@@ -2366,13 +2390,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerBits();
                 // Save caller's $^H so caller()[8] can retrieve them
                 WarningBitsRegistry.pushCallerHints();
-                // Save caller's %^H so caller()[10] can retrieve them
-                WarningBitsRegistry.pushCallerHintHash();
+                // Save caller's call-site hint hash so caller()[10] can retrieve them
+                HintHashRegistry.pushCallerHintHash();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
-                    WarningBitsRegistry.popCallerHintHash();
+                    HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
