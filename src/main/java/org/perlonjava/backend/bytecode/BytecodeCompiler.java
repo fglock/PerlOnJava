@@ -349,16 +349,46 @@ public class BytecodeCompiler implements Visitor {
         char c = name.charAt(0);
         // Allow if character is in Latin-1 extended range (128-255) and 'use utf8' is NOT enabled
         // Unicode characters above 255 (like Greek α = 945) should NOT be exempt
-        return c > 127 && c <= 255 && emitterContext != null && emitterContext.symbolTable != null
-                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
+        return c > 127 && c <= 255
+                && getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_UTF8) == false;
+    }
+
+    /**
+     * Returns the effective symbol table for pragma checks.
+     * Prefers emitterContext.symbolTable (when available), falls back to this.symbolTable.
+     * This ensures sub-compilers (which have null emitterContext) still enforce pragmas.
+     */
+    private ScopedSymbolTable getEffectiveSymbolTable() {
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            return emitterContext.symbolTable;
+        }
+        return symbolTable;
+    }
+
+    /**
+     * Copies pragma flags (strict, warnings, features) from this compiler's effective
+     * symbol table into a sub-compiler's symbol table. Called before compiling subroutine
+     * bodies so that BEGIN { $^H = ... } changes propagate into anonymous/named subs.
+     */
+    private void inheritPragmaFlags(BytecodeCompiler subCompiler) {
+        ScopedSymbolTable parentST = getEffectiveSymbolTable();
+        subCompiler.symbolTable.strictOptionsStack.pop();
+        subCompiler.symbolTable.strictOptionsStack.push(parentST.strictOptionsStack.peek());
+        subCompiler.symbolTable.featureFlagsStack.pop();
+        subCompiler.symbolTable.featureFlagsStack.push(parentST.featureFlagsStack.peek());
+        subCompiler.symbolTable.warningFlagsStack.pop();
+        subCompiler.symbolTable.warningFlagsStack.push((java.util.BitSet) parentST.warningFlagsStack.peek().clone());
+        subCompiler.symbolTable.warningFatalStack.pop();
+        subCompiler.symbolTable.warningFatalStack.push((java.util.BitSet) parentST.warningFatalStack.peek().clone());
+        subCompiler.symbolTable.warningDisabledStack.pop();
+        subCompiler.symbolTable.warningDisabledStack.push((java.util.BitSet) parentST.warningDisabledStack.peek().clone());
     }
 
     /**
      * Returns true if strict refs is currently enabled in the symbol table.
      */
     boolean isStrictRefsEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_REFS);
     }
 
     /**
@@ -371,22 +401,15 @@ public class BytecodeCompiler implements Visitor {
      */
 
     boolean isIntegerEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_INTEGER);
     }
 
     boolean isNoOverloadingEnabled() {
-        return emitterContext != null && emitterContext.symbolTable != null
-                && emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
     }
 
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
-        // Only check if strict vars is enabled
-        if (emitterContext == null || emitterContext.symbolTable == null) {
-            return false;  // No context, allow access
-        }
-
-        boolean strictEnabled = emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS);
+        boolean strictEnabled = getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_VARS);
         if (!strictEnabled) {
             return false;  // Strict vars not enabled, allow access
         }
@@ -4762,6 +4785,9 @@ public class BytecodeCompiler implements Visitor {
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
 
+        // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
+        inheritPragmaFlags(subCompiler);
+
         // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
         subCompiler.currentSubroutineBeginId = beginId;
         subCompiler.currentSubroutineClosureVars = new HashSet<>(closureVarNames);
@@ -4865,6 +4891,9 @@ public class BytecodeCompiler implements Visitor {
         subCompiler.isEvalString = false;
         subCompiler.symbolTable.setCurrentPackage(getCurrentPackage(),
                 symbolTable.currentPackageIsClass());
+
+        // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
+        inheritPragmaFlags(subCompiler);
         
         // Check if this subroutine is a defer block
         Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
