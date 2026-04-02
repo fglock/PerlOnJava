@@ -578,21 +578,21 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 
 ### Implementation Plan (Phase 5 continued)
 
-#### Tier 1 — Quick Wins (18 DBIC tests)
+#### Tier 1 — Quick Wins (18 DBIC tests) ✅ COMPLETED
 
-| Step | What | Tests Fixed | Effort |
+| Step | What | Tests Fixed | Status |
 |------|------|------------|--------|
-| 5.38 | SQL `ORDER__BY` counter offset | 16 | Small — single init fix |
-| 5.39 | `prepare_cached` error message | 1 | Trivial — string in DBI.pm |
-| 5.40 | `-and` array condition in `find()` | 1 | Small — SQL generation |
+| 5.38 | SQL `ORDER__BY` counter offset | 16 | ✅ Done |
+| 5.39 | `prepare_cached` error message | 1 | ✅ Done |
+| 5.40 | `-and` array condition in `find()` | 1 | ✅ Done |
 
-#### Tier 2 — Medium Effort (21 DBIC tests)
+#### Tier 2 — Medium Effort (21 DBIC tests) ✅ COMPLETED
 
-| Step | What | Tests Fixed | Effort |
+| Step | What | Tests Fixed | Status |
 |------|------|------------|--------|
-| 5.41 | Multi-create FK insertion ordering | 9 | Medium — insert order |
-| 5.42 | SQL condition parenthesization | 10 | Medium — SQL::Abstract |
-| 5.43 | Custom opaque relationship SQL | 2 | Medium — relationship resolver |
+| 5.41 | Multi-create FK / DBI HandleError | 9 | ✅ Done — root cause was missing HandleError support |
+| 5.42 | SQL condition / Storable sort order | 10 | ✅ Done — binary Storable serializer matching Perl 5 |
+| 5.43 | Custom opaque relationship SQL | 2 | ✅ Done — fixed PerlOnJava autovivification bug |
 
 #### Tier 3 — Dependency Module Fixes
 
@@ -608,12 +608,42 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 - GC / weaken / isweak (147 files with GC-only noise)
 - UTF8 flag semantics (14 tests in t/85utf8.t)
 
+### Progress Tracking
+
+#### Current Status: Tier 2 complete, Tier 3 pending
+
+#### Key Test Results (2026-04-02)
+
+| Test File | Real Failures | Notes |
+|-----------|---------------|-------|
+| t/sqlmaker/dbihacks_internals.t | **0** | Was 3, fixed by Storable binary serializer |
+| t/search/stack_cond.t | **0** | Was 7-12, fixed by Storable sort order |
+| t/multi_create/standard.t | **0** | Was 1, fixed by DBI HandleError |
+| t/multi_create/in_memory.t | **0** | Was 8, fixed by DBI HandleError |
+| t/storage/base.t | **0** | Was 1 |
+| t/search/related_strip_prefetch.t | **0** | |
+| t/relationship/custom_opaque.t | **0** | Was 2, fixed by autovivification bug fix |
+| t/60core.t | 45 (DESTROY) | All are "cached stmt still active" — DESTROY not implemented |
+
+#### Completed Work
+
+**Step 5.41-5.42 (2026-04-01):**
+- Binary Storable serializer matching Perl 5 sort order (`Storable.java`)
+- DBI HandleError support (`DBI.java`)
+- DBI error message format fix (`DBI.java`, `DBI.pm`)
+- Commit: `e662f76ed`
+
+**Step 5.43 (2026-04-02):**
+- Fixed PerlOnJava autovivification bug: multi-element list assignment to hash elements
+  from undef scalar now works correctly (`AutovivificationHash.java`, `AutovivificationArray.java`)
+- Root cause: `($h->{a}, $h->{b}) = (v1, v2)` when `$h` is undef created two separate
+  hashes (one per `hashDeref()` call). Fix caches the autovivification hash in the scalar's
+  value field so subsequent hashDeref() calls reuse the same hash.
+
 ### Next Steps
-1. Implement Tier 1 quick wins (steps 5.38-5.40) — should fix 18 DBIC test failures with minimal effort
-2. Implement Tier 2 medium fixes (steps 5.41-5.43) — should fix 21 more DBIC test failures
-3. Implement Tier 3 dependency fixes (steps 5.44-5.46) — improves SQL-Abstract, Sub-Quote, MRO-Compat
-4. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-5. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
+1. Implement Tier 3 dependency fixes (steps 5.44-5.46) — improves SQL-Abstract, Sub-Quote, MRO-Compat
+2. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+3. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?

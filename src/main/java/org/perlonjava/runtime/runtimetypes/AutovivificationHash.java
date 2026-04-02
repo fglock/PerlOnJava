@@ -50,6 +50,18 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
     }
 
     static RuntimeHash createAutovivifiedHash(RuntimeScalar runtimeScalar) {
+        // If this scalar already has a pending autovivification hash (from a
+        // previous hashDeref() call that hasn't been vivified yet), reuse it.
+        // This is critical for list assignments like ($h->{a}, $h->{b}) = (1, 2)
+        // where $h is undef: both LHS elements must share the same hash, otherwise
+        // the second vivification would overwrite the first and orphan its data.
+        if (runtimeScalar.value instanceof RuntimeHash existingHash
+                && existingHash.type == RuntimeHash.AUTOVIVIFY_HASH
+                && existingHash.elements instanceof AutovivificationHash avh
+                && avh.scalarToAutovivify == runtimeScalar) {
+            return existingHash;
+        }
+
         // Autovivification: When dereferencing an undefined scalar as a hash,
         // Perl automatically creates a new hash reference.
         var newHash = new RuntimeHash();
@@ -61,6 +73,12 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
         // scalars become references when used as such.
         newHash.type = RuntimeHash.AUTOVIVIFY_HASH;
         newHash.elements = new AutovivificationHash(runtimeScalar);
+
+        // Cache the hash in the scalar's value field (type remains UNDEF).
+        // This allows subsequent hashDeref() calls on the same still-undef scalar
+        // to find and reuse this hash instead of creating a duplicate.
+        // The value field is not read when type is UNDEF, so this is safe.
+        runtimeScalar.value = newHash;
 
         // Return the newly created hash. At this point, the scalar is still UNDEF,
         // but will be autovivified to a hash reference on first write operation.
