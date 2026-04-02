@@ -1267,15 +1267,26 @@ public class OperatorParser {
         // "syntax::reserved" via the all→syntax→syntax::reserved hierarchy
         if (!parser.ctx.symbolTable.isWarningCategoryEnabled("syntax::reserved")) return;
 
+        // Only warn for all-lowercase attribute names (matching Perl 5's
+        // grep { m/\A[[:lower:]]+(?:\z|\()/ } filter in attributes.pm)
+        List<String> lowercaseAttrs = new ArrayList<>();
+        for (String attr : attrs) {
+            String baseName = attr.contains("(") ? attr.substring(0, attr.indexOf('(')) : attr;
+            if (!baseName.isEmpty() && baseName.equals(baseName.toLowerCase())) {
+                lowercaseAttrs.add(baseName);
+            }
+        }
+        if (lowercaseAttrs.isEmpty()) return;
+
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < attrs.size(); i++) {
-            if (i > 0) sb.append(" ");
-            sb.append(attrs.get(i));
+        for (int i = 0; i < lowercaseAttrs.size(); i++) {
+            if (i > 0) sb.append(" : ");
+            sb.append(lowercaseAttrs.get(i));
         }
 
         String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
-        String word = attrs.size() > 1 ? "words" : "word";
-        String attrWord = attrs.size() > 1 ? "attributes" : "attribute";
+        String word = lowercaseAttrs.size() > 1 ? "words" : "word";
+        String attrWord = lowercaseAttrs.size() > 1 ? "attributes" : "attribute";
         String msg = svtype + " package " + attrWord + " may clash with future reserved " + word + ": "
                 + sb + loc + ".\n";
         WarnDie.warn(new RuntimeScalar(msg), new RuntimeScalar());
