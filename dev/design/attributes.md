@@ -573,6 +573,28 @@ undeclared variables inside named sub bodies. Added checking at parse time since
 | multi.t 45-47,49-50 | 5 | DESTROY not implemented | PerlOnJava limitation |
 | multi.t 52 | 1 | END handler warning | Minor edge case |
 
+#### Known Issue: `\K` Regex Bug Affects decl-refs.t
+
+The `\K` (keep left) assertion in `s///` is broken. For example:
+
+```perl
+"MODIFY_SCALAR_ATTRIBUTES" =~ s/MODIFY_\KSCALAR/ARRAY/;
+# Expected: "MODIFY_ARRAY_ATTRIBUTES"
+# Actual:   "ARRAY_ATTRIBUTES"
+```
+
+This is a **pre-existing bug on master** (not introduced by the attribute branch).
+It affects `decl-refs.t` because the test template uses `\K` substitution to rename
+`MODIFY_SCALAR_ATTRIBUTES` → `MODIFY_ARRAY_ATTRIBUTES` / `MODIFY_HASH_ATTRIBUTES`.
+The corrupted handler name causes `can()` to fail, which triggers "Invalid attribute"
+errors for `@` and `%` variable types in the test iterations.
+
+**Impact:** ~45 tests in decl-refs.t that would otherwise pass if `\K` worked correctly.
+
+**Fix:** Investigate and fix `\K` handling in the regex engine (`org.perlonjava.regex`
+or the `s///` substitution logic). Once fixed, decl-refs.t should gain ~45 additional
+passing tests without any attribute system changes.
+
 #### Regressions Next Steps (Priority Order)
 
 1. **Fix `defined(&foo)` for forward declarations** (deprecate.t, EASY)
@@ -590,6 +612,11 @@ undeclared variables inside named sub bodies. Added checking at parse time since
    - Check if scope management changes affected `state sub` prototype visibility
    - The `(\@)` prototype must be visible at the call site for unparenthesized calls
    - Restores lexsub.t from 0/0 → 105/160 (baseline)
+
+4. **Fix `\K` regex assertion in `s///`** (decl-refs.t, SEPARATE ISSUE)
+   - Pre-existing bug, not caused by attribute branch
+   - Once fixed, decl-refs.t gains ~45 more passing tests
+   - See "Known Issue" section above for details
 
 ### PR
 - https://github.com/fglock/PerlOnJava/pull/420

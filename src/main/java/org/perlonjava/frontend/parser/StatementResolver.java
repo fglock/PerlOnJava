@@ -377,6 +377,10 @@ public class StatementResolver {
 
                                     // NOW add &subName to symbol table AFTER parsing the body
                                     // This makes the sub "invisible inside itself" during compilation
+                                    // Store prototype in varDecl annotation for call-site parsing
+                                    if (prototype != null) {
+                                        varDecl.setAnnotation("prototype", prototype);
+                                    }
                                     if (hadForwardDecl) {
                                         parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
                                     } else {

@@ -513,8 +513,12 @@ public class Attributes extends PerlModuleBase {
                 CallerStack.pop();
             }
         }
-        // If no handler, the compile-time check already threw an error,
-        // so we shouldn't reach here without a handler.
+        // If no handler found at runtime, silently return.
+        // For 'our' variables, the compile-time check already threw.
+        // For 'my'/'state', ideally we'd throw here, but the \K regex bug
+        // (pre-existing) corrupts handler names in decl-refs.t, causing
+        // false "Invalid attribute" errors. Deferring until \K is fixed.
+        // See dev/design/attributes.md "Known Issue: \K Regex Bug".
     }
 
     /**

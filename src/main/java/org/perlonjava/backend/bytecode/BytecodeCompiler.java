@@ -2349,6 +2349,9 @@ public class BytecodeCompiler implements Visitor {
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
 
+                        // Runtime attribute dispatch for state variables with attributes
+                        emitVarAttrsIfNeeded(node, reg, sigil);
+
                         // If this is a declared reference, create a reference to it
                         if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
                             int refReg = allocateRegister();

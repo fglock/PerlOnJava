@@ -2625,12 +2625,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (this.isBuiltin) {
             return true;
         }
-        // Explicitly declared subs (sub foo; or sub foo { ... }) are considered defined
-        // even if the body hasn't been compiled yet. In Perl 5, defined(*foo{CODE})
-        // returns true for forward declarations.
-        if (this.isDeclared) {
-            return true;
-        }
+        // Note: isDeclared is NOT checked here. In Perl 5, defined(&foo) returns
+        // false for forward declarations (sub foo;). The isDeclared flag is used
+        // only by RuntimeGlob.getGlobSlot("CODE") for *foo{CODE} visibility.
         return this.constantValue != null || this.compilerSupplier != null 
                 || this.subroutine != null || this.methodHandle != null;
     }
