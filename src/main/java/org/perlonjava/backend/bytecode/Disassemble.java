@@ -885,6 +885,14 @@ public class Disassemble {
                         sb.append("VIVIFY_LVALUE r").append(vivReg).append("\n");
                         break;
                     }
+                    case Opcodes.LIST_SLICE: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int lsListReg = interpretedCode.bytecode[pc++];
+                        int lsIndicesReg = interpretedCode.bytecode[pc++];
+                        sb.append("LIST_SLICE r").append(rd).append(" = r").append(lsListReg)
+                                .append(".getSlice(r").append(lsIndicesReg).append(")\n");
+                        break;
+                    }
                     case Opcodes.HASH_KEYS:
                         rd = interpretedCode.bytecode[pc++];
                         int hashKeysReg = interpretedCode.bytecode[pc++];

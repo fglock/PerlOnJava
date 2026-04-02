@@ -671,7 +671,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ast = ConstantFoldingVisitor.foldConstants(ast, evalCtx.symbolTable.getCurrentPackage());
 
                 // Create a new instance of ErrorMessageUtil, resetting the line counter
-                evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+                // Use evalCtx.compilerOptions.fileName (the eval's filename, e.g. "(eval 1)")
+                // not ctx.compilerOptions.fileName (the outer file, e.g. "-e") so that
+                // anonymous subs compiled inside eval STRING get the correct source filename
+                // for #line directives and caller() reporting
+                evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
                 ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
                 evalCtx.symbolTable = capturedSymbolTable;
                 evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
@@ -1679,12 +1683,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         Throwable t = new Throwable();
-        ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+        ExceptionFormatter.StackTraceResult result = ExceptionFormatter.formatExceptionDetailed(t);
+        ArrayList<ArrayList<String>> stackTrace = result.frames();
         java.util.ArrayList<String> javaClassNames = extractJavaClassNames(t);
         int stackTraceSize = stackTrace.size();
 
-        // Skip the first frame which is the caller() builtin itself
-        if (stackTraceSize > 0) {
+        // Skip the first frame for JVM-compiled code, where the first frame represents
+        // the sub's own location (not the call site). For interpreter code, the first
+        // frame from CallerStack already IS the call site, so no skip is needed.
+        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()) {
             frame++;
         }
 

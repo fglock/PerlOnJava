@@ -13,6 +13,21 @@ import java.util.HashMap;
 public class ExceptionFormatter {
 
     /**
+     * Result of formatting a stack trace, including metadata about frame types.
+     *
+     * @param frames                    The formatted stack frames
+     * @param firstFrameFromInterpreter True if the first frame was generated from interpreter
+     *                                  CallerStack (already represents the call site), false if
+     *                                  from JVM class (represents the sub's own location).
+     *                                  This affects how caller() should skip frames.
+     */
+    public record StackTraceResult(
+            ArrayList<ArrayList<String>> frames,
+            boolean firstFrameFromInterpreter
+    ) {
+    }
+
+    /**
      * Formats the innermost cause of the given Throwable into a structured stack trace.
      *
      * @param t The Throwable to format.
@@ -20,6 +35,18 @@ public class ExceptionFormatter {
      * and line number of a stack trace element.
      */
     public static ArrayList<ArrayList<String>> formatException(Throwable t) {
+        Throwable innermostCause = findInnermostCause(t);
+        return formatThrowable(innermostCause).frames();
+    }
+
+    /**
+     * Formats the innermost cause with metadata about frame types.
+     * Used by caller() to determine correct frame skip behavior.
+     *
+     * @param t The Throwable to format.
+     * @return StackTraceResult with frames and metadata.
+     */
+    public static StackTraceResult formatExceptionDetailed(Throwable t) {
         Throwable innermostCause = findInnermostCause(t);
         return formatThrowable(innermostCause);
     }
@@ -44,10 +71,15 @@ public class ExceptionFormatter {
      * @param t The Throwable whose stack trace is to be formatted.
      * @return A list of lists, where each inner list represents a stack trace element with package name, source file, and line number.
      */
-    private static ArrayList<ArrayList<String>> formatThrowable(Throwable t) {
+    private static StackTraceResult formatThrowable(Throwable t) {
         var stackTrace = new ArrayList<ArrayList<String>>();
         int callerStackIndex = 0;
         String lastFileName = "";
+        // Track whether the first Perl frame was from the interpreter (CallerStack).
+        // Interpreter frames from CallerStack already represent the CALL SITE,
+        // while JVM frames represent the sub's OWN location.
+        // This distinction matters for caller()'s frame skip logic.
+        boolean firstFrameFromInterpreter = false;
 
         var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
 
@@ -167,6 +199,9 @@ public class ExceptionFormatter {
                         entry.add(filename);
                         entry.add(line);
                         entry.add(subName);
+                        if (stackTrace.isEmpty()) {
+                            firstFrameFromInterpreter = true;
+                        }
                         stackTrace.add(entry);
                         lastFileName = filename != null ? filename : "";
                         addedFrameForCurrentLevel = true;
@@ -214,7 +249,7 @@ public class ExceptionFormatter {
             entry.add(null);  // No subroutine name available
             stackTrace.add(entry);
         }
-        return stackTrace;
+        return new StackTraceResult(stackTrace, firstFrameFromInterpreter);
     }
 
 }

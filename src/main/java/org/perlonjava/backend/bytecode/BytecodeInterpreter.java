@@ -1970,6 +1970,17 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.LIST_SLICE -> {
+                                // List slice: rd = list.getSlice(indices)
+                                // Used for (list)[indices] syntax
+                                int rd = bytecode[pc++];
+                                int listReg = bytecode[pc++];
+                                int indicesReg = bytecode[pc++];
+                                RuntimeList list = registers[listReg].getList();
+                                RuntimeList indices = registers[indicesReg].getList();
+                                registers[rd] = list.getSlice(indices);
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(
