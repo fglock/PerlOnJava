@@ -38,6 +38,9 @@ public class Parser {
     // Flags to indicate special parsing states.
     public boolean parsingForLoopVariable = false;
     public boolean parsingTakeReference = false;
+    // Are we currently parsing a my/our/state declaration's variable list?
+    // Used to suppress strict vars checking for the variable being declared.
+    public boolean parsingDeclaration = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?

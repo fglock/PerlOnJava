@@ -315,7 +315,11 @@ public class OperatorParser {
         }
 
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
+        // Suppress strict vars check while parsing the variable being declared
+        boolean savedParsingDeclaration = parser.parsingDeclaration;
+        parser.parsingDeclaration = true;
         Node operand = ParsePrimary.parsePrimary(parser);
+        parser.parsingDeclaration = savedParsingDeclaration;
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
 
         // Add variables to the scope

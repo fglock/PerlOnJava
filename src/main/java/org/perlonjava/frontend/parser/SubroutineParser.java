@@ -562,11 +562,19 @@ public class SubroutineParser {
         }
 
         ListNode signature = null;
+        // Scope index for signature parameter variables (for strict vars checking).
+        // Entered before parseSignature() so that default value expressions can
+        // reference earlier parameters, and exited after the block body is parsed.
+        int signatureScopeIndex = -1;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek(parser).text.equals("(")) {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signatures feature enabled");
+                // Enter a scope for signature parameter variables so the parse-time
+                // strict vars check can find them.  SignatureParser.parseParameter()
+                // registers each parameter directly in this scope.
+                signatureScopeIndex = parser.ctx.symbolTable.enterScope();
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser, subName);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signature AST: " + signature);
@@ -727,6 +735,10 @@ public class SubroutineParser {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
         } finally {
+            // Exit the signature scope if we entered one
+            if (signatureScopeIndex >= 0) {
+                parser.ctx.symbolTable.exitScope(signatureScopeIndex);
+            }
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
