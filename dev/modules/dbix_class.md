@@ -193,11 +193,10 @@ a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
 | 5.36 | Fix `%{{ expr }}` parser disambiguation inside dereference context | `Parser.java`, `StatementResolver.java`, `Variable.java` | DONE |
 | 5.37 | Fix `//=`, `||=`, `&&=` short-circuit in bytecode interpreter | `BytecodeCompiler.java` | DONE |
 
-**t/60core.t results** (170 tests emitted):
-- **ok 1–37, 39–81, 127–170**: All real tests pass
-- **not ok 38**: `-and` array condition in `find()` — returns a row instead of undef (real bug)
-- **not ok 82–126**: "Unreachable cached statement still active" — DESTROY-related (statement handles never `finish()`ed)
-- **not ok 171–175**: Garbage collection tests — expected failures (JVM has no reference counting / `weaken`)
+**t/60core.t results** (142 tests emitted, updated after step 5.56):
+- **125 ok**: All real tests pass
+- **not ok 82–93**: 12 "Unreachable cached statement still active" — cursors not fully consumed, need DESTROY to call finish()
+- **not ok 138–142**: 5 garbage collection tests — expected (JVM has no reference counting / `weaken`)
 
 **Full test suite results** (314 test files, updated 2026-04-02):
 
@@ -398,7 +397,7 @@ Of the 40 test files with real TAP failures, detailed analysis shows:
 
 | Test | Failures | Root cause | Status |
 |------|----------|------------|--------|
-| `t/60core.t` tests 82-126 | 45 | "Unreachable cached statement" — DESTROY-related | Systemic |
+| `t/60core.t` tests 82-93 | 12 | "Unreachable cached statement" — DESTROY-related (reduced from 45 by step 5.56) | Systemic |
 | `t/85utf8.t` | 14 | `utf8::is_utf8` flag — JVM strings are natively Unicode | Systemic |
 | `t/100populate.t` | 12 | Tests 37-42/53 DESTROY-related; test 59 JDBC batch execution | Partially systemic |
 | `t/88result_set_column.t` | 1 | DBIx::Class's own TODO test | Not a PerlOnJava bug |
@@ -613,13 +612,47 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 
 #### Systemic — Not planned for short-term
 
-- DESTROY / TxnScopeGuard (6 txn_scope_guard + 45 cached stmt + 12 populate = ~63 tests)
 - GC / weaken / isweak (~44 files with GC-only noise)
-- UTF8 flag semantics (8 tests in t/85utf8.t)
+- UTF8 flag semantics (8 tests in t/85utf8.t — JVM strings are natively Unicode)
+
+#### Phase 6 — DBI Statement Handle Lifecycle ✅ COMPLETED
+
+**Root cause**: Three compounding bugs in PerlOnJava DBI's `Active` flag management:
+1. `prepare()` copies ALL dbh attributes to sth including `Active=true` (DBI.java line 193)
+2. `execute()` never sets `Active` based on whether there are results
+3. Fetch methods never clear `Active` when result set is exhausted
+
+In real Perl DBI: sth starts with Active=false, becomes true on execute with results,
+becomes false when all rows are fetched or finish() is called.
+
+| Step | What | Impact | Status |
+|------|------|--------|--------|
+| 5.56 | Fix sth Active flag lifecycle: false after prepare, true after execute with results, false on fetch exhaustion. Use mutable RuntimeScalar (not read-only scalarFalse). Close previous JDBC ResultSet on re-execute. | t/60core.t: 45→12 cached stmt failures | ✅ Done |
+
+#### Phase 7 — Transaction Scope Guard Cleanup (targets 12 t/100populate.t tests)
+
+**Root cause**: `TxnScopeGuard::DESTROY` never fires → no ROLLBACK on exception →
+`transaction_depth` stays elevated permanently.
+
+**Approach**: Cannot fix via general DESTROY (bless happens in constructor, wrong DVM scope).
+Best option is patching `_insert_bulk` and other callers to use explicit try/catch rollback
+instead of relying on DESTROY.
+
+| Step | What | Impact | Status |
+|------|------|--------|--------|
+| 5.58 | Patch `_insert_bulk` with explicit try/catch rollback | 12 (t/100populate.t) | |
+| 5.59 | Audit other txn_scope_guard callers for similar issues | Future test coverage | |
+
+#### Phase 8 — Remaining Dependency Fixes
+
+| Step | What | Impact | Status |
+|------|------|--------|--------|
+| 5.60 | Sub-Quote hints.t tests 4-5 (${^WARNING_BITS} round-trip) | 2 (Sub-Quote) | |
+| 5.61 | `overload::constant` support | 2 (Sub-Quote hints.t 9,14) | |
 
 ### Progress Tracking
 
-#### Current Status: Steps 5.52-5.55 complete
+#### Current Status: Step 5.56 complete (DBI Active flag lifecycle)
 
 #### Key Test Results (2026-04-02)
 
@@ -632,7 +665,7 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | t/storage/base.t | **0** | Was 1 |
 | t/search/related_strip_prefetch.t | **0** | |
 | t/relationship/custom_opaque.t | **0** | Was 2, fixed by autovivification bug fix |
-| t/60core.t | 45 (DESTROY) | All are "cached stmt still active" — DESTROY not implemented |
+| t/60core.t | 17 (12 cached + 5 GC) | Reduced from 50 by step 5.56 (Active flag lifecycle fix). Remaining 12 need DESTROY. |
 
 #### Completed Work
 
@@ -773,7 +806,23 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
   (was 152KB without hooks, causing "Can't bless non-reference value" on thaw).
 - Files changed: `Storable.java`
 
-### DBIx::Class Full Test Suite Results (updated 2026-04-01)
+**Step 5.56 (2026-04-02):**
+- Fixed DBI sth Active flag lifecycle to match real DBI behavior
+- `prepare()` now sets sth Active=false (was inheriting dbh's Active=true via setFromList)
+- `execute()` sets Active=true only for SELECTs with result sets, false for DML
+- `fetchrow_arrayref()` and `fetchrow_hashref()` set Active=false when no more rows
+- `execute()` now closes previous JDBC ResultSet before re-executing (resource leak fix)
+- Used mutable `new RuntimeScalar(false)` instead of read-only `scalarFalse` constant,
+  fixing "Modification of a read-only value attempted" in DBI.pm `finish()`
+- Impact: t/60core.t goes from 50 failures (45 cached stmt + 5 GC) to 17 (12 cached + 5 GC)
+  The 33 fixed failures were: stale Active=true from prepare, DML leaving Active=true,
+  and exhausted cursors still showing Active=true
+- Remaining 12 are SELECTs where cursor was opened but not fully consumed, needing DESTROY
+  to call finish() on scope exit
+- Files changed: `DBI.java`
+- Commit: `3de38f462`
+
+### DBIx::Class Full Test Suite Results (updated 2026-04-02)
 
 **92 test programs (66 active, 26 skipped)**
 
@@ -789,10 +838,9 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 
 | Test | Total Failed | GC Failures | Real Failures | Root Cause |
 |------|-------------|-------------|---------------|------------|
-| t/60core.t | 50 | 5 | 45 | "Unreachable cached statement still active" — DESTROY-related |
+| t/60core.t | 17 | 5 | 12 | "Unreachable cached statement" — 12 remaining after Active flag fix (step 5.56), need DESTROY |
 | t/100populate.t | 17 | 5 | 12 | Transaction depth (DESTROY), JDBC batch execution |
 | t/85utf8.t | 13 | 5 | 8 | UTF-8 byte handling (JVM strings natively Unicode) |
-| t/60core.t test 38 | 1 | 0 | 1 | `-and` array condition in `find()` |
 
 **Previously miscounted as having real failures (actually all GC-only):**
 
@@ -819,10 +867,12 @@ Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-o
 | leaks.t | 5/9 | 4 failures all weaken-related |
 
 ### Next Steps
-1. Remaining real failures are systemic: DESTROY/TxnScopeGuard (57 tests), UTF-8 flag (8 tests), -and condition (1 test)
-2. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
-3. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-4. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
+1. Remaining real failures are systemic: DESTROY/TxnScopeGuard (12 t/60core.t + 12 t/100populate.t), UTF-8 flag (8 tests)
+2. Phase 7: TxnScopeGuard fix for t/100populate.t (explicit try/catch rollback)
+3. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
+4. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
+5. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+6. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
 ### Open Questions
 - `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?

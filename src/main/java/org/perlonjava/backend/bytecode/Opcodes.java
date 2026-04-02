@@ -2145,7 +2145,7 @@ public class Opcodes {
      * Used for (list)[indices] syntax in the interpreter.
      * Format: LIST_SLICE rd list_reg indices_reg
      */
-    public static final short LIST_SLICE = 452;
+    public static final short LIST_SLICE = 453;
 
     private Opcodes() {
     } // Utility class - no instantiation
