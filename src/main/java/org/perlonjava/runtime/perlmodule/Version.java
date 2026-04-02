@@ -248,6 +248,8 @@ public class Version extends PerlModuleBase {
 
     /**
      * Returns the numified representation of the version.
+     * Each sub-version is zero-padded to 3 digits to preserve precision.
+     * For example: version->new("5.42.0")->numify returns "5.042000"
      */
     public static RuntimeList numify(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -264,14 +266,20 @@ public class Version extends PerlModuleBase {
             return new RuntimeScalar(0.0).getList();
         }
 
-        // Convert to decimal: major.minorpatch
-        double major = Double.parseDouble(parts[0]);
-        double minor = parts.length > 1 ? Double.parseDouble(parts[1]) : 0;
-        double patch = parts.length > 2 ? Double.parseDouble(parts[2]) : 0;
+        // Build numified string with 3-digit zero-padded groups
+        // e.g., "5.42.0" -> "5.042000", "1.2.3" -> "1.002003"
+        StringBuilder numified = new StringBuilder();
+        numified.append(parts[0]);
+        numified.append(".");
 
-        double numified = major + (minor / 1000.0) + (patch / 1000000.0);
+        // Ensure at least 2 sub-version groups (minor, patch) for proper padding
+        int numGroups = Math.max(parts.length - 1, 2);
+        for (int i = 0; i < numGroups; i++) {
+            int val = (i + 1 < parts.length) ? Integer.parseInt(parts[i + 1]) : 0;
+            numified.append(String.format("%03d", val));
+        }
 
-        return new RuntimeScalar(numified).getList();
+        return new RuntimeScalar(numified.toString()).getList();
     }
 
     /**

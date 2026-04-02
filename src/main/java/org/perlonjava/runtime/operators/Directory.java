@@ -92,7 +92,8 @@ public class Directory {
         File absoluteDir = RuntimeIO.resolveFile(dirName);
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {
-            System.setProperty("user.dir", absoluteDir.getAbsolutePath());
+            // Normalize the path to remove redundant . and .. components
+            System.setProperty("user.dir", absoluteDir.toPath().normalize().toString());
             return scalarTrue;
         } else {
             // Set errno to ENOENT (No such file or directory)

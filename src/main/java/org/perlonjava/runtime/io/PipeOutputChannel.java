@@ -2,6 +2,7 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
@@ -165,12 +166,22 @@ public class PipeOutputChannel implements IOHandle {
         outputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 
-        // Start threads to consume stdout and stderr to prevent blocking
+        // Start threads to consume stdout and stderr and route through Perl handles
+        // This ensures Perl-level redirections are honored
         Thread outputThread = new Thread(() -> {
             try (BufferedReader out = outputReader) {
                 String line;
                 while ((line = out.readLine()) != null) {
-                    System.out.println(line);
+                    try {
+                        RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
+                        if (perlStdout != null) {
+                            perlStdout.write(line + "\n");
+                        } else {
+                            System.out.println(line);
+                        }
+                    } catch (Exception ex) {
+                        System.out.println(line);
+                    }
                 }
             } catch (IOException e) {
                 // Ignore - process might have terminated
@@ -183,7 +194,16 @@ public class PipeOutputChannel implements IOHandle {
             try (BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {
-                    System.err.println(line);
+                    try {
+                        RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+                        if (perlStderr != null) {
+                            perlStderr.write(line + "\n");
+                        } else {
+                            System.err.println(line);
+                        }
+                    } catch (Exception ex) {
+                        System.err.println(line);
+                    }
                 }
             } catch (IOException e) {
                 // Ignore - process might have terminated

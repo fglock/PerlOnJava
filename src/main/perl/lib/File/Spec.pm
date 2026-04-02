@@ -22,6 +22,12 @@ use strict;
 
 our $VERSION = '3.95';  # Match perl5 PathTools version
 
+# Load File::Spec::Unix so that code calling File::Spec::Unix->method()
+# directly (e.g., Module::Build) can find the methods.
+# The Java backend (FileSpec.java) provides the primary implementation,
+# but File::Spec::Unix must also be loaded for compatibility.
+require File::Spec::Unix;
+
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/perlmodule/FileSpec.java
 

@@ -2,6 +2,7 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
@@ -105,12 +106,22 @@ public class PipeInputChannel implements IOHandle {
         // Create reader for stderr only
         errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 
-        // Start a thread to consume stderr to prevent blocking
+        // Start a thread to consume stderr and route through Perl STDERR handle
+        // This ensures Perl-level redirections are honored (e.g., open STDERR, ">", $file)
         Thread errorThread = new Thread(() -> {
             try (BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {
-                    System.err.println(line);
+                    try {
+                        RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+                        if (perlStderr != null) {
+                            perlStderr.write(line + "\n");
+                        } else {
+                            System.err.println(line);
+                        }
+                    } catch (Exception ex) {
+                        System.err.println(line);
+                    }
                 }
             } catch (IOException e) {
                 // Ignore - process might have terminated

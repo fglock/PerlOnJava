@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -192,19 +193,17 @@ public class SystemOperator {
             // Copy %ENV to the subprocess environment
             copyPerlEnvToProcessBuilder(processBuilder);
 
-            // CORRECT PERL BEHAVIOR: Handle streams according to Perl documentation
-            // - system(): Both stdout and stderr go to terminal
-            // - backticks: Only stdout is captured, stderr goes to terminal
-
-            // Always inherit stderr (goes to terminal in both cases)
-            processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+            // Route child process stderr through Perl's STDERR handle so that
+            // Perl-level redirections (e.g., open STDERR, ">", $file) are honored.
+            // Do NOT use INHERIT which bypasses Perl-level redirections.
 
             // Handle stdout based on operation type
             if (!captureOutput) {
-                // For system(): stdout also goes to terminal
-                processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                // For system(): both stdout and stderr go through Perl handles
+                // so that Perl-level redirections are honored
             }
-            // For backticks: stdout will be captured (default behavior)
+            // For backticks: stdout will be captured (default behavior),
+            // stderr goes through Perl STDERR handle
 
             // Always redirect stdin from /dev/null to prevent subprocess blocking
             // This prevents the subprocess from waiting for input that will never come
@@ -220,8 +219,12 @@ public class SystemOperator {
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
 
+            // Route stderr through Perl STDERR handle (for both system() and backticks)
+            Thread stderrThread = createStreamRouterThread(finalProcess.getErrorStream(), true);
+            stderrThread.start();
+
             if (captureOutput) {
-                // For backticks: capture stdout only, stderr already goes to terminal
+                // For backticks: capture stdout only, stderr goes through Perl STDERR
                 // Read raw bytes to preserve exact output (including or excluding trailing newlines)
                 Thread stdoutThread = new Thread(() -> {
                     try (java.io.InputStream is = finalProcess.getInputStream()) {
@@ -243,10 +246,13 @@ public class SystemOperator {
                 exitCode = waitForProcessWithStatus(process);
                 stdoutThread.join();
             } else {
-                // For system(): both stdout and stderr go to terminal (inherited)
-                // Just wait for process completion
+                // For system(): route stdout through Perl STDOUT handle
+                Thread stdoutThread = createStreamRouterThread(finalProcess.getInputStream(), false);
+                stdoutThread.start();
                 exitCode = waitForProcessWithStatus(process);
+                stdoutThread.join();
             }
+            stderrThread.join(1000); // Wait up to 1s for stderr to flush
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
             setGlobalVariable("main::!", e.getMessage());
@@ -289,19 +295,16 @@ public class SystemOperator {
 
             process = processBuilder.start();
 
-            // For system(), pipe stdout and stderr to terminal
-            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
-            }
-
-            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            while ((line = errorReader.readLine()) != null) {
-                System.err.println(line);
-            }
+            // Route stdout and stderr through Perl handles so that
+            // Perl-level redirections are honored
+            Thread stdoutThread = createStreamRouterThread(process.getInputStream(), false);
+            Thread stderrThread = createStreamRouterThread(process.getErrorStream(), true);
+            stdoutThread.start();
+            stderrThread.start();
 
             exitCode = waitForProcessWithStatus(process);
+            stdoutThread.join();
+            stderrThread.join(1000);
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
             setGlobalVariable("main::!", e.getMessage());
@@ -342,13 +345,16 @@ public class SystemOperator {
             // Copy %ENV to the subprocess environment
             copyPerlEnvToProcessBuilder(processBuilder);
 
-            // Inherit stderr (goes to terminal like Perl's backticks)
-            processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+            // Route stderr through Perl STDERR handle (not INHERIT which bypasses Perl redirections)
 
             process = processBuilder.start();
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
+
+            // Route stderr through Perl handle
+            Thread stderrThread = createStreamRouterThread(finalProcess.getErrorStream(), true);
+            stderrThread.start();
 
             // Capture stdout
             Thread stdoutThread = new Thread(() -> {
@@ -370,6 +376,7 @@ public class SystemOperator {
             stdoutThread.start();
             exitCode = waitForProcessWithStatus(process);
             stdoutThread.join();
+            stderrThread.join(1000);
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
             setGlobalVariable("main::!", e.getMessage());
@@ -432,6 +439,66 @@ public class SystemOperator {
                 System.err.println("Error closing stream: " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Writes a line to the current Perl-level STDOUT handle.
+     * This ensures output goes through any Perl-level redirections (e.g.,
+     * when STDOUT has been reopened to a file via open STDOUT, ">", $file).
+     */
+    private static void writeToPerlStdout(String line) {
+        try {
+            RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
+            if (perlStdout != null) {
+                perlStdout.write(line + "\n");
+            } else {
+                System.out.println(line);
+            }
+        } catch (Exception e) {
+            System.out.println(line);
+        }
+    }
+
+    /**
+     * Writes a line to the current Perl-level STDERR handle.
+     * This ensures output goes through any Perl-level redirections (e.g.,
+     * when STDERR has been reopened to a file via open STDERR, ">", $file).
+     */
+    private static void writeToPerlStderr(String line) {
+        try {
+            RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+            if (perlStderr != null) {
+                perlStderr.write(line + "\n");
+            } else {
+                System.err.println(line);
+            }
+        } catch (Exception e) {
+            System.err.println(line);
+        }
+    }
+
+    /**
+     * Creates a daemon thread that reads from the given input stream and writes
+     * each line to the current Perl-level handle for the given global name.
+     * This is used for routing child process stderr/stdout through Perl handles.
+     */
+    private static Thread createStreamRouterThread(InputStream stream, boolean isStderr) {
+        Thread t = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (isStderr) {
+                        writeToPerlStderr(line);
+                    } else {
+                        writeToPerlStdout(line);
+                    }
+                }
+            } catch (IOException e) {
+                // Ignore - process might have terminated
+            }
+        });
+        t.setDaemon(true);
+        return t;
     }
 
     /**

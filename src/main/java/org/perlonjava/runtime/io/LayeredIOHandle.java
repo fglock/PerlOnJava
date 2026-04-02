@@ -492,6 +492,21 @@ public class LayeredIOHandle implements IOHandle {
         return delegate.truncate(length);
     }
 
+    /**
+     * Delegates flock operations to the underlying handle.
+     *
+     * <p>This is necessary because handles opened with encoding layers
+     * (e.g., :encoding(UTF-8)) get wrapped in a LayeredIOHandle, but
+     * the flock implementation lives in the delegate (e.g., CustomFileChannel).</p>
+     *
+     * @param operation the flock operation (LOCK_SH, LOCK_EX, LOCK_UN, etc.)
+     * @return the result from the delegate's flock operation
+     */
+    @Override
+    public RuntimeScalar flock(int operation) {
+        return delegate.flock(operation);
+    }
+
     public String getCurrentLayers() {
         // Return the currently applied layers as a string
         StringBuilder layers = new StringBuilder();

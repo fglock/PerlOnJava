@@ -250,6 +250,10 @@ $os_name =~ s/\s+/_/g;
     installman1dir => '',
     installman3dir => '',
 
+    # Man page section suffixes
+    man1ext => '1',
+    man3ext => '3pm',
+
     # Perl tests use this
     useperlio => 'define',
     
