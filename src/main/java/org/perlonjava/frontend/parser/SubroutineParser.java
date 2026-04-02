@@ -779,7 +779,13 @@ public class SubroutineParser {
             if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
                 String argString;
                 try {
-                    argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                    // Parse the parenthesized parameter using raw string parsing.
+                    // Unlike q(), Perl's attribute parameter parsing preserves backslashes:
+                    // :Foo(\() gives parameter \( not ( — backslash is kept literally.
+                    StringParser.ParsedString rawStr = StringParser.parseRawStrings(
+                            parser, parser.ctx, parser.tokens, parser.tokenIndex, 1);
+                    parser.tokenIndex = rawStr.next;
+                    argString = rawStr.buffers.getFirst();
                 } catch (PerlCompilerException e) {
                     // Rethrow with Perl-compatible message for unterminated parens
                     if (e.getMessage() != null && e.getMessage().contains("Can't find string terminator")) {
@@ -1009,13 +1015,25 @@ public class SubroutineParser {
         }
         // else: preserve existing attributes (e.g., from forward declaration)
         placeholder.subName = subName;
-        placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
 
         // Call MODIFY_CODE_ATTRIBUTES if attributes are present
-        // In Perl, this is called at compile time after the sub is defined
+        // In Perl, this is called at compile time after the sub is defined.
+        // The dispatch package is the CvSTASH of the existing code ref (if any),
+        // not the current package. E.g., *Y::bar = \&X::foo; sub Y::bar : attr
+        // dispatches X::MODIFY_CODE_ATTRIBUTES because the code ref's stash is X.
         if (attributes != null && !attributes.isEmpty()) {
-            callModifyCodeAttributes(packageToUse, codeRef, attributes, parser);
+            String attrPackage = (placeholder.packageName != null && !placeholder.packageName.isEmpty())
+                    ? placeholder.packageName
+                    : packageToUse;
+            callModifyCodeAttributes(attrPackage, codeRef, attributes, parser);
         }
+
+        // Set packageName from the sub's fully-qualified name (CvSTASH equivalent).
+        // For `sub X::foo { }` in package main, packageName should be "X", not "main".
+        int lastSep = fullName.lastIndexOf("::");
+        placeholder.packageName = lastSep >= 0
+                ? fullName.substring(0, lastSep)
+                : parser.ctx.symbolTable.getCurrentPackage();
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables

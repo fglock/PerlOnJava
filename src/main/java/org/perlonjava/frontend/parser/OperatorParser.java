@@ -1262,6 +1262,11 @@ public class OperatorParser {
     private static void emitReservedWordWarning(String svtype, List<String> attrs, Parser parser) {
         if (attrs.isEmpty()) return;
 
+        // Check compile-time warning scope directly (consistent with experimental:: checks)
+        // Use "syntax::reserved" since "reserved" is an alias — use warnings enables
+        // "syntax::reserved" via the all→syntax→syntax::reserved hierarchy
+        if (!parser.ctx.symbolTable.isWarningCategoryEnabled("syntax::reserved")) return;
+
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < attrs.size(); i++) {
             if (i > 0) sb.append(" ");
@@ -1273,6 +1278,6 @@ public class OperatorParser {
         String attrWord = attrs.size() > 1 ? "attributes" : "attribute";
         String msg = svtype + " package " + attrWord + " may clash with future reserved " + word + ": "
                 + sb + loc + ".\n";
-        WarnDie.warnWithCategory(new RuntimeScalar(msg), new RuntimeScalar(), "reserved");
+        WarnDie.warn(new RuntimeScalar(msg), new RuntimeScalar());
     }
 }
