@@ -192,6 +192,11 @@ public class DBI extends PerlModuleBase {
             // add attributes from dbh and attr: RaiseError, PrintError, FetchHashKeyName
             sth.setFromList(new RuntimeList(sth, dbh, attr.hashDeref()));
 
+            // sth starts inactive — Active becomes true only after execute() with results.
+            // The setFromList above copies dbh's Active=true, which is wrong for sth.
+            // Use mutable scalar (not scalarFalse) because Perl code does $sth->{Active} = 0
+            sth.put("Active", new RuntimeScalar(false));
+
             // Get connection from database handle
             Connection conn = (Connection) dbh.get("connection").value;
 
@@ -372,6 +377,21 @@ public class DBI extends PerlModuleBase {
             // Bind parameters and execute the statement.
             // If the JDBC PreparedStatement is stale (e.g., invalidated by ROLLBACK),
             // re-prepare it and retry once.
+
+            // Close any previous ResultSet to prevent JDBC resource leaks
+            RuntimeScalar prevResultRef = sth.get("execute_result");
+            if (prevResultRef != null && RuntimeScalarType.isReference(prevResultRef)) {
+                try {
+                    RuntimeHash prevResult = prevResultRef.hashDeref();
+                    RuntimeScalar rsScalar = prevResult.get("resultset");
+                    if (rsScalar != null && rsScalar.value instanceof ResultSet) {
+                        ((ResultSet) rsScalar.value).close();
+                    }
+                } catch (Exception ignored) {
+                    // Best effort — old result set may already be closed
+                }
+            }
+
             boolean retried = false;
             boolean hasResultSet = false;
             while (true) {
@@ -449,6 +469,9 @@ public class DBI extends PerlModuleBase {
             sth.put("Executed", scalarTrue);
             dbh.put("Executed", scalarTrue);
 
+            // Set Active based on whether we have results to fetch
+            sth.put("Active", new RuntimeScalar(hasResultSet));
+
             // Store execution result in statement handle
             sth.put("execute_result", result.createReference());
 
@@ -509,6 +532,9 @@ public class DBI extends PerlModuleBase {
                 return row.createReference().getList();
             }
 
+            // No more rows — mark statement as inactive (like real DBI)
+            sth.put("Active", new RuntimeScalar(false));
+
             // Return empty array if no more rows
             return new RuntimeList();
         }, dbh, "fetchrow_arrayref");
@@ -565,6 +591,9 @@ public class DBI extends PerlModuleBase {
                 RuntimeScalar rowRef = row.createReference();
                 return rowRef.getList();
             }
+
+            // No more rows — mark statement as inactive (like real DBI)
+            sth.put("Active", new RuntimeScalar(false));
 
             // Return undef if no more rows
             return scalarUndef.getList();
