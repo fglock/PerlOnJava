@@ -460,7 +460,8 @@ sub prepare_cached {
             if ($if_active && $sth->{Active}) {
                 if ($if_active == 3) {
                     # Return a fresh sth instead of the active cached one
-                    my $new_sth = $dbh->prepare($sql, $attr) or return undef;
+                    my $new_sth = _prepare_as_cached($dbh, $sql, $attr);
+                    return undef unless $new_sth;
                     $cache->{$sql} = $new_sth;
                     return $new_sth;
                 }
@@ -470,8 +471,22 @@ sub prepare_cached {
         }
     }
 
-    my $sth = $dbh->prepare($sql, $attr) or return undef;
+    my $sth = _prepare_as_cached($dbh, $sql, $attr);
+    return undef unless $sth;
     $cache->{$sql} = $sth;
+    return $sth;
+}
+
+# Call prepare() but rewrite error messages to say prepare_cached.
+# This matches real DBI behavior where prepare_cached is the reported method.
+sub _prepare_as_cached {
+    my ($dbh, $sql, $attr) = @_;
+    my $sth = eval { $dbh->prepare($sql, $attr) };
+    if ($@) {
+        my $err = "$@";
+        $err =~ s/\bDBI prepare\(\) failed\b/DBI prepare_cached() failed/g;
+        die $err;
+    }
     return $sth;
 }
 

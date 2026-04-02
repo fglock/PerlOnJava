@@ -1903,6 +1903,13 @@ public class BytecodeCompiler implements Visitor {
         // Step 1: Compile LHS first to get the target register
         int targetReg = compileLhsForCompoundAssignment(node);
 
+        // Step 1.5: Vivify the LHS proxy so hash/array entries exist before the condition check.
+        // This matches Perl 5's behavior where $h{key} ||= expr creates the hash entry
+        // (with undef value) during lvalue resolution, before evaluating the boolean condition.
+        // Without this, `scalar keys %$h` in the RHS would see 0 keys instead of 1.
+        emit(Opcodes.VIVIFY_LVALUE);
+        emitReg(targetReg);
+
         // Step 2: Emit conditional jump to skip RHS evaluation
         int jumpPos;
         if (op.equals("//=")) {

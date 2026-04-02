@@ -2132,6 +2132,14 @@ public class Opcodes {
      */
     public static final short DISPATCH_VAR_ATTRS = 451;
 
+    /**
+     * Vivify an lvalue proxy (hash/array element) so the entry exists in the parent container.
+     * For plain scalars this is a no-op. Used by ||=/&&=//= to match Perl 5's lvalue semantics
+     * where hash element access creates the entry before the condition check.
+     * Format: VIVIFY_LVALUE reg
+     */
+    public static final short VIVIFY_LVALUE = 452;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

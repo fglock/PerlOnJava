@@ -67,41 +67,34 @@ public class RuntimeStashEntry extends RuntimeGlob {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar deref = value.scalarDeref();
                 if (deref.type == CODE) {
-                    // `*foo = \&bar` creates a constant subroutine returning the code reference
+                    // `$stash->{foo} = \&bar` creates a constant subroutine returning the code reference
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
                     GlobalVariable.getGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                     InheritanceResolver.invalidateCache();
                 } else if (deref.type == HASHREFERENCE) {
-                    // `*foo = \$hash_ref` creates a constant subroutine returning the hash reference
+                    // `$stash->{foo} = \$hash_ref` creates a constant subroutine returning the hash reference
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
                     GlobalVariable.getGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else if (deref.type == ARRAYREFERENCE) {
-                    // `*foo = \$array_ref` creates a constant subroutine returning the array reference
+                    // `$stash->{foo} = \$array_ref` creates a constant subroutine returning the array reference
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
                     GlobalVariable.getGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
-                } else if (deref.type == HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
-                    // `*foo = \%bar` assigns to the HASH slot.
-                    GlobalVariable.globalHashes.put(this.globName, hash);
-                } else if (deref.type == ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
-                    // `*foo = \@bar` assigns to the ARRAY slot.
-                    GlobalVariable.globalArrays.put(this.globName, arr);
                 } else if (deref.type == GLOB) {
-                    // `*foo = \*bar` creates a constant subroutine returning the glob
+                    // `$stash->{foo} = \*bar` creates a constant subroutine returning the glob
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = new RuntimeList(deref);
                     GlobalVariable.getGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else {
-                    // Default: scalar slot.
+                    // Default: scalar slot + constant subroutine for bareword access
                     GlobalVariable.globalVariables.put(this.globName, deref);
 
-                    // Also create a constant subroutine for bareword access
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
                     GlobalVariable.getGlobalCodeRef(this.globName).set(
@@ -181,7 +174,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 }
                 return value;
             case GLOBREFERENCE:
-                // `*foo = \*bar` creates a constant subroutine returning the glob
+                // `$stash->{foo} = \*bar` creates a constant subroutine returning the glob
                 if (value.value instanceof RuntimeGlob glob) {
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = new RuntimeList(new RuntimeScalar(glob));

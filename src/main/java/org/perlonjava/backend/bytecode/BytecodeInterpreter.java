@@ -1960,6 +1960,16 @@ public class BytecodeInterpreter {
                                 pc = SlowOpcodeHandler.executeDispatchVarAttrs(bytecode, pc, registers, code.constants);
                             }
 
+                            case Opcodes.VIVIFY_LVALUE -> {
+                                // Vivify an lvalue proxy so the entry exists in the parent container.
+                                // For plain scalars this is a no-op.
+                                int reg = bytecode[pc++];
+                                RuntimeBase val = registers[reg];
+                                if (val instanceof RuntimeScalar rs) {
+                                    rs.vivifyLvalue();
+                                }
+                            }
+
                             default -> {
                                 int opcodeInt = opcode;
                                 throw new RuntimeException(

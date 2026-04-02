@@ -690,6 +690,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return scalar.set(this);
     }
 
+    /**
+     * Vivifies this scalar as an lvalue. For plain scalars this is a no-op.
+     * For hash/array element proxies (RuntimeBaseProxy subclasses), this creates
+     * the actual entry in the parent container, matching Perl 5's behavior where
+     * hash element lvalue access in ||=/&&=//= creates the entry before evaluating the RHS.
+     */
+    public void vivifyLvalue() {
+        // No-op for plain scalars
+    }
+
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
         if (value == null) {
@@ -1451,6 +1461,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tmp.setIO(io);
                     yield tmp;
                 }
+                // When glob-dereferencing a stash entry, return a plain RuntimeGlob.
+                // This prevents *{$stash->{name}} = \$scalar from creating PCS constant subs.
+                // PCS (Proxy Constant Subroutine) creation should only happen via direct
+                // stash hash assignment ($stash->{name} = \$scalar), handled by RuntimeStashEntry.set().
+                if (value instanceof RuntimeStashEntry stashEntry) {
+                    yield new RuntimeGlob(stashEntry.globName);
+                }
                 yield (RuntimeGlob) value;
             }
             case STRING, BYTE_STRING ->
@@ -1495,6 +1512,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
+                }
+                // When glob-dereferencing a stash entry, return a plain RuntimeGlob.
+                // This prevents *{$stash->{name}} = \$scalar from creating PCS constant subs.
+                if (value instanceof RuntimeStashEntry stashEntry) {
+                    yield new RuntimeGlob(stashEntry.globName);
                 }
                 yield (RuntimeGlob) value;
             }

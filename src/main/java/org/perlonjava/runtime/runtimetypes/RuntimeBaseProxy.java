@@ -39,6 +39,21 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     abstract void vivify();
 
     /**
+     * Vivifies this proxy as an lvalue. Creates the actual entry in the parent
+     * hash/array, matching Perl 5's behavior where hash element access in lvalue
+     * context (e.g., $h{key} ||= expr) creates the entry before the condition check.
+     */
+    @Override
+    public void vivifyLvalue() {
+        vivify();
+        // Sync proxy state with the underlying lvalue
+        if (lvalue != null) {
+            this.type = lvalue.type;
+            this.value = lvalue.value;
+        }
+    }
+
+    /**
      * Sets the value of the underlying scalar.
      *
      * @param value The new value to set.
