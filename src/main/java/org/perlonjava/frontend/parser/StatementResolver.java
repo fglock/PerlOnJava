@@ -151,6 +151,13 @@ public class StatementResolver {
                         // Parse signature if present (optional)
                         String prototype = null;
                         ListNode signatureAST = null;
+
+                        // Enter a scope for the implicit $self and any signature parameters.
+                        // This scope is exited after the method body is parsed so that
+                        // the parse-time strict vars check can find $self and parameters.
+                        int methodScopeIndex = parser.ctx.symbolTable.enterScope();
+                        parser.ctx.symbolTable.addVariable("$self", "my", null);
+
                         if (peek(parser).text.equals("(")) {
                             // Parse the signature properly to generate parameter declarations
                             // Pass true for isMethod flag to account for implicit $self in error messages
@@ -158,6 +165,7 @@ public class StatementResolver {
                             // Note: SignatureParser consumes the closing )
                         }
 
+                        try {
                         // Check for forward declaration (method name;) or full definition (method name {...})
                         if (peek(parser).text.equals(";")) {
                             // Forward declaration - just consume the semicolon
@@ -209,6 +217,9 @@ public class StatementResolver {
                                 method.setAnnotation("signatureAST", signatureAST);
                             }
                             yield method;
+                        }
+                        } finally {
+                            parser.ctx.symbolTable.exitScope(methodScopeIndex);
                         }
                     }
                     yield null;
@@ -470,6 +481,14 @@ public class StatementResolver {
                             // Generate unique hidden variable name
                             String hiddenVarName = methodName + "__lexmethod_" + parser.tokenIndex;
 
+                            // Enter scope for $self and signature parameters early,
+                            // so they are visible during parse-time strict vars check.
+                            int scopeIndex = parser.ctx.symbolTable.enterScope();
+                            OperatorNode tempSelf = new OperatorNode("my",
+                                    new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex),
+                                    parser.tokenIndex);
+                            parser.ctx.symbolTable.addVariable("$self", "my", tempSelf);
+
                             // Parse signature if present
                             ListNode signatureAST = null;
                             if (peek(parser).text.equals("(")) {
@@ -477,23 +496,13 @@ public class StatementResolver {
                                 signatureAST = SignatureParser.parseSignature(parser, methodName, true);
                             }
 
+                            try {
                             // Parse the method body
                             BlockNode block = null;
                             if (peek(parser).text.equals("{")) {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
                                 boolean wasInMethod = parser.isInMethod;
                                 parser.isInMethod = true; // Set method context for lexical method
-
-                                // Enter scope for the lexical method's body
-                                int scopeIndex = parser.ctx.symbolTable.enterScope();
-
-                                // Add temp $self to THIS scope (the method's inner scope)
-                                // so field access works during parsing
-                                // This will be matched by the actual `my $self = shift;` injected during transformation
-                                OperatorNode tempSelf = new OperatorNode("my",
-                                        new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex),
-                                        parser.tokenIndex);
-                                parser.ctx.symbolTable.addVariable("$self", "my", tempSelf);
 
                                 // Parse the block contents (without creating another scope)
                                 List<Node> elements = new ArrayList<>();
@@ -504,9 +513,6 @@ public class StatementResolver {
                                     }
                                 }
                                 block = new BlockNode(elements, parser.tokenIndex);
-
-                                // Exit the method's scope (this removes temp $self)
-                                parser.ctx.symbolTable.exitScope(scopeIndex);
 
                                 parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
@@ -546,6 +552,9 @@ public class StatementResolver {
                             parser.ctx.symbolTable.addVariable("&" + methodName, declaration, varDecl);
 
                             yield assignment;
+                            } finally {
+                                parser.ctx.symbolTable.exitScope(scopeIndex);
+                            }
                         } else {
                             throw new RuntimeException("Method name expected after 'my method'");
                         }

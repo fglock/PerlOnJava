@@ -270,6 +270,14 @@ public class Variable {
         // Skip when parsing a my/our/state declaration — the variable is being declared
         if (parser.parsingDeclaration) return;
 
+        // Only apply inside named subroutine bodies.  Named subs are compiled
+        // lazily, so the existing code-generation strict check never fires at
+        // compile time for them.  All other contexts (file-level, anonymous
+        // subs, eval STRING) are handled correctly by the code-generation check.
+        if (!parser.ctx.symbolTable.isInSubroutineBody()) return;
+        String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
+        if (currentSub == null || currentSub.isEmpty()) return;
+
         // Check if strict vars is enabled in the current scope
         if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS)) return;
 

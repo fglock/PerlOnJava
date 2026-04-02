@@ -90,6 +90,11 @@ public class FieldParser {
         String fieldSymbol = "field:" + fieldName;
         parser.ctx.symbolTable.addVariable(fieldSymbol, "field", fieldPlaceholder);
 
+        // Also register with the sigil so the parse-time strict vars check
+        // can find the field variable in later field default expressions
+        // (e.g., field $two = $one + 1; needs to see $one)
+        parser.ctx.symbolTable.addVariable(sigil + fieldName, "field", fieldPlaceholder);
+
         // Also register in global FieldRegistry for inheritance tracking
         String currentClass = parser.ctx.symbolTable.getCurrentPackage();
         FieldRegistry.registerField(currentClass, fieldName);
