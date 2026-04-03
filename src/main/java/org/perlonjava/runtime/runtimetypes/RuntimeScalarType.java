@@ -11,9 +11,15 @@ public class RuntimeScalarType {
     public static final int BOOLEAN = 6;
     public static final int GLOB = 7;
     public static final int JAVAOBJECT = 8;
+    // --- Magic boundary ---
+    // Types below TIED_SCALAR (0..8) require no special handling during set operations.
+    // Code such as `this.type < TIED_SCALAR` relies on this ordering to fast-path
+    // plain assignments. Do NOT insert new plain types at or above TIED_SCALAR
+    // without updating those guards.
     public static final int TIED_SCALAR = 9;
     public static final int DUALVAR = 10;
     public static final int FORMAT = 11;
+    public static final int READONLY_SCALAR = 12;
     // Reference types (with high bit set)
     private static final int REFERENCE_BIT = 0x8000;
     // References with bit pattern

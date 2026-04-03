@@ -87,15 +87,15 @@ public class Internals extends PerlModuleBase {
      *
      * @param args The arguments passed to the method: variable, optional flag to set readonly
      * @param ctx  The context in which the method is called.
-     * @return Empty list
+     * @return The readonly status (query mode) or empty list (set mode)
      */
     public static RuntimeList svReadonly(RuntimeArray args, int ctx) {
         if (args.size() >= 2) {
             RuntimeBase variable = args.get(0);
             RuntimeBase flag = args.get(1);
 
-            // If flag is true (non-zero), make the variable readonly
             if (flag.getBoolean()) {
+                // Make the variable readonly
                 if (variable instanceof RuntimeArray array) {
                     array.type = RuntimeArray.READONLY_ARRAY;
                 } else if (variable instanceof RuntimeScalar scalar) {
@@ -109,33 +109,44 @@ public class Internals extends PerlModuleBase {
                     }
                     // Check if it's a scalar reference (from \$var)
                     else if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
-                        // Replace the target scalar with a readonly version
-                        RuntimeScalarReadOnly readonlyScalar;
-                        if (targetScalar.type == RuntimeScalarType.INTEGER) {
-                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getInt());
-                        } else if (targetScalar.type == RuntimeScalarType.DOUBLE) {
-                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getDouble());
-                        } else if (targetScalar.type == RuntimeScalarType.BOOLEAN) {
-                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getBoolean());
-                        } else if (targetScalar.type == RuntimeScalarType.STRING || targetScalar.type == RuntimeScalarType.BYTE_STRING) {
-                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.toString());
-                        } else if (targetScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
-                                   targetScalar.type == RuntimeScalarType.HASHREFERENCE ||
-                                   targetScalar.type == RuntimeScalarType.REFERENCE ||
-                                   targetScalar.type == RuntimeScalarType.CODE ||
-                                   targetScalar.type == RuntimeScalarType.GLOBREFERENCE) {
-                            // For reference types, don't modify the value - just mark as readonly
-                            // In Perl, making a reference readonly prevents reassignment of the variable
-                            // but doesn't change the referenced data
-                            return new RuntimeList();
-                        } else {
-                            readonlyScalar = new RuntimeScalarReadOnly(); // undef
+                        // Skip if already readonly
+                        if (targetScalar.type != RuntimeScalarType.READONLY_SCALAR
+                                && !(targetScalar instanceof RuntimeScalarReadOnly)) {
+                            // Wrap: save original type+value in an inner scalar,
+                            // set targetScalar.type = READONLY_SCALAR
+                            RuntimeScalar inner = new RuntimeScalar();
+                            inner.type = targetScalar.type;
+                            inner.value = targetScalar.value;
+                            targetScalar.type = RuntimeScalarType.READONLY_SCALAR;
+                            targetScalar.value = inner;
                         }
-                        // Copy readonly value into the actual target scalar (replace variable contents)
-                        targetScalar.type = readonlyScalar.type;
-                        targetScalar.value = readonlyScalar.value;
                     }
                 }
+            } else {
+                // Make the variable writable again
+                if (variable instanceof RuntimeScalar scalar) {
+                    if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
+                        if (targetScalar.type == RuntimeScalarType.READONLY_SCALAR) {
+                            // Unwrap: restore original type+value
+                            RuntimeScalar inner = (RuntimeScalar) targetScalar.value;
+                            targetScalar.type = inner.type;
+                            targetScalar.value = inner.value;
+                        }
+                    }
+                }
+            }
+        } else if (args.size() == 1) {
+            // Query mode: return whether the variable is readonly
+            RuntimeBase variable = args.get(0);
+            if (variable instanceof RuntimeScalar scalar) {
+                if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
+                    boolean isRo = targetScalar.type == RuntimeScalarType.READONLY_SCALAR
+                            || targetScalar instanceof RuntimeScalarReadOnly;
+                    return new RuntimeScalar(isRo).getList();
+                }
+                boolean isRo = scalar instanceof RuntimeScalarReadOnly
+                        || scalar.type == RuntimeScalarType.READONLY_SCALAR;
+                return new RuntimeScalar(isRo).getList();
             }
         }
         return new RuntimeList();
