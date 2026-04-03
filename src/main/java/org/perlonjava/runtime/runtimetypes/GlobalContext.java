@@ -184,17 +184,17 @@ public class GlobalContext {
         System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
 
         /* Initialize @INC.
-           @INC Search order is:
-            - "-I" argument
-            - JAR_PERLLIB, the jar directory: src/main/perl/lib
-            - PERL5LIB env
-            - ~/.perlonjava/lib (user installed modules)
+           @INC Search order mirrors Perl 5's site_perl > core pattern:
+            - "-I" argument              (highest priority, user override)
+            - PERL5LIB env               (user environment override)
+            - ~/.perlonjava/lib          (user-installed CPAN modules, like site_perl)
+            - JAR_PERLLIB                (bundled modules, like core lib — lowest priority)
+           This allows CPAN-installed modules to override bundled ones.
            See also: https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
          */
         List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
-        inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib
         String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar("")).toString().split(":");
         for (String directory : directories) {
             if (!directory.isEmpty()) {
@@ -210,6 +210,7 @@ public class GlobalContext {
                 inc.add(new RuntimeScalar(userLib));
             }
         }
+        inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib (lowest priority)
 
         // Initialize %INC
         GlobalVariable.getGlobalHash("main::INC");
