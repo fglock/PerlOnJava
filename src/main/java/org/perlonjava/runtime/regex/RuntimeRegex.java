@@ -164,7 +164,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Compile the Unicode variant for Unicode strings
                 // Only compile separately if the flags differ (saves memory when /a or /u is used)
                 if (regex.patternFlagsUnicode != regex.patternFlags) {
-                    regex.patternUnicode = Pattern.compile(javaPattern, regex.patternFlagsUnicode);
+                    // Fix POSIX [:punct:] for Unicode mode: Java's UNICODE_CHARACTER_CLASS flag
+                    // changes \p{Punct} from ASCII punct+symbols to only \p{P} (Unicode Punctuation).
+                    // Perl's [:punct:] should match both Punctuation and Symbols in Unicode mode.
+                    String javaPatternUnicode = javaPattern
+                            .replace("\\p{Punct}", "[\\p{P}\\p{S}]")
+                            .replace("\\P{Punct}", "[^\\p{P}\\p{S}]");
+                    regex.patternUnicode = Pattern.compile(javaPatternUnicode, regex.patternFlagsUnicode);
                 } else {
                     regex.patternUnicode = regex.pattern;
                 }
