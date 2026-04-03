@@ -4,7 +4,7 @@
 
 **Module**: Excel::Writer::XLSX 1.15
 **Test command**: `./jcpan -j 8 -t Excel::Writer::XLSX`
-**Status**: 1243/1247 programs pass (99.7%), 5110/5115 subtests pass (99.9%)
+**Status**: 1247/1247 programs pass (100%), 5115/5115 subtests pass (100%)
 
 ## Dependency Tree
 
@@ -16,7 +16,7 @@
 
 ## Test Results Summary
 
-### Current Status: 1243/1247 programs pass, 5110/5115 subtests pass
+### Current Status: 1247/1247 programs pass, 5115/5115 subtests pass (100%)
 
 Tests are in subdirectories: `t/chart/`, `t/chartsheet/`, `t/drawing/`, `t/package/`, `t/regression/`, `t/utility/`, `t/workbook/`, `t/worksheet/`
 
@@ -25,48 +25,11 @@ Tests are in subdirectories: `t/chart/`, `t/chartsheet/`, `t/drawing/`, `t/packa
 | t/chart/ | ~47 | 47 | 0 | All pass |
 | t/chartsheet/ | 4 | 4 | 0 | All pass (password tests fixed) |
 | t/drawing/ | ~23 | 23 | 0 | All pass |
-| t/package/ | ~50 | 49 | 1 | `styles/sub_write_num_fmts.t` ('' vs undef) |
+| t/package/ | ~50 | 50 | 0 | All pass |
 | t/regression/ | ~800+ | ~800+ | 0 | All pass |
 | t/utility/ | ~15 | 15 | 0 | All pass (quote_sheetname fixed) |
 | t/workbook/ | ~18 | 18 | 0 | All pass |
-| t/worksheet/ | ~90 | 88 | 2 | `sub_write_page_setup.t`, `sub_write_print_options.t` ('' vs undef) |
-
----
-
-## Remaining Failures (4 programs, 5 subtests)
-
-### 1. Empty string `''` vs `undef` return value (3 test files, 3 subtests)
-
-**Affected tests**:
-- `t/package/styles/sub_write_num_fmts.t` (1/2 fail)
-- `t/worksheet/sub_write_page_setup.t` (1/6 fail)
-- `t/worksheet/sub_write_print_options.t` (1/8 fail)
-
-**Error pattern**:
-```
-#          got: ''
-#     expected: undef
-```
-
-**Root Cause**: XML writer methods return `''` (empty string) instead of `undef` when there is nothing to write. In Perl, `''` and `undef` are different values - `undef` means "no value" while `''` means "empty string value". The test uses `is()` which distinguishes them.
-
-**Investigation needed**: Trace the specific XML writer method being called (e.g., `_write_num_fmts()`, `_write_page_setup()`, `_write_print_options()`) and find where it returns `''` instead of `undef`. This is likely a PerlOnJava parity issue in:
-- How subroutines return values when no explicit `return` is used
-- How `$self->{_writer}->xml_data_element()` or similar XMLwriter methods behave when called with no data to write
-- How the `_write_*` methods short-circuit when there are no elements to emit
-
-**Fix approach**:
-1. Run the failing test in Perl vs jperl and compare output
-2. Add debug prints to the `_write_num_fmts` sub to trace where `''` vs `undef` diverges
-3. Fix the runtime behavior or the specific method
-
-### 2. Emoticons Unicode quoting in `quote_sheetname` (FIXED)
-
-**Previously affected test**: `t/utility/quote_sheetname.t` (2/100 failed)
-
-**Was**: `\w` in regex didn't match Latin-1 accented characters (like `é`) when the string had the UTF-8 flag set. PerlOnJava only used the Unicode-aware regex pattern for strings containing characters > U+00FF.
-
-**Fixed in commit 3f85c7cd3**: Changed regex pattern selection to use Unicode semantics whenever the input string has the UTF-8 flag, matching Perl's behavior.
+| t/worksheet/ | ~90 | 90 | 0 | All pass |
 
 ---
 
@@ -123,20 +86,18 @@ Tests are in subdirectories: `t/chart/`, `t/chartsheet/`, `t/drawing/`, `t/packa
 
 **Result**: `quote_sheetname.t` all 100 tests pass. Latin-1 accented chars match `\w` when UTF-8 flagged.
 
----
-
-## Open Phase: Fix '' vs undef return value (TODO)
+### Phase 5: Fix `open '>' \$scalar` to preserve undef (COMPLETED 2026-04-03)
 
 | Step | Description | File | Status |
 |------|-------------|------|--------|
-| 5.1 | Reproduce in jperl: run `sub_write_num_fmts.t` and trace return value | - | TODO |
-| 5.2 | Compare jperl vs perl: what does the `_write_*` method return? | - | TODO |
-| 5.3 | Identify PerlOnJava runtime parity issue (return value semantics) | - | TODO |
-| 5.4 | Fix the runtime or codegen to return `undef` instead of `''` | - | TODO |
-| 5.5 | Verify all 3 affected tests pass | - | TODO |
-| 5.6 | Run `make` to verify unit tests pass | - | TODO |
+| 5.1 | Identify root cause: `open '>', \$scalar` sets undef to `''` | `RuntimeIO.java` | DONE |
+| 5.2 | Fix: only truncate if scalar was already defined | `RuntimeIO.java` | DONE |
+| 5.3 | Verify `open '>', \$undef_var` keeps undef (matches Perl) | - | DONE |
+| 5.4 | Verify `open '>', \$defined_var` truncates to `''` (matches Perl) | - | DONE |
+| 5.5 | Run `make` to verify unit tests pass | - | DONE |
+| 5.6 | Run full Excel::Writer::XLSX test suite | - | DONE |
 
-**Expected result**: Fixes the last 3 failing test programs (5 subtests), achieving 100% pass rate.
+**Result**: All 1247 programs pass, all 5115 subtests pass. 100% pass rate achieved.
 
 ---
 
@@ -149,7 +110,7 @@ Tests are in subdirectories: `t/chart/`, `t/chartsheet/`, `t/drawing/`, `t/packa
 | 2 | `\p{Emoticons}` regex | ~20+ tests | COMPLETED |
 | 3 | split scalar context (password hash) | 3 subtests | COMPLETED |
 | 4 | regex Unicode semantics (Latin-1 \w) | 2 subtests | COMPLETED |
-| 5 | '' vs undef return value | 3 programs, 5 subtests | TODO |
+| 5 | `open '>' \$scalar` undef preservation | 3 programs, 5 subtests | COMPLETED |
 
 ## Branch & PR
 
