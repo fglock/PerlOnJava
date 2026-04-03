@@ -127,6 +127,7 @@ public class Readline {
     }
 
     private static RuntimeScalar readParagraphMode(RuntimeIO runtimeIO) {
+        boolean isByteMode = runtimeIO.isByteMode();
         StringBuilder paragraph = new StringBuilder();
         boolean inParagraph = false;
         boolean lastWasNewline = false;
@@ -169,10 +170,15 @@ public class Readline {
             }
         }
 
-        return new RuntimeScalar(paragraph.toString());
+        RuntimeScalar result = new RuntimeScalar(paragraph.toString());
+        if (isByteMode) {
+            result.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return result;
     }
 
     private static RuntimeScalar readFixedLength(RuntimeIO runtimeIO, int length) {
+        boolean isByteMode = runtimeIO.isByteMode();
         StringBuilder result = new StringBuilder();
 
         for (int i = 0; i < length; i++) {
@@ -191,10 +197,15 @@ public class Readline {
         // Don't increment line numbers for fixed-length reads
         // (this matches Perl behavior for record-length mode)
 
-        return new RuntimeScalar(result.toString());
+        RuntimeScalar rslt = new RuntimeScalar(result.toString());
+        if (isByteMode) {
+            rslt.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return rslt;
     }
 
     private static RuntimeScalar readUntilCharacter(RuntimeIO runtimeIO, char separator) {
+        boolean isByteMode = runtimeIO.isByteMode();
         StringBuilder line = new StringBuilder();
 
         String readChar;
@@ -217,10 +228,15 @@ public class Readline {
             return scalarUndef;
         }
 
-        return new RuntimeScalar(line.toString());
+        RuntimeScalar result = new RuntimeScalar(line.toString());
+        if (isByteMode) {
+            result.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return result;
     }
 
     private static RuntimeScalar readUntilString(RuntimeIO runtimeIO, String separator) {
+        boolean isByteMode = runtimeIO.isByteMode();
         StringBuilder line = new StringBuilder();
         StringBuilder buffer = new StringBuilder();
 
@@ -256,7 +272,11 @@ public class Readline {
             return scalarUndef;
         }
 
-        return new RuntimeScalar(line.toString());
+        RuntimeScalar result = new RuntimeScalar(line.toString());
+        if (isByteMode) {
+            result.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return result;
     }
 
     /**

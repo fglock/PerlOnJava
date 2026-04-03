@@ -247,6 +247,24 @@ public class RuntimeIO extends RuntimeScalar {
         this.directoryIO = directoryIO;
     }
 
+    /**
+     * Checks if this handle is in byte mode (no encoding layers).
+     *
+     * <p>In Perl, reads from handles without encoding layers (e.g., :raw, :bytes,
+     * or default mode) produce byte strings (UTF-8 flag off). Reads from handles
+     * with encoding layers (e.g., :utf8, :encoding(UTF-8)) produce character
+     * strings (UTF-8 flag on).</p>
+     *
+     * @return true if the handle produces byte data (no encoding layers active)
+     */
+    public boolean isByteMode() {
+        if (ioHandle instanceof LayeredIOHandle layered) {
+            return !layered.hasEncodingLayer();
+        }
+        // Non-layered handles (CustomFileChannel, etc.) are always byte mode
+        return true;
+    }
+
     public static void registerChildProcess(Process p) {
         if (p != null) childProcesses.put(p.pid(), p);
     }

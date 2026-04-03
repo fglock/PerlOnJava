@@ -507,6 +507,24 @@ public class LayeredIOHandle implements IOHandle {
         return delegate.flock(operation);
     }
 
+    /**
+     * Checks if this handle has any encoding layers (e.g., :utf8, :encoding(UTF-8)).
+     *
+     * <p>Encoding layers decode bytes into characters, which means reads should
+     * produce character strings (UTF-8 flag set in Perl terms). Without encoding
+     * layers, reads produce byte strings.</p>
+     *
+     * @return true if any active layer is an EncodingLayer
+     */
+    public boolean hasEncodingLayer() {
+        for (IOLayer layer : activeLayers) {
+            if (layer instanceof EncodingLayer) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public String getCurrentLayers() {
         // Return the currently applied layers as a string
         StringBuilder layers = new StringBuilder();
