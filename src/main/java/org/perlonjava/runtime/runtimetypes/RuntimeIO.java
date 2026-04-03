@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -1255,6 +1256,32 @@ public class RuntimeIO extends RuntimeScalar {
             lastWrittenHandle.flush();
         }
         lastWrittenHandle = this;
+
+        // When no encoding layer is active, check for wide characters (> 0xFF).
+        // Perl 5 warns and outputs UTF-8 encoding of the entire string in this case.
+        if (!(ioHandle instanceof LayeredIOHandle)) {
+            boolean hasWide = false;
+            for (int i = 0; i < data.length(); i++) {
+                if (data.charAt(i) > 0xFF) {
+                    hasWide = true;
+                    break;
+                }
+            }
+            if (hasWide) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Wide character in print"),
+                        new RuntimeScalar(""),
+                        "utf8");
+                // Encode as UTF-8, where each byte becomes a char (matching Perl 5 behavior)
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                StringBuilder sb = new StringBuilder(bytes.length);
+                for (byte b : bytes) {
+                    sb.append((char) (b & 0xFF));
+                }
+                data = sb.toString();
+            }
+        }
+
         RuntimeScalar result = ioHandle.write(data);
         if (System.getenv("JPERL_IO_DEBUG") != null) {
             if (("main::STDOUT".equals(globName) || "main::STDERR".equals(globName)) &&

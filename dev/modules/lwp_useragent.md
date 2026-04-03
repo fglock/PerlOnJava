@@ -245,6 +245,19 @@ via `File::Spec->splitpath`).
 **Files**: `HTMLParser.java`, `Utf8.java`
 **Commit**: `17b38eabd`
 
+### P15: print with non-ASCII characters > 0xFF fails silently -- FIXED
+
+**Impact**: Any code printing wide characters without a `:utf8` encoding layer
+**Root cause**: When `print` outputs a string containing characters with code points
+above 0xFF (e.g. `"\x{100}"`, U+0100 Ā) to a handle without `:encoding(utf8)`,
+PerlOnJava silently replaces those characters with `?` (0x3F). No warning is emitted
+and no UTF-8 bytes are output.
+**Fix**: Added wide character detection in `RuntimeIO.write()`. When a string contains
+chars > 0xFF and no encoding layer is active, emits "Wide character in print" warning
+(via `utf8` warning category) and encodes the string as UTF-8 bytes. Warning is
+suppressed by `no warnings "utf8"` and not emitted for `:utf8`/`:encoding` handles.
+**Files**: `RuntimeIO.java`
+
 ### Won't fix
 
 | Issue | Test | Reason |
