@@ -277,29 +277,48 @@ public class ScalarUtil extends PerlModuleBase {
         
         // Check if it's a GLOB or GLOBREFERENCE (filehandle)
         if (arg.type == GLOB || arg.type == GLOBREFERENCE) {
-            Object value = arg.value;
-            
-            // Handle RuntimeGlob
-            if (value instanceof RuntimeGlob glob) {
-                RuntimeScalar io = glob.getIO();
-                if (io != null && io.value instanceof RuntimeIO runtimeIO) {
-                    // Check if the handle is open (not a ClosedIOHandle)
-                    if (!(runtimeIO.ioHandle instanceof ClosedIOHandle)) {
-                        return arg.getList();  // Return the filehandle itself
-                    }
-                }
-            }
-            // Handle RuntimeIO directly
-            else if (value instanceof RuntimeIO runtimeIO) {
-                if (!(runtimeIO.ioHandle instanceof ClosedIOHandle)) {
-                    return arg.getList();  // Return the filehandle itself
-                }
+            if (isOpenGlob(arg.value)) {
+                return arg.getList();  // Return the filehandle itself
             }
         }
-        // Check for blessed object with *{} overload (handled in Perl code)
-        // For now, just return undef for non-glob types
+        
+        // Check for blessed object with *{} overload
+        // In Perl 5, openhandle() recognizes objects with *{} overloading
+        // (e.g., File::Temp objects) as filehandles.
+        int blessId = RuntimeScalarType.blessedId(arg);
+        if (blessId < 0) {
+            // Blessed object with overloading - try *{} dereference
+            try {
+                RuntimeGlob glob = arg.globDeref();
+                if (glob != null) {
+                    RuntimeScalar io = glob.getIO();
+                    if (io != null && io.value instanceof RuntimeIO runtimeIO) {
+                        if (!(runtimeIO.ioHandle instanceof ClosedIOHandle)) {
+                            return arg.getList();  // Return the original object
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // globDeref failed - not a glob-like object, fall through to return undef
+            }
+        }
         
         return new RuntimeScalar().getList();  // Return undef
+    }
+    
+    /**
+     * Helper to check if a glob/IO value represents an open filehandle.
+     */
+    private static boolean isOpenGlob(Object value) {
+        if (value instanceof RuntimeGlob glob) {
+            RuntimeScalar io = glob.getIO();
+            if (io != null && io.value instanceof RuntimeIO runtimeIO) {
+                return !(runtimeIO.ioHandle instanceof ClosedIOHandle);
+            }
+        } else if (value instanceof RuntimeIO runtimeIO) {
+            return !(runtimeIO.ioHandle instanceof ClosedIOHandle);
+        }
+        return false;
     }
 
     /**

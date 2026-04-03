@@ -311,30 +311,46 @@ public class IOOperator {
                         throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                     }
                 } else {
-                    // Handle string filehandle names (like "STDOUT", "STDERR", "STDIN")
-                    String handleName = secondArg.toString();
-                    if (handleName.equals("STDOUT") || handleName.equals("STDERR") || handleName.equals("STDIN")) {
-                        // Convert string to proper filehandle reference
-                        RuntimeScalar handleRef = GlobalVariable.getGlobalIO("main::" + handleName);
-                        if (handleRef != null && handleRef.value instanceof RuntimeGlob) {
-                            RuntimeIO sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
-                            if (sourceHandle != null && sourceHandle.ioHandle != null) {
-                                if (isParsimonious) {
-                                    // &= mode: reuse the same file descriptor (parsimonious)
-                                    fh = sourceHandle;
+                    // Try getRuntimeIO() which handles blessed objects with *{} overloading
+                    // (e.g., File::Temp objects passed to open with dup mode)
+                    RuntimeIO sourceHandle = null;
+                    try {
+                        sourceHandle = secondArg.getRuntimeIO();
+                    } catch (Exception ignored) {
+                    }
+
+                    if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                        if (isParsimonious) {
+                            fh = sourceHandle;
+                        } else {
+                            fh = duplicateFileHandle(sourceHandle);
+                        }
+                    } else {
+                        // Handle string filehandle names (like "STDOUT", "STDERR", "STDIN")
+                        String handleName = secondArg.toString();
+                        if (handleName.equals("STDOUT") || handleName.equals("STDERR") || handleName.equals("STDIN")) {
+                            // Convert string to proper filehandle reference
+                            RuntimeScalar handleRef = GlobalVariable.getGlobalIO("main::" + handleName);
+                            if (handleRef != null && handleRef.value instanceof RuntimeGlob) {
+                                sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
+                                if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                                    if (isParsimonious) {
+                                        // &= mode: reuse the same file descriptor (parsimonious)
+                                        fh = sourceHandle;
+                                    } else {
+                                        // & mode: create a new handle that duplicates the original
+                                        fh = duplicateFileHandle(sourceHandle);
+                                    }
                                 } else {
-                                    // & mode: create a new handle that duplicates the original
-                                    fh = duplicateFileHandle(sourceHandle);
+                                    throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                                 }
                             } else {
                                 throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                             }
                         } else {
+                            // For other non-GLOB types, provide proper "Bad filehandle" error messages
                             throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                         }
-                    } else {
-                        // For other non-GLOB types, provide proper "Bad filehandle" error messages
-                        throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                     }
                 }
             } else if (secondArg.type == RuntimeScalarType.REFERENCE) {

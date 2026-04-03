@@ -212,9 +212,14 @@ public class Utf8 extends PerlModuleBase {
 
             // If the original string matches the decoded string, conversion is successful
             if (string.equals(decoded)) {
-                // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
-                scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
-                scalar.type = BYTE_STRING;
+                // Don't modify read-only scalars (e.g., string literals).
+                // The string is already representable in ISO-8859-1, so the downgrade
+                // is logically successful even if we can't modify the scalar in-place.
+                if (!(scalar instanceof RuntimeScalarReadOnly)) {
+                    // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
+                    scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
+                    scalar.type = BYTE_STRING;
+                }
                 return new RuntimeScalar(true).getList();
             } else {
                 // If the strings do not match, the conversion failed
