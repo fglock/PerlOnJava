@@ -164,9 +164,6 @@ public class Storable extends PerlModuleBase {
                     "STORABLE_freeze", className, null, 0);
 
             if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
-                // Track for circular reference detection before calling hook
-                if (scalar.value != null) seen.put(scalar.value, seen.size());
-
                 // Call STORABLE_freeze($self, $cloning=0)
                 RuntimeArray freezeArgs = new RuntimeArray();
                 RuntimeArray.push(freezeArgs, scalar);
@@ -175,23 +172,31 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray freezeArray = new RuntimeArray();
                 freezeResult.setArrayOfAlias(freezeArray);
 
-                // Emit SX_HOOK + class name + serialized string + extra refs
-                sb.append((char) SX_HOOK);
-                appendInt(sb, className.length());
-                sb.append(className);
+                // Per Perl 5 Storable: empty return from STORABLE_freeze cancels the
+                // hook and falls through to default serialization (SX_BLESS path)
+                if (freezeArray.size() > 0) {
+                    // Track for circular reference detection before emitting
+                    if (scalar.value != null) seen.put(scalar.value, seen.size());
 
-                // Serialized string (first element of freeze result)
-                String serialized = freezeArray.size() > 0 ? freezeArray.get(0).toString() : "";
-                appendInt(sb, serialized.length());
-                sb.append(serialized);
+                    // Emit SX_HOOK + class name + serialized string + extra refs
+                    sb.append((char) SX_HOOK);
+                    appendInt(sb, className.length());
+                    sb.append(className);
 
-                // Extra refs (remaining elements)
-                int extraRefs = Math.max(0, freezeArray.size() - 1);
-                appendInt(sb, extraRefs);
-                for (int i = 1; i <= extraRefs; i++) {
-                    serializeBinary(freezeArray.get(i), sb, seen);
+                    // Serialized string (first element of freeze result)
+                    String serialized = freezeArray.get(0).toString();
+                    appendInt(sb, serialized.length());
+                    sb.append(serialized);
+
+                    // Extra refs (remaining elements)
+                    int extraRefs = freezeArray.size() - 1;
+                    appendInt(sb, extraRefs);
+                    for (int i = 1; i <= extraRefs; i++) {
+                        serializeBinary(freezeArray.get(i), sb, seen);
+                    }
+                    return;
                 }
-                return;
+                // Empty return — fall through to default SX_BLESS serialization
             }
 
             // No hook — emit SX_BLESS + class name before the data
@@ -524,27 +529,32 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray freezeArray = new RuntimeArray();
                 freezeResult.setArrayOfAlias(freezeArray);
 
-                // Create a new empty blessed object of the same class
-                RuntimeHash newHash = new RuntimeHash();
-                RuntimeScalar newObj = newHash.createReference();
-                ReferenceOperators.bless(newObj, new RuntimeScalar(className));
-                cloned.put(scalar.value, newObj);
+                // Per Perl 5 Storable: empty return from STORABLE_freeze cancels the
+                // hook and falls through to default deep-copy
+                if (freezeArray.size() > 0) {
+                    // Create a new empty blessed object of the same class
+                    RuntimeHash newHash = new RuntimeHash();
+                    RuntimeScalar newObj = newHash.createReference();
+                    ReferenceOperators.bless(newObj, new RuntimeScalar(className));
+                    cloned.put(scalar.value, newObj);
 
-                // Call STORABLE_thaw($new_obj, $cloning=1, $serialized, @extra_refs)
-                RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
-                        "STORABLE_thaw", className, null, 0);
-                if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
-                    RuntimeArray thawArgs = new RuntimeArray();
-                    RuntimeArray.push(thawArgs, newObj);
-                    RuntimeArray.push(thawArgs, new RuntimeScalar(1)); // cloning = true
-                    // Pass serialized data and any extra refs from freeze
-                    for (int i = 0; i < freezeArray.size(); i++) {
-                        RuntimeArray.push(thawArgs, freezeArray.get(i));
+                    // Call STORABLE_thaw($new_obj, $cloning=1, $serialized, @extra_refs)
+                    RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
+                            "STORABLE_thaw", className, null, 0);
+                    if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
+                        RuntimeArray thawArgs = new RuntimeArray();
+                        RuntimeArray.push(thawArgs, newObj);
+                        RuntimeArray.push(thawArgs, new RuntimeScalar(1)); // cloning = true
+                        // Pass serialized data and any extra refs from freeze
+                        for (int i = 0; i < freezeArray.size(); i++) {
+                            RuntimeArray.push(thawArgs, freezeArray.get(i));
+                        }
+                        RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
                     }
-                    RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
-                }
 
-                return newObj;
+                    return newObj;
+                }
+                // Empty return — fall through to default deep-copy
             }
         }
 
@@ -671,16 +681,17 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray freezeArray = new RuntimeArray();
                 freezeResult.setArrayOfAlias(freezeArray);
 
-                // Store serialized data with class tag
-                Map<String, Object> taggedObject = new LinkedHashMap<>();
+                // Per Perl 5 Storable: empty return from STORABLE_freeze cancels the
+                // hook and falls through to default !!perl/hash: serialization
                 if (freezeArray.size() > 0) {
+                    // Store serialized data with class tag
+                    Map<String, Object> taggedObject = new LinkedHashMap<>();
                     // STORABLE_freeze returns (serialized_string, @extra_refs)
                     // Store the serialized string directly
                     taggedObject.put("!!perl/freeze:" + className, freezeArray.get(0).toString());
-                } else {
-                    taggedObject.put("!!perl/freeze:" + className, "");
+                    return taggedObject;
                 }
-                return taggedObject;
+                // Empty return — fall through to default !!perl/hash: serialization
             }
 
             Map<String, Object> taggedObject = new LinkedHashMap<>();
