@@ -376,6 +376,58 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Low-level read from the socket (sysread equivalent).
+     * Reads raw bytes without buffering, suitable for use by HTTP::Daemon and similar.
+     *
+     * @param length maximum number of bytes to read
+     * @return RuntimeScalar containing the bytes read, empty string at EOF, or undef on error
+     */
+    @Override
+    public RuntimeScalar sysread(int length) {
+        try {
+            if (inputStream != null) {
+                byte[] buffer = new byte[length];
+                int bytesRead = inputStream.read(buffer);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    return new RuntimeScalar("");
+                }
+                byte[] result = new byte[bytesRead];
+                System.arraycopy(buffer, 0, result, 0, bytesRead);
+                return new RuntimeScalar(result);
+            }
+            throw new IllegalStateException("No input stream available");
+        } catch (IOException e) {
+            return handleIOException(e, "sysread operation failed");
+        }
+    }
+
+    /**
+     * Low-level write to the socket (syswrite equivalent).
+     * Writes raw bytes without buffering.
+     *
+     * @param data the data to write
+     * @return RuntimeScalar containing the number of bytes written, or undef on error
+     */
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        try {
+            if (outputStream != null) {
+                byte[] bytes = new byte[data.length()];
+                for (int i = 0; i < data.length(); i++) {
+                    bytes[i] = (byte) (data.charAt(i) & 0xFF);
+                }
+                outputStream.write(bytes);
+                outputStream.flush();
+                return new RuntimeScalar(bytes.length);
+            }
+            throw new IllegalStateException("No output stream available");
+        } catch (IOException e) {
+            return handleIOException(e, "syswrite operation failed");
+        }
+    }
+
+    /**
      * Checks if the end-of-file (EOF) has been reached on the input stream.
      *
      * @return a RuntimeScalar indicating EOF (true) or not (false)
