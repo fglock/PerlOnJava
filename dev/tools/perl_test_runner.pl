@@ -444,8 +444,14 @@ sub parse_tap_output {
         }
 
         if ($line =~ /^not ok\s+\d+/) {
-            $not_ok_count++;
             $actual_tests_run++;
+            if ($line =~ /#\s*TODO\b/i) {
+                # "not ok ... # TODO" = expected failure, counts as OK in TAP
+                $ok_count++;
+                $todo_count++;
+            } else {
+                $not_ok_count++;
+            }
             next;
         }
 

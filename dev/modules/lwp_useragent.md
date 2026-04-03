@@ -12,19 +12,26 @@ client library for Perl. It was previously blocked on HTTP::Message, which has s
 been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
-## Current State (after Phase 7b)
+## Current State (after Phase 7c)
 
-Running all 22 test files via `jcpan -t LWP::UserAgent`:
-- **314/316 subtests pass** (99.4%), 2 TODO failures in 1 file
-- **20/22 test files pass**, 1 skipped (NNTP network), 1 error (XS Test::LeakTrace)
-- All 4 daemon-based tests fully pass:
-  - t/local/http.t: **136/136** (Unicode title encoding fixed)
+Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
+- **173/173 subtests pass** (100%) — after fixing test runner to treat `not ok # TODO` as OK per TAP spec
+- **8/8 local test files pass**
+- All daemon-based tests fully pass:
+  - t/local/http.t: **136/136** (Unicode title encoding fixed; test 37 is flaky, occasionally 135/136)
   - t/robot/ua-get.t: **18/18**
   - t/robot/ua.t: **14/14**
   - t/redirect.t: **4/4** (all passing)
 - HTML::HeadParser callback chain works (ua.t 51/51)
 - Socket sysread/syswrite work for HTTP::Daemon request parsing
 - JVM startup (~1.2s) fits within talk-to-ourself's 5-second timeout
+
+### Known Flaky / Pre-existing Issues
+
+| Test | Symptom | Status |
+|------|---------|--------|
+| t/local/http.t test 37 | "good title" UTF-8 check occasionally fails (135/136). The `ø` (U+00F8) in "En prøve" is in the 0x80-0xFF range — not a wide char, but its handling depends on the STRING vs BYTE_STRING type flowing through the HTTP response pipeline. Passes most runs. | Pre-existing, flaky |
+| t/local/download_to_fh.t tests 3-4 | `not ok # TODO` — mirror() doesn't support filehandles. These are upstream TODO tests that are *expected* to fail. | Expected (upstream TODO) |
 
 ### Test Results Breakdown
 
@@ -42,11 +49,11 @@ Running all 22 test files via `jcpan -t LWP::UserAgent`:
 | t/base/ua_handlers.t | PASS | 3/3 | |
 | t/leak/no_leak.t | ERROR | 0/0 | Test::LeakTrace is XS-only (won't fix) |
 | t/local/autoload-get.t | PASS | 4/4 | |
-| t/local/autoload.t | PASS | 4/4 | |
-| t/local/cookie_jar.t | PASS | 8/8 | |
-| t/local/download_to_fh.t | FAIL | 3/5 | 2 TODO failures (expected: mirror doesn't support filehandles) |
+| t/local/autoload.t | PASS | 2/2 | |
+| t/local/cookie_jar.t | PASS | 12/12 | |
+| t/local/download_to_fh.t | **PASS** | 5/5 | 2 TODO expected failures now counted correctly |
 | t/local/get.t | PASS | 7/7 | |
-| t/local/http.t | **PASS** | 136/136 | Fixed in Phase 7b (UTF-8 title encoding) |
+| t/local/http.t | **PASS** | 136/136 | Fixed in Phase 7b; test 37 flaky (see above) |
 | t/local/httpsub.t | PASS | 2/2 | |
 | t/local/protosub.t | PASS | 7/7 | |
 | t/redirect.t | **PASS** | 4/4 | Fixed in Phase 7b |
