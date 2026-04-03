@@ -363,11 +363,27 @@ public class WarningFlags {
         int byteIndex = bitPos / 8;
         int bitInByte = bitPos % 8;
         
-        if (byteIndex >= bits.length()) {
-            return false;
+        // Check the specific bit if it's within range
+        if (byteIndex < bits.length() && (bits.charAt(byteIndex) & (1 << bitInByte)) != 0) {
+            return true;
         }
         
-        return (bits.charAt(byteIndex) & (1 << bitInByte)) != 0;
+        // For custom categories, fall back to checking if "all" is enabled.
+        // Custom categories may not have their specific bit set in the bits string
+        // because they were registered (via warnings::register) after the scope's
+        // "use warnings" was compiled. In Perl 5, "use warnings" (which enables "all")
+        // implicitly enables all custom categories registered later.
+        if (customCategories.contains(category)) {
+            int allOffset = PERL5_OFFSETS.get("all");
+            int allBitPos = allOffset * 2;
+            int allByteIndex = allBitPos / 8;
+            int allBitInByte = allBitPos % 8;
+            if (allByteIndex < bits.length()) {
+                return (bits.charAt(allByteIndex) & (1 << allBitInByte)) != 0;
+            }
+        }
+        
+        return false;
     }
     
     /**
@@ -395,11 +411,23 @@ public class WarningFlags {
         int byteIndex = bitPos / 8;
         int bitInByte = bitPos % 8;
         
-        if (byteIndex >= bits.length()) {
-            return false;
+        // Check the specific bit if it's within range
+        if (byteIndex < bits.length() && (bits.charAt(byteIndex) & (1 << bitInByte)) != 0) {
+            return true;
         }
         
-        return (bits.charAt(byteIndex) & (1 << bitInByte)) != 0;
+        // For custom categories, fall back to checking if "all" is fatal
+        if (customCategories.contains(category)) {
+            int allOffset = PERL5_OFFSETS.get("all");
+            int allBitPos = allOffset * 2 + 1; // Fatal bit for "all"
+            int allByteIndex = allBitPos / 8;
+            int allBitInByte = allBitPos % 8;
+            if (allByteIndex < bits.length()) {
+                return (bits.charAt(allByteIndex) & (1 << allBitInByte)) != 0;
+            }
+        }
+        
+        return false;
     }
 
     /**

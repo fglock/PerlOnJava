@@ -360,8 +360,15 @@ public class Warnings extends PerlModuleBase {
         if (args.size() > 0) {
             category = args.get(0).toString();
         } else {
-            // No args: use calling package as category (Perl 5 behavior)
-            String pkg = getCallerPackageAtLevel(0);
+            // No args: use calling package as category (Perl 5 behavior).
+            // Use caller(0) directly (without the +1 offset from getCallerPackageAtLevel)
+            // because this registered Java method adds a frame to the caller stack,
+            // and we need the direct caller's package (caller(0)).
+            RuntimeList callerInfo = RuntimeCode.caller(
+                new RuntimeList(RuntimeScalarCache.getScalarInt(0)), 
+                RuntimeContextType.LIST
+            );
+            String pkg = (callerInfo.size() > 0) ? callerInfo.elements.get(0).toString() : null;
             category = (pkg != null) ? pkg : "all";
         }
         
@@ -413,8 +420,13 @@ public class Warnings extends PerlModuleBase {
         if (args.size() > 0) {
             category = args.get(0).toString();
         } else {
-            // No args: use calling package as category (Perl 5 behavior)
-            String pkg = getCallerPackageAtLevel(0);
+            // No args: use calling package as category (Perl 5 behavior).
+            // Use caller(0) directly to get the direct caller's package.
+            RuntimeList callerInfo = RuntimeCode.caller(
+                new RuntimeList(RuntimeScalarCache.getScalarInt(0)), 
+                RuntimeContextType.LIST
+            );
+            String pkg = (callerInfo.size() > 0) ? callerInfo.elements.get(0).toString() : null;
             category = (pkg != null) ? pkg : "all";
         }
         
@@ -491,9 +503,14 @@ public class Warnings extends PerlModuleBase {
             category = args.get(0).toString();
             message = args.get(1);
         } else {
-            // warnif(message) - use calling package as category
+            // warnif(message) - use calling package as category.
+            // Use caller(0) directly to get the direct caller's package.
             message = args.get(0);
-            String pkg = getCallerPackageAtLevel(0);
+            RuntimeList callerInfo = RuntimeCode.caller(
+                new RuntimeList(RuntimeScalarCache.getScalarInt(0)), 
+                RuntimeContextType.LIST
+            );
+            String pkg = (callerInfo.size() > 0) ? callerInfo.elements.get(0).toString() : null;
             category = (pkg != null) ? pkg : "main";
         }
         

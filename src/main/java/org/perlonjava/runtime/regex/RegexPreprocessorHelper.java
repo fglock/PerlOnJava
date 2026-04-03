@@ -561,6 +561,30 @@ public class RegexPreprocessorHelper {
                                 if (nextChar == 'b' || nextChar == 'N' || nextChar == 'p' || nextChar == 'P') {
                                     // These are special escapes, can't be in range
                                     nextChar = -1;
+                                } else if (nextChar == 'x' && nextPos + 2 < length && s.charAt(nextPos + 2) == '{') {
+                                    // Parse \x{NNNN} as range endpoint
+                                    int endBrace = s.indexOf('}', nextPos + 3);
+                                    if (endBrace != -1) {
+                                        String hex = s.substring(nextPos + 3, endBrace).trim().replace("_", "");
+                                        try {
+                                            nextChar = Integer.parseInt(hex, 16);
+                                            rangeEndCharCount = endBrace - nextPos + 1;
+                                        } catch (NumberFormatException e) {
+                                            nextChar = -1;
+                                        }
+                                    }
+                                } else if (nextChar == 'o' && nextPos + 2 < length && s.charAt(nextPos + 2) == '{') {
+                                    // Parse \o{NNNN} as range endpoint
+                                    int endBrace = s.indexOf('}', nextPos + 3);
+                                    if (endBrace != -1) {
+                                        String oct = s.substring(nextPos + 3, endBrace).trim().replace("_", "");
+                                        try {
+                                            nextChar = Integer.parseInt(oct, 8);
+                                            rangeEndCharCount = endBrace - nextPos + 1;
+                                        } catch (NumberFormatException e) {
+                                            nextChar = -1;
+                                        }
+                                    }
                                 }
                             }
 
@@ -660,6 +684,25 @@ public class RegexPreprocessorHelper {
                             }
                         } else {
                             RegexPreprocessor.regexError(s, offset, "Missing right brace on \\o{}");
+                        }
+                    } else if (offset + 1 < length && s.charAt(offset) == 'x' && s.charAt(offset + 1) == '{') {
+                        // Handle \x{...} hex escape construct in character class
+                        offset += 2; // Skip past x{
+                        int endBrace = s.indexOf('}', offset);
+                        if (endBrace != -1) {
+                            String hexStr = s.substring(offset, endBrace).trim();
+                            // Remove underscores (Perl allows them in number literals)
+                            hexStr = hexStr.replace("_", "");
+                            try {
+                                int value = Integer.parseInt(hexStr, 16);
+                                sb.append(String.format("x{%X}", value));
+                                offset = endBrace;
+                                lastChar = value;
+                            } catch (NumberFormatException e) {
+                                RegexPreprocessor.regexError(s, offset, "Invalid hex number in \\x{...}");
+                            }
+                        } else {
+                            RegexPreprocessor.regexError(s, offset, "Missing right brace on \\x{}");
                         }
                     } else if (s.codePointAt(offset) == 'b') {
                         // \b inside character class = backspace in Perl

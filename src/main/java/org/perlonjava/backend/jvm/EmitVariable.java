@@ -438,16 +438,17 @@ public class EmitVariable {
                         allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
                     }
 
-                    // Perl's strict 'vars' requires declaration for unqualified globals like $A
-                    // even if they were previously created under 'no strict'.
-                    // Keep this narrow to avoid changing behavior for other globals.
+                    // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
+                    // (via use vars or Exporter import), not if merely auto-vivified under 'no strict'.
                     if (sigil.equals("$")
                             && name != null
                             && name.length() == 1
                             && Character.isLetter(name.charAt(0))
                             && !name.contains("::")
                             && !isSpecialSortVar) {
-                        allowIfAlreadyExists = false;
+                        if (!GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
+                            allowIfAlreadyExists = false;
+                        }
                     }
                 }
 

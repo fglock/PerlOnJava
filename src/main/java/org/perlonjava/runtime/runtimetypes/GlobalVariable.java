@@ -6,6 +6,7 @@ import org.perlonjava.frontend.parser.ParserTables;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -61,6 +62,57 @@ public class GlobalVariable {
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
+    // Track explicitly declared global variables (via use vars, our, Exporter glob assignment).
+    // Separate from globalVariables/globalArrays/globalHashes to distinguish intentional
+    // declarations from auto-vivification under 'no strict'. Used by strict vars check
+    // for single-letter variable names like $A-$Z (excluding $a/$b).
+    private static final Set<String> declaredGlobalVariables = new HashSet<>();
+    private static final Set<String> declaredGlobalArrays = new HashSet<>();
+    private static final Set<String> declaredGlobalHashes = new HashSet<>();
+
+    /**
+     * Marks a global variable as explicitly declared (e.g., via use vars, Exporter import).
+     */
+    public static void declareGlobalVariable(String key) {
+        declaredGlobalVariables.add(key);
+    }
+
+    /**
+     * Marks a global array as explicitly declared.
+     */
+    public static void declareGlobalArray(String key) {
+        declaredGlobalArrays.add(key);
+    }
+
+    /**
+     * Marks a global hash as explicitly declared.
+     */
+    public static void declareGlobalHash(String key) {
+        declaredGlobalHashes.add(key);
+    }
+
+    /**
+     * Checks if a global variable was explicitly declared (not just auto-vivified).
+     */
+    public static boolean isDeclaredGlobalVariable(String key) {
+        return declaredGlobalVariables.contains(key)
+                || key.endsWith("::a") || key.endsWith("::b");
+    }
+
+    /**
+     * Checks if a global array was explicitly declared.
+     */
+    public static boolean isDeclaredGlobalArray(String key) {
+        return declaredGlobalArrays.contains(key);
+    }
+
+    /**
+     * Checks if a global hash was explicitly declared.
+     */
+    public static boolean isDeclaredGlobalHash(String key) {
+        return declaredGlobalHashes.contains(key);
+    }
+
     /**
      * Resets all global variables, arrays, hashes, code references, and IO references.
      * Also destroys and recreates the global class loader to allow GC of old classes.
@@ -78,6 +130,9 @@ public class GlobalVariable {
         isSubs.clear();
         stashAliases.clear();
         globAliases.clear();
+        declaredGlobalVariables.clear();
+        declaredGlobalArrays.clear();
+        declaredGlobalHashes.clear();
         clearPackageCache();
 
         RuntimeCode.clearCaches();

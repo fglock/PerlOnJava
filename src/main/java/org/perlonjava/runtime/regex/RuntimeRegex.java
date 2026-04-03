@@ -574,6 +574,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
         }
         
+        // Workaround for Java MULTILINE quirk: Java's Pattern.MULTILINE changes ^ to only
+        // match after line terminators, so "^" fails on empty strings. In Perl, /m makes ^
+        // and $ match at line boundaries AND at start/end of string. Since empty strings have
+        // no line breaks, MULTILINE is irrelevant and we can safely strip it.
+        if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
+            pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
+        }
+
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 
@@ -946,6 +954,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
         }
         
+        // Workaround for Java MULTILINE quirk (same as matchRegexDirect)
+        if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
+            pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
+        }
+
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 

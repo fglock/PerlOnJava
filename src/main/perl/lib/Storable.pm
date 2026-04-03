@@ -127,4 +127,11 @@ PerlOnJava Project
 
 =cut
 
+# File locking stubs — JVM handles file access safely; these delegate to
+# the non-locking variants so that modules requiring them (e.g. XML::Simple
+# cache tests) don't fail.
+sub lock_store    { goto &store }
+sub lock_nstore   { goto &nstore }
+sub lock_retrieve { goto &retrieve }
+
 1;

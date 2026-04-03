@@ -356,11 +356,14 @@ public class Variable {
         } else if (sigil.equals("%") && !normalizedName.endsWith("::"))
             existsGlobally = GlobalVariable.existsGlobalHash(normalizedName);
 
-        // Single-letter scalars require declaration even if they exist globally
+        // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
+        // (via use vars or Exporter import), not if merely auto-vivified under 'no strict'.
         if (sigil.equals("$") && varName.length() == 1
                 && Character.isLetter(varName.charAt(0))
                 && !varName.equals("a") && !varName.equals("b")) {
-            existsGlobally = false;
+            if (!GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
+                existsGlobally = false;
+            }
         }
 
         if (existsGlobally) return;
