@@ -20,6 +20,7 @@ public class RuntimeScalarType {
     public static final int DUALVAR = 10;
     public static final int FORMAT = 11;
     public static final int READONLY_SCALAR = 12;
+    public static final int PROXY = 13;  // Proxy with lazy evaluation (e.g. ScalarSpecialVariable)
     // Reference types (with high bit set)
     private static final int REFERENCE_BIT = 0x8000;
     // References with bit pattern
