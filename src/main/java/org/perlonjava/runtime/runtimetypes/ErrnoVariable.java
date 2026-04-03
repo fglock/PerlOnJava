@@ -1,7 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents the special Perl variable $! (errno).
@@ -11,71 +14,106 @@ import java.util.Map;
  * When set to a number, it stores the errno and looks up the message.
  * When set to a string (known errno message), it looks up the errno code.
  * When set to an unknown string, it stores 0 as errno and the string as message.
+ *
+ * Errno messages are obtained from the native C strerror() function via FFM,
+ * which ensures correct platform-specific messages on macOS, Linux, and Windows.
+ * Results are cached lazily.
+ *
+ * Named errno constants (EINPROGRESS, etc.) are read from the Perl Errno module
+ * at runtime, so they match the platform's header values.
  */
 public class ErrnoVariable extends RuntimeScalar {
     
     private int errno = 0;
     private String message = "";
     
-    // Map of errno numbers to messages (POSIX standard messages)
-    private static final Map<Integer, String> ERRNO_MESSAGES = new HashMap<>();
-    // Reverse map of messages to errno numbers
+    // Lazy cache: errno number -> strerror() message
+    private static final ConcurrentHashMap<Integer, String> STRERROR_CACHE = new ConcurrentHashMap<>();
+    // Reverse map of messages to errno numbers (built lazily)
     private static final Map<String, Integer> MESSAGE_TO_ERRNO = new HashMap<>();
-    
-    static {
-        // Standard POSIX errno values and messages
-        addErrno(1, "Operation not permitted");
-        addErrno(2, "No such file or directory");
-        addErrno(3, "No such process");
-        addErrno(4, "Interrupted system call");
-        addErrno(5, "Input/output error");
-        addErrno(6, "No such device or address");
-        addErrno(7, "Argument list too long");
-        addErrno(8, "Exec format error");
-        addErrno(9, "Bad file descriptor");
-        addErrno(10, "No child processes");
-        addErrno(11, "Resource temporarily unavailable");
-        addErrno(12, "Cannot allocate memory");
-        addErrno(13, "Permission denied");
-        addErrno(14, "Bad address");
-        addErrno(15, "Block device required");
-        addErrno(16, "Device or resource busy");
-        addErrno(17, "File exists");
-        addErrno(18, "Invalid cross-device link");
-        addErrno(19, "No such device");
-        addErrno(20, "Not a directory");
-        addErrno(21, "Is a directory");
-        addErrno(22, "Invalid argument");
-        addErrno(23, "Too many open files in system");
-        addErrno(24, "Too many open files");
-        addErrno(25, "Inappropriate ioctl for device");
-        addErrno(26, "Text file busy");
-        addErrno(27, "File too large");
-        addErrno(28, "No space left on device");
-        addErrno(29, "Illegal seek");
-        addErrno(30, "Read-only file system");
-        addErrno(31, "Too many links");
-        addErrno(32, "Broken pipe");
-        addErrno(33, "Numerical argument out of domain");
-        addErrno(34, "Numerical result out of range");
-        addErrno(35, "Resource deadlock avoided");
-        addErrno(36, "File name too long");
-        addErrno(37, "No locks available");
-        addErrno(38, "Function not implemented");
-        addErrno(39, "Directory not empty");
-        addErrno(40, "Too many levels of symbolic links");
-        addErrno(48, "Address already in use");
-        addErrno(49, "Cannot assign requested address");
-        addErrno(61, "Connection refused");
-        addErrno(111, "Connection refused");
-        // Additional messages used in PerlOnJava code
-        addErrno(5, "I/O error");
-        addErrno(21, "Is a directory");
+
+    // Named errno constants — populated lazily from Perl's Errno module
+    private static volatile int _EINPROGRESS = -1;
+    private static volatile int _ECONNREFUSED = -1;
+    private static volatile int _ETIMEDOUT = -1;
+    private static volatile int _ENETUNREACH = -1;
+    private static volatile int _ECONNRESET = -1;
+    private static volatile int _ECONNABORTED = -1;
+    private static volatile int _EADDRINUSE = -1;
+    private static volatile int _EADDRNOTAVAIL = -1;
+
+    /**
+     * Look up the strerror() message for a given errno, caching the result.
+     */
+    private static String nativeStrerror(int errnum) {
+        return STRERROR_CACHE.computeIfAbsent(errnum, n -> {
+            try {
+                String msg = FFMPosix.get().strerror(n);
+                if (msg != null && !msg.isEmpty() && !msg.startsWith("Unknown error")) {
+                    MESSAGE_TO_ERRNO.putIfAbsent(msg, n);
+                    return msg;
+                }
+            } catch (Exception ignored) {
+            }
+            return "Unknown error " + n;
+        });
     }
-    
-    private static void addErrno(int code, String msg) {
-        ERRNO_MESSAGES.put(code, msg);
-        MESSAGE_TO_ERRNO.putIfAbsent(msg, code);
+
+    /**
+     * Look up an errno constant by name from Perl's Errno module.
+     * Falls back to -1 if not available.
+     */
+    private static int lookupErrnoConstant(String name) {
+        try {
+            RuntimeScalar result = GlobalVariable.getGlobalHash("Errno::err").get(name);
+            if (result != null && result.getDefinedBoolean()) {
+                return result.getInt();
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    // Public accessors for named constants — lazy init from Errno module
+    public static int EINPROGRESS() {
+        int v = _EINPROGRESS;
+        if (v == -1) { v = _EINPROGRESS = lookupErrnoConstant("EINPROGRESS"); }
+        return v;
+    }
+    public static int ECONNREFUSED() {
+        int v = _ECONNREFUSED;
+        if (v == -1) { v = _ECONNREFUSED = lookupErrnoConstant("ECONNREFUSED"); }
+        return v;
+    }
+    public static int ETIMEDOUT() {
+        int v = _ETIMEDOUT;
+        if (v == -1) { v = _ETIMEDOUT = lookupErrnoConstant("ETIMEDOUT"); }
+        return v;
+    }
+    public static int ENETUNREACH() {
+        int v = _ENETUNREACH;
+        if (v == -1) { v = _ENETUNREACH = lookupErrnoConstant("ENETUNREACH"); }
+        return v;
+    }
+    public static int ECONNRESET() {
+        int v = _ECONNRESET;
+        if (v == -1) { v = _ECONNRESET = lookupErrnoConstant("ECONNRESET"); }
+        return v;
+    }
+    public static int ECONNABORTED() {
+        int v = _ECONNABORTED;
+        if (v == -1) { v = _ECONNABORTED = lookupErrnoConstant("ECONNABORTED"); }
+        return v;
+    }
+    public static int EADDRINUSE() {
+        int v = _EADDRINUSE;
+        if (v == -1) { v = _EADDRINUSE = lookupErrnoConstant("EADDRINUSE"); }
+        return v;
+    }
+    public static int EADDRNOTAVAIL() {
+        int v = _EADDRNOTAVAIL;
+        if (v == -1) { v = _EADDRNOTAVAIL = lookupErrnoConstant("EADDRNOTAVAIL"); }
+        return v;
     }
     
     public ErrnoVariable() {
@@ -90,9 +128,9 @@ public class ErrnoVariable extends RuntimeScalar {
     @Override
     public RuntimeScalar set(int value) {
         this.errno = value;
-        this.message = ERRNO_MESSAGES.getOrDefault(value, value == 0 ? "" : "Unknown error " + value);
-        this.type = RuntimeScalarType.DUALVAR;
-        this.value = new DualVar(new RuntimeScalar(value), new RuntimeScalar(this.message));
+        this.message = value == 0 ? "" : nativeStrerror(value);
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = value;
         return this;
     }
     

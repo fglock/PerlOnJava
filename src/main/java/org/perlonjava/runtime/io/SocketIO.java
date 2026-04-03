@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.runtimetypes.ErrnoVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.IOException;
@@ -144,10 +145,10 @@ public class SocketIO implements IOHandle {
             if (socketChannel != null && !blocking) {
                 boolean connected = socketChannel.connect(target);
                 if (!connected) {
-                    // Connection in progress — set EINPROGRESS (115 in PerlOnJava's errno)
+                    // Connection in progress — set EINPROGRESS
                     // Return undef (not false) to match Perl 5's connect() behavior.
                     // IO::Socket::IP relies on `defined connect(...)` to detect failure.
-                    getGlobalVariable("main::!").set(115);
+                    getGlobalVariable("main::!").set(ErrnoVariable.EINPROGRESS());
                     return scalarUndef;
                 }
                 // Connected immediately
@@ -237,15 +238,15 @@ public class SocketIO implements IOHandle {
                         return 0;
                     }
                     // Still in progress
-                    return 115; // EINPROGRESS
+                    return ErrnoVariable.EINPROGRESS();
                 }
                 if (socketChannel.isConnected()) {
                     return 0;
                 }
             } catch (java.net.ConnectException e) {
-                return 111; // ECONNREFUSED
+                return ErrnoVariable.ECONNREFUSED();
             } catch (java.net.SocketTimeoutException e) {
-                return 110; // ETIMEDOUT
+                return ErrnoVariable.ETIMEDOUT();
             } catch (IOException e) {
                 return 5; // EIO
             }

@@ -72,7 +72,14 @@ use overload
 # Constructor for OO interface
 sub new {
     my $class = shift;
+
+    # Handle odd arg count: first arg is a positional template
+    # e.g. File::Temp->new("foo-XXXXXXXX") or File::Temp->new(TEMPLATE => "foo-XXXXXXXX")
+    my $leading_template = (scalar(@_) % 2 == 1 ? shift(@_) : undef);
     my %args = @_;
+
+    # Positional template overrides TEMPLATE key
+    $args{TEMPLATE} = $leading_template if defined $leading_template && !exists $args{TEMPLATE};
 
     # Default arguments
     $args{UNLINK} = 1 unless exists $args{UNLINK};

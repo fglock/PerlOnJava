@@ -1,8 +1,11 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
+
+import java.util.HashMap;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -150,6 +153,10 @@ public class WarnDie {
                 String out = messageStr;
                 if (!out.endsWith("\n")) {
                     String whereStr = where.toString();
+                    // If no explicit location provided, derive from Perl call stack
+                    if (whereStr.isEmpty() && (fileName == null || fileName.isEmpty())) {
+                        whereStr = getPerlLocationFromStack();
+                    }
                     out += whereStr;
                     // Add period and newline if location info was added
                     if (!whereStr.isEmpty()) {
@@ -277,6 +284,29 @@ public class WarnDie {
             }
         }
         return null;
+    }
+
+    /**
+     * Gets the Perl source location string (" at FILE line N") from the current
+     * Java call stack. Scans for JVM-compiled Perl frames (org.perlonjava.anon*)
+     * and uses ByteCodeSourceMapper to resolve to the Perl source file and line.
+     *
+     * @return A location string like " at script.pl line 42", or empty string if not found
+     */
+    static String getPerlLocationFromStack() {
+        Throwable t = new Throwable();
+        HashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName = new HashMap<>();
+        for (StackTraceElement element : t.getStackTrace()) {
+            String className = element.getClassName();
+            if (className.contains("org.perlonjava.anon") ||
+                    className.contains("org.perlonjava.runtime.perlmodule")) {
+                var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
+                if (loc != null && loc.sourceFileName() != null && !loc.sourceFileName().isEmpty()) {
+                    return " at " + loc.sourceFileName() + " line " + loc.lineNumber();
+                }
+            }
+        }
+        return "";
     }
 
     /**
