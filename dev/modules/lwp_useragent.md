@@ -1,6 +1,6 @@
 # LWP::UserAgent Support for PerlOnJava
 
-## Status: Phase 7c Complete
+## Status: Phase 8 Complete
 
 **Branch**: `fix/lwp-useragent-support`
 **Date started**: 2026-04-03
@@ -12,7 +12,7 @@ client library for Perl. It was previously blocked on HTTP::Message, which has s
 been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
-## Current State (after Phase 7c)
+## Current State (after Phase 8)
 
 Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
 - **173/173 subtests pass** (100%) — after fixing test runner to treat `not ok # TODO` as OK per TAP spec
@@ -32,6 +32,9 @@ Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
 |------|---------|--------|
 | t/local/http.t test 37 | "good title" UTF-8 check occasionally fails (135/136). The `ø` (U+00F8) in "En prøve" is in the 0x80-0xFF range — not a wide char, but its handling depends on the STRING vs BYTE_STRING type flowing through the HTTP response pipeline. Passes most runs. | Pre-existing, flaky |
 | t/local/download_to_fh.t tests 3-4 | `not ok # TODO` — mirror() doesn't support filehandles. These are upstream TODO tests that are *expected* to fail. | Expected (upstream TODO) |
+| t/10-attrs.t | "Use of uninitialized value in join or string" warnings (×6). These are real Perl warnings from undef credentials in LWP/UserAgent.pm line 712. Perl 5 produces them too. | Pre-existing (not a PerlOnJava bug) |
+| t/local/download_to_fh.t | "Odd number of elements in hash assignment" warnings. These are real Perl warnings from LWP code path. Perl 5 produces them too. | Pre-existing (not a PerlOnJava bug) |
+| t/leak/no_leak.t | Requires Test::LeakTrace (XS-only module). Cannot be supported. | Won't fix |
 
 ### Test Results Breakdown
 
@@ -391,10 +394,25 @@ via a prior jcpan run.
 - [x] `make` passes
 - [x] Commit: `0b0065072`
 
+### Phase 8: Platform-correct errno + warning locations -- COMPLETED (2026-04-03)
+
+- [x] Replace hardcoded Linux errno table with native C `strerror()` via FFM
+- [x] ErrnoVariable: lazy `ConcurrentHashMap` cache for strerror results
+- [x] ErrnoVariable: named constants (EINPROGRESS etc.) loaded from Perl Errno module at runtime
+- [x] FFMPosixLinux: add `strerrorHandle` MethodHandle calling real native `strerror()`
+- [x] SocketIO: update to use method-based errno constants (`EINPROGRESS()` etc.)
+- [x] WarnDie: add `getPerlLocationFromStack()` for warning source location ("at FILE line N")
+- [x] File::Temp: handle positional template argument in constructor
+- [x] Fixes "Unknown error 115" on macOS (EINPROGRESS=36 on macOS, 115 on Linux)
+- [x] All 60+ macOS errno values now resolve correctly
+- [x] `make` passes
+- [x] Commit: `b1dd75b02`
+
 ### Next Steps
 
 - [x] Create PR for merge to master — PR #431
 - [x] download_to_fh.t TODO tests are upstream expected failures (mirror doesn't support filehandles) — no fix needed
+- [ ] Merge PR #431 to master
 
 ## Files Changed
 
@@ -458,3 +476,12 @@ via a prior jcpan run.
 | File | Change |
 |------|--------|
 | `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeIO.java` | Wide character detection in write(); emit utf8 warning + UTF-8 byte fallback |
+
+### Phase 8
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoVariable.java` | Rewrite to use native strerror() via FFM; lazy cache; runtime errno constants from Perl Errno module |
+| `src/main/java/org/perlonjava/runtime/nativ/ffm/FFMPosixLinux.java` | Add strerror MethodHandle; call real native strerror() instead of hardcoded switch |
+| `src/main/java/org/perlonjava/runtime/io/SocketIO.java` | Update to method-based errno constants (EINPROGRESS() etc.) |
+| `src/main/java/org/perlonjava/runtime/operators/WarnDie.java` | Add getPerlLocationFromStack() for warning source location info |
+| `src/main/perl/lib/File/Temp.pm` | Handle positional template argument in constructor |
