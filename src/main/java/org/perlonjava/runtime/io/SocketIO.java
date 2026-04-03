@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 
 /**
  * The SocketIO class provides a simplified interface for socket operations,
@@ -33,6 +34,7 @@ public class SocketIO implements IOHandle {
     private InputStream inputStream;
     private OutputStream outputStream;
     private boolean isEOF;
+    private boolean blocking = true;
     private CharsetDecoderHelper decoderHelper;
     // Track the protocol family for server socket conversion in listen()
     private ProtocolFamily protocolFamily;
@@ -132,18 +134,123 @@ public class SocketIO implements IOHandle {
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
     public RuntimeScalar connect(String address, int port) {
-        if (socket == null) {
+        if (socket == null && socketChannel == null) {
             throw new IllegalStateException("No socket available to connect");
         }
         try {
-            socket.connect(new InetSocketAddress(address, port));
+            InetSocketAddress target = new InetSocketAddress(address, port);
+
+            // Use SocketChannel for non-blocking connect support
+            if (socketChannel != null && !blocking) {
+                boolean connected = socketChannel.connect(target);
+                if (!connected) {
+                    // Connection in progress — set EINPROGRESS (115 in PerlOnJava's errno)
+                    // Return undef (not false) to match Perl 5's connect() behavior.
+                    // IO::Socket::IP relies on `defined connect(...)` to detect failure.
+                    getGlobalVariable("main::!").set(115);
+                    return scalarUndef;
+                }
+                // Connected immediately
+                this.socket = socketChannel.socket();
+                this.inputStream = socket.getInputStream();
+                this.outputStream = socket.getOutputStream();
+                return scalarTrue;
+            }
+
+            // Blocking connect via Socket API
+            if (socket != null) {
+                socket.connect(target);
+            } else {
+                socketChannel.connect(target);
+                this.socket = socketChannel.socket();
+            }
             // Initialize streams after successful connection
             this.inputStream = socket.getInputStream();
             this.outputStream = socket.getOutputStream();
             return scalarTrue;
         } catch (IOException e) {
-            return handleIOException(e, "connect operation failed");
+            // Perl 5's connect() returns undef on failure (not false).
+            // IO::Socket::IP relies on `defined connect(...)` to detect failure.
+            handleIOException(e, "connect operation failed");
+            return scalarUndef;
         }
+    }
+
+    /**
+     * Get the current blocking mode of the socket.
+     *
+     * @return true if blocking, false if non-blocking
+     */
+    public boolean isBlocking() {
+        return blocking;
+    }
+
+    /**
+     * Set the blocking mode of the socket.
+     * Configures the underlying NIO channel for non-blocking I/O when available.
+     *
+     * @param newBlocking true for blocking, false for non-blocking
+     */
+    public void setBlocking(boolean newBlocking) {
+        this.blocking = newBlocking;
+        try {
+            if (socketChannel != null) {
+                socketChannel.configureBlocking(newBlocking);
+                // When transitioning to blocking mode after a non-blocking connect,
+                // finish pending connection and initialize streams if needed
+                if (newBlocking && outputStream == null) {
+                    if (socketChannel.isConnectionPending()) {
+                        socketChannel.finishConnect();
+                    }
+                    if (socketChannel.isConnected()) {
+                        this.socket = socketChannel.socket();
+                        this.inputStream = socket.getInputStream();
+                        this.outputStream = socket.getOutputStream();
+                    }
+                }
+            }
+            if (serverSocketChannel != null) {
+                serverSocketChannel.configureBlocking(newBlocking);
+            }
+        } catch (IOException e) {
+            // Silently ignore — the blocking field still tracks the desired state
+        }
+    }
+
+    /**
+     * Get the socket error status (for SO_ERROR getsockopt).
+     * For non-blocking connects, attempts to finish the connection and
+     * returns the appropriate errno (0 if connected, error code otherwise).
+     *
+     * @return 0 if no error, errno value otherwise
+     */
+    public int getSocketError() {
+        if (socketChannel != null && socketChannel.isOpen()) {
+            try {
+                if (socketChannel.isConnectionPending()) {
+                    boolean finished = socketChannel.finishConnect();
+                    if (finished) {
+                        // Connection completed successfully
+                        this.socket = socketChannel.socket();
+                        this.inputStream = socket.getInputStream();
+                        this.outputStream = socket.getOutputStream();
+                        return 0;
+                    }
+                    // Still in progress
+                    return 115; // EINPROGRESS
+                }
+                if (socketChannel.isConnected()) {
+                    return 0;
+                }
+            } catch (java.net.ConnectException e) {
+                return 111; // ECONNREFUSED
+            } catch (java.net.SocketTimeoutException e) {
+                return 110; // ETIMEDOUT
+            } catch (IOException e) {
+                return 5; // EIO
+            }
+        }
+        return 0;
     }
 
     /**
@@ -347,6 +454,14 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar write(String string) {
         var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
+            // Use channel-based I/O for non-blocking sockets to avoid
+            // IllegalBlockingModeException from stream-based I/O
+            if (!blocking && socketChannel != null) {
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
+                int written = socketChannel.write(buf);
+                return written > 0 ? scalarTrue : scalarFalse;
+            }
+
             if (outputStream != null) {
                 outputStream.write(data);
                 return scalarTrue;
@@ -385,6 +500,26 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar sysread(int length) {
         try {
+            // Use channel-based I/O for non-blocking sockets to avoid
+            // IllegalBlockingModeException from stream-based I/O
+            if (!blocking && socketChannel != null) {
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
+                int bytesRead = socketChannel.read(buf);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    return new RuntimeScalar("");
+                }
+                if (bytesRead == 0) {
+                    // Would block — set EWOULDBLOCK
+                    getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                    return scalarUndef;
+                }
+                byte[] result = new byte[bytesRead];
+                buf.flip();
+                buf.get(result);
+                return new RuntimeScalar(result);
+            }
+
             if (inputStream != null) {
                 byte[] buffer = new byte[length];
                 int bytesRead = inputStream.read(buffer);
@@ -412,11 +547,25 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar syswrite(String data) {
         try {
-            if (outputStream != null) {
-                byte[] bytes = new byte[data.length()];
-                for (int i = 0; i < data.length(); i++) {
-                    bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            byte[] bytes = new byte[data.length()];
+            for (int i = 0; i < data.length(); i++) {
+                bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            }
+
+            // Use channel-based I/O for non-blocking sockets to avoid
+            // IllegalBlockingModeException from stream-based I/O
+            if (!blocking && socketChannel != null) {
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
+                int written = socketChannel.write(buf);
+                if (written == 0) {
+                    // Would block — set EWOULDBLOCK
+                    getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                    return scalarUndef;
                 }
+                return new RuntimeScalar(written);
+            }
+
+            if (outputStream != null) {
                 outputStream.write(bytes);
                 outputStream.flush();
                 return new RuntimeScalar(bytes.length);

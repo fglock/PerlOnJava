@@ -134,8 +134,15 @@ public class IOOperator {
                                 ? SelectionKey.OP_ACCEPT
                                 : SelectionKey.OP_READ;
                     }
-                    if (wantWrite && ch instanceof SocketChannel) {
-                        ops |= SelectionKey.OP_WRITE;
+                    if (wantWrite && ch instanceof SocketChannel sc) {
+                        // For non-blocking connects in progress, use OP_CONNECT.
+                        // Perl's select() treats write-readiness as "connect complete",
+                        // but Java NIO requires OP_CONNECT for pending connections.
+                        if (sc.isConnectionPending()) {
+                            ops |= SelectionKey.OP_CONNECT;
+                        } else {
+                            ops |= SelectionKey.OP_WRITE;
+                        }
                     }
 
                     if (ops != 0) {
@@ -200,7 +207,8 @@ public class IOOperator {
                     setBit(rresult, fd);
                     totalReady++;
                 }
-                if ((readyOps & SelectionKey.OP_WRITE) != 0 && isBitSet(wdata, fd)) {
+                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
+                if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
                     setBit(wresult, fd);
                     totalReady++;
                 }
@@ -1261,8 +1269,31 @@ public class IOOperator {
             return scalarFalse;
         }
 
-        fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
-        fileHandle.value = new RuntimeGlob(null).setIO(fh);
+        // Set IO slot on the glob, following the same pattern as open() and socket()
+        RuntimeGlob targetGlob = null;
+        if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                && fileHandle.value instanceof RuntimeGlob glob) {
+            targetGlob = glob;
+        } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING)
+                && fileHandle.value instanceof String name) {
+            if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
+                String fullName = name.contains("::") ? name : ("main::" + name);
+                targetGlob = GlobalVariable.getGlobalIO(fullName);
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = targetGlob;
+                fileHandle.set(newGlob);
+            }
+        }
+
+        if (targetGlob != null) {
+            targetGlob.setIO(fh);
+        } else {
+            RuntimeScalar newGlob = new RuntimeScalar();
+            newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            fileHandle.set(newGlob);
+        }
         return scalarTrue;
     }
 
@@ -1708,7 +1739,7 @@ public class IOOperator {
     public static RuntimeScalar connect(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             getGlobalVariable("main::!").set("Not enough arguments for connect");
-            return scalarFalse;
+            return scalarUndef;
         }
 
         try {
@@ -1718,7 +1749,7 @@ public class IOOperator {
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for connect");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Parse Perl-style packed socket address (sockaddr_in format)
@@ -1730,7 +1761,7 @@ public class IOOperator {
                 parts = addressStr.split(":");
                 if (parts.length != 2) {
                     getGlobalVariable("main::!").set("Invalid address format for connect (expected sockaddr_in or host:port)");
-                    return scalarFalse;
+                    return scalarUndef;
                 }
             }
 
@@ -1740,7 +1771,7 @@ public class IOOperator {
                 port = Integer.parseInt(parts[1]);
             } catch (NumberFormatException e) {
                 getGlobalVariable("main::!").set("Invalid port number for connect");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Delegate to RuntimeIO's connect method
@@ -1748,7 +1779,7 @@ public class IOOperator {
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Connect failed: " + e.getMessage());
-            return scalarFalse;
+            return scalarUndef;
         }
     }
 
@@ -2383,9 +2414,9 @@ public class IOOperator {
                 // Use Java's native socket option support via SocketIO
                 int optionValue = socketIOHandle.getSocketOption(level, optname);
 
-                // For SO_ERROR (common case), always return 0 (no error)
+                // For SO_ERROR, check actual socket connection status
                 if (level == 1 && optname == 4) { // SOL_SOCKET, SO_ERROR
-                    optionValue = 0;
+                    optionValue = socketIOHandle.getSocketError();
                 }
 
                 // Pack the option value as a 4-byte integer and return it
