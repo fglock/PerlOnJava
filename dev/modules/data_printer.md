@@ -4,7 +4,7 @@
 
 - **Module**: Data::Printer 1.002001
 - **Test command**: `./jcpan -j 8 -t Data::Printer`
-- **Status**: Phase 2 complete — ready for Phase 3
+- **Status**: Phase 2c complete — READONLY_SCALAR dispatch wired across codebase, ready for Phase 3
 
 ## Test Results Summary
 
@@ -84,6 +84,34 @@
 - Split `set(RuntimeScalar)` into inlineable fast path (`type < TIED_SCALAR`) + `setLarge()` slow path with switch dispatchers
 - Added magic boundary comment in `RuntimeScalarType.java`
 - **Files**: `RuntimeScalarType.java`, `RuntimeScalar.java`, `Internals.java`, `ScalarUtil.java`
+
+### Phase 2c: READONLY_SCALAR dispatch across codebase (COMPLETED 2026-04-03)
+
+**Fixed**: All type-dispatch switches and comparisons now handle READONLY_SCALAR transparently.
+
+Uniform pattern applied:
+- **Switches**: `case READONLY_SCALAR:` delegate to unwrapped value (zero overhead for non-READONLY paths)
+- **Ternaries** (BitwiseOperators): `type < TIED_SCALAR ? original : type == TIED_SCALAR ? tiedFetch() : type == READONLY_SCALAR ? unwrap : original`
+- **If-chains**: `if (type == READONLY_SCALAR) unwrap` at method entry
+
+Key fixes:
+- `BitwiseOperators.java`: And/Or/Xor/Not + integer variants — fixed `use constant` values being treated as strings (was the root cause of op/svflags.t regression 4→16)
+- `ScalarUtils.looksLikeNumber()`: delegate for READONLY_SCALAR
+- `RuntimeScalarType.blessedId()/isReference()`: unwrap before REFERENCE_BIT check
+- `RuntimeCode.apply()`: unwrap in all 3 overloads (prevents "Not a CODE reference" crash)
+- `RuntimeGlob.set()`, `RuntimeStashEntry.set()`: unwrap in switch/if (prevents "typeglob assignment not implemented" crash)
+- `ScalarUtil.java`: blessed, refaddr, reftype, isdual, looks_like_number, openhandle, set_prototype
+- `Builtin.java`: isBoolean, refaddr, reftype, createdAsNumber
+- `Universal.can()`, `Universal.VERSION()`, `NextMethod.getSearchClass()`
+- `RuntimeRegex.java`: pattern/replacement/quotedRegex type checks
+- `Attributes.getRefType()`, `ReferenceOperators.ref()` inner switch
+- Serialization: `Json.java`, `YAMLPP.java`, `Storable.java` (3 methods), `Toml.java` (2 methods)
+- `RuntimeScalar.isString()`, `_charnames.pm` readonly crash fix
+
+Lvalue operators (`substr`, `vec`, `chop`, `++/--`) already work correctly — write paths go through `set()` on the parent scalar, which triggers the READONLY_SCALAR modification check.
+
+- **Files** (20 files changed): `BitwiseOperators.java`, `ReferenceOperators.java`, `Attributes.java`, `Builtin.java`, `Json.java`, `ScalarUtil.java`, `Storable.java`, `Toml.java`, `Universal.java`, `YAMLPP.java`, `RuntimeRegex.java`, `NextMethod.java`, `RuntimeCode.java`, `RuntimeGlob.java`, `RuntimeScalar.java`, `RuntimeScalarType.java`, `RuntimeStashEntry.java`, `ScalarUtils.java`, `_charnames.pm`
+- **Regression tests**: op/svflags.t 16/23 (restored from 4), op/index.t 415/415, re/subst.t 227/281 (all at baseline)
 
 ## Remaining Error Categories
 
