@@ -293,6 +293,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
         String modifierStr = modifiers.toString();
 
+        // Unwrap readonly scalar
+        if (patternString.type == RuntimeScalarType.READONLY_SCALAR) patternString = (RuntimeScalar) patternString.value;
+
         // Check if patternString is already a compiled regex
         if (patternString.type == RuntimeScalarType.REGEX) {
             RuntimeRegex originalRegex = (RuntimeRegex) patternString.value;
@@ -971,6 +974,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         StringBuilder resultBuffer = new StringBuilder();
         int found = 0;
 
+        // Unwrap readonly scalar
+        if (replacement.type == RuntimeScalarType.READONLY_SCALAR) replacement = (RuntimeScalar) replacement.value;
+
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
 
@@ -1320,6 +1326,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @throws PerlCompilerException if qr overload doesn't return proper regex
      */
     private static RuntimeRegex resolveRegex(RuntimeScalar quotedRegex) {
+        // Unwrap readonly scalar
+        if (quotedRegex.type == RuntimeScalarType.READONLY_SCALAR) quotedRegex = (RuntimeScalar) quotedRegex.value;
+
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
             return (RuntimeRegex) quotedRegex.value;
         }

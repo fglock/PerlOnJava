@@ -78,6 +78,7 @@ public class Builtin extends PerlModuleBase {
      */
     public static RuntimeList isBoolean(RuntimeArray args, int ctx) {
         RuntimeScalar res = args.getFirst();
+        if (res.type == READONLY_SCALAR) res = (RuntimeScalar) res.value;
         return new RuntimeList(getScalarBoolean(res.type == RuntimeScalarType.BOOLEAN));
     }
 
@@ -120,6 +121,7 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList refaddr(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
+        if (ref.type == READONLY_SCALAR) ref = (RuntimeScalar) ref.value;
         // Return memory address for reference
         RuntimeScalar result;
         switch (ref.type) {
@@ -135,6 +137,7 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList reftype(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
+        if (ref.type == READONLY_SCALAR) ref = (RuntimeScalar) ref.value;
 
         // Check if this is a blessed object (class instance)
         // For Perl 5.38+ class syntax, blessed objects should return "OBJECT"
@@ -149,6 +152,7 @@ public class Builtin extends PerlModuleBase {
         String type = switch (ref.type) {
             case REFERENCE -> {
                 if (ref.value instanceof RuntimeScalar scalar) {
+                    if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
                     yield switch (scalar.type) {
                         case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, REGEX -> "REF";
                         case GLOB, GLOBREFERENCE -> "GLOB";
@@ -205,6 +209,7 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList createdAsNumber(RuntimeArray args, int ctx) {
         RuntimeScalar scalar = args.get(0);
+        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
         return new RuntimeList(getScalarBoolean(scalar.type == RuntimeScalarType.INTEGER || scalar.type == RuntimeScalarType.DOUBLE));
     }
 

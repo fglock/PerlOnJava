@@ -121,6 +121,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             scalar = ssv.getValueAsScalar();
         } else if (scalar.type == TIED_SCALAR) {
             scalar = scalar.tiedFetch();
+        } else if (scalar.type == READONLY_SCALAR) {
+            scalar = (RuntimeScalar) scalar.value;
         }
         this.type = scalar.type;
         this.value = scalar.value;
@@ -250,8 +252,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public boolean isString() {
-        // TODO optimization: group the string type ids to simplify the isString test
         int t = this.type;
+        if (t == READONLY_SCALAR) return ((RuntimeScalar) this.value).isString();
         return t == STRING || t == BYTE_STRING || t == VSTRING;
     }
 
@@ -307,6 +309,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> scalarOne;  // Assuming globs are truthy, so 1
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumber();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumber();
             case DUALVAR -> ((DualVar) this.value).numericValue();
             default -> Overload.numify(this);
         };
@@ -393,6 +396,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1;  // Assuming globs are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
             case TIED_SCALAR -> this.tiedFetch().getInt();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getInt();
             case DUALVAR -> ((DualVar) this.value).numericValue().getInt();
             default -> Overload.numify(this).getInt();
         };
@@ -564,6 +568,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
             case TIED_SCALAR -> this.tiedFetch().getLong();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getLong();
             case DUALVAR -> ((DualVar) this.value).numericValue().getLong();
             default -> Overload.numify(this).getLong();
         };
@@ -606,6 +611,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
             case TIED_SCALAR -> this.tiedFetch().getDouble();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getDouble();
             case DUALVAR -> ((DualVar) this.value).numericValue().getDouble();
             default -> Overload.numify(this).getDouble();
         };
@@ -635,6 +641,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> true;
             case JAVAOBJECT -> value != null;
             case TIED_SCALAR -> this.tiedFetch().getBoolean();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getBoolean();
             case DUALVAR -> ((DualVar) this.value).stringValue().getBoolean();
             case CODE -> {
                 if (value == null) yield false;
@@ -706,23 +713,44 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Setters
+
+    // Inlineable fast path for set(RuntimeScalar)
     public RuntimeScalar set(RuntimeScalar value) {
+        if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
+            this.type = value.type;
+            this.value = value.value;
+            return this;
+        }
+        return setLarge(value);
+    }
+
+    // Slow path for set(RuntimeScalar)
+    private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
             return this;
         }
-        if (value.type == TIED_SCALAR) {
-            return set(value.tiedFetch());
+        // Unwrap source special types via switch dispatcher
+        switch (value.type) {
+            case TIED_SCALAR -> {
+                return set(value.tiedFetch());
+            }
+            case READONLY_SCALAR -> {
+                return set((RuntimeScalar) value.value);
+            }
         }
-        if (this.type == TIED_SCALAR) {
-            return this.tiedStore(value);
+        // Resolve ScalarSpecialVariable
+        if (value instanceof ScalarSpecialVariable ssv) {
+            value = ssv.getValueAsScalar();
         }
-        if (value instanceof ScalarSpecialVariable) {
-            RuntimeScalar resolved = ((ScalarSpecialVariable) value).getValueAsScalar();
-            this.type = resolved.type;
-            this.value = resolved.value;
-            return this;
+        // Handle target special types via switch dispatcher
+        switch (this.type) {
+            case TIED_SCALAR -> {
+                return this.tiedStore(value);
+            }
+            case READONLY_SCALAR ->
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         this.type = value.type;
         this.value = value.value;
@@ -733,6 +761,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
+        if (this.type == READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
         return this;
@@ -741,6 +772,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar set(long value) {
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
+        }
+        if (this.type == READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         this.initializeWithLong(value);
         return this;
@@ -756,6 +790,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar set(BigInteger value) {
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value.toString()));
+        }
+        if (this.type == READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
         }
 
         // Check if the value fits in an int
@@ -783,6 +820,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
+        if (this.type == READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
         return this;
@@ -791,6 +831,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar set(String value) {
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
+        }
+        if (this.type == READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         if (value == null) {
             this.type = UNDEF;
@@ -839,6 +882,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> value == null ? "" : value.toString();
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toString();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).toString();
             case DUALVAR -> ((DualVar) this.value).stringValue().toString();
             case CODE -> Overload.stringify(this).toString();
             default -> {
@@ -867,6 +911,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> value == null ? "" : value.toString();
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toStringNoOverload();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).toStringNoOverload();
             case DUALVAR -> ((DualVar) this.value).stringValue().toStringNoOverload();
             case CODE -> toStringRef();
             default -> {
@@ -928,6 +973,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // For REFERENCE type, the blessId is on the value, not on the reference itself
                 yield (valueBlessId == 0 ? refStr : NameNormalizer.getBlessStr(valueBlessId) + "=" + refStr);
             }
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).toStringRef();
             default -> "SCALAR(0x" + Integer.toHexString(value.hashCode()) + ")";
         };
         return (blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId) + "=" + ref);
@@ -1102,6 +1148,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not an ARRAY reference");
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not an ARRAY reference");
+            case READONLY_SCALAR -> // 12
+                    ((RuntimeScalar) this.value).arrayDeref();
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
@@ -1185,6 +1233,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new PerlCompilerException("Not a HASH reference");
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not a HASH reference");
+            case READONLY_SCALAR -> // 12
+                    ((RuntimeScalar) this.value).hashDeref();
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -1235,6 +1285,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().scalarDeref();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).scalarDeref();
             case GLOBREFERENCE -> {
                 // Dereferencing a glob reference (e.g., $${\*Foo::bar}) returns the glob itself
                 // This is Perl semantics: $$glob_ref returns the glob, not the scalar slot
@@ -1292,6 +1343,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield GlobalVariable.getGlobalVariable(varName);
             }
             case TIED_SCALAR -> tiedFetch().scalarDerefNonStrict(packageName);
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).scalarDerefNonStrict(packageName);
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);
@@ -1359,6 +1411,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tiedFetch().hashDerefNonStrict(packageName);
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not a HASH reference");
+            case READONLY_SCALAR -> // 12
+                    ((RuntimeScalar) this.value).hashDerefNonStrict(packageName);
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -1424,6 +1478,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     tiedFetch().arrayDerefNonStrict(packageName);
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not an ARRAY reference");
+            case READONLY_SCALAR -> // 12
+                    ((RuntimeScalar) this.value).arrayDerefNonStrict(packageName);
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
@@ -1447,6 +1503,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().globDeref();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).globDeref();
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
@@ -1500,6 +1557,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().globDerefNonStrict(packageName);
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).globDerefNonStrict(packageName);
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
@@ -1556,6 +1614,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().codeDerefNonStrict(packageName);
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).codeDerefNonStrict(packageName);
             case CODE -> this;  // Already a CODE reference - return unchanged
             case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
             case REFERENCE -> {
@@ -1628,6 +1687,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean(); // 9
             case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean(); // 10
             case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean(); // 11
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getDefinedBoolean(); // 12
             // Reference types (with REFERENCE_BIT) fall through to default
             default -> type != CODE || ((RuntimeCode) value).defined();
         };
@@ -1687,6 +1747,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
+            case READONLY_SCALAR -> // 12
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> { // All reference types (CODE, REFERENCE, ARRAYREFERENCE, etc.)
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
@@ -1801,6 +1863,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
+            case READONLY_SCALAR -> // 12
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
@@ -1894,6 +1958,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
+            case READONLY_SCALAR -> // 12
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
@@ -1992,6 +2058,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
+            case READONLY_SCALAR -> // 12
+                    throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);

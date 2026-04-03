@@ -38,9 +38,13 @@ public class BitwiseOperators {
             if (result != null) return result;
         }
 
-        // Fetch tied scalars once to avoid redundant FETCH calls
-        RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+        // Fetch tied/readonly scalars once to avoid redundant FETCH calls
+        RuntimeScalar val1 = t1 < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
+                t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
+                        t1 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
+        RuntimeScalar val2 = t2 < RuntimeScalarType.TIED_SCALAR ? arg2 :
+                t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
+                        t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
         // Check for uninitialized values and generate warnings
         if (!val1.getDefinedBoolean()) {
@@ -103,9 +107,13 @@ public class BitwiseOperators {
             if (result != null) return result;
         }
 
-        // Fetch tied scalars once to avoid redundant FETCH calls
-        RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+        // Fetch tied/readonly scalars once to avoid redundant FETCH calls
+        RuntimeScalar val1 = t1 < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
+                t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
+                        t1 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
+        RuntimeScalar val2 = t2 < RuntimeScalarType.TIED_SCALAR ? arg2 :
+                t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
+                        t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
         // In Perl, if either operand is a reference or doesn't look like a number, use string operations
         if (!ScalarUtils.looksLikeNumber(val1) || !ScalarUtils.looksLikeNumber(val2)) {
@@ -162,9 +170,13 @@ public class BitwiseOperators {
             if (result != null) return result;
         }
 
-        // Fetch tied scalars once to avoid redundant FETCH calls
-        RuntimeScalar val1 = t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar val2 = t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+        // Fetch tied/readonly scalars once to avoid redundant FETCH calls
+        RuntimeScalar val1 = t1 < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
+                t1 == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
+                        t1 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
+        RuntimeScalar val2 = t2 < RuntimeScalarType.TIED_SCALAR ? arg2 :
+                t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
+                        t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
         // Use numeric XOR only if BOTH operands look like numbers
         // For everything else (strings, blessed objects, references, etc.), use string XOR
@@ -203,8 +215,10 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNot(RuntimeScalar runtimeScalar) {
-        // Fetch tied scalar once to avoid redundant FETCH calls
-        RuntimeScalar val = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        // Fetch tied/readonly scalar once to avoid redundant FETCH calls
+        RuntimeScalar val = runtimeScalar.type < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
+                runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
+                        runtimeScalar.type == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
 
         // In Perl, if the operand is a reference or doesn't look like a number, use string operations
         if (!ScalarUtils.looksLikeNumber(val)) {
@@ -243,8 +257,10 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the integer bitwise NOT operation.
      */
     public static RuntimeScalar integerBitwiseNot(RuntimeScalar runtimeScalar) {
-        // Fetch tied scalar once to avoid redundant FETCH calls
-        RuntimeScalar val = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        // Fetch tied/readonly scalar once to avoid redundant FETCH calls
+        RuntimeScalar val = runtimeScalar.type < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
+                runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
+                        runtimeScalar.type == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
 
         // In Perl, if the operand is a reference or doesn't look like a number, use string operations
         if (!ScalarUtils.looksLikeNumber(val)) {

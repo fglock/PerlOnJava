@@ -119,6 +119,8 @@ public class Universal extends PerlModuleBase {
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
+            case READONLY_SCALAR:
+                return can(new RuntimeArray(new RuntimeList((RuntimeScalar) object.value, args.get(1))), ctx);
             case UNDEF:
                 if (object.getDefinedBoolean()) {
                     perlClassName = object.toString();
@@ -345,6 +347,8 @@ public class Universal extends PerlModuleBase {
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
+            case READONLY_SCALAR:
+                return VERSION(new RuntimeArray(new RuntimeList((RuntimeScalar) object.value, wantVersion)), ctx);
             case UNDEF:
                 if (object.getDefinedBoolean()) {
                     perlClassName = object.toString();

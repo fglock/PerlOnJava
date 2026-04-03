@@ -84,6 +84,9 @@ public class RuntimeStashEntry extends RuntimeGlob {
      */
     public RuntimeScalar set(RuntimeScalar value) {
         type = RuntimeScalarType.GLOB;
+        if (value.type == READONLY_SCALAR) {
+            return set((RuntimeScalar) value.value);
+        }
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar deref = value.scalarDeref();

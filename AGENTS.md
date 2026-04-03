@@ -66,7 +66,8 @@ PerlOnJava does **not** implement the following Perl features:
 
 | Feature | Impact |
 |---------|--------|
-| `weaken` / `isweak` | Weak references don't work; modules using `Scalar::Util::weaken` for cleanup (e.g., Moo's `no Moo`) will fail |
+| `weaken` / `isweak` | No weak reference tracking. `weaken()` is a no-op, `isweak()` always returns false (since nothing is ever weakened). JVM's tracing GC handles circular references natively. |
+| `Scalar::Util::readonly` | Works for compile-time constants (`RuntimeScalarReadOnly` instances). Does not yet detect variables made readonly at runtime via `Internals::SvREADONLY` (those copy type/value into a plain `RuntimeScalar` without replacing the object). |
 | `DESTROY` | Object destructors never called; DEMOLISH patterns and cleanup code won't run |
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
 | `threads` | Perl threads not supported; use Java threading via inline Java if needed |

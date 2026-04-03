@@ -308,6 +308,7 @@ public class YAMLPP extends PerlModuleBase {
             case DOUBLE -> scalar.getDouble();
             case INTEGER -> scalar.getLong();
             case BOOLEAN -> scalar.getBoolean();
+            case READONLY_SCALAR -> convertRuntimeScalarToYaml((RuntimeScalar) scalar.value, seen);
             default -> null;
         };
 

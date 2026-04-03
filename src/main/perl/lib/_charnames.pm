@@ -137,7 +137,7 @@ my sub populate_txt {
   return if $txt;
 
   $txt = do "unicore/Name.pl";
-  Internals::SvREADONLY($txt, 1);
+  Internals::SvREADONLY($txt, 1) if defined $txt;
 }
 
 my sub alias (%aliases) { # Set up aliases

@@ -9,6 +9,7 @@ import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.PROXY;
 
 /**
  * Represents a Perl special scalar variable, such as $`, $&, $', or $1.
@@ -35,6 +36,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     public ScalarSpecialVariable(Id variableId) {
         super();
+        this.type = PROXY;
         this.variableId = variableId;
         this.position = 0; // Default position is 0 for non-capture variables.
     }
@@ -47,6 +49,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     public ScalarSpecialVariable(Id variableId, int position) {
         super();
+        this.type = PROXY;
         this.variableId = variableId;
         this.position = position;
     }
@@ -281,6 +284,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
     public RuntimeScalar getNumber() {
         return this.getValueAsScalar().getNumber();
+    }
+
+    @Override
+    public boolean isString() {
+        return this.getValueAsScalar().isString();
     }
 
     /**

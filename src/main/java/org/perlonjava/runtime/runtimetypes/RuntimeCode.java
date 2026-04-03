@@ -1942,6 +1942,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), a, callContext);
         }
+        if (runtimeScalar.type == READONLY_SCALAR) {
+            return apply((RuntimeScalar) runtimeScalar.value, a, callContext);
+        }
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
@@ -2169,6 +2172,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), subroutineName, args, callContext);
         }
+        if (runtimeScalar.type == READONLY_SCALAR) {
+            return apply((RuntimeScalar) runtimeScalar.value, subroutineName, args, callContext);
+        }
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
         // If the RuntimeScalar is undef (forward declaration never filled),
         // silently return undef so tests can continue running.
@@ -2326,6 +2332,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), subroutineName, list, callContext);
+        }
+        if (runtimeScalar.type == READONLY_SCALAR) {
+            return apply((RuntimeScalar) runtimeScalar.value, subroutineName, list, callContext);
         }
 
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
