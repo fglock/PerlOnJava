@@ -538,7 +538,11 @@ public class RuntimeIO extends RuntimeScalar {
             try {
                 if (mode.equals(">")) {
                     // Truncate for write mode - this will throw if read-only
-                    targetScalar.set("");
+                    // Match Perl behavior: if scalar was undef, keep it undef;
+                    // if it was defined, truncate to empty string
+                    if (targetScalar.getDefinedBoolean()) {
+                        targetScalar.set("");
+                    }
                 } else if (mode.equals(">>")) {
                     // For append mode, test if scalar is writable by setting it to itself
                     targetScalar.set(targetScalar.toString());
