@@ -1,6 +1,6 @@
 # LWP::UserAgent Support for PerlOnJava
 
-## Status: Phase 7 Complete
+## Status: Phase 7c Complete
 
 **Branch**: `fix/lwp-useragent-support`
 **Date started**: 2026-04-03
@@ -376,6 +376,14 @@ via a prior jcpan run.
 - [x] Full test run: **314/316 subtests pass** (99.4%), 2 are TODO expected failures
 - [x] Commit: `17b38eabd`
 
+### Phase 7c: Wide character in print -- COMPLETED (2026-04-03)
+
+- [x] **P15**: Implement "Wide character in print" warning + UTF-8 fallback in RuntimeIO.write()
+- [x] Warning uses `utf8` category, suppressed by `no warnings "utf8"`
+- [x] No warning when `:utf8`/`:encoding` layer is active
+- [x] `make` passes
+- [x] Commit: `0b0065072`
+
 ### Next Steps
 
 - [ ] Create PR for merge to master
@@ -438,3 +446,8 @@ via a prior jcpan run.
 |------|--------|
 | `src/main/java/org/perlonjava/runtime/perlmodule/HTMLParser.java` | Decode UTF-8 bytes in parse() when utf8_mode is set |
 | `src/main/java/org/perlonjava/runtime/perlmodule/Utf8.java` | Strict CharsetDecoder in decode() — REPORT on malformed/unmappable instead of REPLACE |
+
+### Phase 7c
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeIO.java` | Wide character detection in write(); emit utf8 warning + UTF-8 byte fallback |
