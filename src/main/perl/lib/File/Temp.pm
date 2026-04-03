@@ -248,9 +248,15 @@ sub tempfile {
     my $perms  = $args{PERMS};  # Custom permissions
 
     # If no directory specified, use temp directory by default
-    # unless TMPDIR was explicitly set to false
-    if (!defined $dir && (!exists $args{TMPDIR} || $args{TMPDIR})) {
-        $dir = File::Spec->tmpdir;
+    # but only when no template with a path was given.
+    # In Perl 5, TMPDIR => 1 forces tmpdir; otherwise the template's
+    # own directory (if any) is used as-is.
+    if (!defined $dir) {
+        if (exists $args{TMPDIR} && $args{TMPDIR}) {
+            $dir = File::Spec->tmpdir;
+        } elsif (!defined $template || $template eq '') {
+            $dir = File::Spec->tmpdir;
+        }
     }
 
     # Generate template if not provided
@@ -264,9 +270,12 @@ sub tempfile {
         croak "Template must end with at least 4 'X' characters";
     }
 
-    # Prepend directory if specified
+    # Prepend directory if specified and template doesn't already have one
     if (defined $dir) {
-        $template = File::Spec->catfile($dir, $template);
+        my ($vol, $dirs, $file_part) = File::Spec->splitpath($template);
+        if ($dirs eq '' && $vol eq '') {
+            $template = File::Spec->catfile($dir, $template);
+        }
     }
 
     # Create temp file

@@ -165,7 +165,7 @@ public class HTMLParser extends PerlModuleBase {
                 if (chunk.getDefinedBoolean()) {
                     String html = pstate.get("_buf").toString() + chunk.toString();
                     pstate.put("_buf", new RuntimeScalar(""));
-                    parseHtml(selfHash, pstate, html);
+                    parseHtml(self, selfHash, pstate, html);
                 }
             }
         } finally {
@@ -197,10 +197,10 @@ public class HTMLParser extends PerlModuleBase {
                 String remaining = pstate.get("_buf").toString();
                 if (!remaining.isEmpty()) {
                     pstate.put("_buf", new RuntimeScalar(""));
-                    parseHtml(selfHash, pstate, remaining);
+                    parseHtml(self, selfHash, pstate, remaining);
                 }
                 // Fire end_document event
-                fireEvent(selfHash, pstate, "end_document");
+                fireEvent(self, selfHash, pstate, "end_document");
             } finally {
                 pstate.put("_parsing", scalarFalse);
             }
@@ -401,8 +401,13 @@ public class HTMLParser extends PerlModuleBase {
 
     /**
      * Fire a parser event by calling the registered handler.
+     * @param self the original blessed parser object (for method dispatch)
+     * @param selfHash the dereferenced hash of the parser
+     * @param pstate the parser state hash
+     * @param eventName the event type (start, end, text, etc.)
+     * @param eventArgs the event-specific arguments
      */
-    private static void fireEvent(RuntimeHash selfHash, RuntimeHash pstate, String eventName, RuntimeScalar... eventArgs) {
+    private static void fireEvent(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate, String eventName, RuntimeScalar... eventArgs) {
         RuntimeHash handlers = pstate.get("_handlers").hashDeref();
         RuntimeScalar cb = handlers.get(eventName + "_cb");
 
@@ -417,16 +422,16 @@ public class HTMLParser extends PerlModuleBase {
         String argspec = (argspecSv != null && argspecSv.getDefinedBoolean()) ?
                 argspecSv.toString() : "";
 
-        if (cb.type == RuntimeScalarType.STRING) {
+        if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
             // Method name - call as $self->method(...)
+            // Use the original blessed self for correct method dispatch
             String methodName = cb.toString();
-            RuntimeScalar selfRef = selfHash.createReference();
-            RuntimeArray.push(callArgs, selfRef);
+            RuntimeArray.push(callArgs, self);
             for (RuntimeScalar arg : eventArgs) {
                 RuntimeArray.push(callArgs, arg);
             }
-            // Look up method in the object's class hierarchy
-            int blessId = RuntimeScalarType.blessedId(selfRef);
+            // Look up method in the object's class hierarchy using the blessed class
+            int blessId = RuntimeScalarType.blessedId(self);
             String className = (blessId != 0) ?
                     NameNormalizer.getBlessStr(blessId) : "HTML::Parser";
             RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
@@ -447,7 +452,7 @@ public class HTMLParser extends PerlModuleBase {
      * Basic HTML parser - fires text, start, end events.
      * This is a simplified version; Phase 2 will port the full hparser.c logic.
      */
-    private static void parseHtml(RuntimeHash selfHash, RuntimeHash pstate, String html) {
+    private static void parseHtml(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate, String html) {
         int len = html.length();
         int i = 0;
         int textStart = 0;
@@ -456,7 +461,7 @@ public class HTMLParser extends PerlModuleBase {
             if (html.charAt(i) == '<') {
                 // Flush pending text
                 if (i > textStart) {
-                    fireEvent(selfHash, pstate, "text",
+                    fireEvent(self, selfHash, pstate, "text",
                             new RuntimeScalar(html.substring(textStart, i)));
                 }
 
@@ -474,7 +479,7 @@ public class HTMLParser extends PerlModuleBase {
                     while (i < len && html.charAt(i) != '>') i++;
                     if (i < len) i++; // skip '>'
 
-                    fireEvent(selfHash, pstate, "end",
+                    fireEvent(self, selfHash, pstate, "end",
                             new RuntimeScalar(tagName),
                             new RuntimeScalar(html.substring(tagStart, i)));
                     textStart = i;
@@ -489,7 +494,7 @@ public class HTMLParser extends PerlModuleBase {
                         if (endIdx >= 0) {
                             String comment = html.substring(commentStart, endIdx);
                             i = endIdx + 3;
-                            fireEvent(selfHash, pstate, "comment",
+                            fireEvent(self, selfHash, pstate, "comment",
                                     new RuntimeScalar(comment));
                         } else {
                             // Unterminated comment - buffer it
@@ -502,7 +507,7 @@ public class HTMLParser extends PerlModuleBase {
                         if (endIdx >= 0) {
                             String decl = html.substring(tagStart, endIdx + 1);
                             i = endIdx + 1;
-                            fireEvent(selfHash, pstate, "declaration",
+                            fireEvent(self, selfHash, pstate, "declaration",
                                     new RuntimeScalar(decl));
                         } else {
                             pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
@@ -516,7 +521,7 @@ public class HTMLParser extends PerlModuleBase {
                     if (endIdx >= 0) {
                         String pi = html.substring(tagStart, endIdx + 2);
                         i = endIdx + 2;
-                        fireEvent(selfHash, pstate, "process",
+                        fireEvent(self, selfHash, pstate, "process",
                                 new RuntimeScalar(pi));
                     } else {
                         pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
@@ -589,14 +594,14 @@ public class HTMLParser extends PerlModuleBase {
 
                     String origText = html.substring(tagStart, i);
 
-                    fireEvent(selfHash, pstate, "start",
+                    fireEvent(self, selfHash, pstate, "start",
                             new RuntimeScalar(tagName),
                             attrs.createReference(),
                             attrSeq.createReference(),
                             new RuntimeScalar(origText));
 
                     if (selfClosing) {
-                        fireEvent(selfHash, pstate, "end",
+                        fireEvent(self, selfHash, pstate, "end",
                                 new RuntimeScalar(tagName),
                                 new RuntimeScalar("</" + tagName + ">"));
                     }
@@ -609,7 +614,7 @@ public class HTMLParser extends PerlModuleBase {
 
         // Flush remaining text
         if (textStart < len) {
-            fireEvent(selfHash, pstate, "text",
+            fireEvent(self, selfHash, pstate, "text",
                     new RuntimeScalar(html.substring(textStart)));
         }
     }
