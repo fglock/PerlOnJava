@@ -1,10 +1,9 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.runtime.runtimetypes.RuntimeArray;
-import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
-import org.perlonjava.runtime.runtimetypes.RuntimeList;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.*;
 
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +44,20 @@ public class Socket extends PerlModuleBase {
     public static final int SHUT_RD = 0;
     public static final int SHUT_WR = 1;
     public static final int SHUT_RDWR = 2;
+    // getaddrinfo/getnameinfo constants
+    public static final int AI_PASSIVE = 1;
+    public static final int AI_CANONNAME = 2;
+    public static final int AI_NUMERICHOST = 4;
+    public static final int AI_ADDRCONFIG = 0x0400;
+    public static final int NI_NUMERICHOST = 1;
+    public static final int NI_NUMERICSERV = 2;
+    public static final int NI_DGRAM = 16;
+    public static final int NIx_NOHOST = 1;
+    public static final int NIx_NOSERV = 2;
+    public static final int EAI_NONAME = 8;
+    // IPV6 constants
+    public static final int IPV6_V6ONLY = 26;
+    public static final int SO_REUSEPORT = 15;
     // INADDR constants as 4-byte packed binary strings
     public static final String INADDR_ANY = "\0\0\0\0";           // 0.0.0.0
     public static final String INADDR_LOOPBACK = "\177\0\0\1";    // 127.0.0.1
@@ -65,6 +78,8 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("inet_ntoa", null);
             socket.registerMethod("sockaddr_in", null);
             socket.registerMethod("getnameinfo", null);
+            socket.registerMethod("getaddrinfo", null);
+            socket.registerMethod("sockaddr_family", null);
 
             // Register constants as subroutines with empty prototype (like use constant)
             socket.registerMethod("AF_INET", "");
@@ -96,6 +111,18 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("INADDR_ANY", "");
             socket.registerMethod("INADDR_LOOPBACK", "");
             socket.registerMethod("INADDR_BROADCAST", "");
+            socket.registerMethod("AI_PASSIVE", "");
+            socket.registerMethod("AI_CANONNAME", "");
+            socket.registerMethod("AI_NUMERICHOST", "");
+            socket.registerMethod("AI_ADDRCONFIG", "");
+            socket.registerMethod("NI_NUMERICHOST", "");
+            socket.registerMethod("NI_NUMERICSERV", "");
+            socket.registerMethod("NI_DGRAM", "");
+            socket.registerMethod("NIx_NOHOST", "");
+            socket.registerMethod("NIx_NOSERV", "");
+            socket.registerMethod("EAI_NONAME", "");
+            socket.registerMethod("IPV6_V6ONLY", "");
+            socket.registerMethod("SO_REUSEPORT", "");
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Socket method: " + e.getMessage());
@@ -429,5 +456,205 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList INADDR_BROADCAST(RuntimeArray args, int ctx) {
         return new RuntimeScalar(INADDR_BROADCAST).getList();
+    }
+
+    /**
+     * getaddrinfo(HOST, SERVICE [, HINTS])
+     * Resolves a hostname and service name to a list of socket address structures.
+     * Returns ($err, @results) where each result is a hashref with:
+     *   family, socktype, protocol, addr, canonname
+     */
+    public static RuntimeList getaddrinfo(RuntimeArray args, int ctx) {
+        String host = args.size() > 0 && args.get(0).getDefinedBoolean() ? args.get(0).toString() : null;
+        String service = args.size() > 1 && args.get(1).getDefinedBoolean() ? args.get(1).toString() : null;
+
+        // Parse hints hashref if provided
+        int hintFamily = 0;  // AF_UNSPEC
+        int hintSocktype = 0;
+        int hintProtocol = 0;
+        int hintFlags = 0;
+        if (args.size() > 2) {
+            RuntimeScalar hintsArg = args.get(2);
+            if (hintsArg.value instanceof RuntimeHash hintsHash) {
+                RuntimeScalar fam = hintsHash.get("family");
+                if (fam != null && fam.getDefinedBoolean()) hintFamily = fam.getInt();
+                RuntimeScalar st = hintsHash.get("socktype");
+                if (st != null && st.getDefinedBoolean()) hintSocktype = st.getInt();
+                RuntimeScalar proto = hintsHash.get("protocol");
+                if (proto != null && proto.getDefinedBoolean()) hintProtocol = proto.getInt();
+                RuntimeScalar fl = hintsHash.get("flags");
+                if (fl != null && fl.getDefinedBoolean()) hintFlags = fl.getInt();
+            }
+        }
+
+        RuntimeList result = new RuntimeList();
+
+        try {
+            InetAddress[] addresses;
+            if (host == null || host.isEmpty()) {
+                if ((hintFlags & AI_PASSIVE) != 0) {
+                    // Passive: use wildcard addresses
+                    addresses = new InetAddress[]{
+                            InetAddress.getByName("0.0.0.0")
+                    };
+                } else {
+                    addresses = new InetAddress[]{
+                            InetAddress.getByName("127.0.0.1")
+                    };
+                }
+            } else {
+                addresses = InetAddress.getAllByName(host);
+            }
+
+            // Parse port
+            int port = 0;
+            if (service != null && !service.isEmpty()) {
+                try {
+                    port = Integer.parseInt(service);
+                } catch (NumberFormatException e) {
+                    // Service name lookup - common services
+                    switch (service.toLowerCase()) {
+                        case "http": port = 80; break;
+                        case "https": port = 443; break;
+                        case "ftp": port = 21; break;
+                        case "ssh": port = 22; break;
+                        case "smtp": port = 25; break;
+                        default: port = 0;
+                    }
+                }
+            }
+
+            // Success - empty error string
+            result.add(new RuntimeScalar(""));
+
+            for (InetAddress addr : addresses) {
+                int family;
+                byte[] sockaddrBytes;
+
+                if (addr instanceof Inet6Address) {
+                    if (hintFamily != 0 && hintFamily != AF_INET6) continue;
+                    family = AF_INET6;
+                    // Build sockaddr_in6: family(2) + port(2) + flowinfo(4) + addr(16) + scope(4) = 28 bytes
+                    byte[] addrBytes = addr.getAddress();
+                    sockaddrBytes = new byte[28];
+                    sockaddrBytes[0] = (byte) (family & 0xFF);
+                    sockaddrBytes[1] = (byte) ((family >> 8) & 0xFF);
+                    sockaddrBytes[2] = (byte) ((port >> 8) & 0xFF);
+                    sockaddrBytes[3] = (byte) (port & 0xFF);
+                    System.arraycopy(addrBytes, 0, sockaddrBytes, 8, 16);
+                } else {
+                    if (hintFamily != 0 && hintFamily != AF_INET) continue;
+                    family = AF_INET;
+                    // Build sockaddr_in: family(2) + port(2) + addr(4) + zero(8) = 16 bytes
+                    byte[] addrBytes = addr.getAddress();
+                    sockaddrBytes = new byte[16];
+                    sockaddrBytes[0] = (byte) (family & 0xFF);
+                    sockaddrBytes[1] = (byte) ((family >> 8) & 0xFF);
+                    sockaddrBytes[2] = (byte) ((port >> 8) & 0xFF);
+                    sockaddrBytes[3] = (byte) (port & 0xFF);
+                    System.arraycopy(addrBytes, 0, sockaddrBytes, 4, 4);
+                }
+
+                // Build result hashref
+                RuntimeHash entry = new RuntimeHash();
+                entry.put("family", new RuntimeScalar(family));
+                entry.put("socktype", new RuntimeScalar(hintSocktype != 0 ? hintSocktype : SOCK_STREAM));
+                entry.put("protocol", new RuntimeScalar(hintProtocol != 0 ? hintProtocol : 0));
+                entry.put("addr", new RuntimeScalar(new String(sockaddrBytes, StandardCharsets.ISO_8859_1)));
+                entry.put("canonname", new RuntimeScalar(addr.getCanonicalHostName()));
+
+                // If no socktype hint, add both STREAM and DGRAM entries
+                if (hintSocktype == 0) {
+                    RuntimeHash entryDgram = new RuntimeHash();
+                    entryDgram.put("family", new RuntimeScalar(family));
+                    entryDgram.put("socktype", new RuntimeScalar(SOCK_DGRAM));
+                    entryDgram.put("protocol", new RuntimeScalar(IPPROTO_UDP));
+                    entryDgram.put("addr", new RuntimeScalar(new String(sockaddrBytes, StandardCharsets.ISO_8859_1)));
+                    entryDgram.put("canonname", new RuntimeScalar(""));
+
+                    entry.put("protocol", new RuntimeScalar(IPPROTO_TCP));
+                    result.add(entry.createReference());
+                    result.add(entryDgram.createReference());
+                } else {
+                    result.add(entry.createReference());
+                }
+            }
+
+            return result;
+        } catch (UnknownHostException e) {
+            // Return error
+            result.add(new RuntimeScalar("Name or service not known"));
+            return result;
+        } catch (Exception e) {
+            result.add(new RuntimeScalar(e.getMessage()));
+            return result;
+        }
+    }
+
+    /**
+     * sockaddr_family(SOCKADDR)
+     * Returns the address family of a packed sockaddr structure.
+     */
+    public static RuntimeList sockaddr_family(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for sockaddr_family");
+        }
+        String sockaddr = args.get(0).toString();
+        if (sockaddr.length() < 2) {
+            return scalarUndef.getList();
+        }
+        byte[] bytes = sockaddr.getBytes(StandardCharsets.ISO_8859_1);
+        // Family is stored in the first 2 bytes (little-endian on most platforms)
+        int family = (bytes[0] & 0xFF) | ((bytes[1] & 0xFF) << 8);
+        return new RuntimeScalar(family).getList();
+    }
+
+    // New constant methods
+    public static RuntimeList AI_PASSIVE(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(AI_PASSIVE).getList();
+    }
+
+    public static RuntimeList AI_CANONNAME(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(AI_CANONNAME).getList();
+    }
+
+    public static RuntimeList AI_NUMERICHOST(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(AI_NUMERICHOST).getList();
+    }
+
+    public static RuntimeList AI_ADDRCONFIG(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(AI_ADDRCONFIG).getList();
+    }
+
+    public static RuntimeList NI_NUMERICHOST(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(NI_NUMERICHOST).getList();
+    }
+
+    public static RuntimeList NI_NUMERICSERV(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(NI_NUMERICSERV).getList();
+    }
+
+    public static RuntimeList NI_DGRAM(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(NI_DGRAM).getList();
+    }
+
+    public static RuntimeList NIx_NOHOST(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(NIx_NOHOST).getList();
+    }
+
+    public static RuntimeList NIx_NOSERV(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(NIx_NOSERV).getList();
+    }
+
+    public static RuntimeList EAI_NONAME(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(EAI_NONAME).getList();
+    }
+
+    public static RuntimeList IPV6_V6ONLY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPV6_V6ONLY).getList();
+    }
+
+    public static RuntimeList SO_REUSEPORT(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SO_REUSEPORT).getList();
     }
 }

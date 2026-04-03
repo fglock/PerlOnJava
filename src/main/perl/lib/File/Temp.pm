@@ -154,6 +154,40 @@ sub autoflush {
     return $value;
 }
 
+sub close {
+    my $self = shift;
+    return CORE::close($self->{_fh}) if defined $self->{_fh};
+    return;
+}
+
+sub seek {
+    my $self = shift;
+    return CORE::seek($self->{_fh}, $_[0], $_[1]) if defined $self->{_fh};
+    return;
+}
+
+sub read {
+    my $self = shift;
+    return CORE::read($self->{_fh}, $_[0], $_[1], defined $_[2] ? $_[2] : 0);
+}
+
+sub binmode {
+    my $self = shift;
+    return @_ ? CORE::binmode($self->{_fh}, $_[0]) : CORE::binmode($self->{_fh});
+}
+
+sub getline {
+    my $self = shift;
+    my $fh = $self->{_fh};
+    return <$fh>;
+}
+
+sub getlines {
+    my $self = shift;
+    my $fh = $self->{_fh};
+    return <$fh>;
+}
+
 sub DESTROY {
     my $self = shift;
 
@@ -179,6 +213,18 @@ sub AUTOLOAD {
 
     if (exists $self->{_fh} && ref($self->{_fh}) && UNIVERSAL::can($self->{_fh}, $method)) {
         return $self->{_fh}->$method(@_);
+    }
+
+    # Fallback for IO::Handle methods not directly available on the filehandle
+    if ($method eq 'printflush') {
+        my $fh = $self->{_fh};
+        my $oldfh = select($fh);
+        my $old_af = $|;
+        $| = 1;
+        my $ret = print $fh @_;
+        $| = $old_af;
+        select($oldfh);
+        return $ret;
     }
 
     croak "Undefined method $method called on File::Temp object";
