@@ -95,18 +95,6 @@ sub import {
     };
 }
 
-################################################
-# This is the only exported function we define;
-# the rest come from other classes.
-#
-
-sub pipe {
-    my $r = IO::Handle->new;
-    my $w = IO::Handle->new;
-    CORE::pipe($r, $w) or return undef;
-    ($r, $w);
-}
-
 # Rebless standard file handles
 bless *STDIN{IO},  "FileHandle" if ref *STDIN{IO}  eq "IO::Handle";
 bless *STDOUT{IO}, "FileHandle" if ref *STDOUT{IO} eq "IO::Handle";
