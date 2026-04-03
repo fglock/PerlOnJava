@@ -480,15 +480,11 @@ public class GlobalVariable {
         if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
             return definedGlobalCodeRefAsScalar(glob.globName);
         }
-        // Handle CODE type: look up by name in the stash (not the object directly),
-        // because `undef &x` for lexical subs doesn't modify the RuntimeCode object.
-        // For named subs, use the stash name. For anonymous coderefs, fall through
-        // to toString() which produces "CODE(0x...)" - not a valid stash name,
-        // so definedGlobalCodeRefAsScalar(String) correctly returns false.
+        // Handle CODE type: check the RuntimeCode object directly.
+        // This works for both named subs and anonymous/lexical coderefs.
+        // After `undef &x`, the RuntimeCode is replaced with an empty one where defined() returns false.
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
-            if (runtimeCode.packageName != null && runtimeCode.subName != null) {
-                return definedGlobalCodeRefAsScalar(runtimeCode.packageName + "::" + runtimeCode.subName);
-            }
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
         }
         return definedGlobalCodeRefAsScalar(key.toString());
     }

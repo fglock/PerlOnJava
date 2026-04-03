@@ -686,6 +686,9 @@ public class Variable {
                     // IMPORTANT: For state variables, we need to preserve the ID from the declaration!
                     OperatorNode dollarOp = new OperatorNode("$",
                             new IdentifierNode(qualifiedHiddenVarName, index), index);
+                    // Propagate hiddenVarName annotation so that emitters can detect lexical subs
+                    // (e.g., for `undef &x` and `defined(&x)` special handling)
+                    dollarOp.setAnnotation("hiddenVarName", hiddenVarName);
 
                     // Copy the ID from the original declaration if it's a state variable
                     if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {

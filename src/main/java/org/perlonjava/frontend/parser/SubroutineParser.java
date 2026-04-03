@@ -117,6 +117,8 @@ public class SubroutineParser {
                         // Always create a fresh variable reference to avoid AST reuse issues
                         OperatorNode dollarOp = new OperatorNode("$",
                                 new IdentifierNode(qualifiedHiddenVarName, currentIndex), currentIndex);
+                        // Propagate hiddenVarName annotation so that emitters can detect lexical subs
+                        dollarOp.setAnnotation("hiddenVarName", hiddenVarName);
 
                         // Copy the ID from the symbol table entry for state variables
                         if (hiddenEntry != null && hiddenEntry.ast() instanceof OperatorNode hiddenVarNode) {
