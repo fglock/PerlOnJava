@@ -554,12 +554,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         Pattern pattern = regex.pattern;
         String inputStr = string.toString();
         
-        // Select appropriate pattern based on string's UTF-8 flag and content:
+        // Select appropriate pattern based on string's UTF-8 flag:
         // - /a flag or inline (?a): always use ASCII-only pattern
         // - BYTE_STRING: use ASCII-only pattern (Perl's "bytes" semantics)
-        // - UTF-8 string with Unicode chars (> 255): use Unicode pattern
-        // - UTF-8 string with only Latin-1 chars: use ASCII pattern (avoids false matches)
-        // This mimics Perl's behavior where \w, \d, \s semantics depend on UTF-8 flag
+        // - UTF-8 string: use Unicode pattern (Perl uses Unicode semantics for \w, \d, \s
+        //   whenever the string has the UTF-8 flag, even for Latin-1 characters like é)
         if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
             if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
                 // /a flag - always ASCII
@@ -567,11 +566,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } else if (hasInlineAsciiModifier(regex.patternString)) {
                 // Inline (?a...) in pattern - use ASCII to be safe
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string) && RuntimePosLvalue.hasUnicodeChars(string, inputStr)) {
-                // UTF-8 string with true Unicode content (> 255) - use Unicode matching
+            } else if (Utf8.isUtf8(string)) {
+                // UTF-8 string - use Unicode matching for \w, \d, \s semantics
                 pattern = regex.patternUnicode;
             }
-            // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
+            // else: BYTE_STRING - keep ASCII pattern (default)
         }
         
         // Workaround for Java MULTILINE quirk: Java's Pattern.MULTILINE changes ^ to only
@@ -939,7 +938,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         Pattern pattern = regex.pattern;
         
-        // Select appropriate pattern based on string's UTF-8 flag and content (same logic as matchRegex)
+        // Select appropriate pattern based on string's UTF-8 flag (same logic as matchRegex)
         if (regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
             if (regex.regexFlags != null && regex.regexFlags.isAscii()) {
                 // /a flag - always ASCII
@@ -947,11 +946,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } else if (hasInlineAsciiModifier(regex.patternString)) {
                 // Inline (?a...) in pattern - use ASCII to be safe
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string) && RuntimePosLvalue.hasUnicodeChars(string, inputStr)) {
-                // UTF-8 string with true Unicode content (> 255) - use Unicode matching
+            } else if (Utf8.isUtf8(string)) {
+                // UTF-8 string - use Unicode matching for \w, \d, \s semantics
                 pattern = regex.patternUnicode;
             }
-            // else: BYTE_STRING or Latin-1 only content - keep ASCII pattern (default)
+            // else: BYTE_STRING - keep ASCII pattern (default)
         }
         
         // Workaround for Java MULTILINE quirk (same as matchRegexDirect)
