@@ -564,8 +564,8 @@ public class StringOperators {
 
         // Check if separator is undef and generate warning
         if (warnOnUndef && runtimeScalar.type == RuntimeScalarType.UNDEF) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         String delimiter = runtimeScalar.toString();
@@ -590,8 +590,8 @@ public class StringOperators {
 
             // Check if value is undef and generate warning (but not for string interpolation)
             if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
-                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
-                        RuntimeScalarCache.scalarEmptyString);
+                WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
+                        RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
             isByteString = isByteString && scalar.type == BYTE_STRING;
