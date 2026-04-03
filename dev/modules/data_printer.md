@@ -4,59 +4,66 @@
 
 - **Module**: Data::Printer 1.002001
 - **Test command**: `./jcpan -j 8 -t Data::Printer`
-- **Status**: Phase 2c complete + set() fast-path fix — ready for Phase 3
+- **Branch**: `feature/data-printer-phase3`
+- **PR**: #434
+- **Status**: Phase 6 complete — 576/624 subtests passing (92.3%)
 
 ## Test Results Summary
 
-### Baseline: 15/41 test files passing (191/545 subtests fail)
+| Milestone | Test files passing | Subtests passing | Pass rate |
+|-----------|-------------------|-----------------|-----------|
+| Baseline | 15/41 | 354/545 | 65.0% |
+| After Phase 1 | 23/41 | 512/545 | 93.9% |
+| After Phase 2 | 23/41 | 512/545 | 93.9% |
+| After Phase 3-6 | **29/41** | **576/624** | **92.3%** |
 
-### After Phase 1: 23/41 test files passing (33/545 subtests fail)
+Note: subtest totals changed between runs because some tests that previously crashed now run to completion, adding subtests to the total.
 
-### After Phase 2: pending re-run (READONLY_SCALAR type fully wired)
+### Current Test Status (After Phase 6)
 
-| Test File | Baseline | After Phase 1 | Notes |
-|-----------|----------|---------------|-------|
-| t/000-load.t | PASS | PASS | |
-| t/000.0-nsort.t | PASS | PASS | |
-| t/000.1-home.t | **FAIL** 1/4 | **FAIL** 1/4 | glob `~` not expanded (not `$ENV{HOME}`) |
-| t/000.2-warn.t | PASS | PASS | |
-| t/001-object.t | PASS | PASS | |
-| t/002-scalar.t | **FAIL** 68/72 | **FAIL** 12/72 | Remaining: readonly vars, charnames::viacode, `$!` dualvar |
-| t/003-ref.t | **FAIL** 5/7 | **FAIL** 2/7 | weak circular ref detection |
-| t/004-vstring.t | **FAIL** 1/1 | PASS | Fixed by isweak |
-| t/005-lvalue.t | **FAIL** 2/2 | **FAIL** 2/2 | LVALUE ref type detection |
-| t/006-glob.t | PASS | PASS | |
-| t/007.format.t | **FAIL** 1/1 | **FAIL** 1/1 | FORMAT reference returns undef |
-| t/008-regex.t | PASS | PASS | |
-| t/009-array.t | **FAIL** 18/18 | **FAIL** 1/18 | 1 remaining: weak circular ref |
-| t/010-hashes.t | **FAIL** 16/16 | PASS | Fixed by isweak |
-| t/011-class.t | **FAIL** 27/38 | **FAIL** 2/38 | 2 remaining + 11 planned didn't run (B::CV::ROOT) |
-| t/011.1-attributes.t | PASS | PASS | |
-| t/011.2-roles.t | PASS | PASS | |
-| t/011.3-object_pad.t | PASS | PASS | |
-| t/012-code.t | **FAIL** 4/4 | **FAIL** 4/4 | `B::CV::ROOT` missing - crash |
-| t/013-refcount.t | **FAIL** 16/17 | **FAIL** 16/17 | `B::SV::RV` missing - crash |
-| t/014-memsize.t | PASS | PASS | |
-| t/015-multiline.t | **FAIL** 1/1 | PASS | Fixed by isweak |
-| t/016-merge_options.t | PASS | PASS | |
-| t/017-rc_file.t | PASS | PASS | |
-| t/018-alias.t | **FAIL** 1/1 | PASS | Fixed by isweak |
-| t/019-output.t | **FAIL** 0 ran | **FAIL** 0 ran | `SEEK_SET` bareword error |
-| t/020-return_value.t | SKIP | SKIP | Capture::Tiny not found |
-| t/021-p_vs_object.t | **FAIL** 24/26 | **FAIL** 24/26 | `B::SV::RV` missing |
-| t/022-no_prototypes.t | **FAIL** 4/7 | **FAIL** 1/7 | 1 remaining: readonly on `"test"` literal |
-| t/023-filters.t | **FAIL** 11/11 | PASS | Fixed by isweak |
-| t/024-tied.t | **FAIL** 18/18 | **FAIL** 14/18 | ClassCastException + untie issue |
-| t/025-profiles.t | **FAIL** 4/34 | **FAIL** 4/34 | Dumper profile: lvalue/format + glob name + B::CV::ROOT |
-| t/026-caller_message.t | **FAIL** 2/2 | PASS | Fixed by isweak |
-| t/027-nativeperlclass.t | SKIP | SKIP | `class` keyword |
-| t/100-filter_datetime.t | **FAIL** 6/21 | PASS | Fixed by isweak |
-| t/101-filter_db.t | **FAIL** 23/24 | **FAIL** 23/24 | DBI not connecting |
-| t/102-filter_digest.t | **FAIL** 3/21 | **FAIL** 3/21 | Digest filter |
-| t/103-filter_contenttype.t | **FAIL** 6/32 | **FAIL** 1/32 | 1 remaining: hexdump trailing nulls |
-| t/104-filter_web.t | **FAIL** 7/21 | PASS | Fixed by isweak |
-| t/998-color.t | **FAIL** 1/1 | **FAIL** 1/1 | crash |
-| t/999-themes.t | PASS | PASS | |
+| Test File | Status | Failures | Root Cause |
+|-----------|--------|----------|------------|
+| t/000-load.t | PASS | | |
+| t/000.0-nsort.t | PASS | | |
+| t/000.1-home.t | **PASS** | | Fixed Phase 6e: glob tilde uses %ENV{HOME} |
+| t/000.2-warn.t | PASS | | |
+| t/001-object.t | PASS | | |
+| t/002-scalar.t | **FAIL** 4/72 | 2,4,36-37 | Read-only constant detection |
+| t/003-ref.t | **FAIL** 2/7 | 5-6 | Weak ref detection (JVM limitation) |
+| t/004-vstring.t | PASS | | |
+| t/005-lvalue.t | **FAIL** 2/2 | 1-2 | LVALUE ref type not implemented |
+| t/006-glob.t | PASS | | |
+| t/007.format.t | **FAIL** 1/1 | 1 | FORMAT ref type not implemented |
+| t/008-regex.t | PASS | | |
+| t/009-array.t | **FAIL** 1/18 | 4 | Weak circular ref (JVM limitation) |
+| t/010-hashes.t | PASS | | |
+| t/011-class.t | **PASS** | | Fixed Phase 6a: UNIVERSAL methods |
+| t/011.1-attributes.t | PASS | | |
+| t/011.2-roles.t | PASS | | |
+| t/011.3-object_pad.t | PASS | | |
+| t/012-code.t | **FAIL** 2/4 | 2,4 | B::Deparse not implemented |
+| t/013-refcount.t | **FAIL** 12/17 | 1-3,5-8,11-13,16-17 | Refcount/weak refs (JVM limitation) |
+| t/014-memsize.t | PASS | | |
+| t/015-multiline.t | PASS | | |
+| t/016-merge_options.t | PASS | | |
+| t/017-rc_file.t | PASS | | |
+| t/018-alias.t | PASS | | |
+| t/019-output.t | SKIP | | Capture::Tiny not found |
+| t/020-return_value.t | SKIP | | Capture::Tiny not found |
+| t/021-p_vs_object.t | **FAIL** 11/26 | 3,5,7,9,11,13,15,17,19,23,25 | Refcount/weak refs (JVM limitation) |
+| t/022-no_prototypes.t | PASS | | |
+| t/023-filters.t | PASS | | |
+| t/024-tied.t | **PASS** | | Fixed Phase 6d: FETCH caching on untie |
+| t/025-profiles.t | **FAIL** 10/34 | 20-23,25,29-33 | LVALUE/FORMAT ref types missing (see below) |
+| t/026-caller_message.t | PASS | | |
+| t/027-nativeperlclass.t | SKIP | | `class` keyword not implemented |
+| t/100-filter_datetime.t | PASS | | |
+| t/101-filter_db.t | **FAIL** 1/1 | 1 | DBI connect returns undef (24 planned, 1 ran) |
+| t/102-filter_digest.t | **PASS** | | Fixed Phase 6f: Digest::SHA @ISA |
+| t/103-filter_contenttype.t | **FAIL** 1/32 | 29 | Hexdump trailing null bytes |
+| t/104-filter_web.t | PASS | | |
+| t/998-color.t | **FAIL** 1/1 | 1 | Refcount in colored output (JVM limitation) |
+| t/999-themes.t | PASS | | |
 
 ## Completed Phases
 
@@ -123,79 +130,86 @@ Lvalue operators (`substr`, `vec`, `chop`, `++/--`) already work correctly — w
 - **Files**: `RuntimeScalarType.java`, `ScalarSpecialVariable.java`, `RuntimeScalar.java`
 - **Regression tests**: re/subst.t 228/281 (restored), op/svflags.t 16/23 (baseline)
 
-## Remaining Error Categories
+### Phase 3: B module stubs (COMPLETED 2026-04-03)
 
-### 1. HIGH: Missing `B::CV::ROOT` and `B::SV::RV` methods
+**Fixed**: Missing B module introspection methods that caused crashes in Data::Printer.
 
-- **Affected tests**: t/012-code.t (4), t/013-refcount.t (16), t/021-p_vs_object.t (24), t/011-class.t (11 didn't run)
-- **Root cause**: `B.pm` stub doesn't define `ROOT` on `B::CV` or `RV` on `B::SV`
-- **Fix**: Add stub methods to `src/main/perl/lib/B.pm`
-  - `B::CV::ROOT` → return `B::OP->new()` (Data::Printer checks if coderef has a body)
-  - `B::SV::RV` → return the referenced value wrapped in a B:: object
+- `B::CV::ROOT` → return `B::OP->new()` (all subs have bodies on JVM)
+- `B::CV::const_sv` → return `\0` (non-constant subs)
+- `B::class()` → strip `B::` prefix from ref (utility for Data::Printer)
+- `B::NULL` package → for undefined/stub sub detection
+- `B::SV::RV` → unwrap one level of reference
+- Exported `class` in `@EXPORT_OK`
+- **Files**: `src/main/perl/lib/B.pm`
 
-### 2. MEDIUM: `charnames::viacode` returns empty strings
+### Phase 4: charnames, File::Temp, glob tilde (COMPLETED 2026-04-03)
 
-- **Affected tests**: t/002-scalar.t (3 unicode_charnames tests)
-- **Root cause**: `_charnames.pm` does `do "unicore/Name.pl"` but that file doesn't exist. ICU4J has `UCharacter.getName()` available but unused.
-- **Fix**: Either generate `unicore/Name.pl` via `dev/import-perl5/sync.pl`, or add a Java-side `charnames::viacode` using ICU4J's `UCharacter.getName(codePoint)`
+- **4a**: `charnames::viacode` via ICU4J — Created `Charnames.java` with `_java_viacode` using `UCharacter.getName()`. Modified `_charnames.pm` to use Java fallback when `unicore/Name.pl` unavailable. Registered in GlobalContext with `setInc=false` to not block Perl module loading.
+- **4b**: `File::Temp :seekable` export — Added SEEK_SET/SEEK_CUR/SEEK_END to `:seekable` tag and `@EXPORT_OK`. Fixed "Bareword SEEK_SET not allowed" in strict subs.
+- **4c**: Glob tilde expansion — Added `expandTilde()` to `ScalarGlobOperatorHelper.java`. Reads `$ENV{HOME}` from Perl's `%ENV` first, falls back to `System.getProperty("user.home")`.
+- **Files**: `Charnames.java`, `GlobalContext.java`, `_charnames.pm`, `File/Temp.pm`, `ScalarGlobOperatorHelper.java`
 
-### 3. MEDIUM: `SEEK_SET` bareword error in t/019-output.t
+### Phase 5: Tied variable ClassCastException fix (COMPLETED 2026-04-03)
 
-- **Affected tests**: t/019-output.t (all)
-- **Root cause**: `Bareword "SEEK_SET" not allowed while "strict subs"`. Fcntl.pm defines SEEK_SET correctly but the test may use `use Fcntl;` (default export) which doesn't include SEEK_SET. Need to check the actual test code — may be a missing `:seek` tag or Fcntl export issue.
+**Fixed**: Crash when `tied`/`untie` called on tied array/hash elements.
 
-### 4. MEDIUM: Tied variable ClassCastException
+- Three TiedVariableBase subclasses (TieScalar, RuntimeTiedArrayProxyEntry, RuntimeTiedHashProxyEntry) all stored with `type = TIED_SCALAR`, but code blindly cast to `TieScalar`.
+- Added `instanceof TieScalar` guards in `tiedDestroy()` and `tiedUntie()`
+- Fixed `TieOperators.untie()` REFERENCE case with `instanceof TieScalar` pattern match
+- Fixed `TieOperators.tied()` REFERENCE case with `instanceof TiedVariableBase` + null check
+- **Files**: `TieScalar.java`, `TieOperators.java`
 
-- **Affected tests**: t/024-tied.t (crashes after test 5)
-- **Root cause**: `RuntimeTiedArrayProxyEntry cannot be cast to TieScalar` — unsafe casts in `TieScalar.java` (lines 42,49) and `TieOperators.java` (lines 126,190)
-- **Fix**: Use `instanceof TiedVariableBase` checks before casting. `getSelf()` exists on `TiedVariableBase`. Handle proxy entries differently in `untie()`/`tied()`.
+### Phase 6: Data::Printer-specific fixes (COMPLETED 2026-04-03)
 
-### 5. MEDIUM: glob `~` not expanded (t/000.1-home.t)
+**6a - UNIVERSAL methods in class introspection**:
+- Set `code.packageName` and `code.subName` in `PerlModuleBase.registerMethod()` so all Java-implemented builtins have proper names via `Sub::Util::subname()`.
+- Data::Printer skips methods named `__ANON__` — all UNIVERSAL methods were reported as `__ANON__` because RuntimeCode objects created by `registerMethod()` had no name set.
+- **Files**: `PerlModuleBase.java`
 
-- **Affected tests**: t/000.1-home.t (1 failure)
-- **Root cause**: Data::Printer uses `glob("~")` to find home dir. `ScalarGlobOperator.java` and `File::Glob::bsd_glob` have no tilde expansion. `$ENV{HOME}` works fine — it's the glob that returns literal `~`.
-- **Fix**: Add tilde expansion to `ScalarGlobOperator.java`: when pattern starts with `~`, replace with `System.getProperty("user.home")`
+**6b - $! (errno) as proper dualvar**:
+- Changed `ErrnoVariable` to use `DUALVAR` type with `DualVar` value object in constructor, `set(int)`, and `set(String)`. Copies of `$!` now preserve both string ("No such file or directory") and numeric (2) representations.
+- Fixed `local $!`: Added `ErrnoVariable` to special cases in `GlobalRuntimeScalar.makeLocal()` so the ErrnoVariable instance is preserved (not replaced with a plain GlobalRuntimeScalar). Overrode `dynamicSaveState`/`dynamicRestoreState` to save/restore the `errno` and `message` fields.
+- **Root cause of `local $!` failure**: `GlobalRuntimeScalar.makeLocal()` was replacing the ErrnoVariable with a new plain GlobalRuntimeScalar in the global variable map. Subsequent `$! = 2` called the base class `set(int)` which just set `type = INTEGER`, losing the dualvar behavior.
+- **Files**: `ErrnoVariable.java`, `GlobalRuntimeScalar.java`
 
-### 6. LOW: LVALUE ref detection, DBI, FORMAT, color, Digest
+**6c - Tied scalar FETCH caching**:
+- Cache FETCH result in `TieScalar.tiedFetch()` by updating `previousValue.type`/`previousValue.value`. After untie, the cached FETCH result is restored instead of the pre-tie value, matching Perl 5's SV caching behavior.
+- **Files**: `TieScalar.java`
 
-- LVALUE ref detection (t/005-lvalue.t)
-- DBI filter (t/101-filter_db.t)
-- FORMAT reference (t/007.format.t)
-- Color/ANSI (t/998-color.t)
-- Digest filter (t/102-filter_digest.t)
-- Dumper profile (t/025-profiles.t)
+**6d - Glob tilde uses %ENV{HOME}**:
+- Updated `expandTilde()` to read `$ENV{HOME}` from Perl's `%ENV` hash (`GlobalVariable.getGlobalHash("main::ENV")`) before falling back to Java's `System.getProperty("user.home")`.
+- **Files**: `ScalarGlobOperatorHelper.java`
 
-## Fix Plan (Remaining Phases)
+**6e - Digest::SHA @ISA**:
+- Changed `@ISA = qw(Exporter)` to `@ISA = qw(Exporter Digest::base)`. The previous assignment was overwriting the `Digest::base` parent set by `use base "Digest::base"` on the line above.
+- **Files**: `src/main/perl/lib/Digest/SHA.pm`
 
-### Phase 3: B module stubs (NEXT)
+## Remaining Failures (48/624 subtests)
 
-| Step | Issue | Files | Expected impact |
-|------|-------|-------|-----------------|
-| 3a | Add `B::CV::ROOT` stub | src/main/perl/lib/B.pm | t/012-code.t, t/011-class.t |
-| 3b | Add `B::SV::RV` stub | src/main/perl/lib/B.pm | t/013-refcount.t, t/021-p_vs_object.t |
+### Unfixable (JVM limitations) — ~28 subtests
 
-### Phase 4: charnames::viacode + SEEK_SET + glob tilde
+| Category | Tests | Subtests | Why |
+|----------|-------|----------|-----|
+| Weak references | t/003-ref, t/009-array | 3 | `weaken`/`isweak` not implemented; JVM uses GC, not refcounting |
+| Refcount tracking | t/013-refcount, t/021-p_vs_object | 23 | JVM has no SV refcount; `Scalar::Util::refcount` would need JVM-specific instrumentation |
+| Colored refcount | t/998-color | 1 | Same colored output includes `(refcount: 2)` which we can't produce |
 
-| Step | Issue | Files | Expected impact |
-|------|-------|-------|-----------------|
-| 4a | Implement `charnames::viacode` via ICU4J | Java-side or sync.pl | t/002-scalar.t unicode tests |
-| 4b | Fix Fcntl SEEK_SET export | Investigate test code | t/019-output.t |
-| 4c | Add glob `~` tilde expansion | ScalarGlobOperator.java | t/000.1-home.t |
+### Missing ref types — ~13 subtests
 
-### Phase 5: Tied variable cast fix
+| Category | Tests | Subtests | Why |
+|----------|-------|----------|-----|
+| LVALUE refs | t/005-lvalue (2), t/025-profiles (partial) | 2 | `\substr(...)` creates a plain scalar ref, not an LVALUE ref. `reftype` returns "SCALAR" not "LVALUE". |
+| FORMAT refs | t/007.format (1), t/025-profiles (partial) | 1 | Format references not implemented on JVM. |
+| Profile cascading | t/025-profiles | 10 | The Dumper and JSON profiles iterate all ref types and check which ones they can serialize. Missing LVALUE and FORMAT types cause off-by-one in the type list, shifting all warning messages. For example, the JSON profile reports "cannot express vstrings" where it should say "cannot express subroutines" because the type array is shifted. |
 
-| Step | Issue | Files | Expected impact |
-|------|-------|-------|-----------------|
-| 5a | Fix unsafe TieScalar casts | TieScalar.java, TieOperators.java | t/024-tied.t |
+### Other — 7 subtests
 
-### Phase 6: Low priority
-
-- LVALUE ref detection (t/005-lvalue.t)
-- DBI filter (t/101-filter_db.t)
-- FORMAT reference (t/007.format.t)
-- Color/ANSI (t/998-color.t)
-- Digest filter (t/102-filter_digest.t)
-- Dumper profile (t/025-profiles.t)
+| Category | Tests | Subtests | Why |
+|----------|-------|----------|-----|
+| Read-only constants | t/002-scalar | 4 | Literal `123` not detected as read-only. `Scalar::Util::readonly(123)` returns 0 because PerlOnJava's `$` prototype copies the value, losing the read-only flag. Tests 36-37: `Internals::SvREADONLY` on a ref shows stringified ref instead of value. |
+| B::Deparse | t/012-code | 2 | Code decompilation not possible — JVM bytecode can't be decompiled back to Perl. Shows `sub { "DUMMY" }` instead of actual code body. |
+| DBI filter | t/101-filter_db | 1 | `DBI->connect("dbi:Mem:")` returns undef; the in-memory DBD driver may not be available. 24 tests planned but only 1 ran. |
+| ContentType hex dump | t/103-filter_contenttype | 1 | Hexdump shows trailing null bytes `00000000` that Perl 5 doesn't. Minor string truncation difference. |
 
 ### Future: MAGIC type consolidation
 
