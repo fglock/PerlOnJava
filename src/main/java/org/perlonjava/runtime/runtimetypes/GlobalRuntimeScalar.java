@@ -27,6 +27,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             DynamicVariableManager.pushLocalVariable(original);
             return original;
         }
+        if (original instanceof ErrnoVariable) {
+            DynamicVariableManager.pushLocalVariable(original);
+            return original;
+        }
         if (fullName.endsWith("::1")) {
             var regexVar = GlobalVariable.getGlobalVariable(fullName);
             DynamicVariableManager.pushLocalVariable(regexVar);

@@ -59,7 +59,11 @@ public class TieScalar extends TiedVariableBase {
      * Fetches the value from a tied scalar (delegates to FETCH).
      */
     public RuntimeScalar tiedFetch() {
-        return tieCall("FETCH");
+        RuntimeScalar result = tieCall("FETCH");
+        // Cache the FETCH result so untie restores it (matches Perl 5 SV caching)
+        previousValue.type = result.type;
+        previousValue.value = result.value;
+        return result;
     }
 
     /**

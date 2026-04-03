@@ -6,7 +6,7 @@ use base "Digest::base";
 our $VERSION = '6.04';
 
 use Exporter;
-our @ISA = qw(Exporter);
+our @ISA = qw(Exporter Digest::base);
 
 XSLoader::load( 'Digest::SHA' );
 
