@@ -779,6 +779,9 @@ public class EmitOperator {
     // Handles the 'split' operator
     static void handleSplit(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
+        // IMPORTANT: split's EXPR argument (the string to split) must be evaluated in
+        // SCALAR context per Perl semantics. This matters for functions like `reverse`
+        // which behave differently in list vs scalar context.
         // Spill the left operand before evaluating the right side so non-local control flow
         // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
         if (ENABLE_SPILL_BINARY_LHS) {
@@ -792,7 +795,11 @@ public class EmitOperator {
             }
             mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
-            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            // Evaluate the right side (EXPR [, LIMIT]) - each argument in SCALAR context
+            // but produce a RuntimeList for the split runtime method.
+            // We use SCALAR context here because split's EXPR must be in scalar context
+            // (e.g., `reverse $str` should reverse the string, not reverse a list).
+            emitSplitArgs(emitterVisitor, node.right);
 
             mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
             mv.visitInsn(Opcodes.SWAP);
@@ -802,10 +809,56 @@ public class EmitOperator {
             }
         } else {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitSplitArgs(emitterVisitor, node.right);
         }
         emitterVisitor.pushCallContext();
         emitOperator(node, emitterVisitor);
+    }
+
+    /**
+     * Emits split's argument list, evaluating each element in SCALAR context
+     * but producing a RuntimeList result. This ensures that expressions like
+     * `reverse $str` are evaluated in scalar context (string reverse) not
+     * list context (list reverse).
+     */
+    private static void emitSplitArgs(EmitterVisitor emitterVisitor, Node argsNode) {
+        if (argsNode instanceof ListNode listNode && !listNode.elements.isEmpty()) {
+            EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+
+            // Create a new RuntimeList and store in a spill slot
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList", "<init>", "()V", false);
+
+            JavaClassInfo.SpillRef listRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, listRef);
+
+            // Add each argument evaluated in SCALAR context
+            for (Node element : listNode.elements) {
+                element.accept(scalarVisitor);
+                JavaClassInfo.SpillRef elemRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+                emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, elemRef);
+
+                emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, listRef);
+                emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, elemRef);
+                emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elemRef);
+
+                // RuntimeList.add(RuntimeBase)
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "add",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+            }
+
+            // Load the completed list onto the stack
+            emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, listRef);
+            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(listRef);
+        } else {
+            // Fallback: evaluate as LIST (no elements or not a ListNode)
+            argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
     }
 
     // Handles the 'repeat' operator, which repeats a string or list a specified number of times.

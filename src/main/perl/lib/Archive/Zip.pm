@@ -5,6 +5,10 @@ use warnings;
 
 our $VERSION = '1.68';
 
+# Load FileHandle for compatibility with modules that expect Archive::Zip
+# to make FileHandle available (as the CPAN version does on line 12)
+use FileHandle ();
+
 # Load Java implementation
 use XSLoader;
 XSLoader::load('Archive::Zip', $VERSION);
@@ -25,6 +29,17 @@ our %EXPORT_TAGS = (
         COMPRESSION_LEVEL_FASTEST COMPRESSION_LEVEL_BEST_COMPRESSION
     )],
 );
+
+# Error handling (matches CPAN Archive::Zip API)
+our $ErrorHandler = \&Carp::carp;
+
+sub setErrorHandler {
+    my $errorHandler = (ref($_[0]) eq 'HASH') ? shift->{subroutine} : shift;
+    $errorHandler = \&Carp::carp unless defined($errorHandler);
+    my $oldErrorHandler = $Archive::Zip::ErrorHandler;
+    $Archive::Zip::ErrorHandler = $errorHandler;
+    return $oldErrorHandler;
+}
 
 # For Archive::Zip::Member methods - inherit from Archive::Zip
 # This allows member objects to use the same Java methods

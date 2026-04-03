@@ -14,6 +14,8 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     private final RuntimeHash parent;
     // Key associated with this proxy in the parent hash
     private final String key;
+    // Whether the key was originally a BYTE_STRING (for preserving key type in keys())
+    private final boolean byteKey;
 
     /**
      * Constructs a RuntimeHashProxyEntry for a given key in the specified parent hash.
@@ -22,9 +24,21 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
      * @param key    the key in the hash for which this proxy is created
      */
     public RuntimeHashProxyEntry(RuntimeHash parent, String key) {
+        this(parent, key, false);
+    }
+
+    /**
+     * Constructs a RuntimeHashProxyEntry with key type tracking.
+     *
+     * @param parent  the parent RuntimeHash containing the elements
+     * @param key     the key in the hash for which this proxy is created
+     * @param byteKey true if the key was from a BYTE_STRING scalar
+     */
+    public RuntimeHashProxyEntry(RuntimeHash parent, String key, boolean byteKey) {
         super();
         this.parent = parent;
         this.key = key;
+        this.byteKey = byteKey;
         // Note: this.type is RuntimeScalarType.UNDEF
     }
 
@@ -44,6 +58,8 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 } else {
                     parent.put(key, new RuntimeScalar());
                 }
+                // Track the key's byte/UTF-8 type
+                parent.markKeyByte(key, byteKey);
             }
             // Retrieve the element associated with the key
             lvalue = parent.elements.get(key);

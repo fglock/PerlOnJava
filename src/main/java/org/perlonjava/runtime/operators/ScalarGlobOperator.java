@@ -132,34 +132,20 @@ public class ScalarGlobOperator {
         List<String> results = new ArrayList<>();
 
         try {
-            // Preserve the original pattern format for result formatting
-            String originalPattern = pattern;
-
             // Normalize path separators for Windows compatibility
             String normalizedPattern = ScalarGlobOperatorHelper.normalizePathSeparators(pattern);
 
             // Check if pattern is absolute
-            boolean patternIsAbsolute = ScalarGlobOperatorHelper.isAbsolutePath(originalPattern);
+            boolean patternIsAbsolute = ScalarGlobOperatorHelper.isAbsolutePath(pattern);
 
-            // Extract directory and file pattern
-            PathComponents components = scalarGlobOperator.extractPathComponents(normalizedPattern, patternIsAbsolute);
-
-            if (!components.baseDir.exists() || components.filePattern.isEmpty()) {
-                // For non-existent paths or empty patterns, return literal if no glob chars
-                if (!ScalarGlobOperatorHelper.containsGlobChars(pattern)) {
-                    results.add(pattern);
-                }
-                return results;
+            // Check if any directory component contains glob wildcards
+            // If so, use recursive glob expansion
+            if (hasWildcardInDirectoryComponent(normalizedPattern)) {
+                globRecursive(scalarGlobOperator, normalizedPattern, patternIsAbsolute, results);
+            } else {
+                // Original path: only the filename part has wildcards
+                globSimple(scalarGlobOperator, pattern, normalizedPattern, patternIsAbsolute, results);
             }
-
-            // Convert glob pattern to regex
-            Pattern regex = ScalarGlobOperatorHelper.globToRegex(scalarGlobOperator, components.filePattern);
-            if (regex == null) {
-                return results;
-            }
-
-            // Match files against pattern
-            scalarGlobOperator.matchFiles(components, regex, results, originalPattern, patternIsAbsolute);
 
             // For exact matches that don't exist (from brace expansion)
             if (results.isEmpty() && !ScalarGlobOperatorHelper.containsGlobChars(pattern)) {
@@ -170,6 +156,147 @@ public class ScalarGlobOperator {
         }
 
         return results;
+    }
+
+    /**
+     * Checks if any directory component (not the final filename) contains glob wildcards.
+     */
+    private static boolean hasWildcardInDirectoryComponent(String normalizedPattern) {
+        int lastSep = normalizedPattern.lastIndexOf('/');
+        if (lastSep < 0) {
+            return false; // No directory components
+        }
+        String dirPart = normalizedPattern.substring(0, lastSep);
+        return ScalarGlobOperatorHelper.containsGlobChars(dirPart);
+    }
+
+    /**
+     * Original glob logic for patterns where only the filename part has wildcards.
+     */
+    private static void globSimple(ScalarGlobOperator scalarGlobOperator, String originalPattern,
+                                    String normalizedPattern, boolean patternIsAbsolute,
+                                    List<String> results) {
+        // Extract directory and file pattern
+        PathComponents components = scalarGlobOperator.extractPathComponents(normalizedPattern, patternIsAbsolute);
+
+        if (!components.baseDir.exists() || components.filePattern.isEmpty()) {
+            // For non-existent paths or empty patterns, return literal if no glob chars
+            if (!ScalarGlobOperatorHelper.containsGlobChars(originalPattern)) {
+                results.add(originalPattern);
+            }
+            return;
+        }
+
+        // Convert glob pattern to regex
+        Pattern regex = ScalarGlobOperatorHelper.globToRegex(scalarGlobOperator, components.filePattern);
+        if (regex == null) {
+            return;
+        }
+
+        // Match files against pattern
+        scalarGlobOperator.matchFiles(components, regex, results, originalPattern, patternIsAbsolute);
+    }
+
+    /**
+     * Recursively expands glob patterns that have wildcards in directory components.
+     * For example, "t/*&#47;*.t" expands the directory wildcard by listing matching
+     * subdirectories, then matches "*.t" files within each.
+     */
+    private static void globRecursive(ScalarGlobOperator scalarGlobOperator, String normalizedPattern,
+                                       boolean patternIsAbsolute, List<String> results) {
+        // Split the pattern into path segments
+        String[] segments = normalizedPattern.split("/", -1);
+
+        // Determine the starting directory
+        File startDir;
+        int startSegment;
+        String prefix;
+
+        if (patternIsAbsolute) {
+            // Absolute path: start from root
+            if (normalizedPattern.startsWith("/")) {
+                startDir = RuntimeIO.resolveFile("/");
+                prefix = "";
+                startSegment = 1; // Skip the empty segment before leading /
+            } else {
+                // Windows drive letter path like C:/...
+                startDir = RuntimeIO.resolveFile(segments[0] + "/");
+                prefix = segments[0];
+                startSegment = 1;
+            }
+        } else {
+            startDir = new File(System.getProperty("user.dir"));
+            prefix = "";
+            startSegment = 0;
+        }
+
+        globRecursiveStep(scalarGlobOperator, startDir, segments, startSegment, prefix, results);
+    }
+
+    /**
+     * Recursive step: processes one path segment at a time.
+     */
+    private static void globRecursiveStep(ScalarGlobOperator scalarGlobOperator, File currentDir,
+                                           String[] segments, int segmentIndex, String prefix,
+                                           List<String> results) {
+        if (segmentIndex >= segments.length) {
+            return;
+        }
+
+        String segment = segments[segmentIndex];
+        boolean isLastSegment = (segmentIndex == segments.length - 1);
+
+        if (!ScalarGlobOperatorHelper.containsGlobChars(segment)) {
+            // Literal segment - just descend
+            File next = new File(currentDir, segment);
+            String newPrefix = prefix.isEmpty() ? segment : prefix + "/" + segment;
+
+            if (isLastSegment) {
+                if (next.exists()) {
+                    results.add(newPrefix);
+                }
+            } else {
+                if (next.isDirectory()) {
+                    globRecursiveStep(scalarGlobOperator, next, segments, segmentIndex + 1, newPrefix, results);
+                }
+            }
+        } else {
+            // Wildcard segment - list directory entries and match
+            Pattern regex = ScalarGlobOperatorHelper.globToRegex(scalarGlobOperator, segment);
+            if (regex == null) {
+                return;
+            }
+
+            File[] entries;
+            try {
+                entries = currentDir.listFiles();
+            } catch (SecurityException e) {
+                return;
+            }
+
+            if (entries == null) {
+                return;
+            }
+
+            for (File entry : entries) {
+                String name = entry.getName();
+
+                // Skip hidden files/dirs unless pattern starts with dot
+                if (!segment.startsWith(".") && name.startsWith(".")) {
+                    continue;
+                }
+
+                if (regex.matcher(name).matches()) {
+                    String newPrefix = prefix.isEmpty() ? name : prefix + "/" + name;
+
+                    if (isLastSegment) {
+                        results.add(newPrefix);
+                    } else if (entry.isDirectory()) {
+                        globRecursiveStep(scalarGlobOperator, entry, segments, segmentIndex + 1, newPrefix, results);
+                    }
+                }
+            }
+        }
     }
 
     /**
