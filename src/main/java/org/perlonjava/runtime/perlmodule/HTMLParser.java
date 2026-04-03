@@ -167,14 +167,24 @@ public class HTMLParser extends PerlModuleBase {
                 if (chunk.getDefinedBoolean()) {
                     String chunkStr = chunk.toString();
 
-                    // When utf8_mode is set, decode UTF-8 byte sequences to characters.
-                    // This mirrors the XS parser behavior: utf8_mode(1) means the input
-                    // is UTF-8 encoded bytes, and the parser should deliver decoded
-                    // character strings to handlers.
+                    // When utf8_mode is set and the input is a BYTE_STRING, try to
+                    // decode UTF-8 byte sequences to characters. If decoding fails
+                    // (e.g., the bytes are Latin-1, not UTF-8), keep the original
+                    // string unchanged - each byte maps to the corresponding Unicode
+                    // code point, which preserves Latin-1 characters like ø (0xF8).
+                    // This matches Perl 5's XS parser behavior where character values
+                    // are preserved regardless of utf8_mode.
                     if (pstate.get("utf8_mode").getBoolean()
                             && chunk.type == RuntimeScalarType.BYTE_STRING) {
                         byte[] bytes = chunkStr.getBytes(StandardCharsets.ISO_8859_1);
-                        chunkStr = new String(bytes, StandardCharsets.UTF_8);
+                        java.nio.charset.CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+                        try {
+                            chunkStr = decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+                        } catch (java.nio.charset.CharacterCodingException e) {
+                            // Not valid UTF-8; keep original string (Latin-1 identity mapping)
+                        }
                     }
 
                     String html = pstate.get("_buf").toString() + chunkStr;
