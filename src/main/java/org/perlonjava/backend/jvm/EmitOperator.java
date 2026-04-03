@@ -1075,6 +1075,31 @@ public class EmitOperator {
             }
             return;
         }
+
+        // Special handling for `undef &x` with lexical subs.
+        // For lexical subs, the & operator node has a $ operand with a hiddenVarName annotation.
+        // The normal path would call the subroutine via apply() and undefine the return value,
+        // but we need to undefine the code ref scalar itself.
+        if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            Node element = listNode.elements.getFirst();
+            if (element instanceof OperatorNode ampNode && ampNode.operator.equals("&")) {
+                if (ampNode.operand instanceof OperatorNode dollarNode && dollarNode.operator.equals("$")) {
+                    String hiddenVarName = (String) dollarNode.getAnnotation("hiddenVarName");
+                    if (hiddenVarName != null) {
+                        // Lexical sub: emit the scalar variable directly and call undefine() on it
+                        dollarNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "undefine",
+                                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        handleVoidContext(emitterVisitor);
+                        return;
+                    }
+                }
+            }
+        }
+
         // Use LIST context to avoid runtime context conversion that would convert
         // hashes/arrays to scalars when the containing subroutine is called in scalar context.
         // The undef operator needs the actual container to call undefine() on it.

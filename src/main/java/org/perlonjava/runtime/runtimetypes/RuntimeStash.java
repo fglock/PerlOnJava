@@ -167,12 +167,18 @@ public class RuntimeStash extends RuntimeHash {
             return new RuntimeScalar();
         }
 
-        // Get the CODE slot before deleting (most common case)
+        // Save all slot values BEFORE deleting so they can be accessed
+        // on the returned glob (e.g., *{$old}{SCALAR} in namespace::clean)
+        RuntimeScalar savedScalar = GlobalVariable.globalVariables.get(fullKey);
+        RuntimeArray savedArray = GlobalVariable.globalArrays.get(fullKey);
+        RuntimeHash savedHash = GlobalVariable.globalHashes.get(fullKey);
+        RuntimeGlob savedIO = GlobalVariable.globalIORefs.get(fullKey);
+        RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
+
+        // Delete all slots from GlobalVariable
         // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
         // to continue calling the subroutine (Perl caches CVs at compile time)
-        RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
-
-        // Delete all other slots
+        GlobalVariable.globalCodeRefs.remove(fullKey);
         GlobalVariable.globalVariables.remove(fullKey);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
@@ -182,14 +188,13 @@ public class RuntimeStash extends RuntimeHash {
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
 
-        // If only CODE slot existed, return it directly (Perl behavior)
-        if (code != null && code.getDefinedBoolean()) {
-            return code;
-        }
+        // Create a detached glob that holds the saved slot values including CODE.
+        // In Perl 5, delete $stash->{name} returns the glob with all its old slot values.
+        // Use globName=null so getGlobSlot() uses local slots instead of GlobalVariable.
+        RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
+                savedScalar, savedArray, savedHash, savedIO, savedCode);
 
-        // Otherwise return a glob (for now, just return undef as a placeholder)
-        // TODO: Implement proper detached glob support
-        return new RuntimeScalar();
+        return detached;
     }
 
     /**

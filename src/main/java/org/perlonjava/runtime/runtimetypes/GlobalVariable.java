@@ -336,13 +336,16 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global code reference.
      */
     public static RuntimeScalar getGlobalCodeRef(String key) {
+        if (key == null) {
+            return new RuntimeScalar();
+        }
         // First check if we have a pinned reference that survives stash deletion
         RuntimeScalar pinned = pinnedCodeRefs.get(key);
         if (pinned != null) {
-            // Also ensure it's in globalCodeRefs for normal lookups
-            if (!globalCodeRefs.containsKey(key)) {
-                globalCodeRefs.put(key, pinned);
-            }
+            // Return the pinned ref so compiled code keeps working, but do NOT
+            // re-add to globalCodeRefs. If it was deleted from the stash (e.g., by
+            // namespace::clean), that deletion should be respected for method
+            // resolution via can() and the inheritance hierarchy.
             return pinned;
         }
 
@@ -374,6 +377,24 @@ public class GlobalVariable {
         pinnedCodeRefs.put(key, var);
 
         return var;
+    }
+
+    /**
+     * Retrieves a global code reference for the purpose of DEFINING code.
+     * Unlike getGlobalCodeRef(), this also ensures the entry is visible in
+     * globalCodeRefs for method resolution via can() and the inheritance hierarchy.
+     * Use this when assigning code to a glob (e.g., *Foo::bar = sub { ... }).
+     *
+     * @param key The key of the global code reference.
+     * @return The RuntimeScalar representing the global code reference.
+     */
+    public static RuntimeScalar defineGlobalCodeRef(String key) {
+        RuntimeScalar ref = getGlobalCodeRef(key);
+        // Ensure it's in globalCodeRefs so method resolution finds it
+        if (!globalCodeRefs.containsKey(key)) {
+            globalCodeRefs.put(key, ref);
+        }
+        return ref;
     }
 
     /**
@@ -412,6 +433,10 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle GLOB type: extract CODE slot from the glob
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return existsGlobalCodeRefAsScalar(glob.globName);
+        }
         // Handle RuntimeCode objects by extracting the subroutine name
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
             // Use the RuntimeCode.defined() method to check if the subroutine actually exists
@@ -451,6 +476,16 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle GLOB type: extract CODE slot from the glob
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return definedGlobalCodeRefAsScalar(glob.globName);
+        }
+        // Handle CODE type: check the RuntimeCode object directly.
+        // This works for both named subs and anonymous/lexical coderefs.
+        // After `undef &x`, the RuntimeCode is replaced with an empty one where defined() returns false.
+        if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
+        }
         return definedGlobalCodeRefAsScalar(key.toString());
     }
 
@@ -470,6 +505,10 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar deleteGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle GLOB type: extract CODE slot from the glob
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return deleteGlobalCodeRefAsScalar(glob.globName);
+        }
         // Handle RuntimeCode objects by extracting the subroutine name
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
             String fullName = runtimeCode.packageName + "::" + runtimeCode.subName;

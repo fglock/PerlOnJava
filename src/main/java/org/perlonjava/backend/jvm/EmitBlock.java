@@ -300,6 +300,19 @@ public class EmitBlock {
                 // This means non-local control flow (next LABEL from closures) works for
                 // actual loop constructs but NOT for bare labeled blocks, which is correct
                 // Perl behavior anyway.
+
+                // After a block/control flow node exits, restore the parent's hint hash
+                // so subsequent statements have the correct compile-time %^H for caller()[10].
+                if (element instanceof AbstractNode an) {
+                    Object hintIdObj = an.getAnnotation("postBlockHintHashId");
+                    if (hintIdObj instanceof Integer hintId) {
+                        mv.visitLdcInsn(hintId);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/HintHashRegistry",
+                                "setCallSiteHintHashId",
+                                "(I)V", false);
+                    }
+                }
             }
         } finally {
             if (preEvalForNode != null) {

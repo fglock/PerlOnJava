@@ -16,8 +16,9 @@
 #   perl dev/tools/cpan_smoke_test.pl --list       # List modules and exit
 #
 # Output:
-#   - Summary table to stdout
-#   - Detailed log to cpan_smoke_YYYYMMDD_HHMMSS.log
+#   - Summary table with failure details to stdout
+#   - Combined log to cpan_smoke_YYYYMMDD_HHMMSS.log
+#   - Per-module logs to cpan_smoke_YYYYMMDD_HHMMSS/<Module-Name>.log
 #
 # Run with `perl` (not jperl) because this script uses fork.
 
@@ -151,16 +152,20 @@ if (!@modules) {
 }
 
 # ──────────────────────────────────────────────────────────────────────
-# Setup log file
+# Setup log file and per-module output directory
 # ──────────────────────────────────────────────────────────────────────
 my $timestamp = strftime('%Y%m%d_%H%M%S', localtime);
 $output_file //= "cpan_smoke_${timestamp}.log";
+my $module_log_dir = "cpan_smoke_${timestamp}";
+mkdir $module_log_dir or die "Cannot create $module_log_dir: $!\n" unless -d $module_log_dir;
+
 open my $log_fh, '>', $output_file or die "Cannot open $output_file: $!\n";
 
 log_msg("CPAN Smoke Test - " . strftime('%Y-%m-%d %H:%M:%S', localtime));
 log_msg("Project root: $project_root");
 log_msg("Modules to test: " . scalar(@modules));
 log_msg("Timeout per module: ${timeout}s");
+log_msg("Per-module logs: $module_log_dir/");
 log_msg("=" x 70);
 
 # ──────────────────────────────────────────────────────────────────────
@@ -182,6 +187,22 @@ if ($jobs > 1) {
     @results = run_parallel(\@modules, $jobs);
 } else {
     @results = run_sequential(\@modules);
+}
+
+# For results missing failure details (e.g., from parallel mode),
+# re-extract from saved per-module log files
+for my $result (@results) {
+    next if $result->{status} eq 'PASS' || $result->{status} eq 'INSTALLED';
+    next if $result->{failure_details} && @{$result->{failure_details}};
+    (my $safe = $result->{module}) =~ s/::/-/g;
+    my $logpath = "$module_log_dir/${safe}.log";
+    if (-f $logpath) {
+        open my $fh, '<', $logpath or next;
+        local $/;
+        my $output = <$fh>;
+        close $fh;
+        extract_failure_details($output, $result);
+    }
 }
 
 # Check for regressions
@@ -217,6 +238,7 @@ write_results_data(\@results);
 
 close $log_fh;
 print "\nDetailed log: $output_file\n";
+print "Per-module logs: $module_log_dir/\n";
 print "Results data: cpan_smoke_${timestamp}.dat\n";
 
 # Exit with non-zero if any known-good module failed
@@ -424,6 +446,8 @@ sub run_jcpan_test {
         total_count => undef,
         xs_detected => '',
         error       => '',
+        failed_files => [],   # list of failed test file names
+        failure_details => [], # "not ok" lines and diagnostic context
     );
 
     # Build command with optional env vars
@@ -449,11 +473,15 @@ sub run_jcpan_test {
     if ($@ && $@ =~ /TIMEOUT/) {
         $result{status} = 'TIMEOUT';
         $result{error} = "Exceeded ${timeout}s timeout";
+        save_module_log($module, $output);
         log_msg("  OUTPUT (truncated - timeout):\n$output") if $output;
         return \%result;
     }
 
-    # Log full output
+    # Save per-module output to individual file
+    save_module_log($module, $output);
+
+    # Log full output (also keep in combined log for backward compat)
     log_msg("  FULL OUTPUT:");
     for my $line (split /\n/, $output) {
         print $log_fh "    $line\n";
@@ -461,6 +489,9 @@ sub run_jcpan_test {
 
     # Parse output
     parse_jcpan_output($output, \%result, $exit_code);
+
+    # Extract failure details from the output
+    extract_failure_details($output, \%result);
 
     return \%result;
 }
@@ -616,6 +647,104 @@ sub parse_jcpan_output {
     }
 }
 
+sub save_module_log {
+    my ($module, $output) = @_;
+    (my $safe_name = $module) =~ s/::/-/g;
+    my $path = "$module_log_dir/${safe_name}.log";
+    if (open my $fh, '>', $path) {
+        print $fh $output;
+        close $fh;
+    } else {
+        warn "Cannot write $path: $!\n";
+    }
+}
+
+sub extract_failure_details {
+    my ($output, $result) = @_;
+
+    # Isolate the last test block (the target module, not its deps)
+    my $last_test_block = $output;
+    if ($output =~ /Running make test/) {
+        my @blocks = split /Running make test[^\n]*\n/, $output;
+        $last_test_block = $blocks[-1] if @blocks > 1;
+    }
+
+    # Extract failed test file names from harness summary
+    # Format: "  t/foo.t  (Wstat: 0 Tests: 10 Failed: 1)"
+    my @failed_files;
+    while ($last_test_block =~ /^\s+(\S+\.t)\s+\(Wstat:.*?Failed:\s*(\d+)\)/mg) {
+        push @failed_files, $1 if $2 > 0;
+    }
+    # Also capture from "Failed N/M subtests" lines
+    while ($last_test_block =~ /^(\s*\S+\.t)\s+\.+\s*\n?\s*Failed\s+\d+\/\d+\s+subtests/mg) {
+        my $f = $1;
+        $f =~ s/^\s+//;
+        push @failed_files, $f unless grep { $_ eq $f } @failed_files;
+    }
+    # Also capture files with parse errors (ran 0 tests)
+    while ($last_test_block =~ /^\s+(\S+\.t)\s+\(Wstat:.*?\)\s*\n\s+Parse errors:/mg) {
+        my $f = $1;
+        push @failed_files, $f unless grep { $_ eq $f } @failed_files;
+    }
+    $result->{failed_files} = \@failed_files;
+
+    # Extract failure details from test output.
+    # Test::Harness shows diagnostic lines like:
+    #   #   Failed test 'name'
+    #   #   at t/foo.t line 42.
+    #   #          got: 'xxx'
+    #   #     expected: 'yyy'
+    # Also capture syntax errors and other fatal lines preceding "Failed N/M subtests"
+    my @details;
+    my @lines = split /\n/, $last_test_block;
+    my $i = 0;
+    while ($i <= $#lines) {
+        my $line = $lines[$i];
+
+        # Match "# Failed test '...'" diagnostic blocks
+        if ($line =~ /^#\s+Failed test\b/) {
+            my @block = ($line);
+            # Collect following '#' diagnostic lines
+            my $j = $i + 1;
+            while ($j <= $#lines && $lines[$j] =~ /^#/) {
+                push @block, $lines[$j];
+                $j++;
+            }
+            push @details, join("\n", @block);
+            $i = $j;
+            next;
+        }
+
+        # Match "not ok N" TAP lines (visible in some output modes)
+        if ($line =~ /^\s*not ok \d+/) {
+            my @block;
+            # Grab preceding '#' context (up to 2 lines)
+            for my $k (($i >= 2 ? $i - 2 : 0) .. $i - 1) {
+                push @block, $lines[$k] if $lines[$k] =~ /^\s*#/;
+            }
+            push @block, $line;
+            # Grab following '#' diagnostics (up to 4 lines)
+            for my $k ($i + 1 .. ($i + 4 <= $#lines ? $i + 4 : $#lines)) {
+                last unless $lines[$k] =~ /^\s*#/;
+                push @block, $lines[$k];
+            }
+            push @details, join("\n", @block);
+        }
+
+        # Match fatal errors (syntax error, Can't locate, etc.)
+        if ($line =~ /^(?:syntax error|Can't locate|Compilation failed|BEGIN failed)/) {
+            push @details, $line;
+        }
+
+        $i++;
+    }
+
+    # Deduplicate
+    my %seen;
+    @details = grep { !$seen{$_}++ } @details;
+    $result->{failure_details} = \@details;
+}
+
 sub print_summary {
     my ($results, $elapsed) = @_;
     print format_summary($results, $elapsed);
@@ -707,6 +836,53 @@ sub format_summary {
             $out .= sprintf("    %-30s %s\n", $r->{module}, $java_impl);
         }
     }
+
+    # Failure details section: show failed files and representative failures
+    my @failing = grep {
+        $_->{status} ne 'PASS' && $_->{status} ne 'INSTALLED'
+        && ($_->{failed_files} && @{$_->{failed_files}}
+            || $_->{failure_details} && @{$_->{failure_details}})
+    } @$results;
+
+    if (@failing) {
+        $out .= "\n" . "=" x 90 . "\n";
+        $out .= "FAILURE DETAILS\n";
+        $out .= "=" x 90 . "\n";
+
+        for my $r (sort { $a->{module} cmp $b->{module} } @failing) {
+            (my $safe = $r->{module}) =~ s/::/-/g;
+            $out .= sprintf("\n  %s  (%s/%s)  [full log: %s/%s.log]\n",
+                $r->{module},
+                $r->{pass_count} // '?', $r->{total_count} // '?',
+                $module_log_dir, $safe);
+
+            # List failed test files
+            if ($r->{failed_files} && @{$r->{failed_files}}) {
+                $out .= "    Failed test files:\n";
+                for my $f (@{$r->{failed_files}}) {
+                    $out .= "      - $f\n";
+                }
+            }
+
+            # Show up to 10 representative failure details (compact)
+            if ($r->{failure_details} && @{$r->{failure_details}}) {
+                my $max = 10;
+                my $total_failures = scalar @{$r->{failure_details}};
+                my @show = @{$r->{failure_details}}[0 .. ($max - 1 < $#{ $r->{failure_details} } ? $max - 1 : $#{ $r->{failure_details} })];
+                $out .= "    Failures ($total_failures total" . ($total_failures > $max ? ", showing first $max" : "") . "):\n";
+                for my $detail (@show) {
+                    # Indent each line of the detail block
+                    for my $line (split /\n/, $detail) {
+                        $out .= "      $line\n";
+                    }
+                    $out .= "\n";
+                }
+            }
+        }
+    }
+
+    # Per-module log directory
+    $out .= "\n  Per-module logs: $module_log_dir/\n";
 
     $out .= "\n";
     return $out;

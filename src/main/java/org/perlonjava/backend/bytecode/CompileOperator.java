@@ -448,7 +448,7 @@ public class CompileOperator {
      * Perl allows `defined *$var` even under strict refs without auto-vivifying.
      */
     private static void visitDefined(BytecodeCompiler bc, OperatorNode node) {
-        // Check for special case: defined *$var
+        // Check for special cases
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node operand = listNode.elements.getFirst();
             // Handle defined(+expr) by unwrapping the +
@@ -465,6 +465,19 @@ public class CompileOperator {
                 bc.emitReg(rd);
                 bc.emitReg(scalarReg);
                 bc.emit(pkgIdx);
+                bc.lastResultReg = rd;
+                return;
+            }
+            // defined(&name) - use stash lookup to match JVM backend/Perl 5 behavior
+            if (operand instanceof OperatorNode opNode && opNode.operator.equals("&")
+                    && opNode.operand instanceof IdentifierNode idNode) {
+                String subName = NameNormalizer.normalizeVariableName(
+                        idNode.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(subName);
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.DEFINED_CODE);
+                bc.emitReg(rd);
+                bc.emit(nameIdx);
                 bc.lastResultReg = rd;
                 return;
             }

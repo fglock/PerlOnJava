@@ -37,6 +37,27 @@ public class RuntimeStashEntry extends RuntimeGlob {
         return this;
     }
 
+    /**
+     * Override globDeref for stash entries to return a plain RuntimeGlob.
+     * This ensures that *{$stash{name}} = \$value goes through RuntimeGlob.set()
+     * (which only aliases slots) rather than RuntimeStashEntry.set() (which creates
+     * constant subs). Direct stash assignment $stash{name} = \$value still calls
+     * RuntimeStashEntry.set() and creates constant subs as expected.
+     */
+    @Override
+    public RuntimeGlob globDeref() {
+        RuntimeGlob pure = new RuntimeGlob(this.globName);
+        pure.IO = this.IO;
+        return pure;
+    }
+
+    @Override
+    public RuntimeGlob globDerefNonStrict(String packageName) {
+        RuntimeGlob pure = new RuntimeGlob(this.globName);
+        pure.IO = this.IO;
+        return pure;
+    }
+
 // Note on Stash Operations:
 //
 // In Perl, a typeglob is a structure that holds a symbol table entry and a key (or slot).
@@ -70,26 +91,26 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     // `$stash->{foo} = \&bar` creates a constant subroutine returning the code reference
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                     InheritanceResolver.invalidateCache();
                 } else if (deref.type == HASHREFERENCE) {
                     // `$stash->{foo} = \$hash_ref` creates a constant subroutine returning the hash reference
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else if (deref.type == ARRAYREFERENCE) {
                     // `$stash->{foo} = \$array_ref` creates a constant subroutine returning the array reference
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else if (deref.type == GLOB) {
                     // `$stash->{foo} = \*bar` creates a constant subroutine returning the glob
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = new RuntimeList(deref);
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else {
                     // Default: scalar slot + constant subroutine for bareword access
@@ -97,7 +118,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
 
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 }
             }
@@ -112,7 +133,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 // Also create a constant subroutine for bareword access
                 RuntimeCode code = new RuntimeCode("", null);
                 code.constantValue = targetArray.getList();
-                GlobalVariable.getGlobalCodeRef(this.globName).set(
+                GlobalVariable.defineGlobalCodeRef(this.globName).set(
                         new RuntimeScalar(code));
             }
             return value;
@@ -123,7 +144,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
             case TIED_SCALAR:
                 return set(value.tiedFetch());
             case CODE:
-                GlobalVariable.getGlobalCodeRef(this.globName).set(value);
+                GlobalVariable.defineGlobalCodeRef(this.globName).set(value);
 
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
@@ -164,7 +185,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
             case BYTE_STRING:
                 // Assigning a string to a stash entry sets the prototype for that symbol
                 // e.g., $::{foo} = '$$' sets the prototype of &foo to '$$'
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
+                RuntimeScalar codeRef = GlobalVariable.defineGlobalCodeRef(this.globName);
                 if (codeRef.type == CODE) {
                     ((RuntimeCode) codeRef.value).prototype = value.toString();
                 } else {
@@ -178,8 +199,13 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 if (value.value instanceof RuntimeGlob glob) {
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = new RuntimeList(new RuntimeScalar(glob));
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
+                } else if (value.value instanceof RuntimeIO runtimeIO) {
+                    // *foo = *{$old}{IO} — restore the IO slot
+                    RuntimeScalar ioSlot = GlobalVariable.getGlobalIO(this.globName);
+                    ioSlot.type = RuntimeScalarType.GLOB;
+                    ioSlot.value = runtimeIO;
                 }
                 return value;
         }

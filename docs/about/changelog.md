@@ -34,6 +34,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - The interpreter mode excels at dynamic eval STRING operations (46x faster than compilation for unique strings, matching Perl 5 performance). For general code, it runs only 15% slower than Perl 5. It is also useful for implementing debugging, handling "Method too large" errors, and enabling Android and GraalVM compatibility.
 - Planned release date: 2026-04-10.
 
+- Add `attributes` pragma with `MODIFY_*_ATTRIBUTES`/`FETCH_*_ATTRIBUTES` callbacks for subroutines and variables.
 - Add modules: `Filter::Simple` with `FILTER` and `FILTER_ONLY` support.
 
 - Work in Progress

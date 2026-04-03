@@ -17,6 +17,7 @@ import org.perlonjava.frontend.parser.DataSection;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -161,11 +162,18 @@ public class PerlLanguageProvider {
                     "main",
                     ctx.compilerOptions.fileName,
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
+            // Push the main script onto BHooksEndOfScope's loading stack so that
+            // on_scope_end callbacks (e.g., from namespace::clean) are deferred
+            // until end of parsing, matching Perl 5 behavior.
+            BHooksEndOfScope.beginFileLoad(ctx.compilerOptions.fileName);
         }
         try {
             ast = parser.parse(); // Generate the abstract syntax tree (AST)
         } finally {
             if (isTopLevelScript) {
+                // Fire on_scope_end callbacks now that parsing is complete.
+                // This is the "end of compilation scope" equivalent.
+                BHooksEndOfScope.endFileLoad(ctx.compilerOptions.fileName);
                 CallerStack.pop();
             }
         }

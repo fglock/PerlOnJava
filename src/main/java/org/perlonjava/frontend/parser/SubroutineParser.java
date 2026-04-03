@@ -117,6 +117,8 @@ public class SubroutineParser {
                         // Always create a fresh variable reference to avoid AST reuse issues
                         OperatorNode dollarOp = new OperatorNode("$",
                                 new IdentifierNode(qualifiedHiddenVarName, currentIndex), currentIndex);
+                        // Propagate hiddenVarName annotation so that emitters can detect lexical subs
+                        dollarOp.setAnnotation("hiddenVarName", hiddenVarName);
 
                         // Copy the ID from the symbol table entry for state variables
                         if (hiddenEntry != null && hiddenEntry.ast() instanceof OperatorNode hiddenVarNode) {
@@ -629,7 +631,7 @@ public class SubroutineParser {
         if (wantName && subName != null && !peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeScalar codeRefScalar = GlobalVariable.getGlobalCodeRef(fullName);
+            RuntimeScalar codeRefScalar = GlobalVariable.defineGlobalCodeRef(fullName);
             RuntimeCode codeRef = (RuntimeCode) codeRefScalar.value;
             // Mark as explicitly declared so *{glob}{CODE} returns this code ref
             codeRef.isDeclared = true;
@@ -942,7 +944,7 @@ public class SubroutineParser {
 
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        RuntimeScalar codeRef = GlobalVariable.defineGlobalCodeRef(fullName);
         InheritanceResolver.invalidateCache();
         
         // Check if we're redefining an existing subroutine that already has code.

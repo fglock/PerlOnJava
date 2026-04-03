@@ -18,6 +18,7 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.ForkOpenCompleteException;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.debugger.DebugHooks;
@@ -580,6 +581,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // caller scope, so snapshot and restore it across compilation.
             RuntimeHash capturedHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
             Map<String, RuntimeScalar> savedHintHash = new HashMap<>(capturedHintHash.elements);
+
+            // Restore %^H from the call site's compile-time snapshot for eval STRING.
+            // At runtime, %^H is normally empty. But eval STRING needs to inherit the
+            // compile-time %^H that was active when the eval statement was compiled,
+            // so that pragmas like 'use mypragma' are visible inside eval.
+            java.util.Map<String, String> callSiteHints = HintHashRegistry.getCurrentCallSiteHintHash();
+            if (callSiteHints != null) {
+                for (java.util.Map.Entry<String, String> entry : callSiteHints.entrySet()) {
+                    capturedHintHash.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                }
+            }
 
             // eval may include lexical pragmas (use strict/warnings/features). We need those flags
             // during codegen of the eval body, but they must NOT leak back into the caller scope.
@@ -1521,6 +1533,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
                     ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
+                } else if (runtimeScalar.type == REGEX) {
+                    // qr// objects are implicitly blessed into the Regexp class in Perl 5
+                    // This allows $qr->isa("Regexp"), $qr->can("..."), etc.
+                    perlClassName = "Regexp";
                 } else {
                     // Not auto-blessed
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
@@ -1813,10 +1829,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Add hinthash (element 10): Compile-time %^H hash reference
-                // TODO: Proper implementation requires lexical scoping of %^H during compilation.
-                // Currently %^H is a plain global that leaks across scope boundaries,
-                // so the snapshot is always stale. Return undef until %^H scoping is implemented.
-                res.add(RuntimeScalarCache.scalarUndef);
+                // Use the per-call-site hint hash registry to get the %^H snapshot
+                // that was active when the calling code was compiled.
+                // Falls back to the global %^H for compile-time calls (BEGIN blocks).
+                java.util.Map<String, String> callerHintHash = HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                if (callerHintHash != null) {
+                    RuntimeHash snapshot = new RuntimeHash();
+                    for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                        snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                    }
+                    res.add(snapshot.createReference());
+                } else {
+                    // Fallback: check global %^H (for compile-time calls in BEGIN blocks)
+                    RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+                    if (!hintHash.elements.isEmpty()) {
+                        RuntimeHash snapshot = new RuntimeHash();
+                        snapshot.setFromList(hintHash.getList());
+                        res.add(snapshot.createReference());
+                    } else {
+                        res.add(RuntimeScalarCache.scalarUndef);
+                    }
+                }
             }
         } else if (frame >= stackTraceSize) {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
@@ -1990,13 +2023,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarningBitsRegistry.pushCallerBits();
             // Save caller's $^H so caller()[8] can retrieve them
             WarningBitsRegistry.pushCallerHints();
-            // Save caller's %^H so caller()[10] can retrieve them
-            WarningBitsRegistry.pushCallerHintHash();
+            // Save caller's call-site hint hash so caller()[10] can retrieve them
+            HintHashRegistry.pushCallerHintHash();
             try {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(a, callContext);
             } finally {
-                WarningBitsRegistry.popCallerHintHash();
+                HintHashRegistry.popCallerHintHash();
                 WarningBitsRegistry.popCallerHints();
                 WarningBitsRegistry.popCallerBits();
                 if (warningBits != null) {
@@ -2011,6 +2044,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, a, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, a, callContext);
             }
         }
 
@@ -2020,6 +2055,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, a, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, a, callContext);
             }
         }
 
@@ -2197,13 +2234,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerBits();
                 // Save caller's $^H so caller()[8] can retrieve them
                 WarningBitsRegistry.pushCallerHints();
-                // Save caller's %^H so caller()[10] can retrieve them
-                WarningBitsRegistry.pushCallerHintHash();
+                // Save caller's call-site hint hash so caller()[10] can retrieve them
+                HintHashRegistry.pushCallerHintHash();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
-                    WarningBitsRegistry.popCallerHintHash();
+                    HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
@@ -2253,6 +2290,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, args, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, args, callContext);
             }
         }
 
@@ -2262,6 +2301,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, args, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, args, callContext);
             }
         }
 
@@ -2349,13 +2390,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerBits();
                 // Save caller's $^H so caller()[8] can retrieve them
                 WarningBitsRegistry.pushCallerHints();
-                // Save caller's %^H so caller()[10] can retrieve them
-                WarningBitsRegistry.pushCallerHintHash();
+                // Save caller's call-site hint hash so caller()[10] can retrieve them
+                HintHashRegistry.pushCallerHintHash();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
                 } finally {
-                    WarningBitsRegistry.popCallerHintHash();
+                    HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
                     if (warningBits != null) {
@@ -2399,6 +2440,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, list, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, list, callContext);
             }
         }
 
@@ -2408,6 +2451,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, list, callContext);
+            } else if (glob.codeSlot != null) {
+                return apply(glob.codeSlot, subroutineName, list, callContext);
             }
         }
 
@@ -2495,6 +2540,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // cause normalizeVariableName to look up the wrong name
         if (runtimeScalar.type == RuntimeScalarType.GLOB) {
             RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            // For detached globs (null globName, from stash delete), use local code slot
+            if (glob.globName == null) {
+                if (glob.codeSlot != null) {
+                    RuntimeScalar snapshot = new RuntimeScalar();
+                    snapshot.type = glob.codeSlot.type;
+                    snapshot.value = glob.codeSlot.value;
+                    return snapshot;
+                }
+                return new RuntimeScalar(); // undef
+            }
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(glob.globName);
             
             // Return a snapshot of the current code reference
