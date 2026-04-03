@@ -1,6 +1,6 @@
 # LWP::UserAgent Support for PerlOnJava
 
-## Status: Phase 8 Complete
+## Status: Phase 9 Complete
 
 **Branch**: `fix/lwp-useragent-support`
 **Date started**: 2026-04-03
@@ -12,7 +12,7 @@ client library for Perl. It was previously blocked on HTTP::Message, which has s
 been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
-## Current State (after Phase 8)
+## Current State (after Phase 9)
 
 Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
 - **173/173 subtests pass** (100%) — after fixing test runner to treat `not ok # TODO` as OK per TAP spec
@@ -35,6 +35,8 @@ Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
 | t/10-attrs.t | "Use of uninitialized value in join or string" warnings (×6). These are real Perl warnings from undef credentials in LWP/UserAgent.pm line 712. Perl 5 produces them too. | Pre-existing (not a PerlOnJava bug) |
 | t/local/download_to_fh.t | "Odd number of elements in hash assignment" warnings. These are real Perl warnings from LWP code path. Perl 5 produces them too. | Pre-existing (not a PerlOnJava bug) |
 | t/leak/no_leak.t | Requires Test::LeakTrace (XS-only module). Cannot be supported. | Won't fix |
+| Test2::API line 384 | `Argument "No such file or directory" isn't numeric` warning when running under Test::Harness. Does not reproduce in isolation. Likely a pre-existing issue where the string form of `$!` gets stored in a regular scalar. | Pre-existing |
+| `%!` tied hash | `$!{EINPROGRESS}` returns empty. PerlOnJava may not auto-tie `%!` to Errno like Perl 5 does. IO::Socket::IP uses `$!{EINPROGRESS}` to check non-blocking connect status. | Pre-existing (not yet implemented) |
 
 ### Test Results Breakdown
 
@@ -408,6 +410,17 @@ via a prior jcpan run.
 - [x] `make` passes
 - [x] Commit: `b1dd75b02`
 
+### Phase 9: Platform-correct errno constants -- COMPLETED (2026-04-03)
+
+- [x] ErrnoVariable: probe native strerror() to discover errno values (don't depend on Perl Errno)
+- [x] ErrnoVariable: add EAGAIN constant accessor for sysread/syswrite
+- [x] SocketIO: replace hardcoded `set(11)` with `ErrnoVariable.EAGAIN()` (35 on macOS, 11 on Linux)
+- [x] Errno.pm: add macOS/Darwin errno table with runtime `$^O` detection
+- [x] Errno.pm: filter `:POSIX` export tag to only include platform-available constants
+- [x] Fixes "Unknown error -1" in IO::Socket::IP connect() on macOS
+- [x] `make` passes
+- [x] Commit: `b31a10459`
+
 ### Next Steps
 
 - [x] Create PR for merge to master — PR #431
@@ -485,3 +498,10 @@ via a prior jcpan run.
 | `src/main/java/org/perlonjava/runtime/io/SocketIO.java` | Update to method-based errno constants (EINPROGRESS() etc.) |
 | `src/main/java/org/perlonjava/runtime/operators/WarnDie.java` | Add getPerlLocationFromStack() for warning source location info |
 | `src/main/perl/lib/File/Temp.pm` | Handle positional template argument in constructor |
+
+### Phase 9
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoVariable.java` | Probe strerror() for errno constants instead of reading from Perl Errno; add EAGAIN accessor |
+| `src/main/java/org/perlonjava/runtime/io/SocketIO.java` | Use ErrnoVariable.EAGAIN() instead of hardcoded 11 |
+| `src/main/perl/lib/Errno.pm` | Add macOS/Darwin errno table; runtime $^O detection; filter :POSIX exports |
