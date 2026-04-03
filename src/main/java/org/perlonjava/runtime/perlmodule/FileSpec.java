@@ -78,16 +78,43 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for canonpath() method");
         }
         String path = args.get(1).toString();
-        String quotedSeparator = Matcher.quoteReplacement(File.separator);
-        String canonPath = path.replaceAll("[/\\\\]+", quotedSeparator)
-                .replaceAll(Pattern.quote(File.separator) + "\\." + Pattern.quote(File.separator), quotedSeparator);
         
-        // Remove leading ./ unless the path is exactly "./"
-        // This matches Perl's File::Spec::Unix behavior
-        if (!canonPath.equals("." + File.separator)) {
-            while (canonPath.startsWith("." + File.separator)) {
-                canonPath = canonPath.substring(2);
+        // Empty string stays empty (Perl 5 behavior)
+        if (path.isEmpty()) {
+            return new RuntimeScalar("").getList();
+        }
+        
+        // Implement Perl 5's File::Spec::Unix::canonpath logic:
+        // 1. Collapse multiple slashes into one
+        // 2. Collapse /./  and also /. at end of string
+        // 3. Remove leading ./  (unless path is exactly "./")
+        // 4. Remove trailing /  (unless path is exactly "/")
+        String sep = File.separator;
+        String quotedSep = Pattern.quote(sep);
+        String replSep = Matcher.quoteReplacement(sep);
+        
+        // Collapse multiple separators into one
+        String canonPath = path.replaceAll("[/\\\\]+", replSep);
+        
+        // Collapse /./ and /. at end: (?:/\.)+(?:/|$) -> /
+        // This handles both /./bar -> /bar and foo/. -> foo
+        canonPath = canonPath.replaceAll("(?:" + quotedSep + "\\.)+(?=" + quotedSep + "|$)", "");
+        
+        // Remove leading ./ unless the path is exactly "./" or "."
+        if (!canonPath.equals("." + sep) && !canonPath.equals(".")) {
+            while (canonPath.startsWith("." + sep)) {
+                canonPath = canonPath.substring(1 + sep.length());
             }
+        }
+        
+        // Remove trailing / unless the path is exactly "/"
+        if (!canonPath.equals(sep) && canonPath.endsWith(sep)) {
+            canonPath = canonPath.substring(0, canonPath.length() - sep.length());
+        }
+        
+        // If we reduced to empty string from a non-empty input, return "."
+        if (canonPath.isEmpty()) {
+            canonPath = ".";
         }
         
         return new RuntimeScalar(canonPath).getList();
@@ -153,19 +180,59 @@ public class FileSpec extends PerlModuleBase {
             }
         }
 
-        return new RuntimeScalar(result.toString()).getList();
+        // Apply canonpath to the result, matching Perl's File::Spec::Unix behavior
+        // where catdir calls canonpath(join('/', @_, ''))
+        RuntimeArray canonArgs = new RuntimeArray();
+        canonArgs.push(new RuntimeScalar("dummy"));
+        canonArgs.push(new RuntimeScalar(result.toString()));
+        return canonpath(canonArgs, ctx);
     }
 
     /**
      * Concatenates multiple file names into a single path.
-     * This method is an alias for {@link #catdir(RuntimeArray, int)}.
+     * Uses catdir for the directory components and canonpath for the file component.
      *
      * @param args The arguments passed from the Perl environment, representing file names.
      * @param ctx  The context in which the method is called.
      * @return A {@link RuntimeList} containing the concatenated file path.
      */
     public static RuntimeList catfile(RuntimeArray args, int ctx) {
-        return catdir(args, ctx);
+        if (args.size() <= 2) {
+            // 0 or 1 real args (first is invocant) — just canonpath the single arg
+            if (args.size() == 2) {
+                return canonpath(args, ctx);
+            }
+            return new RuntimeScalar("").getList();
+        }
+
+        // Last real arg is the file component; everything before is directories
+        RuntimeScalar file = args.get(args.size() - 1);
+        
+        // Build directory portion using catdir
+        RuntimeArray dirArgs = new RuntimeArray();
+        for (int i = 0; i < args.size() - 1; i++) {
+            dirArgs.push(args.get(i));
+        }
+        String dir = catdir(dirArgs, ctx).elements.get(0).toString();
+        
+        // Canonpath the file part
+        RuntimeArray fileCanonArgs = new RuntimeArray();
+        fileCanonArgs.push(new RuntimeScalar("dummy"));
+        fileCanonArgs.push(file);
+        String filePart = canonpath(fileCanonArgs, ctx).elements.get(0).toString();
+        
+        // Combine: if dir is empty, just return the file
+        if (dir.isEmpty()) {
+            return new RuntimeScalar(filePart).getList();
+        }
+        
+        // Ensure proper separator between dir and file
+        String separator = File.separator;
+        char lastChar = dir.charAt(dir.length() - 1);
+        if (lastChar == '/' || lastChar == '\\') {
+            return new RuntimeScalar(dir + filePart).getList();
+        }
+        return new RuntimeScalar(dir + separator + filePart).getList();
     }
 
     /**
@@ -363,7 +430,11 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for splitdir() method");
         }
         String directories = args.get(1).toString();
-        String[] dirs = directories.split(Pattern.quote(File.separator));
+        // Empty string returns empty list (Perl 5 behavior)
+        if (directories.isEmpty()) {
+            return new RuntimeList(new ArrayList<>());
+        }
+        String[] dirs = directories.split(Pattern.quote(File.separator), -1);
         List<RuntimeScalar> dirList = new ArrayList<>();
         for (String dir : dirs) {
             dirList.add(new RuntimeScalar(dir));

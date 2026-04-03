@@ -317,6 +317,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Array delete**: `delete` for array indexes is implemented.
 - ✅  **Tied Arrays**: Tied arrays are implemented. See also [Tied Scalars](#scalars), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
 - ✅  **Tied Hashes**: Tied hashes are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
+- ❌  **Restricted hashes**: `Hash::Util` lock/unlock functions (`lock_keys`, `lock_hash`, etc.) are not implemented.
 
 ---
 

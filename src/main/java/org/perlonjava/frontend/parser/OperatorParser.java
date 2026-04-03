@@ -270,16 +270,26 @@ public class OperatorParser {
 
         String varType = null;
         if (peek(parser).type == IDENTIFIER) {
-            // If a package name follows, then it is a type declaration
-            int currentIndex2 = parser.tokenIndex;
-            String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
-            boolean packageExists = GlobalVariable.isPackageLoaded(packageName);
-            // System.out.println("maybe type: " + packageName + " " + packageExists);
-            if (packageExists) {
-                varType = packageName;
+            String tokenText = peek(parser).text;
+
+            // Handle 'my __PACKAGE__ $var' and 'my __CLASS__ $var' syntax.
+            // __PACKAGE__ is a compile-time constant that resolves to the current
+            // package name when used as a type annotation in variable declarations.
+            if (tokenText.equals("__PACKAGE__") || tokenText.equals("__CLASS__")) {
+                TokenUtils.consume(parser); // consume __PACKAGE__/__CLASS__
+                varType = parser.ctx.symbolTable.getCurrentPackage();
             } else {
-                // Backtrack
-                parser.tokenIndex = currentIndex2;
+                // If a package name follows, then it is a type declaration
+                int currentIndex2 = parser.tokenIndex;
+                String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+                boolean packageExists = GlobalVariable.isPackageLoaded(packageName);
+                // System.out.println("maybe type: " + packageName + " " + packageExists);
+                if (packageExists) {
+                    varType = packageName;
+                } else {
+                    // Backtrack
+                    parser.tokenIndex = currentIndex2;
+                }
             }
         }
 

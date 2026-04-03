@@ -6,9 +6,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.UNDEF;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.VSTRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 // TODO - create test cases
 // $ perl -E ' use version; say version->declare("v1.2.3"); say version->declare("1.2.3"); say version->declare("1.2"); say version->declare("1.2.3.4"); say version->declare("1"); say version->declare(" 1.2.4 ")->normal; say version->new(1.2); say version->new(1.2)->normal; say version->new("1.200000"); say version->new("1.2"); '
@@ -170,9 +168,14 @@ public class Version extends PerlModuleBase {
             // Count the number of dots
             long dotCount = version.chars().filter(ch -> ch == '.').count();
 
-            // If exactly one dot and short, prepend "v" for internal processing
-            // but keep the original for stringify() and qv flag
-            if (dotCount == 1 && version.length() < 4) {
+            if (dotCount >= 2) {
+                // Two or more dots means dotted-decimal format (e.g., "0.1.2", "1.2.3")
+                // Perl 5 treats these as v-strings with is_qv=true
+                isVString = true;
+                version = "v" + version;
+            } else if (dotCount == 1 && version.length() < 4) {
+                // If exactly one dot and short, prepend "v" for internal processing
+                // but keep the original for stringify() and qv flag
                 version = "v" + version;
                 // Note: originalVersionStr stays as the user's input (e.g., "1.0")
                 // Note: isVString remains false - this is a decimal version
@@ -248,6 +251,8 @@ public class Version extends PerlModuleBase {
 
     /**
      * Returns the numified representation of the version.
+     * Each sub-version is zero-padded to 3 digits to preserve precision.
+     * For example: version->new("5.42.0")->numify returns "5.042000"
      */
     public static RuntimeList numify(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -264,14 +269,20 @@ public class Version extends PerlModuleBase {
             return new RuntimeScalar(0.0).getList();
         }
 
-        // Convert to decimal: major.minorpatch
-        double major = Double.parseDouble(parts[0]);
-        double minor = parts.length > 1 ? Double.parseDouble(parts[1]) : 0;
-        double patch = parts.length > 2 ? Double.parseDouble(parts[2]) : 0;
+        // Build numified string with 3-digit zero-padded groups
+        // e.g., "5.42.0" -> "5.042000", "1.2.3" -> "1.002003"
+        StringBuilder numified = new StringBuilder();
+        numified.append(parts[0]);
+        numified.append(".");
 
-        double numified = major + (minor / 1000.0) + (patch / 1000000.0);
+        // Ensure at least 2 sub-version groups (minor, patch) for proper padding
+        int numGroups = Math.max(parts.length - 1, 2);
+        for (int i = 0; i < numGroups; i++) {
+            int val = (i + 1 < parts.length) ? Integer.parseInt(parts[i + 1]) : 0;
+            numified.append(String.format("%03d", val));
+        }
 
-        return new RuntimeScalar(numified).getList();
+        return new RuntimeScalar(numified.toString()).getList();
     }
 
     /**
@@ -473,7 +484,23 @@ public class Version extends PerlModuleBase {
         }
 
         RuntimeScalar pkg = args.get(0);
-        String packageName = pkg.toString();
+        String packageName;
+
+        // Handle blessed references: extract class name like ref($pkg) || $pkg
+        switch (pkg.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBase) pkg.value).blessId;
+                if (blessId != 0) {
+                    packageName = NameNormalizer.getBlessStr(blessId);
+                } else {
+                    packageName = pkg.toString();
+                }
+                break;
+            default:
+                packageName = pkg.toString();
+        }
 
         // Get the package's $VERSION
         RuntimeScalar hasVersion = getGlobalVariable(packageName + "::VERSION");

@@ -1,0 +1,15 @@
+#!perl
+
+# Stub xsubpp for PerlOnJava.
+# PerlOnJava does not support XS compilation, but this file must exist
+# so that Module::Build and ExtUtils::MakeMaker can find it via
+# Module::Metadata->find_module_by_name('ExtUtils::xsubpp').
+# The actual XS-to-C translation will never succeed since there is
+# no C compiler available, but having this file lets the build system
+# reach the "no compiler detected" error instead of dying with
+# "Can't find ExtUtils::xsubpp".
+
+use strict;
+use warnings;
+
+die "XS compilation is not supported by PerlOnJava\n";

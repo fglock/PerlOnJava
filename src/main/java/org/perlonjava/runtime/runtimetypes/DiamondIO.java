@@ -35,6 +35,9 @@ public class DiamondIO {
     // Flag to track if @ARGV was initially empty (determines STDIN fallback behavior)
     static boolean argvWasInitiallyEmpty = false;
 
+    // Accumulated line number across ARGV files (Perl's $. continues across <> files)
+    static int accumulatedLineNumber = 0;
+
     // Static field to store the in-place extension for the -i switch
     static String inPlaceExtension = null;
     static boolean inPlaceEdit = false;
@@ -60,6 +63,7 @@ public class DiamondIO {
         eofReached = false;
         readingStarted = false;
         argvWasInitiallyEmpty = false;
+        accumulatedLineNumber = 0;
         inPlaceExtension = null;
         inPlaceEdit = false;
         tempFilePath = null;
@@ -109,15 +113,19 @@ public class DiamondIO {
                         eofReached = true;
                         return scalarUndef;
                     }
+                    // Carry over accumulated line number (Perl's $. continues across <> files)
+                    currentReader.currentLineNumber = accumulatedLineNumber;
                 }
 
                 // Attempt to read a line from the current file
                 RuntimeScalar line = Readline.readline(currentReader);
                 if (line.type != RuntimeScalarType.UNDEF) {
+                    accumulatedLineNumber = currentReader.currentLineNumber;
                     return line;
                 }
 
-                // If we reach here, we've hit EOF for the current file
+                // EOF for current file — save accumulated line count before discarding reader
+                accumulatedLineNumber = currentReader.currentLineNumber;
                 currentReader = null;
             }
         }

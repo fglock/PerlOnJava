@@ -253,7 +253,13 @@ public class EmitBlock {
                     continue;
                 }
 
-                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                // Skip source location mapping for infrastructure nodes (e.g., BEGIN wrapper's
+                // package declarations). These nodes are marked with skipDebug by SpecialBlockParser
+                // to prevent them from storing incorrect package info in ByteCodeSourceMapper
+                // before the package change takes effect (fixes caller() inside BEGIN blocks).
+                if (!(element instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"))) {
+                    ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                }
 
                 // Check if this block should store its result in a register (for bare block expressions)
                 Object resultRegObj = node.getAnnotation("resultRegister");

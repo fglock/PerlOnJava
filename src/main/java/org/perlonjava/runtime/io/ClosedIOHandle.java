@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class ClosedIOHandle implements IOHandle {
 
@@ -31,7 +32,8 @@ public class ClosedIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar eof() {
-        return RuntimeIO.handleIOError("Cannot check EOF on a closed handle.");
+        // In Perl 5, eof() on a closed handle returns true (1)
+        return scalarTrue;
     }
 
     @Override

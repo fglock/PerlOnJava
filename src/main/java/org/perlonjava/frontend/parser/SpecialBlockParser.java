@@ -293,18 +293,33 @@ public class SpecialBlockParser {
         RuntimeList result;
         try {
             setCurrentScope(parser.ctx.symbolTable);
-            // Mark all wrapper nodes to skip DEBUG opcodes
-            // These are infrastructure nodes, not user-debuggable code
-            for (Node n : nodes) {
+            // Mark wrapper infrastructure nodes to skip DEBUG opcodes and source location mapping.
+            // Skip all nodes EXCEPT the last one (the actual ->() call or anon sub).
+            // The last node needs source location mapping so that caller() inside BEGIN blocks
+            // sees the correct package (after the "package Foo;" node has taken effect).
+            for (int i = 0; i < nodes.size() - 1; i++) {
+                Node n = nodes.get(i);
                 if (n instanceof AbstractNode an) {
                     an.setAnnotation("skipDebug", true);
                 }
             }
-            result = PerlLanguageProvider.executePerlAST(
-                    new BlockNode(nodes, tokenIndex),
-                    parser.tokens,
-                    parsedArgs,
-                    contextType);
+            // Push a CallerStack entry so that caller() inside BEGIN blocks sees the correct
+            // package when using the interpreter backend. Without this, the wrapper's interpreter
+            // frame inherits the stale "main" CallerStack entry from PerlLanguageProvider.executePerlCode.
+            ErrorMessageUtil.SourceLocation loc = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+            CallerStack.push(
+                    parser.ctx.symbolTable.getCurrentPackage(),
+                    loc.fileName(),
+                    loc.lineNumber());
+            try {
+                result = PerlLanguageProvider.executePerlAST(
+                        new BlockNode(nodes, tokenIndex),
+                        parser.tokens,
+                        parsedArgs,
+                        contextType);
+            } finally {
+                CallerStack.pop();
+            }
         } catch (PerlExitException e) {
             // exit() inside BEGIN block should terminate the program, not cause compilation error
             // Re-throw so it propagates to the CLI (Main.main()) which will call System.exit()

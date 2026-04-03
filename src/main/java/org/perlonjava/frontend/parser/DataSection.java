@@ -99,9 +99,18 @@ public class DataSection {
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
-        // Check if this package has already processed its DATA section
+        // Check if this package has already processed its DATA section.
+        // However, allow re-processing if the DATA handle was closed (e.g., module
+        // was re-required after delete $INC{...}). This is needed because modules
+        // like ConfigData.pm close DATA after reading and expect a fresh handle on reload.
         if (processedPackages.contains(handleName)) {
-            return tokens.size();
+            RuntimeIO existingIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
+            if (existingIO != null && !(existingIO.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle)) {
+                return tokens.size();
+            }
+            // Handle was closed — allow re-processing
+            processedPackages.remove(handleName);
+            placeholderCreated.remove(handleName);
         }
 
         if (token.text.equals("__DATA__") || token.text.equals("__END__")) {

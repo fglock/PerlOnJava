@@ -229,22 +229,25 @@ public class OverloadContext {
         }
 
         // All overload attempts failed. Check fallback semantics.
-        // If an overload context exists, the fallback value determines behavior:
-        //   fallback=1 (true):  allow native operation (return null)
-        //   fallback=undef/not specified: die
-        //   fallback=0 (false): die
+        // Perl overload fallback rules:
+        //   fallback=0 (explicitly false): deny autogeneration, die immediately
+        //   fallback=undef/not specified:  allow autogeneration, die only if autogeneration also fails
+        //   fallback=1 (true):             allow autogeneration, use native op if all else fails
+        //
+        // Since callers (e.g., CompareOperators) handle autogeneration by calling us again
+        // with the spaceship/cmp operator, we return null here to allow that attempt.
+        // Only fallback=0 should block autogeneration and die immediately.
         OverloadContext activeCtx = (ctx1 != null) ? ctx1 : ctx2;
         if (activeCtx != null) {
-            // Check if fallback explicitly allows native operations (fallback => 1)
+            // Check if fallback is explicitly false (fallback => 0): deny autogeneration, die
             if (activeCtx.hasFallbackGlob && activeCtx.fallbackValue != null
-                    && activeCtx.fallbackValue.getDefinedBoolean() && activeCtx.fallbackValue.getBoolean()) {
-                // fallback => 1: allow native operation
-                return null;
+                    && activeCtx.fallbackValue.getDefinedBoolean() && !activeCtx.fallbackValue.getBoolean()) {
+                String className = activeCtx.perlClassName;
+                throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
+                        + "argument in overloaded package " + className);
             }
-            // fallback => 0, undef, or not specified: die
-            String className = activeCtx.perlClassName;
-            throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
-                    + "argument in overloaded package " + className);
+            // fallback not specified, undef, or true: allow autogeneration / native fallback
+            return null;
         }
         return null;
     }
