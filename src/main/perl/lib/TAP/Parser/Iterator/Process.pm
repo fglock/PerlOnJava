@@ -174,6 +174,16 @@ sub _initialize {
           = join( ' ', $exec, map { $_ =~ /\s/ ? qq{"$_"} : $_ } @command );
         open( $out, "$command|" )
           or die "Could not execute ($command): $!";
+
+        # Try to use IO::Select on the pipe handle for parallel execution.
+        # On platforms without fork (e.g. PerlOnJava), open3 is unavailable
+        # but pipe opens may still produce selectable file handles.
+        eval {
+            require IO::Select;
+            if ( defined fileno($out) ) {
+                $sel = IO::Select->new($out);
+            }
+        };
     }
 
     $self->{out}        = $out;
