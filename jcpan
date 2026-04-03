@@ -3,7 +3,34 @@
 # jcpan - CPAN Client for PerlOnJava (Unix wrapper)
 # Runs the standard cpan script with jperl
 #
+# Supports -j N for parallel test execution:
+#   jcpan -j 4 -t Module::Name
+#
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Parse -j option for parallel test jobs (consumed here, not passed to cpan)
+ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -j)
+            if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
+                export HARNESS_OPTIONS="j${2}"
+                shift 2
+            else
+                echo "Error: -j requires a numeric argument" >&2
+                exit 1
+            fi
+            ;;
+        -j[0-9]*)
+            export HARNESS_OPTIONS="j${1#-j}"
+            shift
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
 
 # Find cpan script - check development path first, then installed path
 if [ -f "$SCRIPT_DIR/src/main/perl/bin/cpan" ]; then
@@ -15,4 +42,4 @@ else
     exit 1
 fi
 
-exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "$@"
+exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "${ARGS[@]}"
