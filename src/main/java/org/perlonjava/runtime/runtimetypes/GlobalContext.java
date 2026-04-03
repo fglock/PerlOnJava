@@ -177,7 +177,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalHash(encodeSpecialVar("H"));
         GlobalVariable.getGlobalHash("main::+").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);  // regex %+
         GlobalVariable.getGlobalHash("main::-").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);  // regex %-
-        GlobalVariable.getGlobalHash("main::!");  // TODO %!
+        GlobalVariable.getGlobalHash("main::!").elements = new ErrnoHash();  // %! errno hash
 
         // Initialize %ENV
         Map<String, RuntimeScalar> env = GlobalVariable.getGlobalHash("main::ENV").elements;

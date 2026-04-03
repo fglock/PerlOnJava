@@ -61,6 +61,27 @@ public class ErrnoVariable extends RuntimeScalar {
     // Cache of resolved errno constants (probed once, cached forever)
     private static final ConcurrentHashMap<String, Integer> ERRNO_CONSTANTS = new ConcurrentHashMap<>();
 
+    // Whether the full MESSAGE_TO_ERRNO map has been populated
+    private static volatile boolean messageMapPopulated = false;
+
+    /**
+     * Ensure the MESSAGE_TO_ERRNO map is fully populated by probing
+     * strerror() for all errno values 1-200. Called lazily on first
+     * reverse lookup (set(String)) to enable message-to-errno resolution.
+     */
+    static void ensureMessageMapPopulated() {
+        if (!messageMapPopulated) {
+            synchronized (MESSAGE_TO_ERRNO) {
+                if (!messageMapPopulated) {
+                    for (int i = 1; i <= 200; i++) {
+                        nativeStrerror(i);
+                    }
+                    messageMapPopulated = true;
+                }
+            }
+        }
+    }
+
     /**
      * Look up the strerror() message for a given errno, caching the result.
      */
@@ -180,6 +201,9 @@ public class ErrnoVariable extends RuntimeScalar {
             return this;
         }
         
+        // Ensure the message-to-errno map is fully populated before reverse lookup
+        ensureMessageMapPopulated();
+        
         // Check if the string is a known errno message (reverse lookup)
         Integer code = MESSAGE_TO_ERRNO.get(value);
         if (code != null) {
@@ -196,10 +220,12 @@ public class ErrnoVariable extends RuntimeScalar {
             return set(num);
         } catch (NumberFormatException e) {
             // Not a number and not a known message - store as message with errno 0
+            // Always maintain INTEGER type so numeric operations use the fast path
+            // and never trigger "isn't numeric" warnings via NumberParser.parseNumber()
             this.errno = 0;
             this.message = value;
-            this.type = RuntimeScalarType.DUALVAR;
-            this.value = new DualVar(new RuntimeScalar(0), new RuntimeScalar(value));
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = 0;
             return this;
         }
     }
@@ -242,6 +268,34 @@ public class ErrnoVariable extends RuntimeScalar {
      */
     @Override
     public double getDouble() {
+        return errno;
+    }
+    
+    /**
+     * Get the numeric value as RuntimeScalar.
+     * ErrnoVariable is a dualvar — numeric context always returns the errno number
+     * without going through string parsing (no "isn't numeric" warning).
+     */
+    @Override
+    public RuntimeScalar getNumber() {
+        return RuntimeScalarCache.getScalarInt(errno);
+    }
+    
+    /**
+     * Get the numeric value with uninitialized warning check.
+     * ErrnoVariable is always "defined" numerically, so no warning is emitted.
+     */
+    @Override
+    public RuntimeScalar getNumberWarn(String operation) {
+        return RuntimeScalarCache.getScalarInt(errno);
+    }
+    
+    /**
+     * Get the numeric value as long.
+     * Ensures numeric operations bypass string parsing.
+     */
+    @Override
+    public long getLong() {
         return errno;
     }
     
