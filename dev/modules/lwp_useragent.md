@@ -393,8 +393,8 @@ via a prior jcpan run.
 
 ### Next Steps
 
-- [ ] Create PR for merge to master
-- [ ] Consider if download_to_fh.t TODO tests can be addressed (mirror with filehandles)
+- [x] Create PR for merge to master — PR #431
+- [x] download_to_fh.t TODO tests are upstream expected failures (mirror doesn't support filehandles) — no fix needed
 
 ## Files Changed
 
