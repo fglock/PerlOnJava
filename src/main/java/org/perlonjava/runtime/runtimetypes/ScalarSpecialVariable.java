@@ -286,6 +286,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         return this.getValueAsScalar().getNumber();
     }
 
+    @Override
+    public boolean isString() {
+        return this.getValueAsScalar().isString();
+    }
+
     /**
      * Converts the special variable to a number with uninitialized warnings.
      *
