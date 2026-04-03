@@ -269,8 +269,22 @@ public class Utf8 extends PerlModuleBase {
         }
         RuntimeScalar scalar = args.get(0);
         String string = scalar.toString();
+
+        // utf8::decode expects octet data (0-255). If the string contains
+        // characters > 0xFF, it cannot be valid octet data — return false
+        // without modifying the string.
+        for (int i = 0; i < string.length(); i++) {
+            if (string.charAt(i) > 0xFF) {
+                return new RuntimeScalar(false).getList();
+            }
+        }
+
         try {
-            byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
+            // Safe: all chars are <= 0xFF, so no data loss with manual byte extraction
+            byte[] bytes = new byte[string.length()];
+            for (int i = 0; i < string.length(); i++) {
+                bytes[i] = (byte) string.charAt(i);
+            }
             // Use a strict UTF-8 decoder that throws on invalid sequences
             // instead of silently replacing with U+FFFD.  This matches Perl 5
             // behavior where utf8::decode returns FALSE for invalid UTF-8.

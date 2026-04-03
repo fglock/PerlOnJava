@@ -54,8 +54,18 @@ public class StandardIO implements IOHandle {
         }
         try {
             synchronized (writeLock) {
-                // Write directly - let BufferedOutputStream handle buffering
-                byte[] data = string.getBytes(StandardCharsets.ISO_8859_1);
+                // Check for wide characters (codepoint > 255)
+                // Perl 5 auto-upgrades to UTF-8 for wide chars
+                boolean hasWideChars = false;
+                for (int i = 0; i < string.length(); i++) {
+                    if (string.charAt(i) > 255) {
+                        hasWideChars = true;
+                        break;
+                    }
+                }
+                byte[] data = hasWideChars
+                        ? string.getBytes(StandardCharsets.UTF_8)
+                        : string.getBytes(StandardCharsets.ISO_8859_1);
                 bufferedOutputStream.write(data);
             }
             return RuntimeScalarCache.scalarTrue;

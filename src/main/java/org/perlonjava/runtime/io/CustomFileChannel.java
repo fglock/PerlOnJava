@@ -12,6 +12,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
@@ -193,9 +194,24 @@ public class CustomFileChannel implements IOHandle {
             if (appendMode) {
                 fileChannel.position(fileChannel.size());
             }
-            byte[] data = new byte[string.length()];
+            // Check if string contains wide characters (codepoint > 255)
+            // Perl 5 auto-upgrades to UTF-8 for wide chars on binary handles
+            boolean hasWideChars = false;
             for (int i = 0; i < string.length(); i++) {
-                data[i] = (byte) string.charAt(i);
+                if (string.charAt(i) > 255) {
+                    hasWideChars = true;
+                    break;
+                }
+            }
+            byte[] data;
+            if (hasWideChars) {
+                // Encode as UTF-8, matching Perl 5 "Wide character in print" behavior
+                data = string.getBytes(StandardCharsets.UTF_8);
+            } else {
+                data = new byte[string.length()];
+                for (int i = 0; i < string.length(); i++) {
+                    data[i] = (byte) string.charAt(i);
+                }
             }
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
             fileChannel.write(byteBuffer);

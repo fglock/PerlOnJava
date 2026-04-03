@@ -82,8 +82,18 @@ public class CustomOutputStreamHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar write(String string) {
-        // Convert string to bytes, treating each character as a byte value
-        var data = string.getBytes(StandardCharsets.ISO_8859_1);
+        // Check for wide characters (codepoint > 255)
+        // Perl 5 auto-upgrades to UTF-8 for wide chars
+        boolean hasWideChars = false;
+        for (int i = 0; i < string.length(); i++) {
+            if (string.charAt(i) > 255) {
+                hasWideChars = true;
+                break;
+            }
+        }
+        var data = hasWideChars
+                ? string.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                : string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             outputStream.write(data);
             bytesWritten += data.length;
