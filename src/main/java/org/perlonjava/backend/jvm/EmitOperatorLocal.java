@@ -62,6 +62,40 @@ public class EmitOperatorLocal {
             }
         }
 
+        // Handle local %hash for global/our hashes.
+        // Uses GlobalRuntimeHash.makeLocal() to save/restore the globalHashes map entry,
+        // not just the hash contents. This is needed because `*glob = \%hash` replaces
+        // the map entry, and a simple save/restore of contents would lose the reference.
+        if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("%")) {
+            if (opNode.operand instanceof IdentifierNode idNode) {
+                String varName = opNode.operator + idNode.name;
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                boolean isOurVariable = false;
+                if (varIndex != -1) {
+                    var symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(varName);
+                    isOurVariable = symbolEntry != null && "our".equals(symbolEntry.decl());
+                }
+                if (varIndex == -1 || isOurVariable) {
+                    String fullName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    mv.visitLdcInsn(fullName);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/GlobalRuntimeHash",
+                            "makeLocal",
+                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                            false);
+                    if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                                "createReference",
+                                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    }
+                    EmitOperator.handleVoidContext(emitterVisitor);
+                    return;
+                }
+            }
+        }
+
         // emit the lvalue
         int lvalueContext = LValueVisitor.getContext(node.operand);
 
