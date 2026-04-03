@@ -133,7 +133,7 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
 
 ## Progress Tracking
 
-### Current Status: Phase 4 complete — 27/40 programs pass
+### Current Status: Phase 5 complete — 30/40 programs pass
 
 ### Completed
 - [x] Phase 1: strict vars + use lib (2026-04-03)
@@ -154,48 +154,112 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
   - Files: CompileOperator.java, Opcodes.java, ScalarUnaryOpcodeHandler.java, Disassemble.java, CompilerOptions.java, FileUtils.java, DataSection.java
   - Added: FC_BYTES/LC_BYTES/UC_BYTES/LCFIRST_BYTES/UCFIRST_BYTES opcodes for bytecode interpreter
   - Fixed: DATA section preserves raw bytes via Latin-1 extraction from rawCodeBytes
-- [x] Phase 3 extras: Latin-1 source reading + StringParser UTF-8 decoding (2026-04-03)
-  - Files: FileUtils.java, StringParser.java
-  - Changed: Default source encoding from UTF-8 to Latin-1
-  - Fixed: `use utf8` now properly decodes Latin-1-read bytes as UTF-8
+- [ ] Phase 3 extras: Latin-1 source reading + StringParser UTF-8 decoding (REVERTED)
+  - Attempted: change default source encoding from UTF-8 to Latin-1 in FileUtils.java + re-decode in StringParser.java
+  - **Problem**: Source enters the compiler via multiple paths (FileUtils for files, `StandardCharsets.UTF_8` in JUnit tests, command-line for `-e`). The StringParser transformations need to know whether the source string has "byte-preserving" (Latin-1) or "already decoded" (UTF-8) semantics. Fixing one path broke the other.
+  - **Reverted**: Changes to FileUtils.java and StringParser.java were rolled back. See "Encoding-Aware Lexer" design below for the proper solution.
 - [x] Phase 4: Logical operator VOID context + PerlIO NPE (2026-04-03)
   - Files: EmitLogicalOperator.java, CompileBinaryOperator.java, PerlIO.java
   - Fixed: VOID context passed through to RHS of &&/and, ||/or, //
   - Fixed: PerlIO::get_layers null check for non-GLOB references
   - Result: 27/40 tests pass (up from 24/40), 114 subtest failures (down from 118)
+- [x] Phase 4b: `local %hash` glob slot restoration (2026-04-03)
+  - Files: GlobalRuntimeHash.java (new), EmitOperatorLocal.java, BytecodeInterpreter.java
+  - Fixed: `local %hash` now saves/restores the globalHashes map entry, not just hash contents
+  - Result: t/91_csv_cb.t 82/82 pass (was 81/82)
+- [x] Phase 5: readline BYTE_STRING propagation (2026-04-03)
+  - Files: LayeredIOHandle.java, RuntimeIO.java, Readline.java
+  - Root cause: readline always returned STRING type, causing utf8::is_utf8() to return true
+    for all readline output. This broke CSV_PP's binary character detection (checks utf8 flag
+    to skip binary validation) and multi-byte UTF-8 comment string handling.
+  - Added: LayeredIOHandle.hasEncodingLayer(), RuntimeIO.isByteMode()
+  - Fixed: All four Readline methods check isByteMode() and return BYTE_STRING when appropriate
+  - Impact: Fixed 27 subtest failures across 6 test files:
+    - t/20_file.t: 104/109 -> 108/109 (+4)
+    - t/21_lexicalio.t: 104/109 -> 108/109 (+4)
+    - t/22_scalario.t: 131/136 -> 135/136 (+4)
+    - t/47_comment.t: 56/71 -> 71/71 (+15, all pass)
+    - t/51_utf8.t: 128/207 -> 132/167 (+4)
+    - t/85_util.t: 318/1448 -> 330/330 (all pass)
+  - Result: 30/40 programs pass (up from 27/40)
 
-### Remaining Failures (13 test files)
+### Remaining Failures (10 test files)
 
 | Test | ok/total | Failures | Category |
 |------|----------|----------|----------|
-| t/20_file.t | 104/109 | 5 | Binary char detection |
-| t/21_lexicalio.t | 104/109 | 5 | Binary char detection |
-| t/22_scalario.t | 131/136 | 5 | Binary char detection |
+| t/20_file.t | 108/109 | 1 | EOL content comparison |
+| t/21_lexicalio.t | 108/109 | 1 | EOL content comparison |
+| t/22_scalario.t | 135/136 | 1 | EOL content comparison |
 | t/45_eol.t | 1164/1182 | 18 | EOL edge cases |
 | t/46_eol_si.t | 550/562 | 12 | EOL edge cases |
-| t/47_comment.t | 56/71 | 15 | Multi-byte UTF-8 comment_str |
 | t/50_utf8.t | 92/93 | 1 | `use bytes` + regex |
-| t/51_utf8.t | 128/207 | 39+40 skipped | UTF-8 flag tracking |
+| t/51_utf8.t | 132/167 | 35 | UTF-8 flag tracking |
 | t/70_rt.t | 1/20469 | crash | Undefined ARRAY ref early |
-| t/75_hashref.t | 58/102 | 0+44 not run | Scalar::Util::readonly |
-| t/76_magic.t | 9/44 | 1+34 not run | TieScalar ClassCastException |
-| t/85_util.t | 318/1448 | 12+1118 not run | :encoding(utf-32be) crash |
-| t/91_csv_cb.t | 81/82 | 1 | Glob slot restoration |
+| t/75_hashref.t | 58/58 | 0+44 not run | Scalar::Util::readonly |
+| t/76_magic.t | 43/44 | 1 | TieScalar issue |
 
 ### Next Steps (by impact)
 
-1. **t/70_rt.t** (20469 tests) — Investigate the "Can't use an undefined value as an ARRAY reference" crash. The Latin-1 source reading should have fixed the binary byte corruption issue, but something else is failing early. Debug the first few tests to identify the new root cause.
+1. **t/70_rt.t** (20469 tests) — Requires encoding-aware lexer (see design below). The source file contains raw `\xab`/`\xbb` bytes in regex patterns. Without Latin-1 source reading, these are corrupted to U+FFFD by UTF-8 decoding.
 
-2. **t/85_util.t** (1448 tests) — Two issues: (a) 12 early failures from BOM detection/Unicode decode, (b) crash at test 330 from `:encoding(utf-32be)`. The BOM failures may be fixable; the utf-32 encoding would require adding a new PerlIO layer.
+2. **EOL edge cases** (t/20_file.t, t/21_lexicalio.t, t/22_scalario.t, t/45_eol.t, t/46_eol_si.t — 33 failures total) — `\r\n` EOL content comparison and mixed EOL handling. The remaining test 47 failure in t/20/21/22 is about CSV content with `eol("\r\n")`.
 
-3. **t/51_utf8.t** (207 tests, 39 failures + 40 not run) — UTF-8 flag tracking issues: `utf8::is_utf8` too permissive, readline returns STRING type instead of BYTE_STRING, `utf8::upgrade` incorrectly decodes bytes. Risky to fix broadly.
+3. **t/51_utf8.t** (167 tests, 35 failures) — UTF-8 flag tracking issues: fields with wide characters (like `\x{060c}`) should get UTF-8 flag set by CSV_PP's internal detection, but currently don't. Also "Wide character in print" warnings missing.
 
-4. **t/47_comment.t** (71 tests, 15 failures) — Multi-byte UTF-8 characters in `comment_str` cause byte vs character length confusion in CSV_PP's comment detection logic.
+4. **t/50_utf8.t** (93 tests, 1 failure) — `use bytes` + regex interaction.
 
-5. **Binary char detection** (t/20_file.t, t/21_lexicalio.t, t/22_scalario.t — 15 failures total) — `\x08` not flagged as binary character. Low-hanging fruit if there's a simple is_binary check to fix.
+5. **t/76_magic.t** (44 tests, 1 failure) — TieScalar edge case.
 
-6. **EOL edge cases** (t/45_eol.t, t/46_eol_si.t — 30 failures total) — `\r` handling in CSV data. Narrow failures within large test suites.
+6. **t/75_hashref.t** (58 tests, 0 actual failures but 44 not run) — Requires `Scalar::Util::readonly()` implementation.
 
-7. **t/76_magic.t** (44 tests) — TieScalar ClassCastException in bytecode interpreter. Not specific to Text::CSV.
+---
 
-8. **t/75_hashref.t** (102 tests) — Requires `Scalar::Util::readonly()` implementation. Being worked on separately.
+## Encoding-Aware Lexer Design
+
+### Problem
+
+Perl reads source files as raw bytes. The `use utf8` pragma tells the parser to decode string literals (and identifiers, regex patterns, etc.) as UTF-8. This encoding switch happens mid-file and is lexically scoped — `no utf8` reverts to byte semantics. `use encoding 'latin1'` and other encoding pragmas add further complexity.
+
+PerlOnJava currently reads the entire source file as a Java String up front using a fixed encoding (UTF-8 by default). This creates a fundamental mismatch:
+
+1. **Without `use utf8`**: Source bytes `\xC3\xA9` should be two separate byte-values (195, 169). But UTF-8 decoding collapses them into one character é (U+00E9).
+2. **With `use utf8`**: Source bytes `\xC3\xA9` should become one character é (U+00E9). This happens to work when reading as UTF-8, but only by accident.
+3. **Mixed contexts**: A file with `use utf8` in one block and byte semantics elsewhere needs both behaviors.
+
+An attempted fix (Latin-1 source reading + StringParser re-decode) was reverted because source code enters the compiler via multiple paths (file reading, `-e` arguments, `eval` strings, JUnit tests) and each path has different encoding semantics. Patching StringParser for one path broke others.
+
+### Proposed Solution: Encoding Feedback from Parser to Lexer
+
+Instead of fixing encoding in StringParser after the fact, make the Lexer encoding-aware with feedback from the Parser:
+
+```
+ Source bytes ──► Lexer (encoding-aware) ──► Tokens ──► Parser
+                      ▲                                   │
+                      └── "use utf8" / "no utf8" ─────────┘
+```
+
+#### Key Design Points
+
+1. **Normalize source to Latin-1 at the boundary**: All source entry points (file, `-e`, `eval`, tests) should convert to a canonical byte-preserving representation before reaching the Lexer. For files, read as Latin-1. For `-e` (already UTF-8 decoded), re-encode to UTF-8 bytes then store as Latin-1 chars. This ensures the Lexer always works with byte-valued characters.
+
+2. **Lexer tracks encoding state**: The Lexer holds a current encoding flag (initially `bytes`, switched to `utf8` when the Parser encounters `use utf8`). This affects how it tokenizes:
+   - In **bytes** mode: each Latin-1 char is one token character (preserving raw byte values)
+   - In **utf8** mode: consecutive Latin-1 chars forming a valid UTF-8 sequence are combined into one Unicode character
+
+3. **Parser signals encoding changes**: When the Parser processes `use utf8`, `no utf8`, or `use encoding '...'`, it calls back to the Lexer to change the encoding mode. This takes effect for subsequent tokens.
+
+4. **Lexically scoped**: The encoding state is part of the scope stack, matching Perl's `use utf8` / `no utf8` scoping.
+
+#### Impact on Existing Code
+
+- **StringParser.java**: The `use utf8` / `no utf8` post-processing branches become unnecessary — the Lexer already delivers correctly-decoded tokens.
+- **FileUtils.java**: Simplified to always read as Latin-1.
+- **PerlScriptExecutionTest.java**: Must normalize `-e`-style source to Latin-1 chars.
+- **Lexer.java**: Needs encoding state and multi-byte char combining logic.
+- **Parser.java**: Needs to signal encoding changes to Lexer.
+
+#### Risks and Alternatives
+
+- **Risk**: The Lexer currently operates on a pre-built Java String. Making it byte-aware may require significant refactoring.
+- **Alternative (simpler)**: Instead of modifying the Lexer, add a `sourceIsLatinEncoded` flag to `CompilerOptions` and branch on it in StringParser. This would require all entry points to set the flag correctly but avoids Lexer changes.  The `-e` path would re-encode its argument to pseudo-Latin-1 and set the flag.
+- **Alternative (pragmatic)**: Leave the source reading as UTF-8 but fix the specific tests that need raw bytes (t/70_rt.t) by adding a binary mode flag or pre-processing step for files containing non-UTF-8 bytes.
