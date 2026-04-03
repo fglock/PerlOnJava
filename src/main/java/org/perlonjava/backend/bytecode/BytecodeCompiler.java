@@ -5787,9 +5787,13 @@ public class BytecodeCompiler implements Visitor {
         // Find the target loop
         LoopInfo targetLoop = null;
         if (labelStr == null) {
-            // Unlabeled: find innermost loop
-            if (!loopStack.isEmpty()) {
-                targetLoop = loopStack.peek();
+            // Unlabeled: find innermost true loop (skip do-while/bare blocks)
+            for (int i = loopStack.size() - 1; i >= 0; i--) {
+                LoopInfo loop = loopStack.get(i);
+                if (loop.isTrueLoop) {
+                    targetLoop = loop;
+                    break;
+                }
             }
         } else {
             // Labeled: search for matching label
