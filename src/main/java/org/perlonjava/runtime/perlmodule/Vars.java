@@ -49,12 +49,15 @@ public class Vars extends PerlModuleBase {
             if (variableString.startsWith("$")) {
                 // Create a scalar variable
                 GlobalVariable.getGlobalVariable(fullName);
+                GlobalVariable.declareGlobalVariable(fullName);
             } else if (variableString.startsWith("@")) {
                 // Create an array variable
                 GlobalVariable.getGlobalArray(fullName);
+                GlobalVariable.declareGlobalArray(fullName);
             } else if (variableString.startsWith("%")) {
                 // Create a hash variable
                 GlobalVariable.getGlobalHash(fullName);
+                GlobalVariable.declareGlobalHash(fullName);
             } else if (variableString.startsWith("&")) {
                 // Create a code variable
                 GlobalVariable.getGlobalCodeRef(fullName);

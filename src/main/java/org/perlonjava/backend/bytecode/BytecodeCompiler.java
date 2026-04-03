@@ -462,6 +462,21 @@ public class BytecodeCompiler implements Visitor {
             allowIfAlreadyExists = true;
         }
 
+        // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
+        // (via use vars or Exporter import), not if merely auto-vivified under 'no strict'.
+        boolean isSpecialSortVar = sigil.equals("$")
+                && (bareVarName.equals("a") || bareVarName.equals("b"));
+        if (sigil.equals("$")
+                && bareVarName != null
+                && bareVarName.length() == 1
+                && Character.isLetter(bareVarName.charAt(0))
+                && !bareVarName.contains("::")
+                && !isSpecialSortVar) {
+            if (!GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
+                allowIfAlreadyExists = false;
+            }
+        }
+
         return !allowIfAlreadyExists;
 
         // BLOCK: Unqualified variable under strict vars

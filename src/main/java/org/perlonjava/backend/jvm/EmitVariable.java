@@ -437,6 +437,19 @@ public class EmitVariable {
                     } else if (sigil.equals("%") && !normalizedName.endsWith("::")) {
                         allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
                     }
+
+                    // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
+                    // (via use vars or Exporter import), not if merely auto-vivified under 'no strict'.
+                    if (sigil.equals("$")
+                            && name != null
+                            && name.length() == 1
+                            && Character.isLetter(name.charAt(0))
+                            && !name.contains("::")
+                            && !isSpecialSortVar) {
+                        if (!GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
+                            allowIfAlreadyExists = false;
+                        }
+                    }
                 }
 
                 // Check if this is an 'our' declaration (not in BEGIN capture) - these create global vars

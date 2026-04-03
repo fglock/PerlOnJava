@@ -63,10 +63,20 @@ XML::Simple 2.25
 **Fix**: Added stubs delegating to non-locking variants.  
 **Files**: `Storable.pm`
 
-### Bug 5: `use vars` with single uppercase letter variables rejected under strict
+### Bug 5: `use vars` / Exporter-imported single-letter variables rejected under strict
 
-**Fix**: Removed incorrect override that forced `existsGlobally = false` for single-letter vars.  
-**Files**: `Variable.java`, `EmitVariable.java`, `BytecodeCompiler.java`
+**Root cause**: Single-letter globals like `$A`-`$Z` auto-vivified under `no strict` would
+incorrectly bypass `use strict 'vars'` later (since `existsGlobalVariable` returned true).
+A blunt fix that forced `existsGlobally = false` for all single-letter vars also blocked
+legitimately imported ones (e.g., `$S` from XML::SAX::PurePerl::Productions via Exporter).
+
+**Fix**: Added `declaredGlobalVariables/Arrays/Hashes` tracking sets in `GlobalVariable.java`
+that distinguish explicitly declared globals (`use vars`, Exporter glob assignment) from
+auto-vivified ones. `Vars.importVars()` and `RuntimeGlob.set()` (REFERENCE/ARRAY/HASH cases)
+now call `declareGlobal*()`. The strict check for single-letter vars consults
+`isDeclaredGlobalVariable()` instead of unconditionally blocking.
+
+**Files**: `GlobalVariable.java`, `Vars.java`, `RuntimeGlob.java`, `Variable.java`, `EmitVariable.java`, `BytecodeCompiler.java`
 
 ### Bug 6: `Encode::define_alias` missing
 
@@ -104,8 +114,10 @@ XML::Simple 2.25
   - Files: SubroutineParser.java
 - [x] Phase 4: Add Storable lock stubs (2026-04-03)
   - Files: Storable.pm
-- [x] Phase 5: Fix `use vars` with single uppercase variables (2026-04-03)
-  - Files: Variable.java, EmitVariable.java, BytecodeCompiler.java
+- [x] Phase 5: Fix strict vars for single-letter globals (declared vs auto-vivified) (2026-04-03)
+  - Added declaredGlobals tracking to GlobalVariable.java
+  - Hooked Vars.importVars() and RuntimeGlob.set() to declare globals
+  - Files: GlobalVariable.java, Vars.java, RuntimeGlob.java, Variable.java, EmitVariable.java, BytecodeCompiler.java
 - [x] Phase 6: Add `Encode::define_alias` stub (2026-04-03)
   - Files: Encode.pm
 - [x] Phase 7: Fix `warnings::enabled()` for custom categories (2026-04-03)

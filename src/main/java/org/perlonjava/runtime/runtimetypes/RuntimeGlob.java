@@ -229,6 +229,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
                         GlobalVariable.globalArrays.put(aliasedName, arr);
                     }
+                    // Mark as explicitly declared for strict vars (e.g., Exporter imports)
+                    GlobalVariable.declareGlobalArray(this.globName);
                 }
                 return value;
             case HASHREFERENCE:
@@ -238,6 +240,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
                         GlobalVariable.globalHashes.put(aliasedName, hash);
                     }
+                    // Mark as explicitly declared for strict vars (e.g., Exporter imports)
+                    GlobalVariable.declareGlobalHash(this.globName);
                 }
                 return value;
             case REFERENCE:
@@ -248,6 +252,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // not REFERENCE, so they are handled above in their respective cases.
                 if (value.value instanceof RuntimeScalar) {
                     GlobalVariable.aliasGlobalVariable(this.globName, (RuntimeScalar) value.value);
+                    // Mark as explicitly declared for strict vars (e.g., Exporter imports)
+                    GlobalVariable.declareGlobalVariable(this.globName);
                 }
                 return value;
             case UNDEF:
