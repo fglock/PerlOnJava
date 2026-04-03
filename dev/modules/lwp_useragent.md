@@ -15,10 +15,11 @@ works, but several issues prevent full test coverage.
 ## Current State (after Phase 5)
 
 Running all 22 test files (with the TESTS pattern from Makefile.PL):
-- **15/22 test programs pass**, 3 skipped (network), 4 have issues
+- **15/22 test programs pass**, 3 skipped (network/XS), 4 have issues
 - Socket infrastructure now works: socket/bind/listen/accept/connect all functional
 - HTTP::Daemon can create and accept connections
 - 4-arg `select()` now works with NIO Selector — IO::Select fully operational
+- All "uninitialized" warnings now respect `no warnings 'uninitialized'` and `$SIG{__WARN__}`
 - `talk-to-ourself` check still fails due to JVM startup time (>5s timeout)
 
 ### Test Results Breakdown
@@ -35,7 +36,7 @@ Running all 22 test files (with the TESTS pattern from Makefile.PL):
 | t/base/simple.t | PASS | 3/3 | |
 | t/base/ua.t | **FAIL** | 49/51 | 2 header tests (Content-Style-Type) |
 | t/base/ua_handlers.t | PASS | 19/19 | |
-| t/leak/no_leak.t | **FAIL** | 0/0 | Test::LeakTrace is XS-only (won't fix) |
+| t/leak/no_leak.t | SKIP | 0/0 | Test::LeakTrace is XS-only (won't fix) |
 | t/local/autoload-get.t | PASS | 3/3 | |
 | t/local/autoload.t | PASS | 5/5 | |
 | t/local/cookie_jar.t | PASS | 9/9 | |
@@ -262,8 +263,13 @@ via a prior jcpan run.
 - [x] **P9d**: Implement 4-arg `select()` with Java NIO Selector
 - [x] Fix: close Selector before restoring blocking mode (IllegalBlockingModeException)
 - [x] Fix: sleep for timeout when no channels registered (defined-but-empty bit vectors)
+- [x] **P10**: Fix all "uninitialized value" warnings to use `warnWithCategory("uninitialized")`
+  instead of bare `WarnDie.warn()` — 5 files: StringOperators, Operator, CompareOperators,
+  BitwiseOperators, RuntimeScalar. Now `no warnings 'uninitialized'` and `$SIG{__WARN__}`
+  work correctly for all uninitialized warnings.
 - [x] `make` passes
 - [x] Verified: IO::Select with server/client sockets works (accept, read, write)
+- [x] Commits: `002a63557`, `ad1aed7d9`
 
 ### Phase 6: Unblock daemon-based tests (P8) -- NEXT
 
