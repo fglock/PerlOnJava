@@ -172,6 +172,8 @@ public class ScalarUtils {
             return true;
         } else if (t == TIED_SCALAR) {
             return looksLikeNumber(runtimeScalar.tiedFetch());
+        } else if (t == READONLY_SCALAR) {
+            return looksLikeNumber((RuntimeScalar) runtimeScalar.value);
         }
         return false;
     }

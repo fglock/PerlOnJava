@@ -160,6 +160,7 @@ public class ReferenceOperators {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
                         case GLOB -> "GLOB";
+                        case READONLY_SCALAR -> ref((RuntimeScalar) scalar.value).toString();
                         default -> "SCALAR";
                     };
                 }
@@ -197,6 +198,8 @@ public class ReferenceOperators {
             case FORMAT:
                 str = "FORMAT";
                 break;
+            case READONLY_SCALAR:
+                return ref((RuntimeScalar) runtimeScalar.value);
             default:
                 return scalarEmptyString;
         }

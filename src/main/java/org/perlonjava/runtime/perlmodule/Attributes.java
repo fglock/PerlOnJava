@@ -539,6 +539,7 @@ public class Attributes extends PerlModuleBase {
             case HASHREFERENCE -> "HASH";
             case GLOBREFERENCE -> "GLOB";
             case REGEX -> "REGEXP";
+            case READONLY_SCALAR -> getRefType((RuntimeScalar) scalar.value);
             default -> "";
         };
     }

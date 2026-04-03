@@ -65,6 +65,7 @@ public class ScalarUtil extends PerlModuleBase {
         }
 
         RuntimeScalar scalar = args.get(0);
+        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
         int blessId = blessedId(scalar);
         // Return undef for unblessed references (blessId == 0)
         if (blessId == 0) {
@@ -89,6 +90,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for refaddr() method");
         }
         RuntimeScalar scalar = args.get(0);
+        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
         // refaddr returns undef for non-references
         // For references, return the identity hash code of the underlying referenced object
         switch (scalar.type) {
@@ -120,10 +122,12 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for reftype() method");
         }
         RuntimeScalar scalar = args.get(0);
+        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
         String type = switch (scalar.type) {
             case REFERENCE -> {
                 // Inspect the referent to distinguish SCALAR refs from REF (ref-to-ref)
                 if (scalar.value instanceof RuntimeScalar inner) {
+                    if (inner.type == READONLY_SCALAR) inner = (RuntimeScalar) inner.value;
                     yield switch (inner.type) {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
@@ -219,7 +223,9 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isdual() method");
         }
-        return new RuntimeScalar(args.get(0).type == DUALVAR).getList();
+        RuntimeScalar s = args.get(0);
+        if (s.type == READONLY_SCALAR) s = (RuntimeScalar) s.value;
+        return new RuntimeScalar(s.type == DUALVAR).getList();
     }
 
     /**
@@ -249,6 +255,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for looks_like_number() method");
         }
         RuntimeScalar scalar = args.get(0);
+        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
         boolean isNumber = scalar.type == RuntimeScalarType.INTEGER || scalar.type == RuntimeScalarType.DOUBLE;
         return new RuntimeScalar(isNumber).getList();
     }
@@ -266,6 +273,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for openhandle() method");
         }
         RuntimeScalar arg = args.get(0);
+        if (arg.type == READONLY_SCALAR) arg = (RuntimeScalar) arg.value;
         
         // Check if it's a GLOB or GLOBREFERENCE (filehandle)
         if (arg.type == GLOB || arg.type == GLOBREFERENCE) {
@@ -322,6 +330,7 @@ public class ScalarUtil extends PerlModuleBase {
         }
 
         RuntimeScalar scalar = args.get(0);
+        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
         RuntimeScalar prototypeScalar = args.get(1);
 
         if (scalar.type != CODE) {

@@ -219,6 +219,8 @@ public class Json extends PerlModuleBase {
                 return scalar.getLong();
             case BOOLEAN:
                 return scalar.getBoolean();
+            case READONLY_SCALAR:
+                return convertRuntimeScalarToJson((RuntimeScalar) scalar.value);
             default:
                 return null;
         }

@@ -252,6 +252,9 @@ public class Storable extends PerlModuleBase {
             case RuntimeScalarType.CODE -> {
                 sb.append((char) SX_CODE);
             }
+            case RuntimeScalarType.READONLY_SCALAR -> {
+                serializeBinary((RuntimeScalar) scalar.value, sb, seen);
+            }
             default -> {
                 // String types (STRING, BYTE_STRING, VSTRING, etc.)
                 if (scalar.value == null) {
@@ -613,6 +616,7 @@ public class Storable extends PerlModuleBase {
                 // CODE refs are shared, not cloned
                 yield scalar;
             }
+            case RuntimeScalarType.READONLY_SCALAR -> deepClone((RuntimeScalar) scalar.value, cloned);
             default -> {
                 // Scalar values (int, double, string, undef) — just copy
                 RuntimeScalar copy = new RuntimeScalar();
@@ -742,6 +746,7 @@ public class Storable extends PerlModuleBase {
             case RuntimeScalarType.DOUBLE -> scalar.getDouble();
             case RuntimeScalarType.INTEGER -> scalar.getLong();
             case RuntimeScalarType.BOOLEAN -> scalar.getBoolean();
+            case RuntimeScalarType.READONLY_SCALAR -> convertScalarValue((RuntimeScalar) scalar.value, seen);
             case RuntimeScalarType.UNDEF -> {
                 // Handle undef values with special tag
                 Map<String, Object> undefMap = new LinkedHashMap<>();

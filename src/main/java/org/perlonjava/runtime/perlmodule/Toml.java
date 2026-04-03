@@ -245,6 +245,7 @@ public class Toml extends PerlModuleBase {
                 }
                 sb.append("]");
             }
+            case READONLY_SCALAR -> convertRuntimeScalarToToml((RuntimeScalar) scalar.value, sb, prefix, isArrayElement);
             default -> appendValue(scalar, sb);
         }
     }
@@ -283,6 +284,7 @@ public class Toml extends PerlModuleBase {
                 }
                 sb.append("}");
             }
+            case READONLY_SCALAR -> appendValue((RuntimeScalar) scalar.value, sb);
             default -> sb.append("\"\"");
         }
     }

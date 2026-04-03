@@ -252,8 +252,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public boolean isString() {
-        // TODO optimization: group the string type ids to simplify the isString test
         int t = this.type;
+        if (t == READONLY_SCALAR) return ((RuntimeScalar) this.value).isString();
         return t == STRING || t == BYTE_STRING || t == VSTRING;
     }
 

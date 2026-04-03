@@ -204,6 +204,8 @@ public class NextMethod {
                     throw new PerlCompilerException("Can't call next::method on unblessed reference");
                 }
                 return NameNormalizer.getBlessStr(blessId);
+            case RuntimeScalarType.READONLY_SCALAR:
+                return getSearchClass((RuntimeScalar) firstArg.value);
             case RuntimeScalarType.UNDEF:
                 throw new PerlCompilerException("Can't call next::method on an undefined value");
             default:
