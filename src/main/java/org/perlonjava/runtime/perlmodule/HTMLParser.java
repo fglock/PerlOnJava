@@ -5,6 +5,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * Java XS implementation of HTML::Parser and HTML::Entities.
  * <p>
@@ -163,7 +165,19 @@ public class HTMLParser extends PerlModuleBase {
             if (args.size() > 1) {
                 RuntimeScalar chunk = args.get(1);
                 if (chunk.getDefinedBoolean()) {
-                    String html = pstate.get("_buf").toString() + chunk.toString();
+                    String chunkStr = chunk.toString();
+
+                    // When utf8_mode is set, decode UTF-8 byte sequences to characters.
+                    // This mirrors the XS parser behavior: utf8_mode(1) means the input
+                    // is UTF-8 encoded bytes, and the parser should deliver decoded
+                    // character strings to handlers.
+                    if (pstate.get("utf8_mode").getBoolean()
+                            && chunk.type == RuntimeScalarType.BYTE_STRING) {
+                        byte[] bytes = chunkStr.getBytes(StandardCharsets.ISO_8859_1);
+                        chunkStr = new String(bytes, StandardCharsets.UTF_8);
+                    }
+
+                    String html = pstate.get("_buf").toString() + chunkStr;
                     pstate.put("_buf", new RuntimeScalar(""));
                     parseHtml(self, selfHash, pstate, html);
                 }

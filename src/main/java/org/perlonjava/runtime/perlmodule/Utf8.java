@@ -271,8 +271,14 @@ public class Utf8 extends PerlModuleBase {
         String string = scalar.toString();
         try {
             byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
-            String decoded = new String(bytes, StandardCharsets.UTF_8);
-            scalar.set(decoded);
+            // Use a strict UTF-8 decoder that throws on invalid sequences
+            // instead of silently replacing with U+FFFD.  This matches Perl 5
+            // behavior where utf8::decode returns FALSE for invalid UTF-8.
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT);
+            CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
+            scalar.set(decoded.toString());
             return new RuntimeScalar(true).getList();
         } catch (Exception e) {
             return new RuntimeScalar(false).getList();
