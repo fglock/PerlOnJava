@@ -66,6 +66,14 @@ public class LayeredIOHandle implements IOHandle {
     private Function<String, String> outputPipeline = Function.identity();
 
     /**
+     * Buffer for decoded characters that were produced by the encoding layer
+     * but not yet consumed by doRead(). This prevents character loss when
+     * the encoding layer decodes more characters than the caller requested
+     * (e.g., reading 4 bytes of UTF-16BE gives 2 characters when only 1 was needed).
+     */
+    private StringBuilder decodedCharBuffer = new StringBuilder();
+
+    /**
      * Constructs a new layered IO handle wrapping the given delegate.
      *
      * <p>Initially, no layers are applied, so all operations pass through
@@ -144,11 +152,22 @@ public class LayeredIOHandle implements IOHandle {
         // For encoding layers, use precise character-based reading
         StringBuilder result = new StringBuilder();
         int charactersNeeded = maxBytes;
-        int safetyLimit = maxBytes * 4; // Prevent infinite loops
+
+        // First, drain any previously buffered decoded characters
+        if (decodedCharBuffer.length() > 0) {
+            int charsFromBuffer = Math.min(decodedCharBuffer.length(), charactersNeeded);
+            result.append(decodedCharBuffer, 0, charsFromBuffer);
+            decodedCharBuffer.delete(0, charsFromBuffer);
+            charactersNeeded -= charsFromBuffer;
+        }
+
+        // Safety limit must be generous for multi-byte encodings (e.g., UTF-32 = 4 bytes/char)
+        int safetyLimit = Math.max(maxBytes * 8, 64); // Prevent infinite loops
 
         while (charactersNeeded > 0 && safetyLimit > 0) {
-            // Read only what we need, don't over-consume
-            int bytesToRead = Math.min(128, charactersNeeded);
+            // Read enough bytes to decode at least one character even for wide encodings.
+            // For UTF-32 (4 bytes/char), reading only `charactersNeeded` bytes is insufficient.
+            int bytesToRead = Math.min(128, Math.max(4, charactersNeeded * 4));
             RuntimeScalar chunk = delegate.doRead(bytesToRead, charset);
             String chunkStr = chunk.toString();
 
@@ -167,9 +186,9 @@ public class LayeredIOHandle implements IOHandle {
                 result.append(processed, 0, charsToTake);
                 charactersNeeded -= charsToTake;
 
-                // If we have extra characters, let the layer buffer them
+                // Buffer any excess decoded characters for the next doRead() call
                 if (processed.length() > charsToTake) {
-                    // This should be handled by the layer's internal buffering
+                    decodedCharBuffer.append(processed, charsToTake, processed.length());
                     break;
                 }
             }
@@ -208,6 +227,9 @@ public class LayeredIOHandle implements IOHandle {
             // Reset all pipelines
             inputPipeline = Function.identity();
             outputPipeline = Function.identity();
+
+            // Clear decoded character buffer (layer change invalidates buffered data)
+            decodedCharBuffer.setLength(0);
 
             // Reset and clear existing layers
             for (IOLayer layer : activeLayers) {
@@ -413,6 +435,7 @@ public class LayeredIOHandle implements IOHandle {
         for (IOLayer layer : activeLayers) {
             layer.reset();
         }
+        decodedCharBuffer.setLength(0);
         return delegate.close();
     }
 
@@ -439,6 +462,10 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar eof() {
+        // If there are buffered decoded characters, we're not at EOF
+        if (decodedCharBuffer.length() > 0) {
+            return new RuntimeScalar(0);
+        }
         return delegate.eof();
     }
 
@@ -475,6 +502,7 @@ public class LayeredIOHandle implements IOHandle {
         for (IOLayer layer : activeLayers) {
             layer.reset();
         }
+        decodedCharBuffer.setLength(0);
         return delegate.seek(pos, whence);
     }
 

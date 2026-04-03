@@ -89,6 +89,32 @@ public class Encode extends PerlModuleBase {
         Charset defaultCharset = Charset.defaultCharset();
         CHARSET_ALIASES.put("locale", defaultCharset);
         CHARSET_ALIASES.put("locale_fs", defaultCharset);
+
+        // UTF-32 aliases
+        try {
+            Charset utf32 = Charset.forName("UTF-32");
+            CHARSET_ALIASES.put("utf32", utf32);
+            CHARSET_ALIASES.put("UTF32", utf32);
+            CHARSET_ALIASES.put("utf-32", utf32);
+            CHARSET_ALIASES.put("UTF-32", utf32);
+        } catch (Exception ignored) {
+        }
+        try {
+            Charset utf32be = Charset.forName("UTF-32BE");
+            CHARSET_ALIASES.put("utf32be", utf32be);
+            CHARSET_ALIASES.put("UTF32BE", utf32be);
+            CHARSET_ALIASES.put("utf-32be", utf32be);
+            CHARSET_ALIASES.put("UTF-32BE", utf32be);
+        } catch (Exception ignored) {
+        }
+        try {
+            Charset utf32le = Charset.forName("UTF-32LE");
+            CHARSET_ALIASES.put("utf32le", utf32le);
+            CHARSET_ALIASES.put("UTF32LE", utf32le);
+            CHARSET_ALIASES.put("utf-32le", utf32le);
+            CHARSET_ALIASES.put("UTF-32LE", utf32le);
+        } catch (Exception ignored) {
+        }
     }
 
     public Encode() {
