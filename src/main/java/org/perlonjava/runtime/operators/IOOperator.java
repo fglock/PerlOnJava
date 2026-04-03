@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.net.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -1343,6 +1344,8 @@ public class IOOperator {
     /**
      * socket(SOCKET, DOMAIN, TYPE, PROTOCOL)
      * Creates a socket and associates it with SOCKET filehandle.
+     * Like POSIX socket(), creates a generic socket that can be used for either
+     * connect() (client) or bind()+listen() (server).
      */
     public static RuntimeScalar socket(int ctx, RuntimeBase... args) {
         if (args.length < 4) {
@@ -1369,24 +1372,39 @@ public class IOOperator {
                 return scalarFalse;
             }
 
+            RuntimeIO socketIO;
             if (type == 1) { // SOCK_STREAM (TCP)
-                // Create ServerSocket using ServerSocketChannel for native socket option support
-                // This enables proper IPv4/IPv6 compatibility and Java's native socket options
-                ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-                ServerSocket serverSocket = serverSocketChannel.socket();
-                SocketIO socketIOHandle = new SocketIO(serverSocket, serverSocketChannel);
-                RuntimeIO socketIO = new RuntimeIO(socketIOHandle);
-                socketHandle.set(socketIO);
-                return scalarTrue;
+                // Create a SocketChannel - this is a client-capable socket that can be
+                // used with connect(). For server usage (bind+listen), SocketIO.listen()
+                // will lazily convert to a ServerSocketChannel.
+                SocketChannel channel = SocketChannel.open();
+                SocketIO socketIOHandle = new SocketIO(channel, family);
+                socketIO = new RuntimeIO(socketIOHandle);
             } else if (type == 2) { // SOCK_DGRAM (UDP)
-                // For UDP, we'll use DatagramSocket - note: SocketIO doesn't support UDP yet
-                // This is a placeholder implementation
                 getGlobalVariable("main::!").set("UDP sockets not yet fully implemented");
                 return scalarFalse;
             } else {
                 getGlobalVariable("main::!").set("Unsupported socket type: " + type);
                 return scalarFalse;
             }
+
+            // Set IO slot on the glob, following the same pattern as open()
+            RuntimeGlob targetGlob = null;
+            if ((socketHandle.type == RuntimeScalarType.GLOB || socketHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                    && socketHandle.value instanceof RuntimeGlob glob) {
+                targetGlob = glob;
+            }
+
+            if (targetGlob != null) {
+                targetGlob.setIO(socketIO);
+            } else {
+                // Create a new anonymous GLOB and assign it to the lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(socketIO);
+                socketHandle.set(newGlob);
+            }
+            return scalarTrue;
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Socket creation failed: " + e.getMessage());
@@ -1573,6 +1591,7 @@ public class IOOperator {
     /**
      * accept(NEWSOCKET, GENERICSOCKET)
      * Accepts a connection on a listening socket.
+     * Returns the packed sockaddr of the remote peer on success, false on failure.
      */
     public static RuntimeScalar accept(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
@@ -1584,23 +1603,39 @@ public class IOOperator {
             RuntimeScalar newSocketHandle = args[0].scalar();
             RuntimeScalar listenSocketHandle = args[1].scalar();
 
-            RuntimeIO listenSocketIO = listenSocketHandle.getRuntimeIO();
-            if (listenSocketIO == null) {
+            RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();
+            if (listenRuntimeIO == null || !(listenRuntimeIO.ioHandle instanceof SocketIO listenSocketIO)) {
                 getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
                 return scalarFalse;
             }
 
-            // Accept connection and create new socket handle
-            RuntimeScalar acceptResult = listenSocketIO.accept();
-            if (acceptResult.getDefinedBoolean()) {
-                // The accept() method in SocketIO returns the remote address string
-                // We need to create a new socket handle for the accepted connection
-                // For now, this is a simplified implementation
-                getGlobalVariable("main::!").set("Accept operation needs full socket handle creation");
-                return scalarFalse;
-            } else {
+            // Accept the connection - returns a new SocketIO for the client
+            SocketIO clientSocketIO = listenSocketIO.acceptConnection();
+            if (clientSocketIO == null) {
                 return scalarFalse;
             }
+
+            // Wrap in RuntimeIO and associate with the NEWSOCKET glob
+            RuntimeIO clientRuntimeIO = new RuntimeIO(clientSocketIO);
+
+            RuntimeGlob targetGlob = null;
+            if ((newSocketHandle.type == RuntimeScalarType.GLOB || newSocketHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                    && newSocketHandle.value instanceof RuntimeGlob glob) {
+                targetGlob = glob;
+            }
+
+            if (targetGlob != null) {
+                targetGlob.setIO(clientRuntimeIO);
+            } else {
+                // Create a new anonymous GLOB and assign it to the lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                newSocketHandle.set(newGlob);
+            }
+
+            // Return the packed sockaddr of the remote peer
+            return clientSocketIO.getpeername();
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Accept failed: " + e.getMessage());

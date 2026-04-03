@@ -33,6 +33,7 @@ public class Socket extends PerlModuleBase {
     public static final int SO_BROADCAST = 6;
     public static final int SO_LINGER = 13;
     public static final int SO_ERROR = 4;
+    public static final int SO_TYPE = 4104;
     public static final int TCP_NODELAY = 1;
     public static final int IPPROTO_TCP = 6;
     public static final int IPPROTO_UDP = 17;
@@ -97,6 +98,7 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("SO_BROADCAST", "");
             socket.registerMethod("SO_LINGER", "");
             socket.registerMethod("SO_ERROR", "");
+            socket.registerMethod("SO_TYPE", "");
             socket.registerMethod("TCP_NODELAY", "");
             socket.registerMethod("IPPROTO_TCP", "");
             socket.registerMethod("IPPROTO_UDP", "");
@@ -286,29 +288,38 @@ public class Socket extends PerlModuleBase {
     }
 
     /**
-     * sockaddr_in(PORT, IP_ADDRESS)
-     * Alias for pack_sockaddr_in for compatibility
+     * sockaddr_in(PORT, IP_ADDRESS) - pack form (2 args)
+     * sockaddr_in(SOCKADDR) - unpack form (1 arg)
+     * Dual-purpose function matching Perl's sockaddr_in behavior.
      */
     public static RuntimeList sockaddr_in(RuntimeArray args, int ctx) {
-        return pack_sockaddr_in(args, ctx);
+        if (args.size() >= 2) {
+            return pack_sockaddr_in(args, ctx);
+        } else {
+            return unpack_sockaddr_in(args, ctx);
+        }
     }
 
     /**
      * getnameinfo(SOCKADDR, FLAGS)
      * Converts a socket address to a hostname and service name.
-     * Returns ($host, $service) in list context.
+     * Returns ($err, $host, $service) in list context, matching Perl's Socket::getnameinfo.
      */
     public static RuntimeList getnameinfo(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
-            return scalarUndef.getList();
+            RuntimeList result = new RuntimeList();
+            result.add(new RuntimeScalar("Missing sockaddr argument"));
+            return result;
         }
 
         try {
             String sockaddr = args.get(0).toString();
-            // int flags = args.size() > 1 ? args.get(1).getInt() : 0;
+            int flags = args.size() > 1 ? args.get(1).getInt() : 0;
 
             if (sockaddr.length() < 8) {
-                return scalarUndef.getList();
+                RuntimeList result = new RuntimeList();
+                result.add(new RuntimeScalar("Invalid sockaddr structure"));
+                return result;
             }
 
             byte[] sockBytes = sockaddr.getBytes(StandardCharsets.ISO_8859_1);
@@ -321,23 +332,33 @@ public class Socket extends PerlModuleBase {
                     sockBytes[4] & 0xFF, sockBytes[5] & 0xFF,
                     sockBytes[6] & 0xFF, sockBytes[7] & 0xFF);
 
-            // Try to resolve hostname
+            // Resolve hostname based on NI_NUMERICHOST flag
             String hostname;
-            try {
-                InetAddress addr = InetAddress.getByName(ipAddress);
-                hostname = addr.getHostName();
-            } catch (Exception e) {
-                hostname = ipAddress;  // Fall back to IP if resolution fails
+            if ((flags & NI_NUMERICHOST) != 0) {
+                hostname = ipAddress;
+            } else {
+                try {
+                    InetAddress addr = InetAddress.getByName(ipAddress);
+                    hostname = addr.getHostName();
+                } catch (Exception e) {
+                    hostname = ipAddress;  // Fall back to IP if resolution fails
+                }
             }
 
-            // Return (hostname, port) in list context
+            // Resolve service name based on NI_NUMERICSERV flag
+            String service = String.valueOf(port);
+
+            // Return ($err, $hostname, $service) - $err is empty string on success
             RuntimeList result = new RuntimeList();
+            result.add(new RuntimeScalar(""));
             result.add(new RuntimeScalar(hostname));
-            result.add(new RuntimeScalar(String.valueOf(port)));
+            result.add(new RuntimeScalar(service));
             return result;
 
         } catch (Exception e) {
-            return scalarUndef.getList();
+            RuntimeList result = new RuntimeList();
+            result.add(new RuntimeScalar(e.getMessage()));
+            return result;
         }
     }
 
@@ -400,6 +421,10 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList SO_ERROR(RuntimeArray args, int ctx) {
         return new RuntimeScalar(SO_ERROR).getList();
+    }
+
+    public static RuntimeList SO_TYPE(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SO_TYPE).getList();
     }
 
     public static RuntimeList TCP_NODELAY(RuntimeArray args, int ctx) {
@@ -537,8 +562,9 @@ public class Socket extends PerlModuleBase {
                     // Build sockaddr_in6: family(2) + port(2) + flowinfo(4) + addr(16) + scope(4) = 28 bytes
                     byte[] addrBytes = addr.getAddress();
                     sockaddrBytes = new byte[28];
-                    sockaddrBytes[0] = (byte) (family & 0xFF);
-                    sockaddrBytes[1] = (byte) ((family >> 8) & 0xFF);
+                    // Family in big-endian (matches pack_sockaddr_in convention)
+                    sockaddrBytes[0] = (byte) ((family >> 8) & 0xFF);
+                    sockaddrBytes[1] = (byte) (family & 0xFF);
                     sockaddrBytes[2] = (byte) ((port >> 8) & 0xFF);
                     sockaddrBytes[3] = (byte) (port & 0xFF);
                     System.arraycopy(addrBytes, 0, sockaddrBytes, 8, 16);
@@ -548,8 +574,9 @@ public class Socket extends PerlModuleBase {
                     // Build sockaddr_in: family(2) + port(2) + addr(4) + zero(8) = 16 bytes
                     byte[] addrBytes = addr.getAddress();
                     sockaddrBytes = new byte[16];
-                    sockaddrBytes[0] = (byte) (family & 0xFF);
-                    sockaddrBytes[1] = (byte) ((family >> 8) & 0xFF);
+                    // Family in big-endian (matches pack_sockaddr_in convention)
+                    sockaddrBytes[0] = (byte) ((family >> 8) & 0xFF);
+                    sockaddrBytes[1] = (byte) (family & 0xFF);
                     sockaddrBytes[2] = (byte) ((port >> 8) & 0xFF);
                     sockaddrBytes[3] = (byte) (port & 0xFF);
                     System.arraycopy(addrBytes, 0, sockaddrBytes, 4, 4);
@@ -604,8 +631,8 @@ public class Socket extends PerlModuleBase {
             return scalarUndef.getList();
         }
         byte[] bytes = sockaddr.getBytes(StandardCharsets.ISO_8859_1);
-        // Family is stored in the first 2 bytes (little-endian on most platforms)
-        int family = (bytes[0] & 0xFF) | ((bytes[1] & 0xFF) << 8);
+        // Family is stored in the first 2 bytes (big-endian, matching pack_sockaddr_in convention)
+        int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
         return new RuntimeScalar(family).getList();
     }
 

@@ -33,6 +33,10 @@ public class SocketIO implements IOHandle {
     private OutputStream outputStream;
     private boolean isEOF;
     private CharsetDecoderHelper decoderHelper;
+    // Track the protocol family for server socket conversion in listen()
+    private ProtocolFamily protocolFamily;
+    // Track bound address for lazy server socket creation in listen()
+    private InetSocketAddress boundAddress;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -79,6 +83,21 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Constructs a SocketIO instance from a SocketChannel (unconnected).
+     * Created by Perl's socket() builtin for SOCK_STREAM. The socket can
+     * later be used with connect() (client) or bind()+listen() (server).
+     *
+     * @param channel the unconnected socket channel
+     * @param family  the protocol family (INET, INET6, etc.)
+     */
+    public SocketIO(SocketChannel channel, ProtocolFamily family) {
+        this.socketChannel = channel;
+        this.socket = channel.socket();
+        this.protocolFamily = family;
+        this.socketOptions = new HashMap<>();
+    }
+
+    /**
      * Binds the socket to a specific address and port.
      *
      * @param address the IP address to bind to
@@ -87,10 +106,13 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar bind(String address, int port) {
         try {
+            InetSocketAddress bindAddr = new InetSocketAddress(address, port);
             if (socket != null) {
-                socket.bind(new InetSocketAddress(address, port));
+                socket.bind(bindAddr);
+                this.boundAddress = bindAddr;
             } else if (serverSocket != null) {
-                serverSocket.bind(new InetSocketAddress(address, port));
+                serverSocket.bind(bindAddr);
+                this.boundAddress = bindAddr;
             } else {
                 throw new IllegalStateException("No socket available to bind");
             }
@@ -102,6 +124,7 @@ public class SocketIO implements IOHandle {
 
     /**
      * Connects the client socket to a remote address and port.
+     * Initializes input/output streams after successful connection.
      *
      * @param address the remote IP address to connect to
      * @param port    the remote port number to connect to
@@ -113,6 +136,9 @@ public class SocketIO implements IOHandle {
         }
         try {
             socket.connect(new InetSocketAddress(address, port));
+            // Initialize streams after successful connection
+            this.inputStream = socket.getInputStream();
+            this.outputStream = socket.getOutputStream();
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "connect operation failed");
@@ -120,21 +146,78 @@ public class SocketIO implements IOHandle {
     }
 
     /**
-     * Listens for incoming connections on the server socket with a specified backlog.
+     * Puts the socket into listening mode. If only a client socket exists
+     * (from socket() builtin), converts it to a server socket first.
      *
      * @param backlog the maximum number of pending connections
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
     public RuntimeScalar listen(int backlog) {
-        if (serverSocket == null) {
-            throw new IllegalStateException("No server socket available to listen");
-        }
         try {
-            serverSocket.setReceiveBufferSize(backlog);
+            if (serverSocket == null) {
+                // Convert from client socket to server socket.
+                // Close the client socket/channel and create a ServerSocketChannel.
+                InetSocketAddress addr = this.boundAddress;
+                if (socketChannel != null) {
+                    socketChannel.close();
+                    socketChannel = null;
+                }
+                if (socket != null) {
+                    // Don't close if we got the bound address from the socket
+                    if (addr == null && socket.getLocalSocketAddress() instanceof InetSocketAddress localAddr) {
+                        addr = localAddr;
+                    }
+                    socket.close();
+                    socket = null;
+                }
+
+                // Create a new ServerSocketChannel and bind to the same address
+                serverSocketChannel = ServerSocketChannel.open();
+                serverSocket = serverSocketChannel.socket();
+
+                // Apply stored SO_REUSEADDR option if set
+                String reuseKey = "1:2"; // SOL_SOCKET:SO_REUSEADDR
+                if (socketOptions.containsKey(reuseKey) && socketOptions.get(reuseKey) != 0) {
+                    serverSocket.setReuseAddress(true);
+                }
+
+                if (addr != null) {
+                    serverSocket.bind(addr, backlog);
+                } else {
+                    // Not yet bound - will need to bind separately
+                    // Store backlog for later use
+                    serverSocket.bind(null, backlog);
+                }
+            } else {
+                // Already a server socket - if not yet bound, bind now
+                if (!serverSocket.isBound()) {
+                    serverSocket.bind(this.boundAddress, backlog);
+                }
+                // If already bound, listen is already active from bind
+            }
             return scalarTrue;
         } catch (IOException e) {
             handleIOException(e, "listen operation failed");
             return scalarFalse;
+        }
+    }
+
+    /**
+     * Accepts a connection on the server socket and returns a new SocketIO
+     * for the accepted client connection.
+     *
+     * @return the SocketIO for the accepted connection, or null on failure
+     */
+    public SocketIO acceptConnection() {
+        if (serverSocket == null) {
+            throw new IllegalStateException("No server socket available to accept connections");
+        }
+        try {
+            Socket clientSocket = serverSocket.accept();
+            return new SocketIO(clientSocket);
+        } catch (IOException e) {
+            handleIOException(e, "accept operation failed");
+            return null;
         }
     }
 
@@ -169,8 +252,17 @@ public class SocketIO implements IOHandle {
      */
     @Override
     public RuntimeScalar fileno() {
+        if (socketChannel != null) {
+            return new RuntimeScalar(socketChannel.hashCode());
+        }
+        if (serverSocketChannel != null) {
+            return new RuntimeScalar(serverSocketChannel.hashCode());
+        }
         if (socket != null) {
-            return new RuntimeScalar(socket.getChannel().hashCode());
+            return new RuntimeScalar(socket.hashCode());
+        }
+        if (serverSocket != null) {
+            return new RuntimeScalar(serverSocket.hashCode());
         }
         return scalarUndef;
     }
