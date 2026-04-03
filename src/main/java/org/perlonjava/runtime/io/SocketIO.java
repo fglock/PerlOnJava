@@ -512,7 +512,7 @@ public class SocketIO implements IOHandle {
                 }
                 if (bytesRead == 0) {
                     // Would block — set EWOULDBLOCK
-                    getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN()); // EAGAIN/EWOULDBLOCK
                     return scalarUndef;
                 }
                 byte[] result = new byte[bytesRead];
@@ -560,7 +560,7 @@ public class SocketIO implements IOHandle {
                 int written = socketChannel.write(buf);
                 if (written == 0) {
                     // Would block — set EWOULDBLOCK
-                    getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN()); // EAGAIN/EWOULDBLOCK
                     return scalarUndef;
                 }
                 return new RuntimeScalar(written);

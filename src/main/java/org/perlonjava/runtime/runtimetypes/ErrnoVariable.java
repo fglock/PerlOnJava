@@ -19,8 +19,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * which ensures correct platform-specific messages on macOS, Linux, and Windows.
  * Results are cached lazily.
  *
- * Named errno constants (EINPROGRESS, etc.) are read from the Perl Errno module
- * at runtime, so they match the platform's header values.
+ * Named errno constants (EINPROGRESS, etc.) are resolved by probing native
+ * strerror() to find which errno value produces the expected message pattern.
+ * This works correctly on any POSIX platform without hardcoded values.
  */
 public class ErrnoVariable extends RuntimeScalar {
     
@@ -32,7 +33,8 @@ public class ErrnoVariable extends RuntimeScalar {
     // Reverse map of messages to errno numbers (built lazily)
     private static final Map<String, Integer> MESSAGE_TO_ERRNO = new HashMap<>();
 
-    // Named errno constants — populated lazily from Perl's Errno module
+    // Named errno constants — resolved lazily by probing native strerror()
+    private static volatile int _EAGAIN = -1;
     private static volatile int _EINPROGRESS = -1;
     private static volatile int _ECONNREFUSED = -1;
     private static volatile int _ETIMEDOUT = -1;
@@ -41,6 +43,23 @@ public class ErrnoVariable extends RuntimeScalar {
     private static volatile int _ECONNABORTED = -1;
     private static volatile int _EADDRINUSE = -1;
     private static volatile int _EADDRNOTAVAIL = -1;
+
+    // Map of errno constant names to substring patterns in strerror() messages.
+    // Used to probe the native strerror() and discover platform-correct values.
+    private static final Map<String, String> ERRNO_MSG_PATTERNS = Map.ofEntries(
+        Map.entry("EAGAIN", "resource temporarily unavailable"),
+        Map.entry("EINPROGRESS", "in progress"),
+        Map.entry("ECONNREFUSED", "connection refused"),
+        Map.entry("ETIMEDOUT", "timed out"),
+        Map.entry("ENETUNREACH", "network is unreachable"),
+        Map.entry("ECONNRESET", "connection reset"),
+        Map.entry("ECONNABORTED", "connection abort"),
+        Map.entry("EADDRINUSE", "address already in use"),
+        Map.entry("EADDRNOTAVAIL", "assign requested address")
+    );
+
+    // Cache of resolved errno constants (probed once, cached forever)
+    private static final ConcurrentHashMap<String, Integer> ERRNO_CONSTANTS = new ConcurrentHashMap<>();
 
     /**
      * Look up the strerror() message for a given errno, caching the result.
@@ -60,21 +79,32 @@ public class ErrnoVariable extends RuntimeScalar {
     }
 
     /**
-     * Look up an errno constant by name from Perl's Errno module.
-     * Falls back to -1 if not available.
+     * Look up an errno constant by probing native strerror().
+     * Scans errno values 1-200 looking for a message that matches the
+     * expected pattern for the given constant name.
+     * Returns 0 if the constant cannot be resolved.
      */
     private static int lookupErrnoConstant(String name) {
-        try {
-            RuntimeScalar result = GlobalVariable.getGlobalHash("Errno::err").get(name);
-            if (result != null && result.getDefinedBoolean()) {
-                return result.getInt();
+        return ERRNO_CONSTANTS.computeIfAbsent(name, n -> {
+            String pattern = ERRNO_MSG_PATTERNS.get(n);
+            if (pattern == null) return 0;
+            String lowerPattern = pattern.toLowerCase();
+            for (int i = 1; i <= 200; i++) {
+                String msg = nativeStrerror(i);
+                if (msg.toLowerCase().contains(lowerPattern)) {
+                    return i;
+                }
             }
-        } catch (Exception ignored) {
-        }
-        return -1;
+            return 0;
+        });
     }
 
-    // Public accessors for named constants — lazy init from Errno module
+    // Public accessors for named constants — lazy init by probing strerror
+    public static int EAGAIN() {
+        int v = _EAGAIN;
+        if (v == -1) { v = _EAGAIN = lookupErrnoConstant("EAGAIN"); }
+        return v;
+    }
     public static int EINPROGRESS() {
         int v = _EINPROGRESS;
         if (v == -1) { v = _EINPROGRESS = lookupErrnoConstant("EINPROGRESS"); }
