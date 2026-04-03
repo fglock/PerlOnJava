@@ -1,6 +1,6 @@
 # LWP::UserAgent Support for PerlOnJava
 
-## Status: Phase 9 Complete
+## Status: Phase 10 Complete
 
 **Branch**: `fix/lwp-useragent-support`
 **Date started**: 2026-04-03
@@ -12,7 +12,7 @@ client library for Perl. It was previously blocked on HTTP::Message, which has s
 been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
-## Current State (after Phase 9)
+## Current State (after Phase 10)
 
 Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
 - **173/173 subtests pass** (100%) — after fixing test runner to treat `not ok # TODO` as OK per TAP spec
@@ -35,8 +35,8 @@ Running all 8 local test files via `perl dev/tools/perl_test_runner.pl`:
 | t/10-attrs.t | "Use of uninitialized value in join or string" warnings (×6). These are real Perl warnings from undef credentials in LWP/UserAgent.pm line 712. Perl 5 produces them too. | Pre-existing (not a PerlOnJava bug) |
 | t/local/download_to_fh.t | "Odd number of elements in hash assignment" warnings. These are real Perl warnings from LWP code path. Perl 5 produces them too. | Pre-existing (not a PerlOnJava bug) |
 | t/leak/no_leak.t | Requires Test::LeakTrace (XS-only module). Cannot be supported. | Won't fix |
-| Test2::API line 384 | `Argument "No such file or directory" isn't numeric` warning when running under Test::Harness. Does not reproduce in isolation. Likely a pre-existing issue where the string form of `$!` gets stored in a regular scalar. | Pre-existing |
-| `%!` tied hash | `$!{EINPROGRESS}` returns empty. PerlOnJava may not auto-tie `%!` to Errno like Perl 5 does. IO::Socket::IP uses `$!{EINPROGRESS}` to check non-blocking connect status. | Pre-existing (not yet implemented) |
+| Test2::API line 384 | `Argument "No such file or directory" isn't numeric` warning when running under Test::Harness. | Fixed in Phase 10 (ErrnoVariable getNumber/getLong overrides) |
+| `%!` errno hash | `$!{EINPROGRESS}` returned empty. PerlOnJava didn't implement `%!` magic hash. IO::Socket::IP uses `$!{EINPROGRESS}` to check non-blocking connect status. | Fixed in Phase 10 (ErrnoHash Java-level magic hash) |
 
 ### Test Results Breakdown
 
@@ -421,6 +421,23 @@ via a prior jcpan run.
 - [x] `make` passes
 - [x] Commit: `b31a10459`
 
+### Phase 10: %! errno hash + $! numeric fixes -- COMPLETED (2026-04-03)
+
+- [x] **ErrnoHash.java**: New Java-level magic hash for `%!` (like `%+`/`%-` pattern)
+  - Platform-specific errno constant tables (macOS Darwin + Linux)
+  - `$!{ENOENT}` returns errno value when `$!` matches, 0 otherwise, `""` for unknown
+  - `exists $!{ENOENT}`, `keys %!` work correctly
+  - Read-only (put/remove silently ignored)
+- [x] **ErrnoVariable.java**: Fix `set(String)` reverse lookup — add `ensureMessageMapPopulated()`
+  to pre-populate strerror cache before message-to-errno resolution
+- [x] **ErrnoVariable.java**: Add `getNumber()`, `getNumberWarn()`, `getLong()` overrides
+  so `0 + $!` uses errno int directly (no "isn't numeric" warning)
+- [x] **GlobalContext.java**: Wire up `%!` with `ErrnoHash` (replaces TODO)
+- [x] Fixes IO::Socket::IP `$!{EINPROGRESS}` checks
+- [x] Fixes Test2::API "isn't numeric" warning on `0 + $!`
+- [x] `make` passes
+- [x] Commit: `2e226b30c`
+
 ### Next Steps
 
 - [x] Create PR for merge to master — PR #431
@@ -505,3 +522,10 @@ via a prior jcpan run.
 | `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoVariable.java` | Probe strerror() for errno constants instead of reading from Perl Errno; add EAGAIN accessor |
 | `src/main/java/org/perlonjava/runtime/io/SocketIO.java` | Use ErrnoVariable.EAGAIN() instead of hardcoded 11 |
 | `src/main/perl/lib/Errno.pm` | Add macOS/Darwin errno table; runtime $^O detection; filter :POSIX exports |
+
+### Phase 10
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoHash.java` | New: Java-level magic hash for `%!` with platform-specific errno constant tables |
+| `src/main/java/org/perlonjava/runtime/runtimetypes/ErrnoVariable.java` | Add ensureMessageMapPopulated(); add getNumber/getNumberWarn/getLong overrides |
+| `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalContext.java` | Wire up `%!` with ErrnoHash (replaces TODO) |
