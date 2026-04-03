@@ -582,6 +582,40 @@ public class CompileBinaryOperator {
             }
         }
 
+        // Handle split specially: each argument (EXPR, LIMIT) should be in SCALAR context,
+        // but the result is assembled into a list for the SPLIT opcode.
+        // This ensures `split //, reverse $str` evaluates `reverse` in scalar context
+        // (string reverse) not list context (list reverse).
+        if (node.operator.equals("split")) {
+            bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
+            int rs1 = bytecodeCompiler.lastResultReg;
+
+            int rs2;
+            if (node.right instanceof ListNode listNode && !listNode.elements.isEmpty()) {
+                // Compile each element in SCALAR context, then assemble into a list
+                java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+                for (Node element : listNode.elements) {
+                    bytecodeCompiler.compileNode(element, -1, RuntimeContextType.SCALAR);
+                    argRegs.add(bytecodeCompiler.lastResultReg);
+                }
+                rs2 = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(rs2);
+                bytecodeCompiler.emit(argRegs.size());
+                for (int argReg : argRegs) {
+                    bytecodeCompiler.emitReg(argReg);
+                }
+            } else {
+                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.SCALAR);
+                rs2 = bytecodeCompiler.lastResultReg;
+            }
+
+            int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
+                    bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
+            bytecodeCompiler.lastResultReg = rd;
+            return;
+        }
+
         // Compile left and right operands (for non-short-circuit operators).
         // For arithmetic/bitwise operators, force SCALAR context to prevent
         // parenthesized expressions from producing RuntimeList in LIST context.

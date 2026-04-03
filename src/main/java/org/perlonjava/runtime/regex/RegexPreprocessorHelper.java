@@ -639,7 +639,31 @@ public class RegexPreprocessorHelper {
                     sb.append(Character.toChars(c));
                     offset++;
                     wasEscape = true;
-                    if (offset < length && s.charAt(offset) == 'N') {
+                    if (offset < length && (s.charAt(offset) == 'p' || s.charAt(offset) == 'P')
+                            && offset + 1 < length && s.charAt(offset + 1) == '{') {
+                        // Handle \p{...} and \P{...} inside character class
+                        // Translate Perl Unicode property names to Java-compatible patterns
+                        boolean pNegated = (s.charAt(offset) == 'P');
+                        int pEndBrace = s.indexOf('}', offset + 2);
+                        if (pEndBrace != -1) {
+                            String property = s.substring(offset + 2, pEndBrace).trim();
+                            try {
+                                String translatedProperty = UnicodeResolver.translateUnicodeProperty(property, pNegated);
+                                // Remove the backslash that was already appended
+                                sb.setLength(sb.length() - 1);
+                                // Append the translated property (e.g., a character class pattern from ICU4J)
+                                sb.append(translatedProperty);
+                                offset = pEndBrace;
+                            } catch (IllegalArgumentException e) {
+                                // If translation fails, pass through as-is and let Java handle it
+                                // (works for standard Java properties like \p{L}, \p{IsAlphabetic}, etc.)
+                                sb.append(Character.toChars(s.charAt(offset)));
+                            }
+                        } else {
+                            sb.append(Character.toChars(s.charAt(offset)));
+                        }
+                        lastChar = -1;  // Unicode properties can't be range endpoints
+                    } else if (offset < length && s.charAt(offset) == 'N') {
                         if (offset + 1 < length && s.charAt(offset + 1) == '{') {
                             // Handle \N{...} constructs
                             offset += 2; // Skip past \N{

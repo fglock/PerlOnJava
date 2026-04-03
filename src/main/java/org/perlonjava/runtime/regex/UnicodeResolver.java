@@ -419,7 +419,22 @@ public class UnicodeResolver {
             if (isBlockProperty(property)) {
                 unicodeSet.applyPropertyAlias("Block", property);
             } else {
-                unicodeSet.applyPropertyAlias(property, "");
+                try {
+                    unicodeSet.applyPropertyAlias(property, "");
+                } catch (IllegalArgumentException ex) {
+                    // Property not found as general category/script - try as a Unicode block name.
+                    // Perl resolves \p{Emoticons} as \p{Block=Emoticons}, etc.
+                    try {
+                        unicodeSet.applyPropertyAlias("Block", property);
+                    } catch (IllegalArgumentException ex2) {
+                        // Neither worked - try user-defined property before giving up
+                        String userProp = tryUserDefinedProperty(property, recursionSet);
+                        if (userProp != null) {
+                            return wrapCharClass(userProp, negated);
+                        }
+                        throw ex; // rethrow original error
+                    }
+                }
             }
 
             String pattern = unicodeSet.toPattern(false);

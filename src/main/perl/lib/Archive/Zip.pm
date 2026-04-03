@@ -26,6 +26,17 @@ our %EXPORT_TAGS = (
     )],
 );
 
+# Error handling (matches CPAN Archive::Zip API)
+our $ErrorHandler = \&Carp::carp;
+
+sub setErrorHandler {
+    my $errorHandler = (ref($_[0]) eq 'HASH') ? shift->{subroutine} : shift;
+    $errorHandler = \&Carp::carp unless defined($errorHandler);
+    my $oldErrorHandler = $Archive::Zip::ErrorHandler;
+    $Archive::Zip::ErrorHandler = $errorHandler;
+    return $oldErrorHandler;
+}
+
 # For Archive::Zip::Member methods - inherit from Archive::Zip
 # This allows member objects to use the same Java methods
 package Archive::Zip::Member;
