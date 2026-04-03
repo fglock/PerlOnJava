@@ -114,55 +114,17 @@ public class Utf8 extends PerlModuleBase {
         // Don't modify read-only scalars (e.g., string literals)
         if (!(scalar instanceof RuntimeScalarReadOnly)) {
             if (scalar.type == BYTE_STRING) {
-                // BYTE_STRING: interpret bytes as Latin-1, then decode as UTF-8 if valid.
+                // BYTE_STRING → STRING: just flip the type flag without changing content.
                 //
-                // IMPORTANT CORNER CASE (regression-prone):
-                // In a perfect world, BYTE_STRING values would only ever contain characters in
-                // the 0x00..0xFF range (representing raw octets). However, some parts of the
-                // interpreter/compiler may currently construct a BYTE_STRING that already
-                // contains Unicode code points > 0xFF (e.g. from "\x{100}" yielding U+0100).
+                // In Perl 5, utf8::upgrade() only changes the internal storage format
+                // (from byte to UTF-8 encoded), but the character codepoints remain
+                // identical. For example, bytes 0xE2, 0x82, 0xAC become characters
+                // U+00E2, U+0082, U+00AC (NOT decoded as UTF-8 to U+20AC).
                 //
-                // If we blindly treat such a value as bytes and cast each char to (byte), Java
-                // will truncate U+0100 (256) to 0x00 and we corrupt the string to "\0".
-                // This breaks re/regexp.t cases that do:
-                //   $subject = "\x{100}"; utf8::upgrade($subject);
-                // and then expect the subject to still contain U+0100.
-                //
-                // Therefore:
-                // - If the current BYTE_STRING already contains chars > 0xFF, treat it as
-                //   already-upgraded Unicode content and simply flip the type to STRING.
-                //   (No re-decoding step; content must not change.)
-                boolean hasNonByteChars = false;
-                for (int i = 0; i < string.length(); i++) {
-                    if (string.charAt(i) > 0xFF) {
-                        hasNonByteChars = true;
-                        break;
-                    }
-                }
-                if (hasNonByteChars) {
-                    scalar.set(string);
-                    scalar.type = STRING;
-                    return new RuntimeScalar(utf8Bytes.length).getList();
-                }
-
-                // Extract raw byte values (0x00-0xFF) directly from char codes.
-                // Do NOT use getBytes(ISO_8859_1) on values that may contain characters > 0xFF,
-                // as Java will replace unmappable characters with '?'.
-                byte[] bytes = new byte[string.length()];
-                for (int i = 0; i < string.length(); i++) {
-                    bytes[i] = (byte) string.charAt(i);
-                }
-                CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                        .onMalformedInput(CodingErrorAction.REPORT)
-                        .onUnmappableCharacter(CodingErrorAction.REPORT);
-                try {
-                    CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
-                    scalar.set(decoded.toString());
-                } catch (CharacterCodingException e) {
-                    // Not valid UTF-8: keep Latin-1 codepoint semantics.
-                    // Each byte value becomes a character with that code point.
-                    scalar.set(string);
-                }
+                // NOTE: Some parts of the interpreter/compiler may construct a BYTE_STRING
+                // that already contains Unicode code points > 0xFF (e.g. "\x{100}").
+                // This is fine — we just flip the type and preserve the content as-is.
+                scalar.set(string);
                 scalar.type = STRING;
             } else if (scalar.type != STRING) {
                 // Other types (INTEGER, DOUBLE, UNDEF, etc.): convert to string and mark as STRING.

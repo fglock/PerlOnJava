@@ -1277,7 +1277,7 @@ public class RuntimeIO extends RuntimeScalar {
 
         // When no encoding layer is active, check for wide characters (> 0xFF).
         // Perl 5 warns and outputs UTF-8 encoding of the entire string in this case.
-        if (!(ioHandle instanceof LayeredIOHandle)) {
+        if (isByteMode()) {
             boolean hasWide = false;
             for (int i = 0; i < data.length(); i++) {
                 if (data.charAt(i) > 0xFF) {
