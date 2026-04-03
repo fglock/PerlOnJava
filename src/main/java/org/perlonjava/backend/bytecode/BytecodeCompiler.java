@@ -401,6 +401,10 @@ public class BytecodeCompiler implements Visitor {
      * @return true if access should be blocked under strict vars
      */
 
+    boolean isBytesEnabled() {
+        return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_BYTES);
+    }
+
     boolean isIntegerEnabled() {
         return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_INTEGER);
     }

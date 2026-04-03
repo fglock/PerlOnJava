@@ -9,6 +9,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -96,6 +97,68 @@ public class DataSection {
         return false;
     }
 
+    /**
+     * Extracts DATA section content from raw file bytes.
+     * In Perl 5, &lt;DATA&gt; reads raw bytes from the file. This method searches for
+     * the __DATA__ or __END__ marker in the raw bytes and returns the content
+     * after it as a Latin-1 string (each byte = one character), preserving
+     * non-UTF-8 bytes that would be corrupted by UTF-8 decoding.
+     *
+     * @param rawBytes    the raw file bytes (after BOM removal)
+     * @param markerText  the marker to search for ("__DATA__" or "__END__")
+     * @return the DATA content as a Latin-1 string, or null if marker not found
+     */
+    private static String extractDataFromRawBytes(byte[] rawBytes, String markerText) {
+        byte[] marker = markerText.getBytes(StandardCharsets.US_ASCII);
+        int markerLen = marker.length;
+
+        // Search for the marker at the start of a line in raw bytes
+        for (int i = 0; i <= rawBytes.length - markerLen; i++) {
+            // Check that we're at the start of a line (position 0 or after \n)
+            if (i > 0 && rawBytes[i - 1] != '\n') {
+                continue;
+            }
+
+            // Check if the marker matches at this position
+            boolean match = true;
+            for (int j = 0; j < markerLen; j++) {
+                if (rawBytes[i + j] != marker[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (!match) continue;
+
+            // Verify the marker is followed by whitespace/newline/EOF (not part of a longer identifier)
+            int afterMarker = i + markerLen;
+            if (afterMarker < rawBytes.length) {
+                byte next = rawBytes[afterMarker];
+                if (next != '\n' && next != '\r' && next != ' ' && next != '\t') {
+                    continue; // Part of a longer identifier
+                }
+            }
+
+            // Skip past the marker and any trailing whitespace + newline
+            int dataStart = afterMarker;
+            // Skip spaces/tabs
+            while (dataStart < rawBytes.length && (rawBytes[dataStart] == ' ' || rawBytes[dataStart] == '\t')) {
+                dataStart++;
+            }
+            // Skip the newline (\n or \r\n)
+            if (dataStart < rawBytes.length && rawBytes[dataStart] == '\r') {
+                dataStart++;
+            }
+            if (dataStart < rawBytes.length && rawBytes[dataStart] == '\n') {
+                dataStart++;
+            }
+
+            // Return remaining bytes as Latin-1 string (each byte = one character)
+            return new String(rawBytes, dataStart, rawBytes.length - dataStart, StandardCharsets.ISO_8859_1);
+        }
+
+        return null; // Marker not found
+    }
+
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
@@ -133,21 +196,36 @@ public class DataSection {
             }
 
             if (populateData) {
-                // Capture all remaining content until end marker
-                StringBuilder dataContent = new StringBuilder();
-                while (tokenIndex < tokens.size()) {
-                    LexerToken currentToken = tokens.get(tokenIndex);
-
-                    // Stop if we hit an end marker
-                    if (isEndMarker(currentToken)) {
-                        break;
-                    }
-
-                    dataContent.append(currentToken.text);
-                    tokenIndex++;
+                // Try to extract DATA content from raw file bytes first.
+                // This preserves non-UTF-8 bytes (e.g., Latin-1) that would be corrupted
+                // by the UTF-8 decoding that happens when reading source files.
+                // In Perl 5, <DATA> reads raw bytes from the file.
+                byte[] rawBytes = parser.ctx.compilerOptions.rawCodeBytes;
+                String rawContent = null;
+                if (rawBytes != null) {
+                    rawContent = extractDataFromRawBytes(rawBytes, token.text);
                 }
 
-                createDataHandle(parser, dataContent.toString());
+                if (rawContent != null) {
+                    createDataHandle(parser, rawContent);
+                } else {
+                    // Fallback: concatenate remaining tokens (for eval/string-based code
+                    // where raw bytes are not available)
+                    StringBuilder dataContent = new StringBuilder();
+                    while (tokenIndex < tokens.size()) {
+                        LexerToken currentToken = tokens.get(tokenIndex);
+
+                        // Stop if we hit an end marker
+                        if (isEndMarker(currentToken)) {
+                            break;
+                        }
+
+                        dataContent.append(currentToken.text);
+                        tokenIndex++;
+                    }
+
+                    createDataHandle(parser, dataContent.toString());
+                }
             }
         }
         // Return tokens.size() to indicate we've consumed everything

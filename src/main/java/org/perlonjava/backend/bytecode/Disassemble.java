@@ -1499,10 +1499,15 @@ public class Disassemble {
                     case Opcodes.LENGTH_BYTES:
                     case Opcodes.QUOTEMETA:
                     case Opcodes.FC:
+                    case Opcodes.FC_BYTES:
                     case Opcodes.LC:
+                    case Opcodes.LC_BYTES:
                     case Opcodes.LCFIRST:
+                    case Opcodes.LCFIRST_BYTES:
                     case Opcodes.UC:
+                    case Opcodes.UC_BYTES:
                     case Opcodes.UCFIRST:
+                    case Opcodes.UCFIRST_BYTES:
                     case Opcodes.SLEEP:
                     case Opcodes.TELL:
                     case Opcodes.RMDIR:

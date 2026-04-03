@@ -2157,6 +2157,31 @@ public class Opcodes {
      */
     public static final short DEFINED_CODE = 454;
 
+    /**
+     * Fold case (bytes mode): rd = StringOperators.fcBytes(rs)
+     */
+    public static final short FC_BYTES = 455;
+
+    /**
+     * Lowercase (bytes mode): rd = StringOperators.lcBytes(rs)
+     */
+    public static final short LC_BYTES = 456;
+
+    /**
+     * Uppercase (bytes mode): rd = StringOperators.ucBytes(rs)
+     */
+    public static final short UC_BYTES = 457;
+
+    /**
+     * Lowercase first (bytes mode): rd = StringOperators.lcfirstBytes(rs)
+     */
+    public static final short LCFIRST_BYTES = 458;
+
+    /**
+     * Uppercase first (bytes mode): rd = StringOperators.ucfirstBytes(rs)
+     */
+    public static final short UCFIRST_BYTES = 459;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

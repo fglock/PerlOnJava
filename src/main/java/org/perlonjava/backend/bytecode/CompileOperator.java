@@ -666,20 +666,20 @@ public class CompileOperator {
             case "exp" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.EXP);
             case "abs" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.ABS);
             case "integerBitwiseNot" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.INTEGER_BITWISE_NOT);
-            case "ord" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.ORD);
+            case "ord" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.ORD_BYTES : Opcodes.ORD);
             case "ordBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.ORD_BYTES);
             case "oct" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.OCT);
             case "hex" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.HEX);
             case "srand" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.SRAND);
-            case "chr" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR);
+            case "chr" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.CHR_BYTES : Opcodes.CHR);
             case "chrBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR_BYTES);
             case "lengthBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LENGTH_BYTES);
             case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.QUOTEMETA);
-            case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.FC);
-            case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LC);
-            case "lcfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LCFIRST);
-            case "uc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.UC);
-            case "ucfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.UCFIRST);
+            case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.FC_BYTES : Opcodes.FC);
+            case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.LC_BYTES : Opcodes.LC);
+            case "lcfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.LCFIRST_BYTES : Opcodes.LCFIRST);
+            case "uc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.UC_BYTES : Opcodes.UC);
+            case "ucfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.UCFIRST_BYTES : Opcodes.UCFIRST);
             case "tell" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.TELL);
             case "rmdir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.RMDIR);
             case "closedir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CLOSEDIR);
@@ -1274,7 +1274,7 @@ public class CompileOperator {
         if (node.operand instanceof ListNode list) { if (list.elements.isEmpty()) bc.throwCompilerException("length requires an argument"); list.elements.get(0).accept(bc); }
         else node.operand.accept(bc);
         int stringReg = bc.lastResultReg;
-        int rd = bc.allocateOutputRegister(); bc.emit(Opcodes.LENGTH_OP); bc.emitReg(rd); bc.emitReg(stringReg);
+        int rd = bc.allocateOutputRegister(); bc.emit(bc.isBytesEnabled() ? Opcodes.LENGTH_BYTES : Opcodes.LENGTH_OP); bc.emitReg(rd); bc.emitReg(stringReg);
         bc.lastResultReg = rd;
     }
 

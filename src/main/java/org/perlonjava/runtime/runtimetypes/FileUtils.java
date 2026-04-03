@@ -60,6 +60,15 @@ public class FileUtils {
             offset = 0;
         }
 
+        // Store raw bytes (after BOM removal) for DATA section extraction.
+        // In Perl 5, <DATA> reads raw bytes from the file. We preserve the original
+        // bytes so the DATA section can provide raw bytes instead of UTF-8-decoded content.
+        if (offset > 0) {
+            parsedArgs.rawCodeBytes = java.util.Arrays.copyOfRange(bytes, offset, bytes.length);
+        } else {
+            parsedArgs.rawCodeBytes = bytes;
+        }
+
         // For UTF-16 encodings, use a decoder that can handle malformed input
         // This is needed to preserve invalid surrogate sequences that Perl allows
         if (charset == StandardCharsets.UTF_16LE || charset == StandardCharsets.UTF_16BE) {
