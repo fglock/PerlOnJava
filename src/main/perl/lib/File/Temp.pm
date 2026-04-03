@@ -24,11 +24,11 @@ our $VERSION = '0.2311';
 
 use Exporter 'import';
 our @EXPORT = qw();
-our @EXPORT_OK = qw(tempfile tempdir mkstemp mkstemps mkdtemp mktemp tmpnam tmpfile tempnam unlink0 unlink1 cleanup);
+our @EXPORT_OK = qw(tempfile tempdir mkstemp mkstemps mkdtemp mktemp tmpnam tmpfile tempnam unlink0 unlink1 cleanup SEEK_SET SEEK_CUR SEEK_END);
 our %EXPORT_TAGS = (
     'POSIX'    => [qw(tmpnam tmpfile)],
     'mktemp'   => [qw(mkstemp mkstemps mkdtemp mktemp)],
-    'seekable' => [],
+    'seekable' => [qw(SEEK_SET SEEK_CUR SEEK_END)],
 );
 
 # Global variables

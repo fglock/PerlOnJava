@@ -486,6 +486,9 @@ public class ScalarGlobOperatorHelper {
 
         // Process each pattern
         for (String singlePattern : patterns) {
+            // Expand tilde to home directory
+            singlePattern = expandTilde(singlePattern);
+
             // Expand braces first
             List<String> expandedPatterns = expandBraces(singlePattern);
 
@@ -495,6 +498,20 @@ public class ScalarGlobOperatorHelper {
         }
 
         return results;
+    }
+
+    /**
+     * Expands a leading tilde (~) to the user's home directory.
+     * "~" becomes "/home/user", "~/foo" becomes "/home/user/foo".
+     */
+    private static String expandTilde(String pattern) {
+        if (pattern.equals("~")) {
+            return System.getProperty("user.home");
+        }
+        if (pattern.startsWith("~/")) {
+            return System.getProperty("user.home") + pattern.substring(1);
+        }
+        return pattern;
     }
 
     /**

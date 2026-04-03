@@ -250,6 +250,7 @@ public class GlobalContext {
         // TimeHiRes.initialize();  // Has XSLoader in Perl file
         // Encode.initialize();  // Has XSLoader in Perl file - deferred for Encode::Alias support
         UnicodeUCD.initialize();  // No XSLoader in Perl file - needed at startup
+        Charnames.initialize();   // Java-side charnames::viacode via ICU4J
         TermReadLine.initialize();  // No Perl file - needed at startup
         TermReadKey.initialize();  // No Perl file - needed at startup
         FileTemp.initialize();  // Perl uses eval require - keep for cleanup hooks
