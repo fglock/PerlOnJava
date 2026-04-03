@@ -4,7 +4,7 @@
 
 - **Module**: Data::Printer 1.002001
 - **Test command**: `./jcpan -j 8 -t Data::Printer`
-- **Status**: Phase 2c complete — READONLY_SCALAR dispatch wired across codebase, ready for Phase 3
+- **Status**: Phase 2c complete + set() fast-path fix — ready for Phase 3
 
 ## Test Results Summary
 
@@ -111,7 +111,17 @@ Key fixes:
 Lvalue operators (`substr`, `vec`, `chop`, `++/--`) already work correctly — write paths go through `set()` on the parent scalar, which triggers the READONLY_SCALAR modification check.
 
 - **Files** (20 files changed): `BitwiseOperators.java`, `ReferenceOperators.java`, `Attributes.java`, `Builtin.java`, `Json.java`, `ScalarUtil.java`, `Storable.java`, `Toml.java`, `Universal.java`, `YAMLPP.java`, `RuntimeRegex.java`, `NextMethod.java`, `RuntimeCode.java`, `RuntimeGlob.java`, `RuntimeScalar.java`, `RuntimeScalarType.java`, `RuntimeStashEntry.java`, `ScalarUtils.java`, `_charnames.pm`
-- **Regression tests**: op/svflags.t 16/23 (restored from 4), op/index.t 415/415, re/subst.t 227/281 (all at baseline)
+- **Regression tests**: op/svflags.t 16/23 (restored from 4), op/index.t 415/415, re/subst.t 228/281 (all at baseline)
+
+### Phase 2d: PROXY type for ScalarSpecialVariable (COMPLETED 2026-04-03)
+
+**Fixed**: `set()` fast-path copying stale fields from `$1` and other ScalarSpecialVariable proxies.
+
+- **Root cause**: `ScalarSpecialVariable` ($1, $&, etc.) computes values lazily via `getValueAsScalar()`, but inherits `type = UNDEF` and `value = null` from RuntimeScalar's default constructor. The `set()` fast path (`type < TIED_SCALAR`) copied these stale fields, causing `$x = $1` inside `s///eg` to silently produce undef.
+- **Fix**: Added `PROXY = 13` type constant (>= TIED_SCALAR) to `RuntimeScalarType.java`. ScalarSpecialVariable constructors now set `this.type = PROXY`. The fast path's existing `value.type < TIED_SCALAR` check naturally routes PROXY to the slow path, where the existing `instanceof ScalarSpecialVariable` resolution handles it.
+- **Design note**: Tried placing PROXY in `RuntimeBaseProxy` (parent class), but other proxy subclasses (RuntimeArrayProxyEntry, RuntimeHashProxyEntry, etc.) have code paths that read `value` directly before materialization. Only ScalarSpecialVariable has persistently stale fields (its values are always lazy). Other proxies update their fields after vivify/set operations.
+- **Files**: `RuntimeScalarType.java`, `ScalarSpecialVariable.java`, `RuntimeScalar.java`
+- **Regression tests**: re/subst.t 228/281 (restored), op/svflags.t 16/23 (baseline)
 
 ## Remaining Error Categories
 
@@ -189,4 +199,4 @@ Lvalue operators (`substr`, `vec`, `chop`, `++/--`) already work correctly — w
 
 ### Future: MAGIC type consolidation
 
-Consolidate `TIED_SCALAR` and `READONLY_SCALAR` into a single `MAGIC` type with a flags field (tied, readonly, tainted, etc.). This keeps all non-magic types on the fast path with a single `type >= MAGIC_THRESHOLD` guard. Requires refactoring 70+ `TIED_SCALAR` references — best done in a separate PR.
+Consolidate `TIED_SCALAR`, `READONLY_SCALAR`, and `PROXY` into a single `MAGIC` type with a flags field (tied, readonly, tainted, proxy, etc.). This keeps all non-magic types on the fast path with a single `type >= MAGIC_THRESHOLD` guard. Requires refactoring 70+ `TIED_SCALAR` references — best done in a separate PR.
