@@ -13,6 +13,9 @@ import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SelectableChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -65,15 +68,202 @@ public class IOOperator {
                 return new RuntimeScalar(0);
             }
 
-            // Full select implementation not yet supported - return 0 as a no-op
-            // rather than throwing fatal error, since many tests use select incidentally
-            return new RuntimeScalar(0);
+            // Implement 4-arg select() using NIO Selector
+            try {
+                return selectWithNIO(rbits, wbits, ebits, timeout);
+            } catch (Exception e) {
+                getGlobalVariable("main::!").set(e.getMessage());
+                return new RuntimeScalar(-1);
+            }
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
         RuntimeIO.selectedHandle = runtimeList.getFirst().getRuntimeIO();
         RuntimeIO.lastAccesseddHandle = RuntimeIO.selectedHandle;
         return fh;
+    }
+
+    /**
+     * Implements 4-arg select() using Java NIO Selector.
+     * Monitors file descriptors in the bit vectors for readiness.
+     * Modifies the bit vectors in place to reflect which descriptors are ready.
+     *
+     * @param rbits   read bit vector (modified in place)
+     * @param wbits   write bit vector (modified in place)
+     * @param ebits   error bit vector (modified in place)
+     * @param timeout timeout in seconds (undef = block forever, 0 = poll)
+     * @return number of ready descriptors, or -1 on error
+     */
+    private static RuntimeScalar selectWithNIO(RuntimeScalar rbits, RuntimeScalar wbits,
+                                                RuntimeScalar ebits, RuntimeScalar timeout) throws IOException {
+        byte[] rdata = rbits.getDefinedBoolean() ? getVecBytes(rbits) : new byte[0];
+        byte[] wdata = wbits.getDefinedBoolean() ? getVecBytes(wbits) : new byte[0];
+        byte[] edata = ebits.getDefinedBoolean() ? getVecBytes(ebits) : new byte[0];
+        int maxFd = Math.max(rdata.length, Math.max(wdata.length, edata.length)) * 8;
+
+        Selector selector = Selector.open();
+        List<SelectableChannel> madeNonBlocking = new ArrayList<>();
+
+        try {
+            Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
+            int nonSocketReady = 0;
+
+            for (int fd = 0; fd < maxFd; fd++) {
+                boolean wantRead = isBitSet(rdata, fd);
+                boolean wantWrite = isBitSet(wdata, fd);
+                if (!wantRead && !wantWrite) continue;
+
+                RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                if (rio == null) continue;
+
+                if (rio.ioHandle instanceof SocketIO socketIO) {
+                    SelectableChannel ch = socketIO.getSelectableChannel();
+                    if (ch == null) {
+                        nonSocketReady++;
+                        continue;
+                    }
+
+                    if (ch.isBlocking()) {
+                        ch.configureBlocking(false);
+                        madeNonBlocking.add(ch);
+                    }
+
+                    int ops = 0;
+                    if (wantRead) {
+                        ops |= (ch instanceof ServerSocketChannel)
+                                ? SelectionKey.OP_ACCEPT
+                                : SelectionKey.OP_READ;
+                    }
+                    if (wantWrite && ch instanceof SocketChannel) {
+                        ops |= SelectionKey.OP_WRITE;
+                    }
+
+                    if (ops != 0) {
+                        ch.register(selector, ops);
+                        channelToFd.put(ch, fd);
+                    }
+                } else {
+                    // Non-socket handles (files, pipes) are always ready
+                    nonSocketReady++;
+                }
+            }
+
+            // Perform the select
+            if (!channelToFd.isEmpty()) {
+                if (!timeout.getDefinedBoolean()) {
+                    selector.select(); // block indefinitely
+                } else {
+                    double sec = timeout.getDouble();
+                    if (sec <= 0) {
+                        selector.selectNow(); // poll
+                    } else {
+                        selector.select((long) (sec * 1000));
+                    }
+                }
+            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
+                // No channels to monitor and no always-ready handles — sleep for timeout
+                double sec = timeout.getDouble();
+                if (sec > 0) {
+                    long millis = (long) (sec * 1000);
+                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
+                    try {
+                        Thread.sleep(millis, nanos);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+
+            // Build result bit vectors (same size as input)
+            byte[] rresult = new byte[rdata.length];
+            byte[] wresult = new byte[wdata.length];
+            byte[] eresult = new byte[edata.length];
+            int totalReady = 0;
+
+            // Non-socket handles keep their bits set (always ready)
+            for (int fd = 0; fd < maxFd; fd++) {
+                RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                if (rio == null) continue;
+                if (rio.ioHandle instanceof SocketIO) continue;
+                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
+                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
+            }
+
+            // Process selected keys
+            for (SelectionKey key : selector.selectedKeys()) {
+                Integer fd = channelToFd.get(key.channel());
+                if (fd == null) continue;
+                int readyOps = key.readyOps();
+
+                if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
+                        && isBitSet(rdata, fd)) {
+                    setBit(rresult, fd);
+                    totalReady++;
+                }
+                if ((readyOps & SelectionKey.OP_WRITE) != 0 && isBitSet(wdata, fd)) {
+                    setBit(wresult, fd);
+                    totalReady++;
+                }
+            }
+
+            // Modify the original scalars in place
+            if (rbits.getDefinedBoolean()) {
+                rbits.set(new String(rresult, StandardCharsets.ISO_8859_1));
+            }
+            if (wbits.getDefinedBoolean()) {
+                wbits.set(new String(wresult, StandardCharsets.ISO_8859_1));
+            }
+            if (ebits.getDefinedBoolean()) {
+                ebits.set(new String(eresult, StandardCharsets.ISO_8859_1));
+            }
+
+            return new RuntimeScalar(totalReady);
+
+        } finally {
+            // Close the selector first — this deregisters all keys,
+            // allowing us to restore blocking mode
+            selector.close();
+
+            // Restore blocking mode for channels we modified
+            for (SelectableChannel ch : madeNonBlocking) {
+                try {
+                    ch.configureBlocking(true);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Extracts the raw bytes from a bit-vector scalar (as used by vec/select).
+     */
+    private static byte[] getVecBytes(RuntimeScalar scalar) {
+        String s = scalar.toString();
+        byte[] data = new byte[s.length()];
+        for (int i = 0; i < s.length(); i++) {
+            data[i] = (byte) s.charAt(i);
+        }
+        return data;
+    }
+
+    /**
+     * Tests whether bit 'fd' is set in a byte array (vec-style, little-endian bits within each byte).
+     */
+    private static boolean isBitSet(byte[] data, int fd) {
+        int byteIndex = fd / 8;
+        int bitIndex = fd % 8;
+        return byteIndex < data.length && (data[byteIndex] & (1 << bitIndex)) != 0;
+    }
+
+    /**
+     * Sets bit 'fd' in a byte array (vec-style, little-endian bits within each byte).
+     */
+    private static void setBit(byte[] data, int fd) {
+        int byteIndex = fd / 8;
+        int bitIndex = fd % 8;
+        if (byteIndex < data.length) {
+            data[byteIndex] |= (byte) (1 << bitIndex);
+        }
     }
 
     public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
@@ -1388,6 +1578,9 @@ public class IOOperator {
                 return scalarFalse;
             }
 
+            // Assign a small sequential fileno for select() support
+            socketIO.assignFileno();
+
             // Set IO slot on the glob, following the same pattern as open()
             RuntimeGlob targetGlob = null;
             if ((socketHandle.type == RuntimeScalarType.GLOB || socketHandle.type == RuntimeScalarType.GLOBREFERENCE)
@@ -1617,6 +1810,8 @@ public class IOOperator {
 
             // Wrap in RuntimeIO and associate with the NEWSOCKET glob
             RuntimeIO clientRuntimeIO = new RuntimeIO(clientSocketIO);
+            // Assign a small sequential fileno for select() support
+            clientRuntimeIO.assignFileno();
 
             RuntimeGlob targetGlob = null;
             if ((newSocketHandle.type == RuntimeScalarType.GLOB || newSocketHandle.type == RuntimeScalarType.GLOBREFERENCE)

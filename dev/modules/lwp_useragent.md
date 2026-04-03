@@ -12,12 +12,13 @@ client library for Perl. It was previously blocked on HTTP::Message, which has s
 been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
-## Current State (after Phase 4)
+## Current State (after Phase 5)
 
 Running all 22 test files (with the TESTS pattern from Makefile.PL):
 - **15/22 test programs pass**, 3 skipped (network), 4 have issues
 - Socket infrastructure now works: socket/bind/listen/accept/connect all functional
 - HTTP::Daemon can create and accept connections
+- 4-arg `select()` now works with NIO Selector — IO::Select fully operational
 - `talk-to-ourself` check still fails due to JVM startup time (>5s timeout)
 
 ### Test Results Breakdown
@@ -253,7 +254,18 @@ via a prior jcpan run.
 - [x] Verified: HTTP::Daemon creates and accepts connections correctly
 - [x] Commit: `1f4d1b1e2`
 
-### Phase 5: Unblock daemon-based tests (P8) -- NEXT
+### Phase 5: Implement select() for socket I/O -- COMPLETED (2026-04-03)
+
+- [x] **P9a**: Fileno registry in RuntimeIO — sequential filenos starting at 3
+- [x] **P9b**: Assign filenos in socket() and accept() builtins
+- [x] **P9c**: Add `getSelectableChannel()` to SocketIO; NIO-based acceptConnection()
+- [x] **P9d**: Implement 4-arg `select()` with Java NIO Selector
+- [x] Fix: close Selector before restoring blocking mode (IllegalBlockingModeException)
+- [x] Fix: sleep for timeout when no channels registered (defined-but-empty bit vectors)
+- [x] `make` passes
+- [x] Verified: IO::Select with server/client sockets works (accept, read, write)
+
+### Phase 6: Unblock daemon-based tests (P8) -- NEXT
 
 The four skipped socket tests all fail at the `talk-to-ourself` check, which
 forks a child `jperl` process with a 5-second timeout. The JVM startup time
@@ -270,7 +282,7 @@ exceeds this timeout. Options to investigate:
 - [ ] Re-run `./jcpan -j 8 -t LWP::UserAgent` and verify http.t/redirect.t run
 - [ ] Retest download_to_fh.t (should now pass with P5+P6 fixes)
 
-### Phase 6: Final cleanup -- FUTURE
+### Phase 7: Final cleanup -- FUTURE
 
 - [ ] Investigate ua.t Content-Style-Type failures (2 tests)
 - [ ] Update plan doc with final test counts
@@ -309,3 +321,10 @@ exceeds this timeout. Options to investigate:
 | `src/main/java/org/perlonjava/runtime/perlmodule/Socket.java` | Fix byte order, sockaddr_in dual mode, getnameinfo signature, add SO_TYPE |
 | `src/main/perl/lib/Socket.pm` | Export SO_TYPE |
 | `src/main/java/org/perlonjava/runtime/operators/ReferenceOperators.java` | Fix bless($ref, $obj) to use ref($obj) |
+
+### Phase 5
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeIO.java` | Add fileno registry (assignFileno, getByFileno); fileno() uses registry |
+| `src/main/java/org/perlonjava/runtime/operators/IOOperator.java` | Implement 4-arg select() with NIO Selector; assign filenos in socket()/accept() |
+| `src/main/java/org/perlonjava/runtime/io/SocketIO.java` | Add getSelectableChannel(); NIO-based acceptConnection() |

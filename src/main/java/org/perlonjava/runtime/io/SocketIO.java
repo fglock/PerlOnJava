@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.*;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
@@ -213,6 +214,19 @@ public class SocketIO implements IOHandle {
             throw new IllegalStateException("No server socket available to accept connections");
         }
         try {
+            // Prefer NIO channel accept — returns a SocketChannel that works with Selector
+            if (serverSocketChannel != null) {
+                SocketChannel clientChannel = serverSocketChannel.accept();
+                if (clientChannel == null) {
+                    return null; // non-blocking and no connection pending
+                }
+                Socket clientSocket = clientChannel.socket();
+                SocketIO clientIO = new SocketIO(clientSocket);
+                // Ensure the channel is set on the new SocketIO
+                clientIO.socketChannel = clientChannel;
+                return clientIO;
+            }
+            // Fallback to blocking accept
             Socket clientSocket = serverSocket.accept();
             return new SocketIO(clientSocket);
         } catch (IOException e) {
@@ -265,6 +279,23 @@ public class SocketIO implements IOHandle {
             return new RuntimeScalar(serverSocket.hashCode());
         }
         return scalarUndef;
+    }
+
+    /**
+     * Returns the NIO SelectableChannel for use with java.nio.channels.Selector.
+     * For server sockets, returns the ServerSocketChannel (selectable for OP_ACCEPT).
+     * For client sockets, returns the SocketChannel (selectable for OP_READ/OP_WRITE).
+     *
+     * @return the SelectableChannel, or null if not available
+     */
+    public SelectableChannel getSelectableChannel() {
+        if (serverSocketChannel != null) {
+            return serverSocketChannel;
+        }
+        if (socketChannel != null) {
+            return socketChannel;
+        }
+        return null;
     }
 
     @Override
