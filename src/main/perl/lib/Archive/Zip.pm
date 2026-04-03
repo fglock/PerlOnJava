@@ -5,6 +5,10 @@ use warnings;
 
 our $VERSION = '1.68';
 
+# Load FileHandle for compatibility with modules that expect Archive::Zip
+# to make FileHandle available (as the CPAN version does on line 12)
+use FileHandle ();
+
 # Load Java implementation
 use XSLoader;
 XSLoader::load('Archive::Zip', $VERSION);
