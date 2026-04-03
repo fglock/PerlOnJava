@@ -1,6 +1,6 @@
 # LWP::UserAgent Support for PerlOnJava
 
-## Status: Phase 6 Complete
+## Status: Phase 7 In Progress
 
 **Branch**: `fix/lwp-useragent-support`
 **Date started**: 2026-04-03
@@ -12,16 +12,17 @@ client library for Perl. It was previously blocked on HTTP::Message, which has s
 been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
-## Current State (after Phase 6)
+## Current State (after Phase 7a)
 
 Running all 22 test files via `jcpan -t LWP::UserAgent`:
-- **307/313 subtests pass** (98.1%), 6 failures across 5 files
-- **17/22 test files pass**, 1 skipped (NNTP network), 1 skipped (XS Test::LeakTrace)
+- **311/313 subtests pass** (99.4%), 2 failures across 2 files
+- **19/22 test files pass**, 1 skipped (NNTP network), 1 skipped (XS Test::LeakTrace)
 - All 4 previously-skipped daemon tests now run:
-  - t/local/http.t: **134/136** (2 Unicode HTML title failures)
+  - t/local/http.t: **135/136** (1 Unicode HTML title encoding failure)
   - t/robot/ua-get.t: **18/18**
   - t/robot/ua.t: **14/14**
   - t/redirect.t: **2/4** (socket connect error message format)
+- HTML::HeadParser callback chain now works (ua.t 51/51)
 - Socket sysread/syswrite now work for HTTP::Daemon request parsing
 - JVM startup (~1.2s) fits within talk-to-ourself's 5-second timeout
 
@@ -37,15 +38,15 @@ Running all 22 test files via `jcpan -t LWP::UserAgent`:
 | t/base/proxy.t | PASS | 8/8 | |
 | t/base/proxy_request.t | PASS | 16/16 | |
 | t/base/simple.t | PASS | 3/3 | |
-| t/base/ua.t | **FAIL** | 49/51 | 2 header tests (Content-Style-Type) |
+| t/base/ua.t | **PASS** | 51/51 | Fixed in Phase 7a |
 | t/base/ua_handlers.t | PASS | 19/19 | |
 | t/leak/no_leak.t | SKIP | 0/0 | Test::LeakTrace is XS-only (won't fix) |
 | t/local/autoload-get.t | PASS | 3/3 | |
 | t/local/autoload.t | PASS | 5/5 | |
 | t/local/cookie_jar.t | PASS | 9/9 | |
-| t/local/download_to_fh.t | PASS* | 2/2 | Parse error: no done_testing (crash on test 3) |
+| t/local/download_to_fh.t | PASS | 5/5 | Fixed in Phase 7a (File::Temp path doubling) |
 | t/local/get.t | PASS | 4/4 | |
-| t/local/http.t | **FAIL** | 134/136 | Unicode HTML title (En prøve) |
+| t/local/http.t | **FAIL** | 135/136 | 1 Unicode HTML title encoding (`En prøve` → `En pr�ve`) |
 | t/local/httpsub.t | PASS | 4/4 | |
 | t/local/protosub.t | PASS | 7/7 | |
 | t/redirect.t | **FAIL** | 2/4 | Socket connect error msg format |
@@ -197,12 +198,49 @@ initialized when connect() fails. The error propagation from `socket.connect()` 
 properly surfacing the IOException message.
 **Status**: Minor issue, 2 tests affected.
 
+### P12: HTML::Parser fireEvent() doesn't dispatch to subclass methods -- FIXED
+
+**Impact**: t/base/ua.t (2 tests: Content-Style-Type, Content-Script-Type)
+**Root cause**: Two bugs in `HTMLParser.java` `fireEvent()`:
+1. Used `selfHash.createReference()` which creates an *unblessed* reference, so
+   `blessedId()` returned 0 and method lookup always started at `HTML::Parser`
+   instead of the subclass (e.g. `HTML::HeadParser`).
+2. Checked only `RuntimeScalarType.STRING` (type 2) for method name callbacks, but
+   handler names are stored as `BYTE_STRING` (type 3), so the method-name branch
+   was never entered.
+**Fix**:
+1. Pass the original blessed `self` through `parse()` → `parseHtml()` → `fireEvent()`
+2. Add `BYTE_STRING` to the type check in the method-name branch
+**Files**: `HTMLParser.java`
+
+### P13: File::Temp path doubling in tempfile() -- FIXED
+
+**Impact**: t/local/download_to_fh.t (crash)
+**Root cause**: When a template already contained a directory component (e.g.
+`/var/.../T/myfile-XXXXXX`), `tempfile()` still prepended `tmpdir`, producing
+doubled paths like `/var/.../T//var/.../T/myfile-XXXXXX`.
+**Fix**: Only default `$dir` to `tmpdir` when `TMPDIR => 1` is explicit or no template
+is provided. Only prepend `$dir` when template has no directory component (checked
+via `File::Spec->splitpath`).
+**Files**: `File/Temp.pm`
+
+### P14: HTML title extraction loses non-ASCII characters -- OPEN
+
+**Impact**: t/local/http.t (1 test: "get file: good title")
+**Root cause**: The HTML `<title>` tag contains `En prøve` (Latin-1 ø = U+00F8),
+but after round-tripping through HTML::HeadParser → HTTP::Response `$res->title`,
+the ø character is corrupted to `�`. This is a character encoding issue in the
+parser or response handling chain — not related to HTML::Parser method dispatch
+(which was fixed in P12). The parser correctly extracts the title text, but the
+bytes are misinterpreted during encoding conversion somewhere in the pipeline.
+**Status**: Low priority, 1 test affected. Requires investigation into how the
+HTML body bytes flow through HeadParser's text handler into the response headers.
+
 ### Won't fix
 
 | Issue | Test | Reason |
 |-------|------|--------|
 | Test::LeakTrace XS | t/leak/no_leak.t | XS module, cannot be supported |
-| ua.t Content-Style-Type | t/base/ua.t (2 tests) | Requires HTML::HeadParser callback chain |
 
 ## Dependency Status
 
@@ -294,11 +332,25 @@ via a prior jcpan run.
 - [x] t/redirect.t: 2/4 (socket connect error message format — P11)
 - [x] `make` passes (all unit tests green)
 - [x] Full jcpan run: **307/313 subtests pass** (98.1%)
-- [x] Commit: (pending)
+- [x] Commits: `03f680d2a`, `44f0d83ff`
 
-### Phase 7: Final cleanup -- FUTURE
+### Phase 7a: HTML::Parser method dispatch + File::Temp fix -- COMPLETED (2026-04-03)
 
-- [ ] Investigate ua.t Content-Style-Type failures (2 tests)
+- [x] **P12**: Fix `fireEvent()` to pass original blessed self (not unblessed createReference)
+- [x] **P12**: Fix `fireEvent()` to check BYTE_STRING type for method name callbacks
+- [x] **P13**: Fix File::Temp `tempfile()` path doubling when template has directory component
+- [x] t/base/ua.t: 51/51 (was 49/51)
+- [x] t/local/download_to_fh.t: 5/5 (was crashing)
+- [x] `make` passes
+- [x] Commit: `7ccebede6`
+
+### Phase 7b: Remaining issues -- FUTURE
+
+- [ ] **P14**: Investigate HTML title UTF-8 encoding issue (http.t test 37)
+      - `$res->title` returns `En pr�ve` instead of `En prøve`
+      - Character encoding issue in HeadParser text handler → response header pipeline
+      - Not related to method dispatch (standalone HeadParser works correctly)
+- [ ] **P11**: Investigate redirect.t socket connect error message format (2 tests)
 - [ ] Update plan doc with final test counts
 - [ ] Create PR for merge to master
 
@@ -347,3 +399,9 @@ via a prior jcpan run.
 | File | Change |
 |------|--------|
 | `src/main/java/org/perlonjava/runtime/io/SocketIO.java` | Add sysread() and syswrite() for raw socket I/O |
+
+### Phase 7a
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/perlmodule/HTMLParser.java` | Fix fireEvent() blessed self dispatch + BYTE_STRING type check; pass self through parseHtml/parserEof |
+| `src/main/perl/lib/File/Temp.pm` | Fix tempfile() path doubling when template has directory component |
