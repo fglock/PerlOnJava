@@ -398,12 +398,19 @@ sub _create_install_makefile {
     # Get the Perl interpreter path
     my $perl = $^X;
     
-    # Build test command - run all t/*.t files using Perl for cross-platform compatibility
+    # Build test command - respect test => { TESTS => ... } from WriteMakefile args
     # Set PERL5LIB to include blib/lib and blib/arch so test subprocesses can find the module
+    my $test_pattern = '';
+    if (ref $args->{test} eq 'HASH' && $args->{test}{TESTS}) {
+        $test_pattern = $args->{test}{TESTS};
+    } elsif (-d 't') {
+        $test_pattern = 't/*.t';
+    }
+    
     my $test_cmd;
-    if (-d 't') {
+    if ($test_pattern) {
         # Use Perl one-liner with Test::Harness for cross-platform test running
-        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl -MTest::Harness -e "runtests(glob(q{t/*.t}))"};
+        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl -MTest::Harness -e "runtests(glob(q{$test_pattern}))"};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
