@@ -5,8 +5,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import java.util.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.HASHREFERENCE;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
@@ -33,6 +32,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public Map<String, RuntimeScalar> elements;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
+    // Track which keys were stored with BYTE_STRING type (vs STRING/UTF-8).
+    // In Perl, hash keys preserve their byte/UTF-8 flag, which affects regex matching semantics.
+    // Lazily initialized to avoid overhead when key type tracking is not needed.
+    Set<String> byteKeys;
 
     /**
      * Constructor for RuntimeHash.
@@ -210,11 +213,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
                 // Clear existing elements but keep the same Map instance to preserve capacity
                 this.elements.clear();
+                if (this.byteKeys != null) this.byteKeys.clear();
 
                 // Populate the hash from the materialized list
                 iterator = materializedList.iterator();
                 while (iterator.hasNext()) {
-                    String key = iterator.next().toString();
+                    RuntimeScalar keyScalar = iterator.next();
+                    String key = keyScalar.toString();
+                    // Track the key's byte/UTF-8 type for correct semantics in keys()
+                    if (keyScalar.type == BYTE_STRING) {
+                        markKeyByte(key, true);
+                    }
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
                     this.elements.put(key, val);
@@ -282,6 +291,34 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Tracks the byte/UTF-8 flag of a hash key.
+     * In Perl, hash keys preserve their byte/UTF-8 flag, which affects regex matching semantics.
+     *
+     * @param key    The hash key string
+     * @param isByte true if the key was stored as BYTE_STRING, false for STRING (UTF-8)
+     */
+    public void markKeyByte(String key, boolean isByte) {
+        if (isByte) {
+            if (byteKeys == null) byteKeys = new HashSet<>();
+            byteKeys.add(key);
+        } else if (byteKeys != null) {
+            byteKeys.remove(key);
+        }
+    }
+
+    /**
+     * Creates a RuntimeScalar for a hash key with the correct type (STRING or BYTE_STRING).
+     */
+    RuntimeScalar createKeyScalar(String key) {
+        if (byteKeys != null && byteKeys.contains(key)) {
+            RuntimeScalar scalar = new RuntimeScalar(key);
+            scalar.type = BYTE_STRING;
+            return scalar;
+        }
+        return new RuntimeScalar(key); // default STRING type
+    }
+
+    /**
      * Retrieves a value by key.
      *
      * @param key The key for the hash entry.
@@ -314,10 +351,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 String key = keyScalar.toString();
                 var value = elements.get(key);
                 if (value != null) {
+                    // Update the key's byte/UTF-8 flag to match the accessing key's type.
+                    // In Perl, the key's UTF-8 flag is updated on each access.
+                    markKeyByte(key, keyScalar.type == BYTE_STRING);
                     yield value;
                 }
-                // Lazy element autovivification
-                yield new RuntimeHashProxyEntry(this, key);
+                // Lazy element autovivification - pass key's byte flag for type tracking
+                boolean isByteKey = keyScalar.type == BYTE_STRING;
+                yield new RuntimeHashProxyEntry(this, key, isByteKey);
             }
 
             case TIED_HASH -> {
@@ -370,6 +411,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case PLAIN_HASH -> {
                 String k = key.toString();
                 var value = elements.remove(k);
+                if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
                     yield new RuntimeScalar(value);
                 }
@@ -388,6 +430,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return switch (type) {
             case PLAIN_HASH -> {
                 var value = elements.remove(key);
+                if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
                     yield new RuntimeScalar(value);
                 }
@@ -656,7 +699,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         RuntimeArray list = new RuntimeArray();
         for (String key : elements.keySet()) {
-            RuntimeArray.push(list, new RuntimeScalar(key));
+            RuntimeArray.push(list, createKeyScalar(key));
         }
         hashIterator = null; // keys resets the iterator
         // Set scalarContextSize so that keys() in scalar context returns the count
@@ -863,6 +906,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         } else {
             this.elements.clear();
         }
+        this.byteKeys = null;
         return this;
     }
 
@@ -911,9 +955,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeHash currentState = new RuntimeHash();
         currentState.elements = new StableHashMap<>(this.elements);
         currentState.blessId = this.blessId;
+        currentState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
         dynamicStateStack.push(currentState);
         // Clear the hash
         this.elements.clear();
+        this.byteKeys = null;
         this.blessId = 0;
     }
 
@@ -928,6 +974,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             RuntimeHash previousState = dynamicStateStack.pop();
             this.elements = previousState.elements;
             this.blessId = previousState.blessId;
+            this.byteKeys = previousState.byteKeys;
         }
     }
 
@@ -980,7 +1027,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (returnKey) {
                 currentEntry = entryIterator.next();
                 returnKey = false;
-                return new RuntimeScalar(currentEntry.getKey());
+                return createKeyScalar(currentEntry.getKey());
             } else {
                 returnKey = true;
                 return currentEntry.getValue();

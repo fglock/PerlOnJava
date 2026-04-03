@@ -542,6 +542,9 @@ public class RuntimeIO extends RuntimeScalar {
                     // if it was defined, truncate to empty string
                     if (targetScalar.getDefinedBoolean()) {
                         targetScalar.set("");
+                    } else {
+                        // Still need to check read-only for undef scalars
+                        targetScalar.set(new RuntimeScalar());
                     }
                 } else if (mode.equals(">>")) {
                     // For append mode, test if scalar is writable by setting it to itself
