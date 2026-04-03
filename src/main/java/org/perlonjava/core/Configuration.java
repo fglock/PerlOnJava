@@ -33,7 +33,7 @@ public final class Configuration {
      * Automatically populated by Gradle/Maven during build.
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String gitCommitId = "92b0bac9c";
+    public static final String gitCommitId = "62750b03a";
 
     /**
      * Git commit date of the build (ISO format: YYYY-MM-DD).
