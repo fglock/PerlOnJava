@@ -152,6 +152,12 @@ public class RuntimeStash extends RuntimeHash {
     }
 
     private RuntimeScalar deleteGlob(String k) {
+        // Special handling for namespace keys (ending with "::")
+        // e.g., delete $::{"Foo::"} should remove all symbols in the Foo:: namespace
+        if (k.endsWith("::")) {
+            return deleteNamespace(k);
+        }
+
         // For stash, we need to delete from GlobalVariable maps and return the glob
         String fullKey = namespace + k;
 
@@ -195,6 +201,42 @@ public class RuntimeStash extends RuntimeHash {
                 savedScalar, savedArray, savedHash, savedIO, savedCode);
 
         return detached;
+    }
+
+    /**
+     * Deletes an entire namespace from the stash.
+     * When Perl does delete $::{"Foo::"}, all symbols in the Foo:: namespace
+     * should be removed, making Foo->can("bar") return false and preventing
+     * spurious "Subroutine redefined" warnings when the namespace is re-populated.
+     */
+    private RuntimeScalar deleteNamespace(String k) {
+        // Compute the prefix for child symbols.
+        // For main:: stash: symbols are stored as "Foo::bar" (not "main::Foo::bar"),
+        //   so the prefix is just k itself (e.g., "Foo::")
+        // For other stashes: symbols are stored as "Outer::Inner::bar",
+        //   so the prefix is namespace + k (e.g., "Outer::" + "Inner::" = "Outer::Inner::")
+        String childPrefix = "main::".equals(namespace) ? k : namespace + k;
+
+        // Remove all symbols with this prefix from all global maps (prefix-based removal)
+        GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalIORefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+
+        // Clear pinned code refs so deleted subs don't get resurrected
+        // by getGlobalCodeRef() lookups (e.g., in SubroutineParser redefinition check)
+        GlobalVariable.clearPinnedCodeRefsForNamespace(childPrefix);
+
+        // Clear stash alias if any
+        GlobalVariable.clearStashAlias(childPrefix);
+
+        // Method resolution and package existence caches are now stale
+        InheritanceResolver.invalidateCache();
+        GlobalVariable.clearPackageCache();
+
+        return new RuntimeScalar();
     }
 
     /**

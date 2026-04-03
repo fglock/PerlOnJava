@@ -524,6 +524,17 @@ public class GlobalVariable {
     }
 
     /**
+     * Clears pinned code references for all subroutines in a given namespace.
+     * This prevents deleted subs from being resurrected by getGlobalCodeRef()
+     * after stash namespace deletion (e.g., delete $::{"Foo::"}).
+     *
+     * @param prefix The namespace prefix (e.g., "Foo::") to clear.
+     */
+    public static void clearPinnedCodeRefsForNamespace(String prefix) {
+        pinnedCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+    }
+
+    /**
      * Clears the package existence cache.
      * Should be called when new packages are loaded or code refs are modified.
      */
