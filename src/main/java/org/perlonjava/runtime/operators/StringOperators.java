@@ -57,6 +57,36 @@ public class StringOperators {
     }
 
     /**
+     * Converts a string to its UTF-8 byte representation.
+     * Each byte becomes a separate character in the range 0x00-0xFF.
+     * This is used when 'use bytes' pragma is in effect for regex matching.
+     *
+     * @param runtimeScalar the {@link RuntimeScalar} to convert
+     * @return a {@link RuntimeScalar} containing the byte-level string
+     */
+    public static RuntimeScalar toBytesString(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        // Check if all characters are already in 0-255 range (ASCII/Latin-1)
+        boolean needsConversion = false;
+        for (int i = 0; i < str.length(); i++) {
+            if (str.charAt(i) > 0xFF) {
+                needsConversion = true;
+                break;
+            }
+        }
+        if (!needsConversion) {
+            return runtimeScalar;
+        }
+        // Convert to UTF-8 bytes, then create a string where each byte is a character
+        byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder(bytes.length);
+        for (byte b : bytes) {
+            sb.append((char) (b & 0xFF));
+        }
+        return new RuntimeScalar(sb.toString());
+    }
+
+    /**
      * Escapes all non-alphanumeric characters in the string representation of the given {@link RuntimeScalar}.
      *
      * @param runtimeScalar the {@link RuntimeScalar} to be quoted

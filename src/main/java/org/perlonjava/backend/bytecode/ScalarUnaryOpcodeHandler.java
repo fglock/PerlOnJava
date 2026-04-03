@@ -51,6 +51,7 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.UC_BYTES -> StringOperators.ucBytes((RuntimeScalar) registers[rs]);
             case Opcodes.UCFIRST -> StringOperators.ucfirst((RuntimeScalar) registers[rs]);
             case Opcodes.UCFIRST_BYTES -> StringOperators.ucfirstBytes((RuntimeScalar) registers[rs]);
+            case Opcodes.TO_BYTES_STRING -> StringOperators.toBytesString((RuntimeScalar) registers[rs]);
             case Opcodes.SLEEP -> Time.sleep((RuntimeScalar) registers[rs]);
             case Opcodes.TELL -> IOOperator.tell((RuntimeScalar) registers[rs]);
             case Opcodes.RMDIR -> Directory.rmdir((RuntimeScalar) registers[rs]);
@@ -115,6 +116,8 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.UCFIRST -> sb.append("UCFIRST r").append(rd).append(" = ucfirst(r").append(rs).append(")\n");
             case Opcodes.UCFIRST_BYTES ->
                     sb.append("UCFIRST_BYTES r").append(rd).append(" = ucfirstBytes(r").append(rs).append(")\n");
+            case Opcodes.TO_BYTES_STRING ->
+                    sb.append("TO_BYTES_STRING r").append(rd).append(" = toBytesString(r").append(rs).append(")\n");
             case Opcodes.SLEEP -> sb.append("SLEEP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
             case Opcodes.TELL -> sb.append("TELL r").append(rd).append(" = tell(r").append(rs).append(")\n");
             case Opcodes.RMDIR -> sb.append("RMDIR r").append(rd).append(" = rmdir(r").append(rs).append(")\n");

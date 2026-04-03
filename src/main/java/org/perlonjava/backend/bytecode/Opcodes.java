@@ -2182,6 +2182,13 @@ public class Opcodes {
      */
     public static final short UCFIRST_BYTES = 459;
 
+    /**
+     * Convert string to UTF-8 byte representation: rd = StringOperators.toBytesString(rs)
+     * Used when 'use bytes' is in effect before regex matching.
+     * Format: TO_BYTES_STRING rd rs
+     */
+    public static final short TO_BYTES_STRING = 460;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

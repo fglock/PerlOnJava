@@ -1508,6 +1508,7 @@ public class Disassemble {
                     case Opcodes.UC_BYTES:
                     case Opcodes.UCFIRST:
                     case Opcodes.UCFIRST_BYTES:
+                    case Opcodes.TO_BYTES_STRING:
                     case Opcodes.SLEEP:
                     case Opcodes.TELL:
                     case Opcodes.RMDIR:
