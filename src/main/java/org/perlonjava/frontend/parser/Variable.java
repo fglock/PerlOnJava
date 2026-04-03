@@ -356,12 +356,6 @@ public class Variable {
         } else if (sigil.equals("%") && !normalizedName.endsWith("::"))
             existsGlobally = GlobalVariable.existsGlobalHash(normalizedName);
 
-        // Single-letter scalars require declaration even if they exist globally
-        if (sigil.equals("$") && varName.length() == 1
-                && Character.isLetter(varName.charAt(0))
-                && !varName.equals("a") && !varName.equals("b")) {
-            existsGlobally = false;
-        }
 
         if (existsGlobally) return;
 

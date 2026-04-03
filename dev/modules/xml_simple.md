@@ -201,7 +201,7 @@ throw Foo::Bar(x => 1);       # runtime error "Can't locate object method" (not 
 
 ## Progress Tracking
 
-### Current Status: Investigation complete, fixes not started
+### Current Status: 12/14 test files pass, 479/487 subtests (98.4%)
 
 ### Completed Phases
 - [x] Investigation (2026-04-03)
@@ -209,12 +209,34 @@ throw Foo::Bar(x => 1);       # runtime error "Can't locate object method" (not 
   - Confirmed Java MULTILINE quirk with standalone Java test
   - Traced all code paths for each bug
   - Files: RegexPreprocessorHelper.java, RuntimeRegex.java, SubroutineParser.java, Storable.pm
+- [x] Phase 1: Fix `\x{NNNN}` in regex character classes (2026-04-03)
+  - Added `\x{...}` handler in `handleRegexCharacterClassEscape`
+  - Updated `-` range validator look-ahead for `\x{NNNN}` and `\o{NNNN}` endpoints
+  - Files: RegexPreprocessorHelper.java
+- [x] Phase 2: Fix `/^$/m` empty string matching (2026-04-03)
+  - Added Java MULTILINE workaround: strip MULTILINE for empty input strings
+  - Applied to both `matchRegexDirect` and `replaceRegex` methods
+  - Files: RuntimeRegex.java
+- [x] Phase 3: Fix indirect method call with qualified class (2026-04-03)
+  - Allow indirect method call when packageName contains `::` (unambiguously a package)
+  - Files: SubroutineParser.java
+- [x] Phase 4: Add Storable lock stubs (2026-04-03)
+  - Added `lock_store`, `lock_nstore`, `lock_retrieve` delegating to non-locking variants
+  - Files: Storable.pm
+- [x] Additional: Fix `use vars` with single uppercase letter variables (2026-04-03)
+  - Removed incorrect override that forced `existsGlobally = false` for single-letter vars
+  - Files: Variable.java, EmitVariable.java, BytecodeCompiler.java
+- [x] Additional: Add `Encode::define_alias` stub (2026-04-03)
+  - Delegates to `Encode::Alias::define_alias` (needed by XML::SAX::PurePerl)
+  - Files: Encode.pm
+
+### Remaining Failures (8/487 subtests)
+All 8 failures are warning capture issues (pre-existing PerlOnJava limitation):
+- t/1_XMLin.t tests 29-30, 32-33, 37, 41, 43: expected warnings not captured
+- t/2_XMLout.t test 137: "Use of uninitialized value" warning not captured
 
 ### Next Steps
-1. Implement Phase 1 (regex \x{} in char classes)
-2. Implement Phase 2 (empty string /m matching)
-3. Implement Phase 3 (indirect method call)
-4. Re-run XML::Simple tests
+- Warning capture improvements (separate effort, not XML::Simple specific)
 
 ## Related Documents
 - `dev/modules/README.md` - Module porting index

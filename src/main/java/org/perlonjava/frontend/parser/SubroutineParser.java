@@ -229,11 +229,12 @@ public class SubroutineParser {
             // Reject if:
             // 1. Explicitly marked as non-package (false in cache), OR
             // 2. Unknown package (null) AND unknown subroutine (!isKnownSub) AND followed by '('
-            //    - this is a function call like mycan(...)
+            //    AND name is not package-qualified (no ::) - this is a function call like mycan(...)
             // Allow if:
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
-            if ((isPackage != null && !isPackage) || (isPackage == null && !isKnownSub && token.text.equals("("))) {
+            // - Name contains '::' (qualified names are always treated as packages in indirect syntax)
+            if ((isPackage != null && !isPackage) || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))) {
                 parser.tokenIndex = currentIndex2;
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax

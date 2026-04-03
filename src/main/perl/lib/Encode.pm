@@ -57,4 +57,11 @@ sub resolve_alias {
     return ref($enc) ? $enc->{Name} : $enc;
 }
 
+# Delegate to Encode::Alias for alias management.
+# Modules like XML::SAX::PurePerl call Encode::define_alias() directly.
+sub define_alias {
+    require Encode::Alias;
+    goto &Encode::Alias::define_alias;
+}
+
 1;

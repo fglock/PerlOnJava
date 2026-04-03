@@ -462,20 +462,6 @@ public class BytecodeCompiler implements Visitor {
             allowIfAlreadyExists = true;
         }
 
-        // Perl's strict 'vars' requires declaration for unqualified single-letter globals
-        // even if they were previously created under 'no strict'.
-        // This mirrors EmitVariable.java lines 349-359.
-        boolean isSpecialSortVar = sigil.equals("$")
-                && (bareVarName.equals("a") || bareVarName.equals("b"));
-        if (sigil.equals("$")
-                && bareVarName != null
-                && bareVarName.length() == 1
-                && Character.isLetter(bareVarName.charAt(0))
-                && !bareVarName.contains("::")
-                && !isSpecialSortVar) {
-            allowIfAlreadyExists = false;
-        }
-
         return !allowIfAlreadyExists;
 
         // BLOCK: Unqualified variable under strict vars

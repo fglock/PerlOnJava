@@ -437,18 +437,6 @@ public class EmitVariable {
                     } else if (sigil.equals("%") && !normalizedName.endsWith("::")) {
                         allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
                     }
-
-                    // Perl's strict 'vars' requires declaration for unqualified globals like $A
-                    // even if they were previously created under 'no strict'.
-                    // Keep this narrow to avoid changing behavior for other globals.
-                    if (sigil.equals("$")
-                            && name != null
-                            && name.length() == 1
-                            && Character.isLetter(name.charAt(0))
-                            && !name.contains("::")
-                            && !isSpecialSortVar) {
-                        allowIfAlreadyExists = false;
-                    }
                 }
 
                 // Check if this is an 'our' declaration (not in BEGIN capture) - these create global vars
