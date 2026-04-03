@@ -4219,6 +4219,11 @@ sub install {
                 $CPAN::Config->{mbuild_install_build_command} ?
                     $CPAN::Config->{mbuild_install_build_command} :
                         $self->_build_command();
+        # On PerlOnJava, jperl is a bash wrapper script so chained shebangs
+        # don't work.  Replace bare "./Build" with "$^X Build".
+        if ($Config::Config{archname} =~ /\bjava\b/ && $mbuild_install_build_command eq './Build') {
+            $mbuild_install_build_command = "$^X Build";
+        }
         my $install_directive = $^O eq 'VMS' ? '"install"' : 'install';
         $system = sprintf("%s %s %s",
                           $mbuild_install_build_command,
@@ -4756,6 +4761,13 @@ sub _build_command {
     }
     elsif ($^O eq 'VMS') {
         return "$^X Build.com";
+    }
+    # When the perl interpreter is a wrapper script (e.g. jperl on
+    # PerlOnJava), chained shebangs don't work — the kernel runs
+    # /bin/bash on the Build script instead of interpreting it as Perl.
+    # Detect this via archname containing "java" and invoke explicitly.
+    elsif ($Config::Config{archname} =~ /\bjava\b/) {
+        return "$^X Build";
     }
     return "./Build";
 }

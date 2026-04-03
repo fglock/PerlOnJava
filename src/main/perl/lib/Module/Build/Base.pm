@@ -48,6 +48,32 @@ if (!$loaded) {
     # This makes _backticks() use backticks instead of fork+pipe
     no warnings 'redefine';
     *have_forkpipe = sub { 0 };
+
+    # Auto-enable pureperl_only for modules that support it.
+    # PerlOnJava runs on JVM and cannot compile XS/C code.
+    # Module::Build's process_xs_files() only skips XS when BOTH
+    # pureperl_only AND allow_pureperl are true.  Since pureperl_only
+    # defaults to 0, modules like Params::Validate (allow_pureperl=1)
+    # still attempt XS compilation and die.  Fix: auto-set pureperl_only
+    # when the module declares allow_pureperl and no C compiler exists.
+    my $orig_process_xs_files = \&Module::Build::Base::process_xs_files;
+    *Module::Build::Base::process_xs_files = sub {
+        my $self = shift;
+        if ($self->allow_pureperl && !$self->have_c_compiler) {
+            $self->pureperl_only(1);
+            return;
+        }
+        return $self->$orig_process_xs_files(@_);
+    };
+
+    my $orig_process_support_files = \&Module::Build::Base::process_support_files;
+    *Module::Build::Base::process_support_files = sub {
+        my $self = shift;
+        if ($self->allow_pureperl && !$self->have_c_compiler) {
+            return;
+        }
+        return $self->$orig_process_support_files(@_);
+    };
 }
 
 1;
