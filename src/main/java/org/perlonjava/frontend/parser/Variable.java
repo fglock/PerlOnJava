@@ -317,7 +317,8 @@ public class Variable {
 
         // Built-in special container vars (%ENV, %SIG, @ARGV, @INC, etc.)
         if (sigil.equals("%") && (varName.equals("SIG") || varName.equals("ENV")
-                || varName.equals("INC") || varName.equals("+") || varName.equals("-"))) return;
+                || varName.equals("INC") || varName.equals("+") || varName.equals("-")
+                || varName.equals("_"))) return;
         if (sigil.equals("@") && (varName.equals("ARGV") || varName.equals("INC")
                 || varName.equals("_") || varName.equals("F"))) return;
 

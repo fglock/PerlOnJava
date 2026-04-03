@@ -236,7 +236,8 @@ public class BytecodeCompiler implements Visitor {
                     || name.equals("ENV")
                     || name.equals("INC")
                     || name.equals("+")
-                    || name.equals("-");
+                    || name.equals("-")
+                    || name.equals("_");
         }
         if ("@".equals(sigil)) {
             return name.equals("ARGV")
