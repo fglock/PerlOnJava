@@ -116,9 +116,14 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else {
-                    // Default: scalar slot + constant subroutine for bareword access
-                    GlobalVariable.globalVariables.put(this.globName, deref);
-
+                    // Default: constant subroutine for bareword access.
+                    // Do NOT set the scalar slot here.  In Perl 5, stash
+                    // assignment of a scalar ref ($stash{name} = \$scalar)
+                    // only creates a constant sub (&name); it never touches
+                    // the scalar variable ($name).  Setting the scalar slot
+                    // causes "Modification of a read-only value attempted"
+                    // when both `use constant FOO => ...` and `our $FOO`
+                    // exist in the same package (e.g. Template::Parser).
                     RuntimeCode code = new RuntimeCode("", null);
                     code.constantValue = deref.getList();
                     GlobalVariable.defineGlobalCodeRef(this.globName).set(

@@ -91,6 +91,15 @@ public class XSLoader extends PerlModuleBase {
             
             return scalarTrue.getList();
         } catch (Exception e) {
+            // No Java XS class found. If the module's @ISA already has a pure-Perl
+            // parent (set by the .pm file before calling XSLoader::load), the module
+            // can function through inheritance. Return success so the require doesn't
+            // fail — the pure-Perl methods from the parent will be used.
+            String isaKey = moduleName + "::ISA";
+            RuntimeArray isa = GlobalVariable.getGlobalArray(isaKey);
+            if (isa != null && !isa.isEmpty()) {
+                return scalarTrue.getList();
+            }
             // Error message matches pattern /object version|loadable object/ that many
             // CPAN modules (DateTime, JSON::XS, etc.) expect for pure Perl fallback
             return WarnDie.die(

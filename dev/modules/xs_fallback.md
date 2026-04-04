@@ -760,7 +760,7 @@ modules:
 
 ## Progress Tracking
 
-### Current Status: Phase 3 complete - DateTime Java XS implemented
+### Current Status: Phase 6 pending - Fix `use constant` / `our $VAR` clash
 
 ### Completed Phases
 
@@ -787,8 +787,246 @@ modules:
   - Verified DateTime Java XS loads and functions correctly
   - All unit tests pass
 
-### Next Steps
+### Phase 5: Preserve JAR Shims During CPAN XS Module Installation (2026-04-04) — COMPLETED
 
+#### Problem
+
+When `jcpan` installs an XS CPAN module, it copies ALL `.pm` files from the
+distribution into `~/.perlonjava/lib/`.  This includes XS bootstrap `.pm` files
+(e.g. `Template/Stash/XS.pm`) that call `XSLoader::load` at the top level.
+
+PerlOnJava ships purpose-built shims for some of these modules inside the JAR
+(`jar:PERL5LIB`), for example `Template/Stash/XS.pm` which gracefully inherits
+from the pure-Perl `Template::Stash`.  Because `~/.perlonjava/lib/` appears
+**before** `jar:PERL5LIB` in `@INC`, the CPAN-installed version shadows the
+shim, and loading the module dies with:
+
+```
+Can't load loadable object for module Template::Stash::XS:
+  no Java XS implementation available
+```
+
+This was discovered while investigating `./jcpan -j 8 -t Template` failures
+(Template Toolkit 3.102).  The same issue would affect any CPAN XS module that
+has a bundled PerlOnJava shim in the JAR.
+
+#### Root Cause
+
+```
+@INC order:
+  1. ~/.perlonjava/lib/       ← CPAN-installed (has broken XS bootstrap .pm)
+  2. jar:PERL5LIB             ← bundled shims  (has working pure-Perl fallback)
+```
+
+The CPAN `Template/Stash/XS.pm` does:
+```perl
+use XSLoader;
+XSLoader::load 'Template::Stash::XS', $Template::VERSION;  # dies
+```
+
+The JAR shim does:
+```perl
+use Template::Stash;
+our @ISA = ('Template::Stash');  # works
+```
+
+#### Fix
+
+Modified `_handle_xs_module()` in `ExtUtils/MakeMaker.pm` to skip installing
+`.pm` files that already have a PerlOnJava shim in `jar:PERL5LIB`.  The check
+uses `-f "jar:PERL5LIB/$rel_path"` (PerlOnJava supports file-test operators on
+`jar:` paths).
+
+Only XS modules go through `_handle_xs_module`, so pure-Perl CPAN modules are
+unaffected.  For XS modules, the JAR shim is always the correct version for
+PerlOnJava -- either it provides a pure-Perl fallback or it delegates to a Java
+XS implementation via `XSLoader::load`.
+
+#### Files Modified
+
+- `src/main/perl/lib/ExtUtils/MakeMaker.pm` — `_handle_xs_module()` now
+  filters `%pm` before passing to `_install_pure_perl()`
+
+#### Related: Template Toolkit `use constant` Bug
+
+During the same investigation, a separate PerlOnJava runtime bug was found:
+`use constant ERROR => 2; our $ERROR = "";` in the same package causes
+"Modification of a read-only value attempted".  This is because PerlOnJava's
+`RuntimeStashEntry.set()` (line 120) incorrectly stores the read-only constant
+value into the scalar glob slot (`$ERROR`), not just the code slot (`&ERROR`).
+
+In Perl 5, `use constant` only creates a constant subroutine; it never touches
+the scalar variable of the same name.  This bug blocks `Template::Parser` from
+loading (and thus most Template Toolkit tests).
+
+**Root cause location:** `RuntimeStashEntry.java` line 120:
+```java
+GlobalVariable.globalVariables.put(this.globName, deref);  // BUG: sets $ERROR
+```
+
+This is tracked separately and not fixed by the MakeMaker change.
+
+### Phase 6: Fix `use constant` / `our $VAR` Clash in RuntimeStashEntry.java
+
+#### Problem
+
+`use constant ERROR => 2; our $ERROR = "";` in the same package causes
+"Modification of a read-only value attempted".  This blocks `Template::Parser`
+from loading (and thus most Template Toolkit tests).
+
+**Minimal repro:**
+```perl
+./jperl -e 'package Foo; use constant ERROR => 2; our $ERROR = "hello"; print "OK\n"'
+# dies: Modification of a read-only value attempted
+```
+
+In Perl 5, `use constant` only creates a constant subroutine (`&ERROR`); it
+never touches the scalar variable `$ERROR`.  They coexist in independent glob
+slots.
+
+#### Root Cause Analysis
+
+The bug is a single line in `RuntimeStashEntry.set()` (line 120):
+
+```java
+// Default: scalar slot + constant subroutine for bareword access
+GlobalVariable.globalVariables.put(this.globName, deref);   // BUG
+```
+
+**What happens step by step:**
+
+1. `use constant ERROR => 2` goes through `constant.pm`'s `_CAN_PCS` path:
+   - Creates a scalar with value 2
+   - Calls `Internals::SvREADONLY($scalar, 1)` — marks it `READONLY_SCALAR`
+   - Does `$symtab->{ERROR} = \$scalar` — stash assignment
+
+2. The stash assignment dispatches to `RuntimeStashEntry.set(RuntimeScalar value)`
+   which enters the `REFERENCE` branch (line 90), then the default else-branch
+   (line 118) for plain scalar references:
+   - **Line 120**: `GlobalVariable.globalVariables.put(this.globName, deref)` —
+     **REPLACES** the `$ERROR` scalar variable with the read-only constant value
+   - Lines 122-125: Creates a constant subroutine `&ERROR` (correct)
+
+3. Later, `our $ERROR = ""` calls `getGlobalVariable("Foo::ERROR")` which returns
+   the **same read-only object** that was put in the map at step 2.  Attempting
+   to `set()` it throws "Modification of a read-only value attempted".
+
+**In Perl 5**, `$stash{name} = \$scalar` only creates a constant subroutine in
+the CODE slot — it never writes to the SCALAR slot.  `$ERROR` and `&ERROR` are
+completely independent glob slots.
+
+#### Fix
+
+**Remove line 120** from `RuntimeStashEntry.java`.  The constant subroutine
+creation (lines 122-125) is correct and must remain; only the scalar-slot
+overwrite is wrong.
+
+**Before:**
+```java
+} else {
+    // Default: scalar slot + constant subroutine for bareword access
+    GlobalVariable.globalVariables.put(this.globName, deref);
+
+    RuntimeCode code = new RuntimeCode("", null);
+    code.constantValue = deref.getList();
+    GlobalVariable.defineGlobalCodeRef(this.globName).set(
+            new RuntimeScalar(code));
+}
+```
+
+**After:**
+```java
+} else {
+    // Default: constant subroutine for bareword access
+    // NOTE: Do NOT set the scalar slot here.  In Perl 5, stash assignment
+    // of a scalar reference ($stash{name} = \$scalar) only creates a
+    // constant sub (&name); it never touches the scalar variable ($name).
+    // Setting the scalar slot would cause "Modification of a read-only
+    // value attempted" when both `use constant FOO => ...` and `our $FOO`
+    // exist in the same package.
+    RuntimeCode code = new RuntimeCode("", null);
+    code.constantValue = deref.getList();
+    GlobalVariable.defineGlobalCodeRef(this.globName).set(
+            new RuntimeScalar(code));
+}
+```
+
+#### Why This Is Safe
+
+1. **`use constant` still works**: The constant subroutine is created via
+   `defineGlobalCodeRef` (lines 122-125).  Bare `FOO` and `FOO()` will still
+   return the constant value.
+
+2. **`our $FOO` is independent**: `getGlobalVariable("Pkg::FOO")` creates/returns
+   its own `RuntimeScalar`.  Without line 120 overwriting it, the scalar variable
+   is a normal writable scalar — exactly like Perl 5.
+
+3. **No other callers depend on this**: The scalar slot write at line 120 is not
+   expected by `constant.pm` or any other code.  The constant sub is the only
+   visible effect.
+
+4. **Order doesn't matter**: Whether `use constant` or `our` comes first, each
+   touches only its own slot (CODE vs SCALAR).
+
+#### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeStashEntry.java` | Remove `GlobalVariable.globalVariables.put(this.globName, deref)` at line 120 |
+| `src/test/resources/unit/constant.t` | Add tests for `use constant` + `our $VAR` coexistence |
+
+#### Test Plan
+
+1. **New unit test** (add to `constant.t`):
+   ```perl
+   # use constant and our $VAR must coexist independently
+   {
+       package ConstOurTest;
+       use constant STATUS_OK => 0;
+       use constant STATUS_ERROR => 2;
+       our $STATUS_OK = "all good";
+       our $STATUS_ERROR = "something failed";
+
+       print "ok" if STATUS_OK == 0;
+       print " - use constant STATUS_OK returns 0\n";
+       print "ok" if STATUS_ERROR == 2;
+       print " - use constant STATUS_ERROR returns 2\n";
+       print "ok" if $STATUS_OK eq "all good";
+       print " - our \$STATUS_OK is writable and correct\n";
+       print "ok" if $STATUS_ERROR eq "something failed";
+       print " - our \$STATUS_ERROR is writable and correct\n";
+   }
+   ```
+
+2. **Verify Template::Parser loads**:
+   ```bash
+   ./jperl -e 'use Template::Parser; print "OK\n"'
+   ```
+
+3. **Regression check**:
+   ```bash
+   make   # all unit tests must pass
+   ```
+
+4. **Template Toolkit retest**:
+   ```bash
+   ./jcpan -j 8 -t Template   # expect significant improvement
+   ```
+
+#### Expected Impact on Template Toolkit
+
+Template::Parser uses both `use constant ERROR => 2` and `our $ERROR = ''`.
+With this fix:
+
+- `Template::Parser` will load correctly
+- `Template::Constants` status constants will work
+- All tests that `use Template::Parser` should unblock:
+  args.t, binop.t, filter.t, list.t, debug.t, constants.t, vars.t, while.t,
+  stop.t, fileline.t, outline_line.t, parser.t, parser2.t (and more)
+
+### Next Steps (after Phase 6)
+
+- [ ] Implement Phase 6 fix and verify
 - [ ] Test with actual CPAN DateTime installation via jcpan
 - [ ] Add more Java XS implementations for other common modules (JSON::XS, List::Util, etc.)
 - [ ] Update user documentation

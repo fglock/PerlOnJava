@@ -114,4 +114,40 @@ use constant UNDEF_CONST => undef;
 ok(!defined(UNDEF_CONST), 'undef constant is undefined');
 is((UNDEF_CONST // 'default'), 'default', 'undef constant folds with //');
 
+# --- use constant and our $VAR coexistence ---
+# In Perl 5, `use constant FOO => val` only creates &FOO (constant sub).
+# It must NOT touch $FOO.  They are independent glob slots.
+
+{
+    package ConstOurTest1;
+    use constant STATUS_OK    => 0;
+    use constant STATUS_ERROR => 2;
+    our $STATUS_OK    = "all good";
+    our $STATUS_ERROR = "something failed";
+
+    main::is(STATUS_OK,    0, 'constant sub STATUS_OK returns 0');
+    main::is(STATUS_ERROR, 2, 'constant sub STATUS_ERROR returns 2');
+    main::is($STATUS_OK,    "all good",         'our $STATUS_OK is writable');
+    main::is($STATUS_ERROR, "something failed",  'our $STATUS_ERROR is writable');
+
+    # Mutate the scalar — must not affect the constant sub
+    $STATUS_OK = "changed";
+    main::is(STATUS_OK, 0, 'constant sub unaffected by scalar mutation');
+    main::is($STATUS_OK, "changed", 'scalar mutation persists');
+}
+
+# Reverse order: our before use constant
+{
+    package ConstOurTest2;
+    our $LEVEL = "info";
+    use constant LEVEL => 42;
+
+    main::is(LEVEL,  42,     'constant sub LEVEL works (declared after our)');
+    main::is($LEVEL, "info", 'our $LEVEL unaffected by later use constant');
+
+    $LEVEL = "debug";
+    main::is($LEVEL, "debug", 'our $LEVEL still writable after use constant');
+    main::is(LEVEL,  42,      'constant sub still returns 42');
+}
+
 done_testing();
