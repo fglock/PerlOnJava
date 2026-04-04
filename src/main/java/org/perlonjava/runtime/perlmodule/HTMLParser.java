@@ -425,6 +425,11 @@ public class HTMLParser extends PerlModuleBase {
 
     /**
      * Fire a parser event by calling the registered handler.
+     * Supports three callback types:
+     * - String: method name to call on $self
+     * - Code ref: subroutine reference to call directly
+     * - Array ref: accumulator for PullParser/TokeParser (push event data)
+     *
      * @param self the original blessed parser object (for method dispatch)
      * @param selfHash the dereferenced hash of the parser
      * @param pstate the parser state hash
@@ -439,20 +444,32 @@ public class HTMLParser extends PerlModuleBase {
             return;
         }
 
-        RuntimeArray callArgs = new RuntimeArray();
-
         // Parse argspec to determine what arguments to pass
         RuntimeScalar argspecSv = handlers.get(eventName + "_argspec");
         String argspec = (argspecSv != null && argspecSv.getDefinedBoolean()) ?
                 argspecSv.toString() : "";
 
-        if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
+        if (cb.type == RuntimeScalarType.ARRAYREFERENCE) {
+            // Array ref accumulator - used by PullParser/TokeParser
+            // Build event data per argspec and push as array ref onto accumulator
+            RuntimeArray accum = (RuntimeArray) cb.value;
+            RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self);
+            RuntimeArray.push(accum, eventData.createReference());
+        } else if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
             // Method name - call as $self->method(...)
-            // Use the original blessed self for correct method dispatch
             String methodName = cb.toString();
+            RuntimeArray callArgs = new RuntimeArray();
             RuntimeArray.push(callArgs, self);
-            for (RuntimeScalar arg : eventArgs) {
-                RuntimeArray.push(callArgs, arg);
+            // Build args from argspec if available, otherwise pass raw eventArgs
+            if (!argspec.isEmpty()) {
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self);
+                for (int idx = 0; idx < eventData.size(); idx++) {
+                    RuntimeArray.push(callArgs, eventData.get(idx));
+                }
+            } else {
+                for (RuntimeScalar arg : eventArgs) {
+                    RuntimeArray.push(callArgs, arg);
+                }
             }
             // Look up method in the object's class hierarchy using the blessed class
             int blessId = RuntimeScalarType.blessedId(self);
@@ -465,11 +482,215 @@ public class HTMLParser extends PerlModuleBase {
             }
         } else if (cb.type == RuntimeScalarType.REFERENCE || cb.type == RuntimeScalarType.CODE) {
             // Code reference - call directly
-            for (RuntimeScalar arg : eventArgs) {
-                RuntimeArray.push(callArgs, arg);
+            RuntimeArray callArgs = new RuntimeArray();
+            if (!argspec.isEmpty()) {
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self);
+                for (int idx = 0; idx < eventData.size(); idx++) {
+                    RuntimeArray.push(callArgs, eventData.get(idx));
+                }
+            } else {
+                for (RuntimeScalar arg : eventArgs) {
+                    RuntimeArray.push(callArgs, arg);
+                }
             }
             RuntimeCode.apply(cb, callArgs, RuntimeContextType.VOID);
         }
+    }
+
+    /**
+     * Build event data array from an argspec string.
+     * Argspec is a comma-separated list of tokens that specify what data to include.
+     *
+     * Supported argspec tokens:
+     * - Quoted literals: 'S', 'E', 'T', 'C', 'D', 'PI' etc.
+     * - tagname: the tag name
+     * - attr: hash ref of attributes (for start events)
+     * - attrseq: array ref of attribute names in order (for start events)
+     * - text: original HTML text
+     * - dtext: decoded text (entities decoded)
+     * - is_cdata: boolean - is this CDATA?
+     * - self: the parser object
+     * - event: the event name
+     * - tag: same as tagname (alias)
+     * - offset: byte offset in document
+     * - length: length of original text
+     * - offset_end: end offset
+     * - line: line number
+     * - column: column number
+     * - token0: first token (for PI)
+     * - skipped_text: text skipped by handler
+     *
+     * For start events, eventArgs = [tagname, attr_ref, attrseq_ref, origtext]
+     * For end events, eventArgs = [tagname, origtext]
+     * For text events, eventArgs = [text]
+     * For comment events, eventArgs = [comment]
+     * For declaration events, eventArgs = [decl_text]
+     * For process events, eventArgs = [pi_text]
+     */
+    private static RuntimeArray buildEventDataFromArgspec(String argspec, String eventName, RuntimeScalar[] eventArgs, RuntimeScalar self) {
+        RuntimeArray result = new RuntimeArray();
+        if (argspec.isEmpty()) {
+            // No argspec - pass raw event args
+            for (RuntimeScalar arg : eventArgs) {
+                RuntimeArray.push(result, arg);
+            }
+            return result;
+        }
+
+        // Parse comma-separated argspec tokens
+        String[] tokens = argspec.split(",");
+        for (String rawToken : tokens) {
+            String token = rawToken.trim();
+            if (token.isEmpty()) continue;
+
+            // Check for quoted literal: 'X' or "X"
+            if ((token.startsWith("'") && token.endsWith("'")) ||
+                    (token.startsWith("\"") && token.endsWith("\""))) {
+                String literal = token.substring(1, token.length() - 1);
+                RuntimeArray.push(result, new RuntimeScalar(literal));
+                continue;
+            }
+
+            switch (token) {
+                case "tagname":
+                case "tag":
+                    // First arg for start/end events is tagname
+                    if (eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else {
+                        RuntimeArray.push(result, scalarUndef);
+                    }
+                    break;
+
+                case "attr":
+                    // Second arg for start events is attr hash ref
+                    if ("start".equals(eventName) && eventArgs.length > 1) {
+                        RuntimeArray.push(result, eventArgs[1]);
+                    } else {
+                        // Return empty hash ref for non-start events
+                        RuntimeArray.push(result, new RuntimeHash().createReference());
+                    }
+                    break;
+
+                case "attrseq":
+                    // Third arg for start events is attrseq array ref
+                    if ("start".equals(eventName) && eventArgs.length > 2) {
+                        RuntimeArray.push(result, eventArgs[2]);
+                    } else {
+                        RuntimeArray.push(result, new RuntimeArray().createReference());
+                    }
+                    break;
+
+                case "text":
+                    // Original text: last arg for start/end, first arg for text
+                    if ("text".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if ("start".equals(eventName) && eventArgs.length > 3) {
+                        RuntimeArray.push(result, eventArgs[3]);
+                    } else if ("end".equals(eventName) && eventArgs.length > 1) {
+                        RuntimeArray.push(result, eventArgs[1]);
+                    } else if ("comment".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, new RuntimeScalar("<!--" + eventArgs[0].toString() + "-->"));
+                    } else if ("declaration".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if ("process".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if (eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[eventArgs.length - 1]);
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
+                    break;
+
+                case "dtext":
+                    // Decoded text (entity-decoded) - for text events
+                    if ("text".equals(eventName) && eventArgs.length > 0) {
+                        // Decode entities in the text
+                        String rawText = eventArgs[0].toString();
+                        RuntimeHash entity2char = GlobalVariable.getGlobalHash("HTML::Entities::entity2char");
+                        String decoded = decodeEntitiesString(rawText, entity2char, false);
+                        RuntimeArray.push(result, new RuntimeScalar(decoded));
+                    } else if (eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[eventArgs.length - 1]);
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
+                    break;
+
+                case "is_cdata":
+                    // Boolean: is this CDATA section?
+                    RuntimeArray.push(result, scalarFalse);
+                    break;
+
+                case "self":
+                    RuntimeArray.push(result, self);
+                    break;
+
+                case "event":
+                    RuntimeArray.push(result, new RuntimeScalar(eventName));
+                    break;
+
+                case "offset":
+                case "offset_end":
+                    // Offset tracking not implemented yet
+                    RuntimeArray.push(result, new RuntimeScalar(0));
+                    break;
+
+                case "length":
+                    // Length of original text
+                    if (eventArgs.length > 0) {
+                        String lastArg;
+                        if ("start".equals(eventName) && eventArgs.length > 3) {
+                            lastArg = eventArgs[3].toString();
+                        } else if ("end".equals(eventName) && eventArgs.length > 1) {
+                            lastArg = eventArgs[1].toString();
+                        } else {
+                            lastArg = eventArgs[0].toString();
+                        }
+                        RuntimeArray.push(result, new RuntimeScalar(lastArg.length()));
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(0));
+                    }
+                    break;
+
+                case "line":
+                case "column":
+                    // Line/column tracking not implemented yet
+                    RuntimeArray.push(result, new RuntimeScalar(0));
+                    break;
+
+                case "token0":
+                    // First token for process instructions
+                    if ("process".equals(eventName) && eventArgs.length > 0) {
+                        String piText = eventArgs[0].toString();
+                        // Extract first token from <?token ...?>
+                        if (piText.startsWith("<?")) {
+                            piText = piText.substring(2);
+                            if (piText.endsWith("?>")) {
+                                piText = piText.substring(0, piText.length() - 2);
+                            }
+                            String[] parts = piText.trim().split("\\s+", 2);
+                            RuntimeArray.push(result, new RuntimeScalar(parts[0]));
+                        } else {
+                            RuntimeArray.push(result, new RuntimeScalar(""));
+                        }
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
+                    break;
+
+                case "skipped_text":
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    break;
+
+                default:
+                    // Unknown argspec token - pass empty string
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    break;
+            }
+        }
+
+        return result;
     }
 
     /**
