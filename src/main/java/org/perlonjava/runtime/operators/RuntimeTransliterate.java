@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.*;
 
@@ -165,7 +166,12 @@ public class RuntimeTransliterate {
 
         // Handle the /r modifier - return the transliterated string without modifying original
         if (returnOriginal) {
-            return new RuntimeScalar(resultString);
+            RuntimeScalar rv = new RuntimeScalar(resultString);
+            // Preserve BYTE_STRING type from input
+            if (originalString.type == RuntimeScalarType.BYTE_STRING) {
+                rv.type = RuntimeScalarType.BYTE_STRING;
+            }
+            return rv;
         }
 
         // Determine if we need to call set() which will trigger read-only error if applicable
@@ -176,7 +182,12 @@ public class RuntimeTransliterate {
         boolean needsSet = !input.equals(resultString) || (input.isEmpty() && hasReplacement);
 
         if (needsSet) {
+            // Preserve BYTE_STRING type: tr/// on a byte string should produce a byte string
+            boolean wasByteString = originalString.type == RuntimeScalarType.BYTE_STRING;
             originalString.set(resultString);
+            if (wasByteString) {
+                originalString.type = RuntimeScalarType.BYTE_STRING;
+            }
         }
 
         // Return the count of matched characters
