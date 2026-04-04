@@ -25,6 +25,7 @@ public class Symbol extends PerlModuleBase {
      */
     public static void initialize() {
         Symbol symbol = new Symbol();
+        GlobalVariable.getGlobalVariable("Symbol::VERSION").set(new RuntimeScalar("1.09"));
         symbol.initializeExporter();
         symbol.defineExport("EXPORT", "gensym", "ungensym", "qualify", "qualify_to_ref");
         symbol.defineExport("EXPORT_OK", "delete_package", "geniosym");
