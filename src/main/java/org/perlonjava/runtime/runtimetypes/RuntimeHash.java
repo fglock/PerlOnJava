@@ -1003,7 +1003,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
          * Constructs a RuntimeHashIterator for iterating over hash elements.
          */
         public RuntimeHashIterator() {
-            this.entryIterator = elements.entrySet().iterator();
+            // Snapshot the entries to avoid ConcurrentModificationException
+            // when the hash is modified during iteration (e.g., delete inside each loop).
+            // This is safe because Perl's each() tolerates hash modification during iteration.
+            this.entryIterator = new ArrayList<>(elements.entrySet()).iterator();
             this.returnKey = true;
         }
 
