@@ -192,7 +192,7 @@ public class SocketIO implements IOHandle {
      *
      * @param newBlocking true for blocking, false for non-blocking
      */
-    public void setBlocking(boolean newBlocking) {
+    public boolean setBlocking(boolean newBlocking) {
         this.blocking = newBlocking;
         try {
             if (socketChannel != null) {
@@ -216,6 +216,7 @@ public class SocketIO implements IOHandle {
         } catch (IOException e) {
             // Silently ignore — the blocking field still tracks the desired state
         }
+        return true;
     }
 
     /**
