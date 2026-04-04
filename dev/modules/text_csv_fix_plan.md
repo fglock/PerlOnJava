@@ -12,7 +12,7 @@ The CPAN **Text::CSV 2.06** is a thin wrapper that delegates to `Text::CSV_PP` (
 
 When a user installs Text::CSV via `jcpan`, the CPAN version (+ CSV_PP) should override the bundled version. The bundled version remains as a zero-install fallback for users who don't need the full CPAN feature set.
 
-## Current Test Results (after Phase 7)
+## Current Test Results (after Phase 9)
 
 **39/40 test programs pass.** ~52,360 subtests ran, only **4** actually failed (all in t/70_rt.t).
 
@@ -133,7 +133,7 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
 
 ## Progress Tracking
 
-### Current Status: Phase 8 complete — 39/40 programs pass, 52356/52360 subtests pass (99.99%)
+### Current Status: Phase 9 complete — 39/40 programs pass, 52356/52360 subtests pass (99.99%)
 
 ### Completed
 - [x] Phase 1: strict vars + use lib (2026-04-03)
@@ -233,6 +233,28 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
     - comp/parser_run.t: NOT a regression — same 18 failures on both master and branch
     - op/anonsub.t: NOT a regression — pre-existing List::Util 1.70 vs 1.63 version mismatch
   - Commit: `07b856abc`
+
+- [x] Phase 9: Regression fixes + namespace::autoclean + Unicode property fix (2026-04-04)
+  - **op/anonsub.t test 9 fix** (B.pm):
+    - Wrapped `require Sub::Util` in eval in B::CV::_introspect() so that loading failures
+      (caused by @INC reordering putting CPAN Sub::Util before bundled) fall back to __ANON__
+      defaults instead of dying
+  - **comp/parser_run.t test 66 fix** (IdentifierParser.java):
+    - Non-ASCII bytes (0x80-0xFF) inside `${...}` contexts now formatted as `\xNN` (uppercase,
+      no braces) matching Perl's diagnostic format
+  - **re/pat_advanced.t Unicode fix** (UnicodeResolver.java):
+    - `unicodeSetToJavaPattern()` uses `\x{XXXX}` notation for supplementary characters (U+10000+)
+      to avoid Java's Pattern.compile() misinterpreting UTF-16 surrogate pairs
+    - Escape `#` and whitespace in character class patterns for Pattern.COMMENTS compatibility
+    - Confirmed: branch matches master at 1316/1678 (no regression)
+  - **namespace::autoclean implementation** (namespace/autoclean.pm):
+    - Replaced no-op stub with working implementation using B::Hooks::EndOfScope + Sub::Util
+    - Uses Sub::Util::subname (XS via XSLoader) to distinguish imported vs local functions
+    - Removes imported functions from stash at end of scope while preserving methods
+    - Supports -cleanee, -also, -except parameters
+    - Fixed DateTime test t/48rt-115983.t: Try::Tiny's try/catch no longer leak as callable
+      methods on DateTime objects
+  - Commits: `52566815a` (regression fixes), `29638fcec` (namespace::autoclean)
 
 ### Remaining Failures (1 test file, 4 subtests)
 
