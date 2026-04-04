@@ -24,6 +24,8 @@ public class Socket extends PerlModuleBase {
     public static final int PF_INET = 2;  // Protocol family same as address family
     public static final int PF_INET6 = 10;
     public static final int PF_UNIX = 1;
+    public static final int PF_UNSPEC = 0;
+    public static final int SOMAXCONN = 128;
     public static final int SOCK_STREAM = 1;
     public static final int SOCK_DGRAM = 2;
     public static final int SOCK_RAW = 3;
@@ -89,6 +91,8 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("PF_INET", "");
             socket.registerMethod("PF_INET6", "");
             socket.registerMethod("PF_UNIX", "");
+            socket.registerMethod("PF_UNSPEC", "");
+            socket.registerMethod("SOMAXCONN", "");
             socket.registerMethod("SOCK_STREAM", "");
             socket.registerMethod("SOCK_DGRAM", "");
             socket.registerMethod("SOCK_RAW", "");
@@ -401,6 +405,14 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList PF_UNIX(RuntimeArray args, int ctx) {
         return new RuntimeScalar(PF_UNIX).getList();
+    }
+
+    public static RuntimeList PF_UNSPEC(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(PF_UNSPEC).getList();
+    }
+
+    public static RuntimeList SOMAXCONN(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SOMAXCONN).getList();
     }
 
     public static RuntimeList SOCK_RAW(RuntimeArray args, int ctx) {
