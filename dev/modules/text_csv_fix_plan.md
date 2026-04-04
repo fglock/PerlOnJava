@@ -133,7 +133,7 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
 
 ## Progress Tracking
 
-### Current Status: Phase 7 complete — 39/40 programs pass, 52356/52360 subtests pass (99.99%)
+### Current Status: Phase 8 complete — 39/40 programs pass, 52356/52360 subtests pass (99.99%)
 
 ### Completed
 - [x] Phase 1: strict vars + use lib (2026-04-03)
@@ -214,6 +214,25 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
     - t/76_magic.t: 43/44 → 44/44 (all pass)
     - t/70_rt.t: 1/20469 → 20465/20469 (massive improvement, +20464)
   - Result: 39/40 programs pass (up from 34/40)
+
+- [x] Phase 8: Regression fixes for PR #424 (2026-04-04)
+  - **re/subst.t fix** (RuntimeRegex.java):
+    - When s/// replacement introduces wide characters (codepoint > 255), the result is now
+      correctly upgraded from BYTE_STRING to STRING instead of preserving byte type
+    - Added `containsWideChars()` helper to detect characters > 255 in substitution results
+    - Root cause: Phase 7's BYTE_STRING preservation unconditionally kept BYTE_STRING type on
+      substitution results, even when replacement introduced wide characters (e.g. `s/a/\x{100}/g`)
+  - **io/crlf.t fix** (LayeredIOHandle.java):
+    - For non-encoding layers like `:crlf`, `doRead()` now reads conservatively
+      (`bytesToRead = charactersNeeded`) to avoid over-consuming from the delegate
+    - Encoding layers (UTF-16/32) still use the wider read (`charactersNeeded * 4`)
+    - Root cause: Phase 5's encoding layer read logic used `charactersNeeded * 4` for ALL layers,
+      causing `:crlf` layer to over-read, making `tell()` inaccurate
+  - **Regression investigation results:**
+    - re/pat_advanced.t: NOT a regression — matches master exactly at 1316/1678 passing
+    - comp/parser_run.t: NOT a regression — same 18 failures on both master and branch
+    - op/anonsub.t: NOT a regression — pre-existing List::Util 1.70 vs 1.63 version mismatch
+  - Commit: `07b856abc`
 
 ### Remaining Failures (1 test file, 4 subtests)
 
