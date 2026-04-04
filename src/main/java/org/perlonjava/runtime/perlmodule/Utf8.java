@@ -349,27 +349,10 @@ public class Utf8 extends PerlModuleBase {
         String string = scalar.toString();
 
         if (scalar.type == BYTE_STRING) {
-            // For byte strings, check if the bytes form valid UTF-8
-            // Extract raw byte values and try to decode as UTF-8
-            byte[] bytes = new byte[string.length()];
-            for (int i = 0; i < string.length(); i++) {
-                char c = string.charAt(i);
-                if (c > 0xFF) {
-                    // Byte string should not contain chars > 0xFF
-                    // This is an inconsistent state
-                    return RuntimeScalarCache.scalarFalse.getList();
-                }
-                bytes[i] = (byte) c;
-            }
-            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT);
-            try {
-                decoder.decode(ByteBuffer.wrap(bytes));
-                return RuntimeScalarCache.scalarTrue.getList();
-            } catch (CharacterCodingException e) {
-                return RuntimeScalarCache.scalarFalse.getList();
-            }
+            // For byte strings (UTF-8 flag off), Perl always returns true.
+            // The bytes are not claiming to be UTF-8, so they are considered
+            // valid in their native encoding (Latin-1/bytes).
+            return RuntimeScalarCache.scalarTrue.getList();
         } else {
             // For character strings (UTF-8 flag on), check if all characters are valid
             // Unicode code points. Java strings contain UTF-16 code units, which
