@@ -224,9 +224,15 @@ public class WarnDie {
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
                                                 String fileName, int lineNumber) {
         // Get the warning bits for the current Perl execution context.
-        // We scan the Java call stack for the nearest Perl frame (org.perlonjava.anon* or perlmodule)
-        // and look up its warning bits in WarningBitsRegistry.
-        String warningBits = getWarningBitsFromCurrentContext();
+        // Priority: call-site bits (per-statement, set by use/no warnings in blocks)
+        //         > stack scan (per-class/closure)
+        //         > context stack (pushed on sub entry)
+        String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCallSiteBits();
+        
+        if (warningBits == null) {
+            // Fall back to scanning the Java call stack for the nearest Perl frame
+            warningBits = getWarningBitsFromCurrentContext();
+        }
         
         // If no bits from direct stack scan, check the current context stack (pushed on sub entry)
         if (warningBits == null) {

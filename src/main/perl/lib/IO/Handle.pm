@@ -53,7 +53,8 @@ our $has_java_backend = defined &IO::Handle::_sync;
 
 # Constructor
 sub new {
-    my $class = shift;
+    my $class = ref($_[0]) || $_[0] || "IO::Handle";
+    shift;
     my $fh = gensym;
     bless $fh, $class;
 }

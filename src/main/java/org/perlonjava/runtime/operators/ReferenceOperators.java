@@ -23,14 +23,11 @@ public class ReferenceOperators {
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         if (RuntimeScalarType.isReference(runtimeScalar)) {
-            // If className is a reference (blessed object), use ref() to get the package name
-            // This matches Perl's behavior: bless($ref, $obj) uses ref($obj) as the class
-            String str;
-            if (RuntimeScalarType.isReference(className)) {
-                str = ref(className).toString();
-            } else {
-                str = className.toString();
-            }
+            // Use toString() which invokes "" overloading for blessed objects.
+            // Perl 5 throws "Attempt to bless into a reference" for non-overloaded
+            // refs, but callers like IO::Handle already handle this via
+            // ref($class) || $class in Perl code.
+            String str = className.toString();
             // Default to "main" if className is empty
             if (str.isEmpty()) {
                 str = "main";
