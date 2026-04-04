@@ -734,6 +734,14 @@ public class IOOperator {
         try {
             // Write the content to the file handle
             return fh.write(sb.toString());
+        } catch (java.nio.channels.NonWritableChannelException e) {
+            // Writing to a read-only filehandle (opened with "<")
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Filehandle opened only for input"),
+                    new RuntimeScalar(""),
+                    "io");
+            return new RuntimeScalar(); // undef
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return scalarFalse;
@@ -779,6 +787,14 @@ public class IOOperator {
                 return scalarFalse;
             }
             return fh.write(sb.toString());
+        } catch (java.nio.channels.NonWritableChannelException e) {
+            // Writing to a read-only filehandle (opened with "<")
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Filehandle opened only for input"),
+                    new RuntimeScalar(""),
+                    "io");
+            return new RuntimeScalar(); // undef
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return scalarFalse;
