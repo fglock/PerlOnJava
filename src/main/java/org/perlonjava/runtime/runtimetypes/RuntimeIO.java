@@ -17,10 +17,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -129,6 +132,56 @@ public class RuntimeIO extends RuntimeScalar {
      * Used by print/printf when no filehandle is specified.
      */
     public static RuntimeIO selectedHandle;
+
+    /**
+     * Fileno registry for select() support.
+     * Maps small sequential integers to RuntimeIO objects, allowing
+     * 4-arg select() to find handles from bit-vector fileno values.
+     * Standard fds 0-2 are reserved for stdin/stdout/stderr.
+     */
+    private static final AtomicInteger nextFileno = new AtomicInteger(3);
+    private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<RuntimeIO, Integer> ioToFileno = new ConcurrentHashMap<>();
+
+    /**
+     * Assigns a small sequential fileno to this RuntimeIO and registers it.
+     * Returns the assigned fileno.
+     */
+    public int assignFileno() {
+        Integer existing = ioToFileno.get(this);
+        if (existing != null) {
+            return existing;
+        }
+        int fd = nextFileno.getAndIncrement();
+        filenoToIO.put(fd, this);
+        ioToFileno.put(this, fd);
+        return fd;
+    }
+
+    /**
+     * Gets the assigned fileno for this RuntimeIO, or -1 if not assigned.
+     */
+    public int getAssignedFileno() {
+        Integer fd = ioToFileno.get(this);
+        return fd != null ? fd : -1;
+    }
+
+    /**
+     * Looks up a RuntimeIO by its assigned fileno.
+     */
+    public static RuntimeIO getByFileno(int fd) {
+        return filenoToIO.get(fd);
+    }
+
+    /**
+     * Unregisters this RuntimeIO from the fileno registry.
+     */
+    public void unregisterFileno() {
+        Integer fd = ioToFileno.remove(this);
+        if (fd != null) {
+            filenoToIO.remove(fd);
+        }
+    }
 
     static {
         // Initialize mode options mapping
@@ -1203,6 +1256,32 @@ public class RuntimeIO extends RuntimeScalar {
             lastWrittenHandle.flush();
         }
         lastWrittenHandle = this;
+
+        // When no encoding layer is active, check for wide characters (> 0xFF).
+        // Perl 5 warns and outputs UTF-8 encoding of the entire string in this case.
+        if (!(ioHandle instanceof LayeredIOHandle)) {
+            boolean hasWide = false;
+            for (int i = 0; i < data.length(); i++) {
+                if (data.charAt(i) > 0xFF) {
+                    hasWide = true;
+                    break;
+                }
+            }
+            if (hasWide) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Wide character in print"),
+                        new RuntimeScalar(""),
+                        "utf8");
+                // Encode as UTF-8, where each byte becomes a char (matching Perl 5 behavior)
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                StringBuilder sb = new StringBuilder(bytes.length);
+                for (byte b : bytes) {
+                    sb.append((char) (b & 0xFF));
+                }
+                data = sb.toString();
+            }
+        }
+
         RuntimeScalar result = ioHandle.write(data);
         if (System.getenv("JPERL_IO_DEBUG") != null) {
             if (("main::STDOUT".equals(globName) || "main::STDERR".equals(globName)) &&
@@ -1226,6 +1305,11 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar with the file descriptor number, or undef if not available
      */
     public RuntimeScalar fileno() {
+        // Check registry first — socket handles get small sequential filenos
+        int fd = getAssignedFileno();
+        if (fd >= 0) {
+            return new RuntimeScalar(fd);
+        }
         if (ioHandle == null) {
             return RuntimeScalarCache.scalarUndef;
         }

@@ -372,8 +372,8 @@ public class PerlLanguageProvider {
         } catch (Throwable t) {
             if (isMainProgram) {
                 runEndBlocks(false);  // Don't reset $? on exception path
+                RuntimeIO.closeAllHandles();
             }
-            RuntimeIO.closeAllHandles();
             if (t instanceof RuntimeException runtimeException) {
                 throw runtimeException;
             }

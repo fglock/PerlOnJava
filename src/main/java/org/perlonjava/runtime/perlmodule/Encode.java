@@ -81,6 +81,14 @@ public class Encode extends PerlModuleBase {
             CHARSET_ALIASES.put("eucjp", eucJP);
         } catch (Exception ignored) {
         }
+
+        // "locale" and "locale_fs" - map to JVM's default charset.
+        // Encode::Locale registers these via Encode::Alias, but the Java decode/encode
+        // methods bypass Perl-side alias resolution. The JVM default charset matches
+        // what Encode::Locale detects from the OS locale (e.g. UTF-8 on modern systems).
+        Charset defaultCharset = Charset.defaultCharset();
+        CHARSET_ALIASES.put("locale", defaultCharset);
+        CHARSET_ALIASES.put("locale_fs", defaultCharset);
     }
 
     public Encode() {

@@ -23,8 +23,12 @@ public class ReferenceOperators {
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         if (RuntimeScalarType.isReference(runtimeScalar)) {
-            // Default to "main" if className is empty
+            // Use toString() which invokes "" overloading for blessed objects.
+            // Perl 5 throws "Attempt to bless into a reference" for non-overloaded
+            // refs, but callers like IO::Handle already handle this via
+            // ref($class) || $class in Perl code.
             String str = className.toString();
+            // Default to "main" if className is empty
             if (str.isEmpty()) {
                 str = "main";
             }

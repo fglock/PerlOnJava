@@ -176,6 +176,24 @@ public class FileTestOperator {
             }
             case "-z" -> getScalarBoolean(lastBasicAttr.size() == 0);
             case "-l" -> getScalarBoolean(lastBasicAttr.isSymbolicLink());
+            case "-T", "-B" -> {
+                // Handle -T/-B on _ without re-statting (preserves stat buffer)
+                // We need to resolve the path from the last stat argument and read file content
+                // without calling fileTest() which would overwrite the stat buffer.
+                try {
+                    String filename = lastStatArg.toString();
+                    Path path = resolvePath(filename);
+                    if (path == null || !Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2);
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0);
+                    yield isTextOrBinary(path, operator.equals("-T"));
+                } catch (IOException e) {
+                    getGlobalVariable("main::!").set(5);
+                    yield scalarUndef;
+                }
+            }
             default -> fileTest(operator, lastFileHandle);
         };
     }
@@ -262,6 +280,25 @@ public class FileTestOperator {
                 innerHandle = lh.getDelegate();
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
+                // Special handling for -T/-B on filehandles: check from current position
+                if (operator.equals("-T") || operator.equals("-B")) {
+                    Path path = cfc.getFilePath();
+                    if (path != null) {
+                        // Stat the file first (like Perl does)
+                        statForFileTest(fileHandle, path, false);
+                    }
+                    // At EOF, both -T and -B return true (Perl behavior)
+                    if (cfc.eof().getBoolean()) {
+                        return scalarTrue;
+                    }
+                    // Read from current position to determine text/binary
+                    try {
+                        return isTextOrBinaryFromHandle(cfc, operator.equals("-T"));
+                    } catch (IOException e) {
+                        getGlobalVariable("main::!").set(5);
+                        return scalarUndef;
+                    }
+                }
                 Path path = cfc.getFilePath();
                 if (path != null) {
                     return fileTest(operator, new RuntimeScalar(path.toString()));
@@ -703,10 +740,44 @@ public class FileTestOperator {
             return scalarTrue; // Empty file is considered both text and binary
         }
 
+        return analyzeTextBinary(buffer, bytesRead, checkForText);
+    }
+
+    /**
+     * Determines if a filehandle's content from the current position is text or binary.
+     * Used for -T/-B on filehandles where we need to read from the current position,
+     * not from the beginning of the file. Saves and restores the file position.
+     *
+     * @param cfc          The CustomFileChannel to read from
+     * @param checkForText True if checking for text, false if checking for binary
+     * @return A RuntimeScalar representing the result (true or false)
+     * @throws IOException If an I/O error occurs
+     */
+    private static RuntimeScalar isTextOrBinaryFromHandle(CustomFileChannel cfc, boolean checkForText) throws IOException {
+        // Save current position
+        long savedPos = cfc.tell().getLong();
+        // Read up to 1024 bytes from the current position using sysread
+        RuntimeScalar data = cfc.sysread(1024);
+        // Restore position (Perl's -T/-B don't permanently advance the handle)
+        cfc.seek(savedPos, 0);
+        if (data.type == RuntimeScalarType.UNDEF) {
+            return scalarTrue; // No data = both text and binary (like empty file)
+        }
+        byte[] buffer = data.toString().getBytes();
+        if (buffer.length == 0) {
+            return scalarTrue;
+        }
+        return analyzeTextBinary(buffer, buffer.length, checkForText);
+    }
+
+    /**
+     * Common heuristic for text/binary detection.
+     */
+    private static RuntimeScalar analyzeTextBinary(byte[] buffer, int length, boolean checkForText) {
         int textChars = 0;
         int totalChars = 0;
 
-        for (int i = 0; i < bytesRead; i++) {
+        for (int i = 0; i < length; i++) {
             if (buffer[i] == 0) {
                 return checkForText ? scalarFalse : scalarTrue; // Binary file
             }

@@ -212,9 +212,14 @@ public class Utf8 extends PerlModuleBase {
 
             // If the original string matches the decoded string, conversion is successful
             if (string.equals(decoded)) {
-                // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
-                scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
-                scalar.type = BYTE_STRING;
+                // Don't modify read-only scalars (e.g., string literals).
+                // The string is already representable in ISO-8859-1, so the downgrade
+                // is logically successful even if we can't modify the scalar in-place.
+                if (!(scalar instanceof RuntimeScalarReadOnly)) {
+                    // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
+                    scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
+                    scalar.type = BYTE_STRING;
+                }
                 return new RuntimeScalar(true).getList();
             } else {
                 // If the strings do not match, the conversion failed
@@ -266,8 +271,14 @@ public class Utf8 extends PerlModuleBase {
         String string = scalar.toString();
         try {
             byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
-            String decoded = new String(bytes, StandardCharsets.UTF_8);
-            scalar.set(decoded);
+            // Use a strict UTF-8 decoder that throws on invalid sequences
+            // instead of silently replacing with U+FFFD.  This matches Perl 5
+            // behavior where utf8::decode returns FALSE for invalid UTF-8.
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT);
+            CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
+            scalar.set(decoded.toString());
             return new RuntimeScalar(true).getList();
         } catch (Exception e) {
             return new RuntimeScalar(false).getList();

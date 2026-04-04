@@ -48,6 +48,9 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle statHandle;
     private static MethodHandle lstatHandle;
     
+    // strerror handle (no errno capture needed)
+    private static MethodHandle strerrorHandle;
+    
     // Method handles for passwd functions
     private static MethodHandle getpwnamHandle;
     private static MethodHandle getpwuidHandle;
@@ -139,6 +142,12 @@ public class FFMPosixLinux implements FFMPosixInterface {
             umaskHandle = linker.downcallHandle(
                 stdlib.find("umask").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            // strerror: char* strerror(int errnum)
+            strerrorHandle = linker.downcallHandle(
+                stdlib.find("strerror").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
             );
             
             // Functions that need errno capture
@@ -665,26 +674,17 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public String strerror(int errno) {
-        // Common POSIX error messages
-        return switch (errno) {
-            case 0 -> "Success";
-            case 1 -> "Operation not permitted";
-            case 2 -> "No such file or directory";
-            case 3 -> "No such process";
-            case 4 -> "Interrupted system call";
-            case 5 -> "I/O error";
-            case 9 -> "Bad file descriptor";
-            case 10 -> "No child processes";
-            case 12 -> "Out of memory";
-            case 13 -> "Permission denied";
-            case 17 -> "File exists";
-            case 20 -> "Not a directory";
-            case 21 -> "Is a directory";
-            case 22 -> "Invalid argument";
-            case 28 -> "No space left on device";
-            case 30 -> "Read-only file system";
-            default -> "Unknown error " + errno;
-        };
+        if (errno == 0) return "Success";
+        ensureInitialized();
+        try {
+            MemorySegment ptr = (MemorySegment) strerrorHandle.invoke(errno);
+            if (ptr.equals(MemorySegment.NULL)) {
+                return "Unknown error " + errno;
+            }
+            return ptr.reinterpret(256).getString(0);
+        } catch (Throwable t) {
+            return "Unknown error " + errno;
+        }
     }
     
     // ==================== Helper Methods ====================

@@ -48,12 +48,12 @@ public class BitwiseOperators {
 
         // Check for uninitialized values and generate warnings
         if (!val1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         if (!val2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         // In Perl, if either operand is a reference or doesn't look like a number, use string operations
@@ -401,12 +401,12 @@ public class BitwiseOperators {
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!runtimeScalar.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         // Convert string type to number if necessary
@@ -483,12 +483,12 @@ public class BitwiseOperators {
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!runtimeScalar.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         // Convert string type to number if necessary
@@ -586,12 +586,12 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar integerShiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         if (!runtimeScalar.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         if (runtimeScalar.isString()) {
@@ -630,12 +630,12 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar integerShiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         if (!runtimeScalar.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         if (runtimeScalar.isString()) {

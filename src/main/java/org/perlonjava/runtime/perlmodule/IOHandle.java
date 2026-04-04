@@ -15,16 +15,18 @@ public class IOHandle extends PerlModuleBase {
         IOHandle ioHandle = new IOHandle();
 
         try {
-            // Register all methods
+            // Register all methods - use null prototypes to match Perl 5's XS subs
+            // (Perl 5's IO.xs subs have no prototypes; adding prototypes would force
+            // scalar context on array args like @_, breaking callers)
             ioHandle.registerMethod("ungetc", null);
-            ioHandle.registerMethod("_error", "*");
-            ioHandle.registerMethod("_clearerr", "*");
-            ioHandle.registerMethod("_sync", "*");
-            ioHandle.registerMethod("_blocking", "*;$");
-            ioHandle.registerMethod("_setbuf", "*$");
-            ioHandle.registerMethod("_setvbuf", "*$$$");
-            ioHandle.registerMethod("_untaint", "*");
-            ioHandle.registerMethod("_set_input_line_number", "*$");
+            ioHandle.registerMethod("_error", null);
+            ioHandle.registerMethod("_clearerr", null);
+            ioHandle.registerMethod("_sync", null);
+            ioHandle.registerMethod("_blocking", null);
+            ioHandle.registerMethod("_setbuf", null);
+            ioHandle.registerMethod("_setvbuf", null);
+            ioHandle.registerMethod("_untaint", null);
+            ioHandle.registerMethod("_set_input_line_number", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing IOHandle method: " + e.getMessage());
         }
@@ -126,7 +128,9 @@ public class IOHandle extends PerlModuleBase {
     }
 
     /**
-     * Get/set blocking mode
+     * Get/set blocking mode.
+     * For sockets with NIO channels, this actually configures non-blocking I/O.
+     * For other handles, non-blocking mode is not supported.
      */
     public static RuntimeList _blocking(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2) {
@@ -139,14 +143,19 @@ public class IOHandle extends PerlModuleBase {
             return new RuntimeList();
         }
 
-        // Get current blocking status (always true in JVM)
+        // Get current blocking status
         boolean currentBlocking = true;
+        if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
+            currentBlocking = socketIO.isBlocking();
+        }
 
         if (args.size() == 2) {
-            // Setting blocking mode
             boolean newBlocking = args.get(1).getBoolean();
-            if (!newBlocking) {
-                // Non-blocking I/O is not easily supported in JVM
+            if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
+                // For sockets, actually set blocking mode via NIO channel
+                socketIO.setBlocking(newBlocking);
+            } else if (!newBlocking) {
+                // Non-blocking I/O not supported for non-socket handles
                 RuntimeIO.handleIOError("Non-blocking I/O not supported");
                 return new RuntimeList();
             }

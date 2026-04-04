@@ -473,6 +473,10 @@ imports:
     target: src/main/perl/lib/IO/Socket
     type: directory
 
+  # IO::Socket::IP - IPv4/IPv6 transparent socket interface (required by HTTP::Daemon)
+  - source: perl5/cpan/IO-Socket-IP/lib/IO/Socket/IP.pm
+    target: src/main/perl/lib/IO/Socket/IP.pm
+
   # IO::Select - OO interface to select() (required by TAP::Parser::Multiplexer)
   - source: perl5/dist/IO/lib/IO/Select.pm
     target: src/main/perl/lib/IO/Select.pm

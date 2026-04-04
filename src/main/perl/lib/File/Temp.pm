@@ -72,7 +72,14 @@ use overload
 # Constructor for OO interface
 sub new {
     my $class = shift;
+
+    # Handle odd arg count: first arg is a positional template
+    # e.g. File::Temp->new("foo-XXXXXXXX") or File::Temp->new(TEMPLATE => "foo-XXXXXXXX")
+    my $leading_template = (scalar(@_) % 2 == 1 ? shift(@_) : undef);
     my %args = @_;
+
+    # Positional template overrides TEMPLATE key
+    $args{TEMPLATE} = $leading_template if defined $leading_template && !exists $args{TEMPLATE};
 
     # Default arguments
     $args{UNLINK} = 1 unless exists $args{UNLINK};
@@ -154,6 +161,40 @@ sub autoflush {
     return $value;
 }
 
+sub close {
+    my $self = shift;
+    return CORE::close($self->{_fh}) if defined $self->{_fh};
+    return;
+}
+
+sub seek {
+    my $self = shift;
+    return CORE::seek($self->{_fh}, $_[0], $_[1]) if defined $self->{_fh};
+    return;
+}
+
+sub read {
+    my $self = shift;
+    return CORE::read($self->{_fh}, $_[0], $_[1], defined $_[2] ? $_[2] : 0);
+}
+
+sub binmode {
+    my $self = shift;
+    return @_ ? CORE::binmode($self->{_fh}, $_[0]) : CORE::binmode($self->{_fh});
+}
+
+sub getline {
+    my $self = shift;
+    my $fh = $self->{_fh};
+    return <$fh>;
+}
+
+sub getlines {
+    my $self = shift;
+    my $fh = $self->{_fh};
+    return <$fh>;
+}
+
 sub DESTROY {
     my $self = shift;
 
@@ -181,6 +222,18 @@ sub AUTOLOAD {
         return $self->{_fh}->$method(@_);
     }
 
+    # Fallback for IO::Handle methods not directly available on the filehandle
+    if ($method eq 'printflush') {
+        my $fh = $self->{_fh};
+        my $oldfh = select($fh);
+        my $old_af = $|;
+        $| = 1;
+        my $ret = print $fh @_;
+        $| = $old_af;
+        select($oldfh);
+        return $ret;
+    }
+
     croak "Undefined method $method called on File::Temp object";
 }
 
@@ -202,9 +255,15 @@ sub tempfile {
     my $perms  = $args{PERMS};  # Custom permissions
 
     # If no directory specified, use temp directory by default
-    # unless TMPDIR was explicitly set to false
-    if (!defined $dir && (!exists $args{TMPDIR} || $args{TMPDIR})) {
-        $dir = File::Spec->tmpdir;
+    # but only when no template with a path was given.
+    # In Perl 5, TMPDIR => 1 forces tmpdir; otherwise the template's
+    # own directory (if any) is used as-is.
+    if (!defined $dir) {
+        if (exists $args{TMPDIR} && $args{TMPDIR}) {
+            $dir = File::Spec->tmpdir;
+        } elsif (!defined $template || $template eq '') {
+            $dir = File::Spec->tmpdir;
+        }
     }
 
     # Generate template if not provided
@@ -218,9 +277,12 @@ sub tempfile {
         croak "Template must end with at least 4 'X' characters";
     }
 
-    # Prepend directory if specified
+    # Prepend directory if specified and template doesn't already have one
     if (defined $dir) {
-        $template = File::Spec->catfile($dir, $template);
+        my ($vol, $dirs, $file_part) = File::Spec->splitpath($template);
+        if ($dirs eq '' && $vol eq '') {
+            $template = File::Spec->catfile($dir, $template);
+        }
     }
 
     # Create temp file

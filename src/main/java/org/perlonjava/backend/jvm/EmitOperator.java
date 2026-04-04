@@ -1638,6 +1638,17 @@ public class EmitOperator {
                     return true;
                 }
             }
+            // Built-in functions that return lists: \stat(...), \localtime, etc.
+            // In Perl, \func distributes the \ over the list elements
+            if ("stat".equals(op) || "lstat".equals(op) ||
+                    "localtime".equals(op) || "gmtime".equals(op) ||
+                    "caller".equals(op) || "each".equals(op) ||
+                    "getpwnam".equals(op) || "getpwuid".equals(op) || "getpwent".equals(op) ||
+                    "getgrnam".equals(op) || "getgrgid".equals(op) || "getgrent".equals(op) ||
+                    "sort".equals(op) || "reverse".equals(op) ||
+                    "keys".equals(op) || "values".equals(op)) {
+                return true;
+            }
         }
 
         // Check for slice operations: %x{...}, @x{...}, @x[...]
@@ -1648,6 +1659,11 @@ public class EmitOperator {
                 if (binOp.left instanceof OperatorNode opNode) {
                     return "%".equals(opNode.operator) || "@".equals(opNode.operator);
                 }
+            }
+
+            // Function calls with parens: \foo() distributes the \ over the returned list
+            if ("(".equals(binOp.operator)) {
+                return true;
             }
 
             // Check if it is an apply `->()`

@@ -46,12 +46,12 @@ public class CompareOperators {
     private static void checkUninitialized(RuntimeScalar arg1, RuntimeScalar arg2, String op) {
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!arg1.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
-                    callerWhere());
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in numeric " + op),
+                    callerWhere(), "uninitialized");
         }
         if (!arg2.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
-                    callerWhere());
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in numeric " + op),
+                    callerWhere(), "uninitialized");
         }
     }
 
@@ -62,8 +62,8 @@ public class CompareOperators {
      */
     private static void checkSpaceshipResult(RuntimeScalar result, String op) {
         if (!result.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in numeric " + op),
-                    callerWhere());
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in numeric " + op),
+                    callerWhere(), "uninitialized");
         }
     }
 

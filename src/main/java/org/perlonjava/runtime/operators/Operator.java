@@ -605,12 +605,12 @@ public class Operator {
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
         if (!timesScalar.getDefinedBoolean()) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         // Check for non-finite values first

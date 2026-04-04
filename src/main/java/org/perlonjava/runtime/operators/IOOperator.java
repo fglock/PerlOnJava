@@ -13,7 +13,11 @@ import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SelectableChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -40,10 +44,12 @@ public class IOOperator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
-            RuntimeScalar rbits = runtimeList.elements.get(0).scalar();
-            RuntimeScalar wbits = runtimeList.elements.get(1).scalar();
-            RuntimeScalar ebits = runtimeList.elements.get(2).scalar();
-            RuntimeScalar timeout = runtimeList.elements.get(3).scalar();
+            // Snapshot arguments to avoid multiple FETCH calls on tied variables.
+            // In Perl 5, arguments are evaluated once onto the stack before select runs.
+            RuntimeScalar rbits = new RuntimeScalar().set(runtimeList.elements.get(0).scalar());
+            RuntimeScalar wbits = new RuntimeScalar().set(runtimeList.elements.get(1).scalar());
+            RuntimeScalar ebits = new RuntimeScalar().set(runtimeList.elements.get(2).scalar());
+            RuntimeScalar timeout = new RuntimeScalar().set(runtimeList.elements.get(3).scalar());
 
             // Special case: if all bit vectors are undef, just sleep
             if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
@@ -64,15 +70,210 @@ public class IOOperator {
                 return new RuntimeScalar(0);
             }
 
-            // Full select implementation not yet supported - return 0 as a no-op
-            // rather than throwing fatal error, since many tests use select incidentally
-            return new RuntimeScalar(0);
+            // Implement 4-arg select() using NIO Selector
+            try {
+                return selectWithNIO(rbits, wbits, ebits, timeout);
+            } catch (Exception e) {
+                getGlobalVariable("main::!").set(e.getMessage());
+                return new RuntimeScalar(-1);
+            }
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
         RuntimeIO.selectedHandle = runtimeList.getFirst().getRuntimeIO();
         RuntimeIO.lastAccesseddHandle = RuntimeIO.selectedHandle;
         return fh;
+    }
+
+    /**
+     * Implements 4-arg select() using Java NIO Selector.
+     * Monitors file descriptors in the bit vectors for readiness.
+     * Modifies the bit vectors in place to reflect which descriptors are ready.
+     *
+     * @param rbits   read bit vector (modified in place)
+     * @param wbits   write bit vector (modified in place)
+     * @param ebits   error bit vector (modified in place)
+     * @param timeout timeout in seconds (undef = block forever, 0 = poll)
+     * @return number of ready descriptors, or -1 on error
+     */
+    private static RuntimeScalar selectWithNIO(RuntimeScalar rbits, RuntimeScalar wbits,
+                                                RuntimeScalar ebits, RuntimeScalar timeout) throws IOException {
+        byte[] rdata = rbits.getDefinedBoolean() ? getVecBytes(rbits) : new byte[0];
+        byte[] wdata = wbits.getDefinedBoolean() ? getVecBytes(wbits) : new byte[0];
+        byte[] edata = ebits.getDefinedBoolean() ? getVecBytes(ebits) : new byte[0];
+        int maxFd = Math.max(rdata.length, Math.max(wdata.length, edata.length)) * 8;
+
+        Selector selector = Selector.open();
+        List<SelectableChannel> madeNonBlocking = new ArrayList<>();
+
+        try {
+            Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
+            int nonSocketReady = 0;
+
+            for (int fd = 0; fd < maxFd; fd++) {
+                boolean wantRead = isBitSet(rdata, fd);
+                boolean wantWrite = isBitSet(wdata, fd);
+                if (!wantRead && !wantWrite) continue;
+
+                RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                if (rio == null) continue;
+
+                if (rio.ioHandle instanceof SocketIO socketIO) {
+                    SelectableChannel ch = socketIO.getSelectableChannel();
+                    if (ch == null) {
+                        nonSocketReady++;
+                        continue;
+                    }
+
+                    if (ch.isBlocking()) {
+                        ch.configureBlocking(false);
+                        madeNonBlocking.add(ch);
+                    }
+
+                    int ops = 0;
+                    if (wantRead) {
+                        ops |= (ch instanceof ServerSocketChannel)
+                                ? SelectionKey.OP_ACCEPT
+                                : SelectionKey.OP_READ;
+                    }
+                    if (wantWrite && ch instanceof SocketChannel sc) {
+                        // For non-blocking connects in progress, use OP_CONNECT.
+                        // Perl's select() treats write-readiness as "connect complete",
+                        // but Java NIO requires OP_CONNECT for pending connections.
+                        if (sc.isConnectionPending()) {
+                            ops |= SelectionKey.OP_CONNECT;
+                        } else {
+                            ops |= SelectionKey.OP_WRITE;
+                        }
+                    }
+
+                    if (ops != 0) {
+                        ch.register(selector, ops);
+                        channelToFd.put(ch, fd);
+                    }
+                } else {
+                    // Non-socket handles (files, pipes) are always ready
+                    nonSocketReady++;
+                }
+            }
+
+            // Perform the select
+            if (!channelToFd.isEmpty()) {
+                if (!timeout.getDefinedBoolean()) {
+                    selector.select(); // block indefinitely
+                } else {
+                    double sec = timeout.getDouble();
+                    if (sec <= 0) {
+                        selector.selectNow(); // poll
+                    } else {
+                        selector.select((long) (sec * 1000));
+                    }
+                }
+            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
+                // No channels to monitor and no always-ready handles — sleep for timeout
+                double sec = timeout.getDouble();
+                if (sec > 0) {
+                    long millis = (long) (sec * 1000);
+                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
+                    try {
+                        Thread.sleep(millis, nanos);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+
+            // Build result bit vectors (same size as input)
+            byte[] rresult = new byte[rdata.length];
+            byte[] wresult = new byte[wdata.length];
+            byte[] eresult = new byte[edata.length];
+            int totalReady = 0;
+
+            // Non-socket handles keep their bits set (always ready)
+            for (int fd = 0; fd < maxFd; fd++) {
+                RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                if (rio == null) continue;
+                if (rio.ioHandle instanceof SocketIO) continue;
+                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
+                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
+            }
+
+            // Process selected keys
+            for (SelectionKey key : selector.selectedKeys()) {
+                Integer fd = channelToFd.get(key.channel());
+                if (fd == null) continue;
+                int readyOps = key.readyOps();
+
+                if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
+                        && isBitSet(rdata, fd)) {
+                    setBit(rresult, fd);
+                    totalReady++;
+                }
+                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
+                if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
+                    setBit(wresult, fd);
+                    totalReady++;
+                }
+            }
+
+            // Modify the original scalars in place
+            if (rbits.getDefinedBoolean()) {
+                rbits.set(new String(rresult, StandardCharsets.ISO_8859_1));
+            }
+            if (wbits.getDefinedBoolean()) {
+                wbits.set(new String(wresult, StandardCharsets.ISO_8859_1));
+            }
+            if (ebits.getDefinedBoolean()) {
+                ebits.set(new String(eresult, StandardCharsets.ISO_8859_1));
+            }
+
+            return new RuntimeScalar(totalReady);
+
+        } finally {
+            // Close the selector first — this deregisters all keys,
+            // allowing us to restore blocking mode
+            selector.close();
+
+            // Restore blocking mode for channels we modified
+            for (SelectableChannel ch : madeNonBlocking) {
+                try {
+                    ch.configureBlocking(true);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Extracts the raw bytes from a bit-vector scalar (as used by vec/select).
+     */
+    private static byte[] getVecBytes(RuntimeScalar scalar) {
+        String s = scalar.toString();
+        byte[] data = new byte[s.length()];
+        for (int i = 0; i < s.length(); i++) {
+            data[i] = (byte) s.charAt(i);
+        }
+        return data;
+    }
+
+    /**
+     * Tests whether bit 'fd' is set in a byte array (vec-style, little-endian bits within each byte).
+     */
+    private static boolean isBitSet(byte[] data, int fd) {
+        int byteIndex = fd / 8;
+        int bitIndex = fd % 8;
+        return byteIndex < data.length && (data[byteIndex] & (1 << bitIndex)) != 0;
+    }
+
+    /**
+     * Sets bit 'fd' in a byte array (vec-style, little-endian bits within each byte).
+     */
+    private static void setBit(byte[] data, int fd) {
+        int byteIndex = fd / 8;
+        int bitIndex = fd % 8;
+        if (byteIndex < data.length) {
+            data[byteIndex] |= (byte) (1 << bitIndex);
+        }
     }
 
     public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
@@ -311,30 +512,46 @@ public class IOOperator {
                         throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                     }
                 } else {
-                    // Handle string filehandle names (like "STDOUT", "STDERR", "STDIN")
-                    String handleName = secondArg.toString();
-                    if (handleName.equals("STDOUT") || handleName.equals("STDERR") || handleName.equals("STDIN")) {
-                        // Convert string to proper filehandle reference
-                        RuntimeScalar handleRef = GlobalVariable.getGlobalIO("main::" + handleName);
-                        if (handleRef != null && handleRef.value instanceof RuntimeGlob) {
-                            RuntimeIO sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
-                            if (sourceHandle != null && sourceHandle.ioHandle != null) {
-                                if (isParsimonious) {
-                                    // &= mode: reuse the same file descriptor (parsimonious)
-                                    fh = sourceHandle;
+                    // Try getRuntimeIO() which handles blessed objects with *{} overloading
+                    // (e.g., File::Temp objects passed to open with dup mode)
+                    RuntimeIO sourceHandle = null;
+                    try {
+                        sourceHandle = secondArg.getRuntimeIO();
+                    } catch (Exception ignored) {
+                    }
+
+                    if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                        if (isParsimonious) {
+                            fh = sourceHandle;
+                        } else {
+                            fh = duplicateFileHandle(sourceHandle);
+                        }
+                    } else {
+                        // Handle string filehandle names (like "STDOUT", "STDERR", "STDIN")
+                        String handleName = secondArg.toString();
+                        if (handleName.equals("STDOUT") || handleName.equals("STDERR") || handleName.equals("STDIN")) {
+                            // Convert string to proper filehandle reference
+                            RuntimeScalar handleRef = GlobalVariable.getGlobalIO("main::" + handleName);
+                            if (handleRef != null && handleRef.value instanceof RuntimeGlob) {
+                                sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
+                                if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                                    if (isParsimonious) {
+                                        // &= mode: reuse the same file descriptor (parsimonious)
+                                        fh = sourceHandle;
+                                    } else {
+                                        // & mode: create a new handle that duplicates the original
+                                        fh = duplicateFileHandle(sourceHandle);
+                                    }
                                 } else {
-                                    // & mode: create a new handle that duplicates the original
-                                    fh = duplicateFileHandle(sourceHandle);
+                                    throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                                 }
                             } else {
                                 throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                             }
                         } else {
+                            // For other non-GLOB types, provide proper "Bad filehandle" error messages
                             throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                         }
-                    } else {
-                        // For other non-GLOB types, provide proper "Bad filehandle" error messages
-                        throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                     }
                 }
             } else if (secondArg.type == RuntimeScalarType.REFERENCE) {
@@ -1054,8 +1271,31 @@ public class IOOperator {
             return scalarFalse;
         }
 
-        fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
-        fileHandle.value = new RuntimeGlob(null).setIO(fh);
+        // Set IO slot on the glob, following the same pattern as open() and socket()
+        RuntimeGlob targetGlob = null;
+        if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                && fileHandle.value instanceof RuntimeGlob glob) {
+            targetGlob = glob;
+        } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING)
+                && fileHandle.value instanceof String name) {
+            if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
+                String fullName = name.contains("::") ? name : ("main::" + name);
+                targetGlob = GlobalVariable.getGlobalIO(fullName);
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = targetGlob;
+                fileHandle.set(newGlob);
+            }
+        }
+
+        if (targetGlob != null) {
+            targetGlob.setIO(fh);
+        } else {
+            RuntimeScalar newGlob = new RuntimeScalar();
+            newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            fileHandle.set(newGlob);
+        }
         return scalarTrue;
     }
 
@@ -1327,6 +1567,8 @@ public class IOOperator {
     /**
      * socket(SOCKET, DOMAIN, TYPE, PROTOCOL)
      * Creates a socket and associates it with SOCKET filehandle.
+     * Like POSIX socket(), creates a generic socket that can be used for either
+     * connect() (client) or bind()+listen() (server).
      */
     public static RuntimeScalar socket(int ctx, RuntimeBase... args) {
         if (args.length < 4) {
@@ -1353,24 +1595,42 @@ public class IOOperator {
                 return scalarFalse;
             }
 
+            RuntimeIO socketIO;
             if (type == 1) { // SOCK_STREAM (TCP)
-                // Create ServerSocket using ServerSocketChannel for native socket option support
-                // This enables proper IPv4/IPv6 compatibility and Java's native socket options
-                ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-                ServerSocket serverSocket = serverSocketChannel.socket();
-                SocketIO socketIOHandle = new SocketIO(serverSocket, serverSocketChannel);
-                RuntimeIO socketIO = new RuntimeIO(socketIOHandle);
-                socketHandle.set(socketIO);
-                return scalarTrue;
+                // Create a SocketChannel - this is a client-capable socket that can be
+                // used with connect(). For server usage (bind+listen), SocketIO.listen()
+                // will lazily convert to a ServerSocketChannel.
+                SocketChannel channel = SocketChannel.open();
+                SocketIO socketIOHandle = new SocketIO(channel, family);
+                socketIO = new RuntimeIO(socketIOHandle);
             } else if (type == 2) { // SOCK_DGRAM (UDP)
-                // For UDP, we'll use DatagramSocket - note: SocketIO doesn't support UDP yet
-                // This is a placeholder implementation
                 getGlobalVariable("main::!").set("UDP sockets not yet fully implemented");
                 return scalarFalse;
             } else {
                 getGlobalVariable("main::!").set("Unsupported socket type: " + type);
                 return scalarFalse;
             }
+
+            // Assign a small sequential fileno for select() support
+            socketIO.assignFileno();
+
+            // Set IO slot on the glob, following the same pattern as open()
+            RuntimeGlob targetGlob = null;
+            if ((socketHandle.type == RuntimeScalarType.GLOB || socketHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                    && socketHandle.value instanceof RuntimeGlob glob) {
+                targetGlob = glob;
+            }
+
+            if (targetGlob != null) {
+                targetGlob.setIO(socketIO);
+            } else {
+                // Create a new anonymous GLOB and assign it to the lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(socketIO);
+                socketHandle.set(newGlob);
+            }
+            return scalarTrue;
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Socket creation failed: " + e.getMessage());
@@ -1481,7 +1741,7 @@ public class IOOperator {
     public static RuntimeScalar connect(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             getGlobalVariable("main::!").set("Not enough arguments for connect");
-            return scalarFalse;
+            return scalarUndef;
         }
 
         try {
@@ -1491,7 +1751,7 @@ public class IOOperator {
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for connect");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Parse Perl-style packed socket address (sockaddr_in format)
@@ -1503,7 +1763,7 @@ public class IOOperator {
                 parts = addressStr.split(":");
                 if (parts.length != 2) {
                     getGlobalVariable("main::!").set("Invalid address format for connect (expected sockaddr_in or host:port)");
-                    return scalarFalse;
+                    return scalarUndef;
                 }
             }
 
@@ -1513,7 +1773,7 @@ public class IOOperator {
                 port = Integer.parseInt(parts[1]);
             } catch (NumberFormatException e) {
                 getGlobalVariable("main::!").set("Invalid port number for connect");
-                return scalarFalse;
+                return scalarUndef;
             }
 
             // Delegate to RuntimeIO's connect method
@@ -1521,7 +1781,7 @@ public class IOOperator {
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Connect failed: " + e.getMessage());
-            return scalarFalse;
+            return scalarUndef;
         }
     }
 
@@ -1557,6 +1817,7 @@ public class IOOperator {
     /**
      * accept(NEWSOCKET, GENERICSOCKET)
      * Accepts a connection on a listening socket.
+     * Returns the packed sockaddr of the remote peer on success, false on failure.
      */
     public static RuntimeScalar accept(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
@@ -1568,23 +1829,41 @@ public class IOOperator {
             RuntimeScalar newSocketHandle = args[0].scalar();
             RuntimeScalar listenSocketHandle = args[1].scalar();
 
-            RuntimeIO listenSocketIO = listenSocketHandle.getRuntimeIO();
-            if (listenSocketIO == null) {
+            RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();
+            if (listenRuntimeIO == null || !(listenRuntimeIO.ioHandle instanceof SocketIO listenSocketIO)) {
                 getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
                 return scalarFalse;
             }
 
-            // Accept connection and create new socket handle
-            RuntimeScalar acceptResult = listenSocketIO.accept();
-            if (acceptResult.getDefinedBoolean()) {
-                // The accept() method in SocketIO returns the remote address string
-                // We need to create a new socket handle for the accepted connection
-                // For now, this is a simplified implementation
-                getGlobalVariable("main::!").set("Accept operation needs full socket handle creation");
-                return scalarFalse;
-            } else {
+            // Accept the connection - returns a new SocketIO for the client
+            SocketIO clientSocketIO = listenSocketIO.acceptConnection();
+            if (clientSocketIO == null) {
                 return scalarFalse;
             }
+
+            // Wrap in RuntimeIO and associate with the NEWSOCKET glob
+            RuntimeIO clientRuntimeIO = new RuntimeIO(clientSocketIO);
+            // Assign a small sequential fileno for select() support
+            clientRuntimeIO.assignFileno();
+
+            RuntimeGlob targetGlob = null;
+            if ((newSocketHandle.type == RuntimeScalarType.GLOB || newSocketHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                    && newSocketHandle.value instanceof RuntimeGlob glob) {
+                targetGlob = glob;
+            }
+
+            if (targetGlob != null) {
+                targetGlob.setIO(clientRuntimeIO);
+            } else {
+                // Create a new anonymous GLOB and assign it to the lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                newSocketHandle.set(newGlob);
+            }
+
+            // Return the packed sockaddr of the remote peer
+            return clientSocketIO.getpeername();
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Accept failed: " + e.getMessage());
@@ -2137,9 +2416,9 @@ public class IOOperator {
                 // Use Java's native socket option support via SocketIO
                 int optionValue = socketIOHandle.getSocketOption(level, optname);
 
-                // For SO_ERROR (common case), always return 0 (no error)
+                // For SO_ERROR, check actual socket connection status
                 if (level == 1 && optname == 4) { // SOL_SOCKET, SO_ERROR
-                    optionValue = 0;
+                    optionValue = socketIOHandle.getSocketError();
                 }
 
                 // Pack the option value as a 4-byte integer and return it

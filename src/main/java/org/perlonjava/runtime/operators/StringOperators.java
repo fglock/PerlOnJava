@@ -547,51 +547,74 @@ public class StringOperators {
     }
 
     public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
-        return joinInternal(runtimeScalar, list, true);
+        return joinInternal(runtimeScalar, list, true, false);
     }
 
     /**
      * Internal join implementation with optional warning control.
      * Used for both explicit join() calls and string interpolation.
      *
-     * @param runtimeScalar The separator
-     * @param list          The list to join
-     * @param warnOnUndef   Whether to warn about undef values
+     * @param runtimeScalar      The separator
+     * @param list               The list to join
+     * @param warnOnUndef        Whether to warn about undef values
+     * @param isStringInterpolation Whether this is a string interpolation (not an explicit join call)
      * @return The joined string
      */
-    private static RuntimeScalar joinInternal(RuntimeScalar runtimeScalar, RuntimeBase list, boolean warnOnUndef) {
+    private static RuntimeScalar joinInternal(RuntimeScalar runtimeScalar, RuntimeBase list, boolean warnOnUndef,
+                                               boolean isStringInterpolation) {
         // TODO - convert octet string back to unicode if needed
 
-        // Check if separator is undef and generate warning
+        // Collect the list elements first so we know the count before evaluating separator.
+        // Perl 5 does not FETCH a tied separator when there are fewer than 2 elements.
+        java.util.List<RuntimeScalar> elements = new java.util.ArrayList<>();
+        Iterator<RuntimeScalar> iterator = list.iterator();
+        while (iterator.hasNext()) {
+            elements.add(iterator.next());
+        }
+
+        // Fast path: 0 elements -> empty string (check undef separator warning first)
+        if (elements.isEmpty()) {
+            if (warnOnUndef && runtimeScalar.type == RuntimeScalarType.UNDEF) {
+                WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
+                        RuntimeScalarCache.scalarEmptyString, "uninitialized");
+            }
+            return new RuntimeScalar("");
+        }
+
+        // Fast path: 1 element -> return that element (no separator evaluation needed)
+        if (elements.size() == 1) {
+            RuntimeScalar scalar = elements.get(0);
+            if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
+                WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
+                        RuntimeScalarCache.scalarEmptyString, "uninitialized");
+            }
+            return new RuntimeScalar(scalar.toString());
+        }
+
+        // 2+ elements: evaluate the separator
         if (warnOnUndef && runtimeScalar.type == RuntimeScalarType.UNDEF) {
-            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
-                    RuntimeScalarCache.scalarEmptyString);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
         String delimiter = runtimeScalar.toString();
 
         boolean isByteString = runtimeScalar.type == BYTE_STRING || delimiter.isEmpty();
 
-        // String interpolation uses empty delimiter - don't warn about undef in that case
-        boolean isStringInterpolation = delimiter.isEmpty();
-
-        // Join the list into a string
+        // Join the elements
         StringBuilder sb = new StringBuilder();
-
-        Iterator<RuntimeScalar> iterator = list.iterator();
         boolean start = true;
-        while (iterator.hasNext()) {
+        for (RuntimeScalar scalar : elements) {
             if (start) {
                 start = false;
             } else {
                 sb.append(delimiter);
             }
-            RuntimeScalar scalar = iterator.next();
 
             // Check if value is undef and generate warning (but not for string interpolation)
             if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
-                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
-                        RuntimeScalarCache.scalarEmptyString);
+                WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
+                        RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
             isByteString = isByteString && scalar.type == BYTE_STRING;
@@ -613,7 +636,7 @@ public class StringOperators {
      * @return The joined string
      */
     public static RuntimeScalar joinForInterpolation(RuntimeScalar runtimeScalar, RuntimeBase list) {
-        return joinInternal(runtimeScalar, list, false);
+        return joinInternal(runtimeScalar, list, false, true);
     }
 
     /**

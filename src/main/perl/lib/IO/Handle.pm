@@ -53,7 +53,8 @@ our $has_java_backend = defined &IO::Handle::_sync;
 
 # Constructor
 sub new {
-    my $class = shift;
+    my $class = ref($_[0]) || $_[0] || "IO::Handle";
+    shift;
     my $fh = gensym;
     bless $fh, $class;
 }
@@ -407,7 +408,12 @@ sub blocking {
     return undef unless defined fileno($fh);
 
     if ($has_java_backend) {
-        return _blocking($fh, @_);
+        # Workaround: pass args explicitly to avoid @_ being evaluated
+        # in scalar context when calling Java-backed _blocking()
+        if (@_) {
+            return _blocking($fh, $_[0]);
+        }
+        return _blocking($fh);
     }
 
     # Fallback: blocking mode control not available
