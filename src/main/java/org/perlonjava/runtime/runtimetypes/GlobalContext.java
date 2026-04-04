@@ -77,11 +77,18 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::a");    // initialize $a to "undef"
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
         GlobalVariable.globalVariables.put("main::!", new ErrnoVariable());    // initialize $! with dualvar support
-        GlobalVariable.getGlobalVariable("main::,").set("");    // initialize $, to ""
+        // Initialize $, (output field separator) with special variable class
+        if (!GlobalVariable.globalVariables.containsKey("main::,")) {
+            var ofs = new OutputFieldSeparator();
+            ofs.set("");
+            GlobalVariable.globalVariables.put("main::,", ofs);
+        }
         GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
         // Only set $\ if it hasn't been set yet - prevents overwriting during re-entrant calls
         if (!GlobalVariable.globalVariables.containsKey("main::\\")) {
-            GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
+            var ors = new OutputRecordSeparator();
+            ors.set(compilerOptions.outputRecordSeparator);    // initialize $\
+            GlobalVariable.globalVariables.put("main::\\", ors);
         }
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         GlobalVariable.getGlobalVariable("main::?");
