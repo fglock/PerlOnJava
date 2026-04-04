@@ -244,6 +244,7 @@ public class Universal extends PerlModuleBase {
             case GLOBREFERENCE:
             case FORMAT:
             case REGEX:
+            case CODE:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     return getScalarBoolean(
@@ -253,6 +254,7 @@ public class Universal extends PerlModuleBase {
                                     || type == GLOBREFERENCE && argString.equals("GLOB")
                                     || type == FORMAT && argString.equals("FORMAT")
                                     || type == REGEX && argString.equals("Regexp")
+                                    || type == CODE && argString.equals("CODE")
                     ).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
