@@ -65,6 +65,7 @@ public class IOOperator {
                         Thread.interrupted();
                         return new RuntimeScalar(0);
                     }
+                    PerlSignalQueue.checkPendingSignals();
                 }
                 // Return 0 to indicate the sleep completed
                 return new RuntimeScalar(0);
@@ -108,7 +109,8 @@ public class IOOperator {
 
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
-            int nonSocketReady = 0;
+            // Track non-socket fds that need polling (pipes, files)
+            List<int[]> pollableFds = new ArrayList<>(); // [fd, wantRead, wantWrite]
 
             for (int fd = 0; fd < maxFd; fd++) {
                 boolean wantRead = isBitSet(rdata, fd);
@@ -121,7 +123,7 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        nonSocketReady++;
+                        pollableFds.add(new int[]{fd, wantRead ? 1 : 0, wantWrite ? 1 : 0});
                         continue;
                     }
 
@@ -152,68 +154,105 @@ public class IOOperator {
                         channelToFd.put(ch, fd);
                     }
                 } else {
-                    // Non-socket handles (files, pipes) are always ready
-                    nonSocketReady++;
+                    // Non-socket handles (pipes, files) — need polling
+                    pollableFds.add(new int[]{fd, wantRead ? 1 : 0, wantWrite ? 1 : 0});
                 }
             }
 
-            // Perform the select
-            if (!channelToFd.isEmpty()) {
-                if (!timeout.getDefinedBoolean()) {
-                    selector.select(); // block indefinitely
-                } else {
-                    double sec = timeout.getDouble();
-                    if (sec <= 0) {
-                        selector.selectNow(); // poll
-                    } else {
-                        selector.select((long) (sec * 1000));
-                    }
-                }
-            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
-                // No channels to monitor and no always-ready handles — sleep for timeout
+            // Determine timeout in millis
+            long deadlineNanos = Long.MAX_VALUE;
+            boolean hasTimeout = timeout.getDefinedBoolean();
+            if (hasTimeout) {
                 double sec = timeout.getDouble();
-                if (sec > 0) {
-                    long millis = (long) (sec * 1000);
-                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
-                    try {
-                        Thread.sleep(millis, nanos);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
+                deadlineNanos = System.nanoTime() + (long) (sec * 1_000_000_000L);
             }
 
-            // Build result bit vectors (same size as input)
+            // Poll loop: check pollable fds and NIO selector, respecting timeout
             byte[] rresult = new byte[rdata.length];
             byte[] wresult = new byte[wdata.length];
             byte[] eresult = new byte[edata.length];
             int totalReady = 0;
 
-            // Non-socket handles keep their bits set (always ready)
-            for (int fd = 0; fd < maxFd; fd++) {
-                RuntimeIO rio = RuntimeIO.getByFileno(fd);
-                if (rio == null) continue;
-                if (rio.ioHandle instanceof SocketIO) continue;
-                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
-                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
-            }
+            while (true) {
+                // Check pollable (non-socket) handles for readiness
+                totalReady = 0;
+                java.util.Arrays.fill(rresult, (byte) 0);
+                java.util.Arrays.fill(wresult, (byte) 0);
+                java.util.Arrays.fill(eresult, (byte) 0);
 
-            // Process selected keys
-            for (SelectionKey key : selector.selectedKeys()) {
-                Integer fd = channelToFd.get(key.channel());
-                if (fd == null) continue;
-                int readyOps = key.readyOps();
+                for (int[] entry : pollableFds) {
+                    int fd = entry[0];
+                    boolean wantRead = entry[1] != 0;
+                    boolean wantWrite = entry[2] != 0;
 
-                if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
-                        && isBitSet(rdata, fd)) {
-                    setBit(rresult, fd);
-                    totalReady++;
+                    RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                    if (rio == null) continue;
+
+                    if (wantRead) {
+                        boolean ready = false;
+                        if (rio.ioHandle instanceof InternalPipeHandle pipeHandle) {
+                            ready = pipeHandle.hasDataAvailable();
+                        } else {
+                            // Regular files are always read-ready
+                            ready = true;
+                        }
+                        if (ready) { setBit(rresult, fd); totalReady++; }
+                    }
+                    if (wantWrite) {
+                        boolean ready = false;
+                        if (rio.ioHandle instanceof InternalPipeHandle) {
+                            // Write end of pipe is generally always ready to accept writes
+                            ready = true;
+                        } else {
+                            // Regular files are always write-ready
+                            ready = true;
+                        }
+                        if (ready) { setBit(wresult, fd); totalReady++; }
+                    }
                 }
-                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
-                if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
-                    setBit(wresult, fd);
-                    totalReady++;
+
+                // Check NIO selector (non-blocking poll)
+                if (!channelToFd.isEmpty()) {
+                    selector.selectNow();
+                    for (SelectionKey key : selector.selectedKeys()) {
+                        Integer fd = channelToFd.get(key.channel());
+                        if (fd == null) continue;
+                        int readyOps = key.readyOps();
+
+                        if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
+                                && isBitSet(rdata, fd)) {
+                            setBit(rresult, fd);
+                            totalReady++;
+                        }
+                        if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
+                            setBit(wresult, fd);
+                            totalReady++;
+                        }
+                    }
+                    selector.selectedKeys().clear();
                 }
+
+                // If anything is ready, return immediately
+                if (totalReady > 0) break;
+
+                // Check timeout
+                if (hasTimeout && System.nanoTime() >= deadlineNanos) break;
+
+                // Nothing ready — sleep briefly and retry (poll interval: 10ms)
+                try {
+                    long remainNanos = hasTimeout ? deadlineNanos - System.nanoTime() : 10_000_000L;
+                    if (remainNanos <= 0) break;
+                    long sleepMs = Math.min(remainNanos / 1_000_000L, 10);
+                    if (sleepMs <= 0) sleepMs = 1;
+                    Thread.sleep(sleepMs);
+                } catch (InterruptedException e) {
+                    PerlSignalQueue.checkPendingSignals();
+                    Thread.interrupted();
+                    break;
+                }
+
+                // Check for pending signals and process DESTROYs
+                PerlSignalQueue.checkPendingSignals();
             }
 
             // Modify the original scalars in place
