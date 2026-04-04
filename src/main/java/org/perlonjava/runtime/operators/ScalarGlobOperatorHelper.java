@@ -486,6 +486,9 @@ public class ScalarGlobOperatorHelper {
 
         // Process each pattern
         for (String singlePattern : patterns) {
+            // Expand tilde to home directory
+            singlePattern = expandTilde(singlePattern);
+
             // Expand braces first
             List<String> expandedPatterns = expandBraces(singlePattern);
 
@@ -495,6 +498,36 @@ public class ScalarGlobOperatorHelper {
         }
 
         return results;
+    }
+
+    /**
+     * Expands a leading tilde (~) to the user's home directory.
+     * "~" becomes "/home/user", "~/foo" becomes "/home/user/foo".
+     */
+    private static String expandTilde(String pattern) {
+        if (pattern.equals("~") || pattern.startsWith("~/")) {
+            // Check Perl's %ENV{HOME} first (may be overridden by user),
+            // then fall back to Java system property
+            String home = null;
+            try {
+                org.perlonjava.runtime.runtimetypes.RuntimeHash envHash =
+                    org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash("main::ENV");
+                org.perlonjava.runtime.runtimetypes.RuntimeScalar envHome = envHash.get("HOME");
+                if (envHome != null && envHome.getDefinedBoolean()) {
+                    home = envHome.toString();
+                }
+            } catch (Exception e) {
+                // ignore - fall through to system property
+            }
+            if (home == null || home.isEmpty()) {
+                home = System.getProperty("user.home");
+            }
+            if (pattern.equals("~")) {
+                return home;
+            }
+            return home + pattern.substring(1);
+        }
+        return pattern;
     }
 
     /**

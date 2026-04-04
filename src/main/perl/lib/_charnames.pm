@@ -807,6 +807,15 @@ sub viacode ($arg) {
       return $algorithmic;
     }
 
+    # PerlOnJava: use Java's ICU4J for name lookup when unicore/Name.pl is unavailable
+    if (!$txt && defined &_charnames::_java_viacode) {
+      my $java_name = _charnames::_java_viacode(CORE::hex $hex);
+      if (defined $java_name && $java_name ne '') {
+        $viacode{$hex} = $java_name;
+        return $java_name;
+      }
+    }
+
     # Return the official name, if exists.  It's unclear to me (khw) at
     # this juncture if it is better to return a user-defined override, so
     # leaving it as is for now.

@@ -120,10 +120,10 @@ public class TieOperators {
         switch (variable.type) {
             case REFERENCE -> {
                 RuntimeScalar scalar = variable.scalarDeref();
-                if (scalar.type == TIED_SCALAR) {
+                if (scalar.type == TIED_SCALAR && scalar.value instanceof TieScalar tieScalar) {
                     TieScalar.tiedUntie(scalar);
                     TieScalar.tiedDestroy(scalar);
-                    RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
+                    RuntimeScalar previousValue = tieScalar.getPreviousValue();
                     scalar.type = previousValue.type;
                     scalar.value = previousValue.value;
                 }
@@ -187,7 +187,12 @@ public class TieOperators {
             case REFERENCE -> {
                 RuntimeScalar scalar = variable.scalarDeref();
                 if (scalar.type == TIED_SCALAR) {
-                    return ((TieScalar) scalar.value).getSelf();
+                    if (scalar.value instanceof TiedVariableBase tvb) {
+                        RuntimeScalar selfObj = tvb.getSelf();
+                        if (selfObj != null) {
+                            return selfObj;
+                        }
+                    }
                 }
                 // Handle tied($$glob_ref) where $$glob_ref evaluates to a GLOB wrapped in a reference.
                 // In Perl 5, tied($$fh) when the glob is tied via tie(*$fh, ...) returns the tied object.

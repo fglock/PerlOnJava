@@ -8,7 +8,12 @@ our $VERSION = '1.643';
 
 XSLoader::load( 'DBI' );
 
-# Wrap Java DBI methods with HandleError support.
+# DBI::db and DBI::st inherit from DBI so method dispatch works
+# when handles are blessed into subclass packages
+@DBI::db::ISA = ('DBI');
+@DBI::st::ISA = ('DBI');
+
+# Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
 # Since our Java methods just die with RaiseError, we wrap them in Perl
 # to intercept the die and call HandleError from Perl context (where
@@ -16,6 +21,8 @@ XSLoader::load( 'DBI' );
 {
     my $orig_prepare = \&DBI::prepare;
     my $orig_execute = \&DBI::execute;
+    my $orig_finish  = \&DBI::finish;
+    my $orig_disconnect = \&DBI::disconnect;
 
     no warnings 'redefine';
 
@@ -23,6 +30,15 @@ XSLoader::load( 'DBI' );
         my $result = eval { $orig_prepare->(@_) };
         if ($@) {
             return _handle_error($_[0], $@);
+        }
+        if ($result) {
+            my $dbh = $_[0];
+            my $sql = $_[1];
+            # Track statement handle count (Kids) and last statement
+            $dbh->{Kids} = ($dbh->{Kids} || 0) + 1;
+            $dbh->{Statement} = $sql;
+            # Link sth back to parent dbh
+            $result->{Database} = $dbh;
         }
         return $result;
     };
@@ -38,7 +54,35 @@ XSLoader::load( 'DBI' );
             }
             return _handle_error($sth_handle, $@);
         }
+        if ($result) {
+            my $sth = $_[0];
+            my $dbh = $sth->{Database};
+            if ($dbh) {
+                # Only mark as active for result-returning statements (SELECT etc.)
+                # DDL/DML statements (CREATE, INSERT, etc.) have NUM_OF_FIELDS == 0
+                if (($sth->{NUM_OF_FIELDS} || 0) > 0) {
+                    $dbh->{ActiveKids} = ($dbh->{ActiveKids} || 0) + 1;
+                    $sth->{Active} = 1;
+                }
+            }
+        }
         return $result;
+    };
+
+    *DBI::finish = sub {
+        my $sth = $_[0];
+        if ($sth->{Active} && $sth->{Database}) {
+            my $active = $sth->{Database}{ActiveKids} || 0;
+            $sth->{Database}{ActiveKids} = $active > 0 ? $active - 1 : 0;
+            $sth->{Active} = 0;
+        }
+        return $orig_finish->(@_);
+    };
+
+    *DBI::disconnect = sub {
+        my $dbh = $_[0];
+        $dbh->{Active} = 0;
+        return $orig_disconnect->(@_);
     };
 }
 
@@ -112,16 +156,32 @@ use constant {
 
 # DSN translation: convert Perl DBI DSN format to JDBC URL
 # This wraps the Java-side connect() to support dbi:Driver:... format
+# Handles attribute syntax: dbi:Driver(RaiseError=1):rest
 {
     no warnings 'redefine';
     my $orig_connect = \&connect;
     *connect = sub {
         my ($class, $dsn, $user, $pass, $attr) = @_;
         $dsn = '' unless defined $dsn;
+        $user = '' unless defined $user;
+        $pass = '' unless defined $pass;
+        $attr = {} unless ref $attr eq 'HASH';
         my $driver_name;
-        if ($dsn =~ /^dbi:(\w+):(.*)$/i) {
-            my ($driver, $rest) = ($1, $2);
+        my $dsn_rest;
+        if ($dsn =~ /^dbi:(\w+)(?:\(([^)]*)\))?:(.*)$/i) {
+            my ($driver, $dsn_attrs, $rest) = ($1, $2, $3);
             $driver_name = $driver;
+            $dsn_rest = $rest;
+
+            # Parse DSN-embedded attributes like (RaiseError=1,PrintError=0)
+            if (defined $dsn_attrs && length $dsn_attrs) {
+                for my $pair (split /,/, $dsn_attrs) {
+                    if ($pair =~ /^\s*(\w+)\s*=\s*(.*?)\s*$/) {
+                        $attr->{$1} = $2 unless exists $attr->{$1};
+                    }
+                }
+            }
+
             my $dbd_class = "DBD::$driver";
             eval "require $dbd_class";
             if ($dbd_class->can('_dsn_to_jdbc')) {
@@ -133,6 +193,12 @@ use constant {
             # Set Driver attribute so DBIx::Class can detect the driver
             # (e.g. $dbh->{Driver}{Name} returns "SQLite")
             $dbh->{Driver} = bless { Name => $driver_name }, 'DBI::dr';
+            # Initialize DBI handle tracking attributes
+            $dbh->{Kids} = 0;
+            $dbh->{ActiveKids} = 0;
+            $dbh->{Statement} = '';
+            # Set Name to DSN rest (after driver:), not the JDBC URL
+            $dbh->{Name} = $dsn_rest if defined $dsn_rest;
         }
         return $dbh;
     };

@@ -116,14 +116,12 @@ public class DBI extends PerlModuleBase {
         String jdbcUrl = args.size() > 1 ? args.get(1).toString() : "";
 
         return executeWithErrorHandling(() -> {
-            if (args.size() < 4) {
-                throw new IllegalStateException("Bad number of arguments for DBI->connect");
-            }
-
-            // Extract connection parameters from args
-            dbh.put("Username", new RuntimeScalar(args.get(2).toString()));
-            dbh.put("Password", new RuntimeScalar(args.get(3).toString()));
-            RuntimeScalar attr = args.get(4);   //  \%attr
+            // Extract connection parameters from args, defaulting user/pass to empty
+            String username = args.size() > 2 ? args.get(2).toString() : "";
+            String password = args.size() > 3 ? args.get(3).toString() : "";
+            dbh.put("Username", new RuntimeScalar(username));
+            dbh.put("Password", new RuntimeScalar(password));
+            RuntimeScalar attr = args.size() > 4 ? args.get(4) : new RuntimeScalar();
 
             // Set dbh attributes
             dbh.put("ReadOnly", scalarFalse);
@@ -157,7 +155,7 @@ public class DBI extends PerlModuleBase {
             dbh.put("Name", new RuntimeScalar(jdbcUrl));
 
             // Create blessed reference for Perl compatibility
-            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBI::db"));
             return dbhRef.getList();
         }, dbh, "connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed");
     }
@@ -212,6 +210,7 @@ public class DBI extends PerlModuleBase {
             // Create statement handle (sth) hash
             sth.put("statement", new RuntimeScalar(stmt));
             sth.put("sql", new RuntimeScalar(sql));
+            sth.put("Statement", new RuntimeScalar(sql));
             sth.put("Type", new RuntimeScalar("st"));
 
             // Add NUM_OF_FIELDS by getting metadata
@@ -237,7 +236,7 @@ public class DBI extends PerlModuleBase {
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
 
             dbh.get("sth").set(sthRef);
 
@@ -260,7 +259,7 @@ public class DBI extends PerlModuleBase {
             // Use database-specific SQL to retrieve the last auto-generated ID.
             // This is more reliable than getGeneratedKeys() because it works
             // regardless of which statement was most recently prepared/executed.
-            String jdbcUrl = finalDbh.get("Name").toString();
+            String jdbcUrl = conn.getMetaData().getURL();
             String sql;
             if (jdbcUrl.contains("sqlite")) {
                 sql = "SELECT last_insert_rowid()";
@@ -268,10 +267,8 @@ public class DBI extends PerlModuleBase {
                 sql = "SELECT LAST_INSERT_ID()";
             } else if (jdbcUrl.contains("postgresql")) {
                 sql = "SELECT lastval()";
-            } else if (jdbcUrl.contains("h2")) {
-                sql = "SELECT SCOPE_IDENTITY()";
             } else {
-                // Generic fallback: try getGeneratedKeys() on the last statement
+                // Generic fallback (H2, etc.): use getGeneratedKeys() on the last statement
                 RuntimeScalar sthRef = finalDbh.get("sth");
                 if (sthRef != null && RuntimeScalarType.isReference(sthRef)) {
                     RuntimeHash sth = sthRef.hashDeref();
@@ -657,7 +654,6 @@ public class DBI extends PerlModuleBase {
 
         return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
-            String name = dbh.get("Name").toString();
 
             conn.close();
             dbh.put("Active", new RuntimeScalar(false));
@@ -835,7 +831,7 @@ public class DBI extends PerlModuleBase {
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "table_info");
     }
@@ -853,7 +849,7 @@ public class DBI extends PerlModuleBase {
 
             // For SQLite, use PRAGMA table_info() to preserve original type case
             // (JDBC getColumns() uppercases type names like varchar -> VARCHAR)
-            String jdbcUrl = dbh.get("Name").toString();
+            String jdbcUrl = conn.getMetaData().getURL();
             if (jdbcUrl.contains("sqlite")) {
                 return columnInfoViaPragma(dbh, conn, table);
             }
@@ -868,7 +864,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getColumns(catalog, schema, table, column);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "column_info");
     }
@@ -956,7 +952,7 @@ public class DBI extends PerlModuleBase {
         result.put("has_resultset", scalarTrue);
         sth.put("execute_result", result.createReference());
 
-        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
         return sthRef.getList();
     }
 
@@ -978,7 +974,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "primary_key_info");
     }
@@ -1005,7 +1001,7 @@ public class DBI extends PerlModuleBase {
                     fkCatalog, fkSchema, fkTable);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "foreign_key_info");
     }
@@ -1019,7 +1015,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "type_info");
     }

@@ -80,8 +80,8 @@ public class ErrnoVariable extends RuntimeScalar {
     
     public ErrnoVariable() {
         super();
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = 0;
+        this.type = RuntimeScalarType.DUALVAR;
+        this.value = new DualVar(new RuntimeScalar(0), new RuntimeScalar(""));
     }
     
     /**
@@ -91,8 +91,8 @@ public class ErrnoVariable extends RuntimeScalar {
     public RuntimeScalar set(int value) {
         this.errno = value;
         this.message = ERRNO_MESSAGES.getOrDefault(value, value == 0 ? "" : "Unknown error " + value);
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = value;
+        this.type = RuntimeScalarType.DUALVAR;
+        this.value = new DualVar(new RuntimeScalar(value), new RuntimeScalar(this.message));
         return this;
     }
     
@@ -107,8 +107,8 @@ public class ErrnoVariable extends RuntimeScalar {
         if (value == null || value.isEmpty()) {
             this.errno = 0;
             this.message = "";
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = 0;
+            this.type = RuntimeScalarType.DUALVAR;
+            this.value = new DualVar(new RuntimeScalar(0), new RuntimeScalar(""));
             return this;
         }
         
@@ -117,8 +117,8 @@ public class ErrnoVariable extends RuntimeScalar {
         if (code != null) {
             this.errno = code;
             this.message = value;
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = code;
+            this.type = RuntimeScalarType.DUALVAR;
+            this.value = new DualVar(new RuntimeScalar(code), new RuntimeScalar(value));
             return this;
         }
         
@@ -130,8 +130,8 @@ public class ErrnoVariable extends RuntimeScalar {
             // Not a number and not a known message - store as message with errno 0
             this.errno = 0;
             this.message = value;
-            this.type = RuntimeScalarType.STRING;
-            this.value = value;
+            this.type = RuntimeScalarType.DUALVAR;
+            this.value = new DualVar(new RuntimeScalar(0), new RuntimeScalar(value));
             return this;
         }
     }
@@ -198,6 +198,28 @@ public class ErrnoVariable extends RuntimeScalar {
      */
     public void clear() {
         set(0);
+    }
+
+    // Stack to save errno/message during local()
+    private static final java.util.Stack<int[]> errnoStack = new java.util.Stack<>();
+    private static final java.util.Stack<String> messageStack = new java.util.Stack<>();
+
+    @Override
+    public void dynamicSaveState() {
+        errnoStack.push(new int[]{errno});
+        messageStack.push(message);
+        super.dynamicSaveState();
+    }
+
+    @Override
+    public void dynamicRestoreState() {
+        super.dynamicRestoreState();
+        if (!errnoStack.isEmpty()) {
+            errno = errnoStack.pop()[0];
+        }
+        if (!messageStack.isEmpty()) {
+            message = messageStack.pop();
+        }
     }
 }
 

@@ -20,7 +20,7 @@ our $VERSION = '1.88';
 
 # Export functionality
 use Exporter 'import';
-our @EXPORT_OK = qw(svref_2object perlstring CVf_ANON SVf_IOK SVf_NOK SVf_POK SVp_IOK SVp_NOK SVp_POK);
+our @EXPORT_OK = qw(svref_2object class perlstring CVf_ANON SVf_IOK SVf_NOK SVf_POK SVp_IOK SVp_NOK SVp_POK);
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
@@ -57,6 +57,16 @@ package B::SV {
         # JVM uses tracing GC, not reference counting.
         # Return 0 to indicate objects are always reclaimable.
         return 0;
+    }
+
+    sub RV {
+        my $self = shift;
+        my $r = $self->{ref};
+        if (ref($r) eq 'SCALAR' || ref($r) eq 'REF') {
+            return B::svref_2object($$r);
+        }
+        # For other reference types, return the referent wrapped
+        return B::SV->new($r);
     }
 
     sub FLAGS {
@@ -161,6 +171,16 @@ package B::CV {
         return B::OP->new();
     }
     
+    sub ROOT {
+        # PerlOnJava: all subs have bodies, return a real B::OP (not B::NULL)
+        return B::OP->new();
+    }
+
+    sub const_sv {
+        # Return a scalar ref to 0 so ${$cv->const_sv} is false
+        return \0;
+    }
+
     sub SV {
         my $self = shift;
         return B::SV->new($self->{ref});
@@ -221,7 +241,23 @@ package B::OP {
     }
 }
 
+package B::NULL {
+    our @ISA = ('B::OP');
+    sub new {
+        my $class = shift;
+        return bless {}, $class;
+    }
+}
+
 package B;
+
+# Utility: extract B:: class name from a B object
+sub class {
+    my $obj = shift;
+    my $name = ref $obj;
+    $name =~ s/^B:://;
+    return $name;
+}
 
 # Main introspection function
 sub svref_2object {

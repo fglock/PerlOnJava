@@ -39,21 +39,31 @@ public class TieScalar extends TiedVariableBase {
      * Called when a tied scalar goes out of scope (delegates to DESTROY if exists).
      */
     public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
-        return ((TieScalar) runtimeScalar.value).tieCallIfExists("DESTROY");
+        if (runtimeScalar.value instanceof TieScalar tieScalar) {
+            return tieScalar.tieCallIfExists("DESTROY");
+        }
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
      * Unties a tied scalar (delegates to UNTIE if exists).
      */
     public static RuntimeScalar tiedUntie(RuntimeScalar runtimeScalar) {
-        return ((TieScalar) runtimeScalar.value).tieCallIfExists("UNTIE");
+        if (runtimeScalar.value instanceof TieScalar tieScalar) {
+            return tieScalar.tieCallIfExists("UNTIE");
+        }
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
      * Fetches the value from a tied scalar (delegates to FETCH).
      */
     public RuntimeScalar tiedFetch() {
-        return tieCall("FETCH");
+        RuntimeScalar result = tieCall("FETCH");
+        // Cache the FETCH result so untie restores it (matches Perl 5 SV caching)
+        previousValue.type = result.type;
+        previousValue.value = result.value;
+        return result;
     }
 
     /**
