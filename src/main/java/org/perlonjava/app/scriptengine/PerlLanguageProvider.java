@@ -358,8 +358,6 @@ public class PerlLanguageProvider {
             try {
                 if (isMainProgram) {
                     runEndBlocks();
-                    // Global destruction phase: process any pending DESTROY calls
-                    DestroyManager.runGlobalDestruction();
                 }
             } catch (Throwable endException) {
                 RuntimeIO.closeAllHandles();

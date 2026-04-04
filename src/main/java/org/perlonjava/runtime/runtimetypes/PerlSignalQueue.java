@@ -30,18 +30,13 @@ public class PerlSignalQueue {
      * Lightweight signal check - called frequently at safe execution points.
      * If no signals are pending, this is just a volatile boolean read (~2 CPU cycles).
      * Signal handlers may throw PerlCompilerException which will propagate.
-     * Also checks for pending DESTROY calls from GC'd blessed objects.
      */
     public static void checkPendingSignals() {
         if (!hasPendingSignal) {
-            // Also check for pending DESTROY calls (fast volatile check)
-            DestroyManager.checkPendingDestroys();
             return;  // Fast path: no signals pending
         }
         // Slow path: process signals (rare)
         processSignalsImpl();
-        // Check DESTROY after signals
-        DestroyManager.checkPendingDestroys();
     }
 
     /**
