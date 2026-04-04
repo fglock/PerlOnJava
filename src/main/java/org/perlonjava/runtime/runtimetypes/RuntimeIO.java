@@ -308,6 +308,20 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Registers this RuntimeIO at a specific fd number (e.g. one already assigned
+     * by FileDescriptorTable for pipes). Advances nextFileno past this fd to
+     * prevent future collisions with assignFileno().
+     *
+     * @param fd the file descriptor number to register at
+     */
+    public void registerExternalFd(int fd) {
+        filenoToIO.put(fd, this);
+        ioToFileno.put(this, fd);
+        // Advance nextFileno past this fd to avoid collisions
+        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
+    }
+
+    /**
      * Unregisters this RuntimeIO from the fileno registry and returns
      * the fd to the recycle pool for reuse by future {@link #assignFileno()} calls.
      */

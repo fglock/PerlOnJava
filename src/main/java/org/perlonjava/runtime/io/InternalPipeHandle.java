@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.runtimetypes.ErrnoVariable;
 import org.perlonjava.runtime.runtimetypes.PerlSignalQueue;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
@@ -27,6 +28,13 @@ public class InternalPipeHandle implements IOHandle {
     private boolean isEOF = false;
     private final int fd;  // Simulated file descriptor number
     private boolean blocking = true;  // Default: blocking mode
+
+    /**
+     * Returns the file descriptor number assigned by FileDescriptorTable.
+     */
+    public int getFd() {
+        return fd;
+    }
 
     private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream, boolean isReader) {
         this.inputStream = inputStream;
@@ -256,7 +264,7 @@ public class InternalPipeHandle implements IOHandle {
                 int available = inputStream.available();
                 if (available <= 0) {
                     // Set $! to EAGAIN (Resource temporarily unavailable)
-                    getGlobalVariable("main::!").set(new RuntimeScalar(11)); // EAGAIN = 11 on most systems
+                    getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EAGAIN()));
                     return new RuntimeScalar(); // undef
                 }
                 // Data available - read it
