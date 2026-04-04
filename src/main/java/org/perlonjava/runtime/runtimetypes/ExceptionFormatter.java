@@ -20,10 +20,15 @@ public class ExceptionFormatter {
      *                                  CallerStack (already represents the call site), false if
      *                                  from JVM class (represents the sub's own location).
      *                                  This affects how caller() should skip frames.
+     * @param callerStackConsumed       The number of CallerStack entries consumed during
+     *                                  stack trace construction. This includes entries used for
+     *                                  both compile-time frames (use/BEGIN) and interpreter frames.
+     *                                  caller()'s fallback should skip this many entries.
      */
     public record StackTraceResult(
             ArrayList<ArrayList<String>> frames,
-            boolean firstFrameFromInterpreter
+            boolean firstFrameFromInterpreter,
+            int callerStackConsumed
     ) {
     }
 
@@ -271,10 +276,17 @@ public class ExceptionFormatter {
             }
         }
 
+        // Compute the total number of CallerStack entries consumed.
+        // This includes entries consumed by compile-time frame processing (callerStackIndex)
+        // and entries consumed by interpreter frame processing (interpreterFrameIndex).
+        // The outermost entry check below uses the effective index to avoid re-reading
+        // CallerStack entries already consumed by interpreter frame processing.
+        int effectiveCallerStackIndex = Math.max(callerStackIndex, interpreterFrameIndex);
+
         // Add the outermost artificial stack entry if different from last file
-        var callerInfo = CallerStack.peek(callerStackIndex);
+        var callerInfo = CallerStack.peek(effectiveCallerStackIndex);
         if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG ExceptionFormatter: CallerStack at index " + callerStackIndex + " = " + 
+            System.err.println("DEBUG ExceptionFormatter: CallerStack at index " + effectiveCallerStackIndex + " = " + 
                 (callerInfo != null ? "pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line() : "null"));
         }
         if (callerInfo != null && callerInfo.filename() != null && !lastFileName.equals(callerInfo.filename())) {
@@ -284,8 +296,9 @@ public class ExceptionFormatter {
             entry.add(String.valueOf(callerInfo.line()));
             entry.add(null);  // No subroutine name available
             stackTrace.add(entry);
+            effectiveCallerStackIndex++;
         }
-        return new StackTraceResult(stackTrace, firstFrameFromInterpreter);
+        return new StackTraceResult(stackTrace, firstFrameFromInterpreter, effectiveCallerStackIndex);
     }
 
 }
