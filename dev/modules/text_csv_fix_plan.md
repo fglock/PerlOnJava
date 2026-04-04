@@ -12,11 +12,11 @@ The CPAN **Text::CSV 2.06** is a thin wrapper that delegates to `Text::CSV_PP` (
 
 When a user installs Text::CSV via `jcpan`, the CPAN version (+ CSV_PP) should override the bundled version. The bundled version remains as a zero-install fallback for users who don't need the full CPAN feature set.
 
-## Current Test Results (after Phase 6)
+## Current Test Results (after Phase 7)
 
-**34/40 test programs pass.** ~31,000 subtests ran, ~72 actually failed.
+**39/40 test programs pass.** ~52,360 subtests ran, only **4** actually failed (all in t/70_rt.t).
 
-Passing: `00_pod` (skip), `01_is_pp`, `10_base`, `12_acc`, `15_flags`, `16_import`, `20_file`, `21_lexicalio`, `22_scalario`, `30_types`, `40_misc`, `41_null`, `45_eol`, `46_eol_si`, `55_combi`, `60_samples`, `65_allow`, `66_formula`, `67_emptrow`, `68_header`, `71_pp`, `71_strict`, `77_getall`, `78_fragment`, `79_callbacks`, `80_diag`, `81_subclass`, `90_csv`, `91_csv_cb`, `92_stream`, `csv_method`, `fields_containing_0`, `rt99774`, `50_utf8`.
+Passing (39/40): `00_pod` (skip), `01_is_pp`, `10_base`, `12_acc`, `15_flags`, `16_import`, `20_file`, `21_lexicalio`, `22_scalario`, `30_types`, `40_misc`, `41_null`, `45_eol`, `46_eol_si`, `47_comment`, `50_utf8`, `51_utf8`, `55_combi`, `60_samples`, `65_allow`, `66_formula`, `67_emptrow`, `68_header`, `71_pp`, `71_strict`, `75_hashref`, `76_magic`, `77_getall`, `78_fragment`, `79_callbacks`, `80_diag`, `81_subclass`, `85_util`, `90_csv`, `91_csv_cb`, `92_stream`, `csv_method`, `fields_containing_0`, `rt99774`.
 
 ## Fix Phases
 
@@ -133,7 +133,7 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
 
 ## Progress Tracking
 
-### Current Status: Phase 6 complete — 34/40 programs pass
+### Current Status: Phase 7 complete — 39/40 programs pass, 52356/52360 subtests pass (99.99%)
 
 ### Completed
 - [x] Phase 1: strict vars + use lib (2026-04-03)
@@ -193,25 +193,54 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
   - Fix: Copy `gotoLabelPcs` and `usesLocalization` to the new InterpretedCode in `withCapturedVars()`
   - Impact: t/45_eol.t: 6→0 (all 1182 pass); t/20_file.t: 108→109; t/21_lexicalio.t: 108→109; t/22_scalario.t: 135→136
   - Result: 34/40 programs pass (up from 30/40)
+- [x] Phase 7: BYTE_STRING preservation + Encode::decode orphan byte fix (2026-04-04)
+  - **BYTE_STRING preservation across string operations** (commit 886c6394e):
+    - RuntimeTransliterate.java: tr///r and in-place tr/// preserve BYTE_STRING type
+    - RuntimeSubstrLvalue.java: substr lvalue inherits BYTE_STRING from parent
+    - StringOperators.java: chomp, chop, lc, uc, lcfirst, ucfirst, reverse preserve BYTE_STRING
+    - RuntimeRegex.java: added lastMatchWasByteString flag propagated through regex match/substitution
+    - ScalarSpecialVariable.java: $1, $&, $`, $' inherit BYTE_STRING from last match
+    - RegexState.java: lastMatchWasByteString saved/restored with regex state
+    - Utf8.java: isUtf8() resolves ScalarSpecialVariable proxy types before checking
+    - Operator.java: repeat (x) and split preserve BYTE_STRING type
+  - **Encode::decode orphan byte fix** (commit b91457959):
+    - Encode.java: Added trimOrphanBytes() to drop incomplete trailing code units for UTF-16/32
+    - Root cause: Java's String(byte[], Charset) replaces orphan bytes with U+FFFD; Perl drops them
+    - Applied to decode(), encoding_decode(), and from_to()
+  - Impact:
+    - t/51_utf8.t: 132/167 → 207/207 (all pass, +75)
+    - t/85_util.t: 1424/1448 → 1448/1448 (all pass, +24)
+    - t/75_hashref.t: 58/58+44 skipped → 102/102 (all pass, previously skipped tests now run)
+    - t/76_magic.t: 43/44 → 44/44 (all pass)
+    - t/70_rt.t: 1/20469 → 20465/20469 (massive improvement, +20464)
+  - Result: 39/40 programs pass (up from 34/40)
 
-### Remaining Failures (6 test files)
+### Remaining Failures (1 test file, 4 subtests)
 
-| Test | ok/total | Failures | Category |
-|------|----------|----------|----------|
-| t/51_utf8.t | 132/167 | 35 | UTF-8 flag tracking |
-| t/70_rt.t | 1/20469 | crash | Undefined ARRAY ref early |
-| t/75_hashref.t | 58/58 | 0+44 not run | Scalar::Util::readonly |
-| t/76_magic.t | 43/44 | 1 | TieScalar issue |
+| Test | ok/total | Failures | Details |
+|------|----------|----------|---------|
+| t/70_rt.t | 20465/20469 | 4 | See below |
 
-### Next Steps (by impact)
+#### t/70_rt.t failure details
 
-1. **t/70_rt.t** (20469 tests) — Requires encoding-aware lexer (see design below). The source file contains raw `\xab`/`\xbb` bytes in regex patterns. Without Latin-1 source reading, these are corrupted to U+FFFD by UTF-8 decoding.
+| Test # | Description | Likely Cause |
+|--------|-------------|--------------|
+| 72 | IO::Handle triggered a warning | Missing warning when printing to invalid IO::Handle |
+| 84 | fields () | Incorrect field parsing with unusual quote/sep values (non-ASCII separator `\xab`/`\xbb` from `chr()`) |
+| 86 | fields () | Same as above |
+| 444 | first string correct in Perl | String content mismatch — likely a raw-bytes vs Unicode edge case |
 
-2. **t/51_utf8.t** (167 tests, 35 failures) — UTF-8 flag tracking issues: fields with wide characters (like `\x{060c}`) should get UTF-8 flag set by CSV_PP's internal detection, but currently don't. Also "Wide character in print" warnings missing.
+### Next Steps
 
-3. **t/76_magic.t** (44 tests, 1 failure) — TieScalar edge case.
+The Text::CSV module is effectively complete for practical use (**99.99% pass rate**). The 4 remaining failures are minor edge cases:
 
-4. **t/75_hashref.t** (58 tests, 0 actual failures but 44 not run) — Requires `Scalar::Util::readonly()` implementation.
+1. **Investigate t/70_rt.t #72** — IO::Handle warning on invalid filehandle. Low priority; may require implementing Perl's warning for printing to a closed/invalid handle.
+
+2. **Investigate t/70_rt.t #84/#86** — Non-ASCII separator/quote handling. These test `chr(0xab)`/`chr(0xbb)` as separator/quote characters. May be a byte vs character encoding edge case.
+
+3. **Investigate t/70_rt.t #444** — String content comparison failure. Need to check what the expected vs actual strings are.
+
+4. **Consider merging** — With 39/40 test files passing and 52356/52360 subtests passing, this branch is ready for review/merge. The remaining 4 failures are edge cases that can be addressed in follow-up work.
 
 ---
 
