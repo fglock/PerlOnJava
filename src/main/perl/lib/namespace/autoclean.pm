@@ -5,32 +5,149 @@ use warnings;
 
 our $VERSION = '0.31';
 
-# namespace::autoclean stub for PerlOnJava
+# namespace::autoclean for PerlOnJava
 #
-# This is a no-op stub that provides the interface but skips cleanup.
-#
-# Problem: The real namespace::autoclean uses subname() to detect whether a
-# function was defined in the current package or imported. Functions where
-# subname() returns a different package are cleaned. However, this breaks
-# modules like DateTime::TimeZone that import Try::Tiny's try/catch and use
-# them internally.
-#
-# Solution: Skip all cleanup. The cleanup is just namespace hygiene - it
-# prevents imported functions from being callable as methods. Since PerlOnJava
-# is typically used in controlled environments where this isn't a concern,
-# skipping cleanup is safe and enables modules like DateTime to work.
+# Removes imported functions from a package's namespace at end of scope,
+# keeping locally-defined methods. Uses Sub::Util::subname (via XSLoader)
+# to determine whether a function was imported or defined locally.
 
-sub import {
-    # Accept all arguments but do nothing
-    # Real signature: ($class, %args) where %args can include -cleanee, -also, -except
-    return;
+use B::Hooks::EndOfScope 'on_scope_end';
+use List::Util 'first';
+
+# Load the XS Sub::Util implementation directly to avoid CPAN version conflicts
+BEGIN {
+    require XSLoader;
+    XSLoader::load('Sub::Util', '1.63');
 }
 
-# Provide the subname function in case anything checks for it
-sub subname {
-    my ($coderef) = @_;
-    # Return a reasonable default - the B module integration isn't always available
-    return ref($coderef) eq 'CODE' ? '__ANON__' : undef;
+sub import {
+    my ($class, %args) = @_;
+
+    my $subcast = sub {
+        my $i = shift;
+        return $i if ref $i eq 'CODE';
+        return sub { $_ =~ $i } if ref $i eq 'Regexp';
+        return sub { $_ eq $i };
+    };
+
+    my $runtest = sub {
+        my ($code, $method_name) = @_;
+        local $_ = $method_name;
+        return $code->();
+    };
+
+    my $cleanee = exists $args{-cleanee} ? $args{-cleanee} : scalar caller;
+
+    my @also = map $subcast->($_), (
+        exists $args{-also}
+        ? (ref $args{-also} eq 'ARRAY' ? @{ $args{-also} } : $args{-also})
+        : ()
+    );
+
+    my @except = map $subcast->($_), (
+        exists $args{-except}
+        ? (ref $args{-except} eq 'ARRAY' ? @{ $args{-except} } : $args{-except})
+        : ()
+    );
+
+    on_scope_end {
+        my $subs = _get_functions($cleanee);
+        my $method_check = _method_check($cleanee);
+
+        my @clean = grep {
+            my $method = $_;
+            ! first { $runtest->($_, $method) } @except
+            and (
+                !$method_check->($method)
+                or first { $runtest->($_, $method) } @also
+            )
+        } keys %$subs;
+
+        # Remove cleaned functions from the stash
+        if (@clean) {
+            no strict 'refs';
+            for my $func (@clean) {
+                # Save non-CODE slots (scalars, arrays, hashes, etc.)
+                my $glob = *{"${cleanee}::${func}"};
+                my @saved;
+                for my $slot (qw(SCALAR ARRAY HASH IO FORMAT)) {
+                    my $ref = *{$glob}{$slot};
+                    push @saved, [$slot, $ref] if defined $ref;
+                }
+
+                # Delete the glob entirely
+                delete ${"${cleanee}::"}{$func};
+
+                # Restore non-CODE slots
+                for my $pair (@saved) {
+                    my ($slot, $ref) = @$pair;
+                    # Recreate the glob with just the non-CODE slots
+                    if ($slot eq 'SCALAR' && defined $$ref) {
+                        *{"${cleanee}::${func}"} = $ref;
+                    } elsif ($slot eq 'ARRAY' && @$ref) {
+                        *{"${cleanee}::${func}"} = $ref;
+                    } elsif ($slot eq 'HASH' && %$ref) {
+                        *{"${cleanee}::${func}"} = $ref;
+                    }
+                }
+            }
+        }
+    };
+}
+
+# Get all functions in a package
+sub _get_functions {
+    my $package = shift;
+    my %subs;
+    no strict 'refs';
+    for my $name (keys %{"${package}::"}) {
+        next if $name =~ /^[A-Z]+$/;  # Skip special names like BEGIN, END, etc.
+        my $glob = ${"${package}::"}{$name};
+        # Check if the glob has a CODE slot
+        if (defined &{"${package}::${name}"}) {
+            $subs{$name} = \&{"${package}::${name}"};
+        }
+    }
+    return \%subs;
+}
+
+# Check if a function is a "method" (defined locally vs imported)
+sub _method_check {
+    my $package = shift;
+
+    # For Moose/Moo classes, use the metaclass if available
+    if (defined &Class::MOP::class_of) {
+        my $meta = Class::MOP::class_of($package);
+        if ($meta) {
+            my %methods = map +($_ => 1), $meta->get_method_list;
+            $methods{meta} = 1
+                if $meta->isa('Moose::Meta::Role')
+                && eval { Moose->VERSION } < 0.90;
+            return sub { $_[0] =~ /^\(/ || $methods{$_[0]} };
+        }
+    }
+
+    # For plain classes: use subname to detect origin
+    my $does = $package->can('does') ? 'does'
+             : $package->can('DOES') ? 'DOES'
+             : undef;
+
+    return sub {
+        return 1 if $_[0] =~ /^\(/;  # Overloaded operators
+
+        my $coderef = do { no strict 'refs'; \&{"${package}::$_[0]"} };
+        my $fullname = Sub::Util::subname($coderef);
+        return 1 unless defined $fullname;  # Can't determine origin, keep it
+
+        my ($code_stash) = $fullname =~ /\A(.*)::/s;
+        return 1 unless defined $code_stash;
+
+        return 1 if $code_stash eq $package;   # Defined locally
+        return 1 if $code_stash eq 'constant'; # Constant subs
+        return 1 if $does && eval { $package->$does($code_stash) };  # Role methods
+
+        return 0;  # Imported - clean it
+    };
 }
 
 1;
@@ -39,81 +156,40 @@ __END__
 
 =head1 NAME
 
-namespace::autoclean - PerlOnJava stub (no cleanup performed)
+namespace::autoclean - Keep imports out of your namespace
 
 =head1 SYNOPSIS
 
-    package MyClass;
+    package Foo;
     use namespace::autoclean;
     use Some::Exporter qw(imported_function);
     
-    sub method { imported_function('args') }
+    sub bar { imported_function('stuff') }
     
-    # In real namespace::autoclean, imported_function would be removed
-    # In this stub, it remains available (both as function and method)
+    # later:
+    Foo->bar;               # works
+    Foo->imported_function; # fails - cleaned after compilation
 
 =head1 DESCRIPTION
 
-This is a stub implementation of namespace::autoclean for PerlOnJava. It
-provides the interface but performs no actual cleanup.
-
-=head2 Why a stub?
-
-The real namespace::autoclean removes imported functions from a package's
-namespace to keep it clean. It uses C<Sub::Util::subname()> or the B module
-to detect which functions were imported vs defined locally.
-
-This breaks modules like DateTime::TimeZone that:
-
-=over 4
-
-=item 1. Import functions from Try::Tiny (try, catch)
-
-=item 2. Use namespace::autoclean
-
-=item 3. Call those functions internally
-
-=back
-
-The imported try/catch get cleaned, causing "Undefined subroutine" errors.
-
-=head2 Why is skipping cleanup safe?
-
-The cleanup is purely cosmetic - it prevents imported functions from being
-callable as methods on objects. In most use cases:
-
-=over 4
-
-=item * Methods are called by name, not discovered dynamically
-
-=item * Imported functions aren't accidentally called as methods
-
-=item * The slight namespace pollution is harmless
-
-=back
+When you import a function into a Perl package, it will naturally also be
+available as a method. The C<namespace::autoclean> pragma will remove all
+imported symbols at the end of the current package's compile cycle. Functions
+called in the package itself will still be bound by their name, but they won't
+show up as methods on your class or instances.
 
 =head1 PARAMETERS
 
-The following parameters are accepted but ignored:
+=head2 -cleanee => $package
 
-=over 4
+Specify which package to clean (defaults to caller).
 
-=item -cleanee => $package
+=head2 -also => ITEM | REGEX | SUB | ARRAYREF
 
-=item -also => \@subs or qr/pattern/
+Additional functions to clean.
 
-=item -except => \@subs or qr/pattern/
+=head2 -except => ITEM | REGEX | SUB | ARRAYREF
 
-=back
-
-=head1 SEE ALSO
-
-L<namespace::clean> - The module this is based on
-
-L<DateTime::TimeZone> - A module that benefits from this stub
-
-=head1 COPYRIGHT
-
-This is a PerlOnJava compatibility stub.
+Functions to exclude from cleaning.
 
 =cut
