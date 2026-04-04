@@ -581,7 +581,8 @@ public class IdentifierParser {
                 if (token.type != LexerTokenType.IDENTIFIER && token.type != LexerTokenType.NUMBER &&
                         !token.text.equals("'") && !token.text.equals("::") && !token.text.equals("->") &&
                         token.type != LexerTokenType.EOF &&
-                        !(token.type == LexerTokenType.OPERATOR && (token.text.equals("}") || token.text.equals(";") || token.text.equals("=") || token.text.equals(")")))) {
+                        token.type != LexerTokenType.NEWLINE && token.type != LexerTokenType.WHITESPACE &&
+                        !(token.type == LexerTokenType.OPERATOR && (token.text.equals("}") || token.text.equals(";") || token.text.equals("=") || token.text.equals(")") || token.text.equals(",")))) {
                     // Bad name after ::
                     parser.throwCleanError("Bad name after " + variableName + "::");
                 }
