@@ -28,7 +28,7 @@ POE 1.370
 └── HTTP::Request/Response       PARTIAL (for Filter::HTTPD)
 ```
 
-## Bugs Fixed (Commits 743c26461 through 2777d2e46)
+## Bugs Fixed (Commits 743c26461 through f119640a5)
 
 ### Bug 1: `exists(&Errno::EINVAL)` fails in require context - FIXED
 
@@ -114,6 +114,18 @@ foreach my $session (@children) {
 **Root cause**: `DestroyManager.registerForDestroy` used `Math.abs(blessId)` as cache keys, but overloaded classes get negative blessIds (-1, -2, ...). `Math.abs(-1) = 1` collided with the first normal class ID, causing `getBlessStr` to return null and NPE in `normalizeVariableName`.
 
 **Fix**: Used original `blessId` directly as cache key (fixed before DestroyManager was removed).
+
+### Bug 14: 4-arg select() marks pipes as always ready - FIXED (commit f119640a5)
+
+**Root cause**: The NIO-based `selectWithNIO()` in `IOOperator.java` treated all non-socket handles (pipes, files) as unconditionally ready (`nonSocketReady++`). This caused `select()` to return immediately when monitoring POE's signal pipe, preventing the event loop from blocking for timer timeouts.
+
+**Impact**: POE's `ses_session.t` hung at test 7 (before `POE::Kernel->run()`) because the event loop never slept — `select()` always returned immediately with the pipe "ready", POE tried to read (got nothing), and looped back.
+
+**Fix**: Replaced the "always ready" assumption with proper polling:
+- `InternalPipeHandle.hasDataAvailable()` checks if data is actually in the pipe
+- Write ends and regular files remain always-ready
+- A poll loop with 10ms intervals respects the timeout parameter
+- Both pollable fds and NIO selector are checked each iteration
 
 ## Current Test Results (2026-04-04)
 
@@ -295,15 +307,22 @@ foreach my $session (@children) {
   - Fixed DestroyManager blessId collision with overloaded classes (Bug 13)
   - Removed DestroyManager — proxy reconstruction too fragile (close() corrupts proxy hash)
   - Updated dev/design/object_lifecycle.md with findings
+- [x] Phase 3.3: select() polling fix (2026-04-04, commit f119640a5)
+  - Fixed 4-arg select() to poll pipe readiness instead of marking always ready (Bug 14)
+  - select() now properly blocks when monitoring InternalPipeHandle with timeout
+  - POE event loop no longer busy-loops; timer-based events fire correctly
 
-### Key Findings (Phase 3.1-3.2)
+### Key Findings (Phase 3.1-3.3)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
   PerlOnJava's RuntimeArrayIterator was caching size at creation. This broke POE::Kernel->stop()
   which walks the session tree by pushing children during foreach.
-- **DESTROY proxy approach failed**: Java's Cleaner API requires that the cleaning action
-  must NOT reference the tracked object (or it's never GC'd). This forces proxy reconstruction,
-  which is inherently lossy — close() on proxy hash corrupts subsequent hash access.
-  Scope-based ref counting is the recommended future approach (see object_lifecycle.md).
+- **DESTROY not feasible via GC**: Java's Cleaner/GC-based DESTROY is unreliable across JVM
+  implementations and cannot guarantee deterministic timing. Perl's DESTROY depends on
+  reference counting (fires immediately when last reference drops). The JVM's tracing GC
+  is fundamentally incompatible with this semantic. DESTROY is not implemented.
+- **Impact on POE**: ses_session.t hangs because POE::Session::AnonEvent postbacks use
+  DESTROY to decrement session refcounts. Without DESTROY, the server session's refcount
+  never reaches zero, keeping the event loop alive. This is a known, documented limitation.
 - **Signal delivery**: `kill("ALRM", $$)` doesn't trigger %SIG handlers within POE event loop.
   ses_session.t tests 21-22 expect 5 SIGALRMs and 5 SIGPIPEs but get 0.
 - **require expression parsing**: `require File::Spec->catfile(...)` was parsed as
