@@ -25,11 +25,14 @@ public class InternalPipeHandle implements IOHandle {
     private final boolean isReader;
     private boolean isClosed = false;
     private boolean isEOF = false;
+    private final int fd;  // Simulated file descriptor number
+    private boolean blocking = true;  // Default: blocking mode
 
     private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream, boolean isReader) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.isReader = isReader;
+        this.fd = FileDescriptorTable.register(this);
     }
 
     /**
@@ -130,6 +133,7 @@ public class InternalPipeHandle implements IOHandle {
             }
             isClosed = true;
             isEOF = true;
+            FileDescriptorTable.unregister(fd);
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "Close pipe failed");
@@ -173,7 +177,27 @@ public class InternalPipeHandle implements IOHandle {
 
     @Override
     public RuntimeScalar fileno() {
-        return RuntimeScalarCache.scalarUndef; // Internal pipes don't have file descriptors
+        return new RuntimeScalar(fd);
+    }
+
+    /**
+     * Check if this pipe handle has data available for reading without blocking.
+     * Used by the 4-arg select() implementation.
+     *
+     * @return true if data is available, the pipe is at EOF, or this is a write-end pipe
+     */
+    public boolean hasDataAvailable() {
+        if (!isReader) {
+            return false; // Write end is not "read-ready"
+        }
+        if (isClosed || isEOF) {
+            return true; // EOF/closed counts as "ready" (read returns 0/empty)
+        }
+        try {
+            return inputStream.available() > 0;
+        } catch (IOException e) {
+            return true; // Error counts as ready (will be detected on actual read)
+        }
     }
 
     @Override
@@ -205,6 +229,17 @@ public class InternalPipeHandle implements IOHandle {
     }
 
     @Override
+    public boolean isBlocking() {
+        return blocking;
+    }
+
+    @Override
+    public boolean setBlocking(boolean blocking) {
+        this.blocking = blocking;
+        return true;
+    }
+
+    @Override
     public RuntimeScalar sysread(int length) {
         if (!isReader) {
             getGlobalVariable("main::!").set("Cannot sysread from write end of pipe");
@@ -216,7 +251,31 @@ public class InternalPipeHandle implements IOHandle {
         }
 
         try {
-            // Always use polling for pipe reads to allow signal interruption
+            // Non-blocking mode: return immediately if no data available
+            if (!blocking) {
+                int available = inputStream.available();
+                if (available <= 0) {
+                    // Set $! to EAGAIN (Resource temporarily unavailable)
+                    getGlobalVariable("main::!").set(new RuntimeScalar(11)); // EAGAIN = 11 on most systems
+                    return new RuntimeScalar(); // undef
+                }
+                // Data available - read it
+                byte[] buffer = new byte[Math.min(length, available)];
+                int bytesRead = inputStream.read(buffer);
+
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    return new RuntimeScalar("");
+                }
+
+                StringBuilder result = new StringBuilder(bytesRead);
+                for (int i = 0; i < bytesRead; i++) {
+                    result.append((char) (buffer[i] & 0xFF));
+                }
+                return new RuntimeScalar(result.toString());
+            }
+
+            // Blocking mode: poll with sleep for signal interruption
             while (true) {
                 if (Thread.interrupted()) {
                     PerlSignalQueue.checkPendingSignals();

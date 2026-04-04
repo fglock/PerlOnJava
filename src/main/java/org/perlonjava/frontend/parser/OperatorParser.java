@@ -1139,19 +1139,37 @@ public class OperatorParser {
             // This avoids treating module names like "Encode" as subroutine calls when a sub
             // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
             // But don't intercept quote-like operators like q(), qq(), etc.
+            //
+            // However, if the bareword is followed by `->`, it's a method call expression
+            // (e.g., `require File::Spec->catfile(...)`) and should be parsed as an expression.
+            int savedIndex = parser.tokenIndex;
             String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("require module name `" + moduleName + "`");
             if (moduleName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
 
-            // Check if module name starts with ::
-            if (moduleName.startsWith("::")) {
-                throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + moduleName + "\"", parser.ctx.errorUtil);
-            }
+            // Check if followed by `->` — if so, this is a method call, not a module name
+            LexerToken nextToken = peek(parser);
+            if (nextToken.type == OPERATOR && nextToken.text.equals("->")) {
+                // Restore position and fall through to expression parsing
+                parser.tokenIndex = savedIndex;
+                ListNode op = ListParser.parseZeroOrOneList(parser, 0);
+                if (op.elements.isEmpty()) {
+                    op.elements.add(scalarUnderscore(parser));
+                    operand = op;
+                } else {
+                    operand = op;
+                }
+            } else {
+                // Check if module name starts with ::
+                if (moduleName.startsWith("::")) {
+                    throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + moduleName + "\"", parser.ctx.errorUtil);
+                }
 
-            String fileName = NameNormalizer.moduleToFilename(moduleName);
-            operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
+                String fileName = NameNormalizer.moduleToFilename(moduleName);
+                operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
+            }
         } else {
             // Check for the specific pattern: :: followed by identifier (which is invalid for require)
             if (token.type == OPERATOR && token.text.equals("::")) {
