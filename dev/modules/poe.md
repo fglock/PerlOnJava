@@ -28,7 +28,7 @@ POE 1.370
 └── HTTP::Request/Response       PARTIAL (for Filter::HTTPD)
 ```
 
-## Bugs Fixed (Commits 743c26461, 76bf09bd9)
+## Bugs Fixed (Commits 743c26461 through 2777d2e46)
 
 ### Bug 1: `exists(&Errno::EINVAL)` fails in require context - FIXED
 
@@ -70,13 +70,20 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
 
 **Fix**: `RuntimeSigHash.java` constructor now pre-populates with POSIX signals plus platform-specific signals (macOS: EMT, INFO, IOT; Linux: CLD, STKFLT, PWR, IOT).
 
-### Bug 9: DESTROY not called for blessed objects - FIXED (commit 338bd4a90)
+### Bug 9: DESTROY not called for blessed objects - ATTEMPTED AND REVERTED
 
 **Root cause**: PerlOnJava had no DESTROY support. POE and many modules rely on DESTROY for cleanup.
 
-**Fix**: New `DestroyManager.java` using `java.lang.ref.Cleaner` to detect when blessed objects become GC-unreachable and schedule DESTROY calls on the main thread at safe points. Per-blessId cache makes the check O(1). Exceptions in DESTROY are caught and printed as "(in cleanup)" warnings matching Perl behavior.
+**Attempted fix**: `DestroyManager.java` using `java.lang.ref.Cleaner` to detect GC-unreachable blessed objects and reconstruct proxy objects for DESTROY calls.
 
-**Note**: DESTROY timing differs from Perl. Perl uses reference counting (DESTROY fires immediately when last reference drops). JVM uses tracing GC (DESTROY fires when GC collects, typically at global destruction). This is expected behavior and not fixable without a reference-counting layer.
+**Why it was reverted**: The proxy reconstruction approach is fundamentally fragile:
+- `close()` inside DESTROY on a proxy hash corrupts subsequent hash access (File::Temp "Not a HASH reference" at line 205)
+- Overloaded classes get negative blessIds; `Math.abs()` on cache keys collided with normal class IDs
+- Proxy can't fully replicate tied/magic/overloaded behavior of original objects
+
+**Current state**: DESTROY is not called for regular blessed objects. Tied variable DESTROY still works (uses scope-based cleanup via `TieScalar.tiedDestroy()`). See `dev/design/object_lifecycle.md` for future directions (scope-based ref counting recommended).
+
+**Impact on POE**: POE's core event loop works without DESTROY. The only affected feature is `POE::Session::AnonEvent` postback cleanup — sessions using postbacks won't get automatic refcount decrement. Workaround: explicit cleanup or patching POE.
 
 ### Bug 10: foreach doesn't see array modifications during iteration - FIXED (commit f79f9f6e8)
 
@@ -89,6 +96,24 @@ foreach my $session (@children) {
 ```
 
 **Fix**: Changed `hasNext()` to check `elements.size()` dynamically instead of using a cached value. This was the root cause of ses_session.t hanging after test 31 — nested child sessions were not being found during stop(), leaving orphan sessions keeping the event loop alive.
+
+### Bug 11: `require File::Spec->catfile(...)` parsed as module name - FIXED (commit 6b9fa2c30)
+
+**Root cause**: POE's `Resource/Clock.pm` does `require File::Spec->catfile(qw(Time HiRes.pm))`. The parser's `parseRequire` method consumed `File::Spec` as a bareword module name without checking for `->` method call after it.
+
+**Fix**: In `OperatorParser.java`, save parser position after consuming identifier, peek for `->`, and if found, restore position and fall through to expression parsing. This allows `Time::HiRes` to load correctly, making `monotime()` return float time instead of integer seconds.
+
+### Bug 12: Non-blocking I/O for pipe handles - FIXED (commit 6b9fa2c30)
+
+**Root cause**: POE's `_data_handle_condition` calls `IO::Handle::blocking($handle, 0)` on the signal pipe, but PerlOnJava's pipes didn't support non-blocking mode. `sysread` on empty non-blocking pipe blocked forever.
+
+**Fix**: Added `isBlocking()`/`setBlocking()` to `IOHandle` interface, implemented in `InternalPipeHandle` with EAGAIN (errno 11) return on empty non-blocking read. Fixed `IO::Handle::blocking()` Perl method to use `($fh, @args) = @_` instead of `shift` (which copied the glob and lost connection to the underlying handle).
+
+### Bug 13: DestroyManager crash with overloaded classes - FIXED (commit cddf4b121)
+
+**Root cause**: `DestroyManager.registerForDestroy` used `Math.abs(blessId)` as cache keys, but overloaded classes get negative blessIds (-1, -2, ...). `Math.abs(-1) = 1` collided with the first normal class ID, causing `getBlessStr` to return null and NPE in `normalizeVariableName`.
+
+**Fix**: Used original `blessId` directly as cache key (fixed before DestroyManager was removed).
 
 ## Current Test Results (2026-04-04)
 
@@ -262,26 +287,35 @@ foreach my $session (@children) {
   - Fixed foreach to see array modifications during iteration (Bug 10)
   - ses_session.t: 7/41 → 35/41 (28 new passing tests)
   - Event loop restart, session tree walk, postbacks/callbacks all work
+- [x] Phase 3.2: I/O and parser fixes (2026-04-04, commits 6b9fa2c30, cddf4b121, 2777d2e46)
+  - Fixed `require File::Spec->catfile(...)` parser bug (Bug 11) — enables Time::HiRes dynamic loading
+  - Added non-blocking I/O for pipe handles (Bug 12) — POE signal pipe no longer blocks
+  - Fixed IO::Handle::blocking() argument passing (shift vs @_ glob copy issue)
+  - Added 4-arg select() and FileDescriptorTable for I/O multiplexing
+  - Fixed DestroyManager blessId collision with overloaded classes (Bug 13)
+  - Removed DestroyManager — proxy reconstruction too fragile (close() corrupts proxy hash)
+  - Updated dev/design/object_lifecycle.md with findings
 
-### Key Findings (Phase 3.1)
+### Key Findings (Phase 3.1-3.2)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
   PerlOnJava's RuntimeArrayIterator was caching size at creation. This broke POE::Kernel->stop()
   which walks the session tree by pushing children during foreach.
-- **DESTROY timing**: GC-based DESTROY fires at global destruction, not immediately when last
-  reference drops. This is an expected JVM limitation. POE's DESTROY-count tests (30-31, 35-36)
-  will always show 0 at assertion time. Not fixable without reference counting.
+- **DESTROY proxy approach failed**: Java's Cleaner API requires that the cleaning action
+  must NOT reference the tracked object (or it's never GC'd). This forces proxy reconstruction,
+  which is inherently lossy — close() on proxy hash corrupts subsequent hash access.
+  Scope-based ref counting is the recommended future approach (see object_lifecycle.md).
 - **Signal delivery**: `kill("ALRM", $$)` doesn't trigger %SIG handlers within POE event loop.
   ses_session.t tests 21-22 expect 5 SIGALRMs and 5 SIGPIPEs but get 0.
-- **4-arg select()**: Returns 0 immediately when bit vectors are defined (line 67-69 of
-  IOOperator.java). Only the all-undef sleep path works. This affects pipe-based I/O
-  monitoring but POE's timer-based event loop still functions.
+- **require expression parsing**: `require File::Spec->catfile(...)` was parsed as
+  `require File::Spec` (module) instead of `require <expr>`. This prevented Time::HiRes
+  from loading, causing monotime() to return integer seconds instead of float.
 
 ### Next Steps (Phase 3 continued)
 1. Implement signal delivery: `kill("ALRM", $$)` should trigger %SIG{ALRM} handler
-2. Implement 4-arg select() for file descriptor monitoring (needed for k_selects.t, pipe I/O)
-3. Debug ses_nfa.t timeout (may be fixed by foreach fix)
-4. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
-5. Debug k_sig_child.t (5/15) — child signal handling
+2. Debug ses_nfa.t timeout (may be fixed by foreach fix)
+3. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
+4. Debug k_sig_child.t (5/15) — child signal handling
+5. Debug k_selects.t (5/17) — file handle watchers (4-arg select now implemented)
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
