@@ -43,13 +43,25 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
 
     @Override
     public void dynamicSaveState() {
-        // Create a new RuntimeScalar for the localized value
-        GlobalRuntimeScalar newLocal = new GlobalRuntimeScalar(fullName);
-
         // Save the current global reference
         var originalVariable = GlobalVariable.globalVariables.get(fullName);
 
         localizedStack.push(new SavedGlobalState(fullName, originalVariable));
+
+        // Create a new variable for the localized scope.
+        // For output separator variables, create the matching special type so that
+        // set() in the localized scope correctly updates the internal value that print reads.
+        // Also save the internal separator value for restoration.
+        RuntimeScalar newLocal;
+        if (originalVariable instanceof OutputRecordSeparator) {
+            OutputRecordSeparator.saveInternalORS();
+            newLocal = new OutputRecordSeparator();
+        } else if (originalVariable instanceof OutputFieldSeparator) {
+            OutputFieldSeparator.saveInternalOFS();
+            newLocal = new OutputFieldSeparator();
+        } else {
+            newLocal = new GlobalRuntimeScalar(fullName);
+        }
 
         // Replace this variable in the global symbol table with the new one
         GlobalVariable.globalVariables.put(fullName, newLocal);
@@ -71,6 +83,13 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             SavedGlobalState saved = localizedStack.peek();
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
+
+                // Restore the internal separator values if this was an output separator variable
+                if (saved.originalVariable instanceof OutputRecordSeparator) {
+                    OutputRecordSeparator.restoreInternalORS();
+                } else if (saved.originalVariable instanceof OutputFieldSeparator) {
+                    OutputFieldSeparator.restoreInternalOFS();
+                }
 
                 // Restore the original variable in the global symbol table
                 GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);

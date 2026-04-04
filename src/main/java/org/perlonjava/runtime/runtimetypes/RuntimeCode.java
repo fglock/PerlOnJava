@@ -1544,6 +1544,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
+        } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+            // Bare typeglob used as method invocant (e.g., *FH->print(...))
+            // Auto-bless to IO::File, same as GLOBREFERENCE
+            perlClassName = "IO::File";
+            ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
         } else if (!runtimeScalar.getDefinedBoolean()) {
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {

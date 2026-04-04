@@ -143,34 +143,34 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             RuntimeScalar result = switch (variableId) {
                 case CAPTURE -> {
                     String capture = RuntimeRegex.captureString(position);
-                    yield capture != null ? new RuntimeScalar(capture) : scalarUndef;
+                    yield capture != null ? makeRegexResultScalar(capture) : scalarUndef;
                 }
                 case MATCH -> {
                     String match = RuntimeRegex.matchString();
-                    yield match != null ? new RuntimeScalar(match) : scalarUndef;
+                    yield match != null ? makeRegexResultScalar(match) : scalarUndef;
                 }
                 case PREMATCH -> {
                     String prematch = RuntimeRegex.preMatchString();
-                    yield prematch != null ? new RuntimeScalar(prematch) : scalarUndef;
+                    yield prematch != null ? makeRegexResultScalar(prematch) : scalarUndef;
                 }
                 case POSTMATCH -> {
                     String postmatch = RuntimeRegex.postMatchString();
-                    yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
+                    yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
                 case P_PREMATCH -> {
                     if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
                     String prematch = RuntimeRegex.preMatchString();
-                    yield prematch != null ? new RuntimeScalar(prematch) : scalarUndef;
+                    yield prematch != null ? makeRegexResultScalar(prematch) : scalarUndef;
                 }
                 case P_MATCH -> {
                     if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
                     String match = RuntimeRegex.matchString();
-                    yield match != null ? new RuntimeScalar(match) : scalarUndef;
+                    yield match != null ? makeRegexResultScalar(match) : scalarUndef;
                 }
                 case P_POSTMATCH -> {
                     if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
                     String postmatch = RuntimeRegex.postMatchString();
-                    yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
+                    yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
                 case LAST_FH -> {
                     if (RuntimeIO.lastAccesseddHandle == null) {
@@ -452,6 +452,18 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             return;
         }
         super.dynamicRestoreState();
+    }
+
+    /**
+     * Creates a RuntimeScalar from a regex match result string, preserving
+     * BYTE_STRING type if the matched input was a byte string.
+     */
+    private static RuntimeScalar makeRegexResultScalar(String value) {
+        RuntimeScalar scalar = new RuntimeScalar(value);
+        if (RuntimeRegex.lastMatchWasByteString) {
+            scalar.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return scalar;
     }
 
     /**

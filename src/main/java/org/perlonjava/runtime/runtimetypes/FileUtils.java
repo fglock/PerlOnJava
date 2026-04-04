@@ -60,6 +60,15 @@ public class FileUtils {
             offset = 0;
         }
 
+        // Store raw bytes (after BOM removal) for DATA section extraction.
+        // In Perl 5, <DATA> reads raw bytes from the file. We preserve the original
+        // bytes so the DATA section can provide raw bytes instead of UTF-8-decoded content.
+        if (offset > 0) {
+            parsedArgs.rawCodeBytes = java.util.Arrays.copyOfRange(bytes, offset, bytes.length);
+        } else {
+            parsedArgs.rawCodeBytes = bytes;
+        }
+
         // For UTF-16 encodings, use a decoder that can handle malformed input
         // This is needed to preserve invalid surrogate sequences that Perl allows
         if (charset == StandardCharsets.UTF_16LE || charset == StandardCharsets.UTF_16BE) {
@@ -76,6 +85,14 @@ public class FileUtils {
                 // Fall back to default behavior
                 return new String(bytes, offset, bytes.length - offset, charset);
             }
+        }
+
+        // When source is detected as ISO-8859-1, mark it as byte string source.
+        // ISO-8859-1 is a 1:1 mapping from bytes to characters (0x00-0xFF),
+        // so the Java string already represents the raw byte values correctly.
+        // The string parser should not re-encode these characters to UTF-8.
+        if (charset == StandardCharsets.ISO_8859_1) {
+            parsedArgs.isByteStringSource = true;
         }
 
         // For UTF-8 and other charsets, use standard decoding
@@ -119,7 +136,43 @@ public class FileUtils {
             }
         }
 
+        // Check if file contains non-ASCII bytes that aren't valid UTF-8.
+        // Perl 5 without 'use utf8' treats source as Latin-1 (ISO-8859-1).
+        // We use UTF-8 for valid UTF-8 files (most modern files), but fall back
+        // to ISO-8859-1 for files with invalid UTF-8 sequences (legacy Latin-1 files).
+        if (hasNonAscii(bytes) && !isValidUtf8(bytes)) {
+            return StandardCharsets.ISO_8859_1;
+        }
+
         // Default to UTF-8
         return StandardCharsets.UTF_8;
+    }
+
+    /**
+     * Checks if the byte array contains any non-ASCII bytes (> 0x7F).
+     */
+    private static boolean hasNonAscii(byte[] bytes) {
+        for (byte b : bytes) {
+            if ((b & 0x80) != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Validates that the byte array is valid UTF-8.
+     * Uses Java's CharsetDecoder with strict error handling.
+     */
+    private static boolean isValidUtf8(byte[] bytes) {
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            decoder.decode(ByteBuffer.wrap(bytes));
+            return true;
+        } catch (CharacterCodingException e) {
+            return false;
+        }
     }
 }

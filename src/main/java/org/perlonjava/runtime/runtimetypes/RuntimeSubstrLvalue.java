@@ -37,7 +37,9 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         this.length = length;
         this.outOfBounds = false;
 
-        this.type = RuntimeScalarType.STRING;
+        // Preserve BYTE_STRING type from parent so substr() on byte strings stays byte
+        this.type = (parent.type == RuntimeScalarType.BYTE_STRING)
+                ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
         this.value = str;
     }
 

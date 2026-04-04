@@ -25,6 +25,7 @@ public class RegexState implements DynamicState {
     private final RuntimeRegex lastSuccessfulPattern;
     private final boolean lastMatchUsedPFlag;
     private final String[] lastCaptureGroups;
+    private final boolean lastMatchWasByteString;
 
     public RegexState() {
         this.globalMatcher = RuntimeRegex.globalMatcher;
@@ -39,6 +40,7 @@ public class RegexState implements DynamicState {
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
         this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
         this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
+        this.lastMatchWasByteString = RuntimeRegex.lastMatchWasByteString;
     }
 
     public static void save() {
@@ -67,5 +69,6 @@ public class RegexState implements DynamicState {
         RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
         RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
         RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
+        RuntimeRegex.lastMatchWasByteString = this.lastMatchWasByteString;
     }
 }

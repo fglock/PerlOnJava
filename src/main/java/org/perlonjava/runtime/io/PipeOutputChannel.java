@@ -226,10 +226,23 @@ public class PipeOutputChannel implements IOHandle {
         }
 
         try {
-            // String contains raw bytes (each char is a byte value 0-255)
-            byte[] bytes = new byte[string.length()];
+            // Check for wide characters (codepoint > 255)
+            // Perl 5 auto-upgrades to UTF-8 for wide chars
+            boolean hasWideChars = false;
             for (int i = 0; i < string.length(); i++) {
-                bytes[i] = (byte) string.charAt(i);
+                if (string.charAt(i) > 255) {
+                    hasWideChars = true;
+                    break;
+                }
+            }
+            byte[] bytes;
+            if (hasWideChars) {
+                bytes = string.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            } else {
+                bytes = new byte[string.length()];
+                for (int i = 0; i < string.length(); i++) {
+                    bytes[i] = (byte) string.charAt(i);
+                }
             }
 
             // Write raw bytes to process

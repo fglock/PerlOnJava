@@ -302,6 +302,11 @@ sub run_single_test {
     elsif ($test_file =~ m{^t/} && !-f 't/TestLib.pm') {
         $local_test_dir = 't';
     }
+    # For CPAN module tests with absolute paths (e.g., /path/to/Module-1.23/t/test.t)
+    # chdir to the module root so require "./t/util.pl" works
+    elsif ($test_file =~ m{^(/.*)/t/[^/]+\.t$}) {
+        $local_test_dir = $1;
+    }
 
     chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
 

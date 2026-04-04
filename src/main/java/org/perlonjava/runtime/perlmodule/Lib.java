@@ -51,11 +51,13 @@ public class Lib extends PerlModuleBase {
     public static RuntimeList useLib(RuntimeArray args, int ctx) {
         RuntimeArray INC = GlobalVariable.getGlobalArray("main::INC");
         initOrigInc(INC);
-        for (int i = 1; i < args.size(); i++) {
+        // Process in reverse order and unshift, matching Perl's lib.pm behavior:
+        // directories are prepended to @INC so they take precedence over existing paths
+        for (int i = args.size() - 1; i >= 1; i--) {
             String dir = args.get(i).toString();
-            if (!contains(INC, dir)) {
-                RuntimeArray.push(INC, new RuntimeScalar(dir));
-            }
+            // Remove any existing occurrence first (dedup), then prepend
+            INC.elements.removeIf(path -> path.toString().equals(dir));
+            RuntimeArray.unshift(INC, new RuntimeScalar(dir));
         }
         return new RuntimeList();
     }

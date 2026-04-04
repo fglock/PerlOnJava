@@ -127,7 +127,8 @@ package B::CV {
         $self->{_pkg_name} = 'main';
         $self->{_is_anon}  = 1;
         if ($self->{ref} && ref($self->{ref}) eq 'CODE') {
-            require Sub::Util;
+            eval { require Sub::Util };
+            return if $@;  # Sub::Util not available, use defaults
             my $fqn = Sub::Util::subname($self->{ref});
             if (defined $fqn && $fqn ne '__ANON__') {
                 # Split "Package::Name::subname" into package and name

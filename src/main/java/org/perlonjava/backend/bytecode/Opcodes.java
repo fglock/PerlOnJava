@@ -2157,6 +2157,38 @@ public class Opcodes {
      */
     public static final short DEFINED_CODE = 454;
 
+    /**
+     * Fold case (bytes mode): rd = StringOperators.fcBytes(rs)
+     */
+    public static final short FC_BYTES = 455;
+
+    /**
+     * Lowercase (bytes mode): rd = StringOperators.lcBytes(rs)
+     */
+    public static final short LC_BYTES = 456;
+
+    /**
+     * Uppercase (bytes mode): rd = StringOperators.ucBytes(rs)
+     */
+    public static final short UC_BYTES = 457;
+
+    /**
+     * Lowercase first (bytes mode): rd = StringOperators.lcfirstBytes(rs)
+     */
+    public static final short LCFIRST_BYTES = 458;
+
+    /**
+     * Uppercase first (bytes mode): rd = StringOperators.ucfirstBytes(rs)
+     */
+    public static final short UCFIRST_BYTES = 459;
+
+    /**
+     * Convert string to UTF-8 byte representation: rd = StringOperators.toBytesString(rs)
+     * Used when 'use bytes' is in effect before regex matching.
+     * Format: TO_BYTES_STRING rd rs
+     */
+    public static final short TO_BYTES_STRING = 460;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

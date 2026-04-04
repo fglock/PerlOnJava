@@ -231,6 +231,15 @@ public class Operator {
             }
         }
 
+        // Preserve BYTE_STRING type: if input was BYTE_STRING, all split results should be too
+        if (string.type == RuntimeScalarType.BYTE_STRING) {
+            for (RuntimeBase element : splitElements) {
+                if (element instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.STRING) {
+                    rs.type = RuntimeScalarType.BYTE_STRING;
+                }
+            }
+        }
+
         if (ctx == SCALAR) {
             int size = result.elements.size();
             return getScalarInt(size).getList();
@@ -468,15 +477,26 @@ public class Operator {
 
         if (ctx == SCALAR) {
             StringBuilder sb = new StringBuilder();
+            boolean isByteString = false;
             if (args.length == 0) {
                 // In scalar context, reverse($_) if no arguments are provided.
-                sb.append(GlobalVariable.getGlobalVariable("main::_"));
+                RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
+                sb.append(defaultVar);
+                isByteString = (defaultVar.type == RuntimeScalarType.BYTE_STRING);
             } else {
+                isByteString = true;
                 for (RuntimeBase arg : args) {
                     sb.append(arg.toString());
+                    if (arg instanceof RuntimeScalar rs && rs.type != RuntimeScalarType.BYTE_STRING) {
+                        isByteString = false;
+                    }
                 }
             }
-            return new RuntimeScalar(sb.reverse().toString());
+            RuntimeScalar result = new RuntimeScalar(sb.reverse().toString());
+            if (isByteString) {
+                result.type = RuntimeScalarType.BYTE_STRING;
+            }
+            return result;
         }
 
         // List context - avoid unnecessary copying to preserve element references
@@ -636,7 +656,11 @@ public class Operator {
                 // Convert to scalar (gets count for arrays, etc.)
                 scalarValue = value.scalar();
             }
-            return new RuntimeScalar(scalarValue.toString().repeat(Math.max(0, times)));
+            RuntimeScalar rv = new RuntimeScalar(scalarValue.toString().repeat(Math.max(0, times)));
+            if (scalarValue.type == RuntimeScalarType.BYTE_STRING) {
+                rv.type = RuntimeScalarType.BYTE_STRING;
+            }
+            return rv;
         } else {
             RuntimeList result = new RuntimeList();
             List<RuntimeBase> outElements = result.elements;

@@ -715,8 +715,8 @@ public class IOOperator {
         }
 
         StringBuilder sb = new StringBuilder();
-        String separator = getGlobalVariable("main::,").toString(); // fetch $,
-        String newline = getGlobalVariable("main::\\").toString();  // fetch $\
+        String separator = OutputFieldSeparator.getInternalOFS(); // fetch $, (internal copy, not affected by aliasing)
+        String newline = OutputRecordSeparator.getInternalORS();  // fetch $\ (internal copy, not affected by aliasing)
         boolean first = true;
 
         // Iterate through elements and append them with the separator

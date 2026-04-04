@@ -47,6 +47,9 @@ public class PerlIO extends PerlModuleBase {
     // Optional arguments like 'output', 'details' are accepted but currently ignored
     public static RuntimeList get_layers(RuntimeArray args, int ctx) {
         RuntimeIO fh = args.get(0).getRuntimeIO();
+        if (fh == null) {
+            throw new PerlCompilerException("Not a GLOB reference");
+        }
         if (fh instanceof TieHandle) {
             throw new PerlCompilerException("can't get_layers on tied handle");
         }

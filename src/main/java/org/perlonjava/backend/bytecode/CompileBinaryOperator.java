@@ -449,7 +449,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
 
-            int rightCtx = bytecodeCompiler.currentCallContext == RuntimeContextType.VOID ? RuntimeContextType.SCALAR : bytecodeCompiler.currentCallContext;
+            int rightCtx = bytecodeCompiler.currentCallContext;
             bytecodeCompiler.compileNode(node.right, rd, rightCtx);
             int rs2 = bytecodeCompiler.lastResultReg;
             if (rs2 >= 0) {
@@ -475,7 +475,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
 
-            int rightCtx = bytecodeCompiler.currentCallContext == RuntimeContextType.VOID ? RuntimeContextType.SCALAR : bytecodeCompiler.currentCallContext;
+            int rightCtx = bytecodeCompiler.currentCallContext;
             bytecodeCompiler.compileNode(node.right, rd, rightCtx);
             int rs2 = bytecodeCompiler.lastResultReg;
             if (rs2 >= 0) {
@@ -506,7 +506,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(definedReg);
             bytecodeCompiler.emitInt(0);
 
-            int rightCtx = bytecodeCompiler.currentCallContext == RuntimeContextType.VOID ? RuntimeContextType.SCALAR : bytecodeCompiler.currentCallContext;
+            int rightCtx = bytecodeCompiler.currentCallContext;
             bytecodeCompiler.compileNode(node.right, rd, rightCtx);
             int rs2 = bytecodeCompiler.lastResultReg;
             if (rs2 >= 0) {

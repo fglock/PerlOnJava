@@ -49,6 +49,7 @@ public class CompilerOptions implements Cloneable {
     public boolean processAndPrint = false; // For -p
     public boolean inPlaceEdit = false; // New field for in-place editing
     public String code = null;
+    public byte[] rawCodeBytes = null; // Raw file bytes (after BOM removal) for DATA section
     public boolean codeHasEncoding = false;
     public String fileName = null;
     public String inPlaceExtension = null; // For -i

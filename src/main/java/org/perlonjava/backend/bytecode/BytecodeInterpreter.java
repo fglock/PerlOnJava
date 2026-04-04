@@ -2479,8 +2479,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 String fullName = code.stringPool[nameIdx];
 
-                RuntimeHash hash = GlobalVariable.getGlobalHash(fullName);
-                DynamicVariableManager.pushLocalVariable(hash);
+                GlobalRuntimeHash.makeLocal(fullName);
                 registers[rd] = GlobalVariable.getGlobalHash(fullName);
                 return pc;
             }

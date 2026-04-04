@@ -77,11 +77,18 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::a");    // initialize $a to "undef"
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
         GlobalVariable.globalVariables.put("main::!", new ErrnoVariable());    // initialize $! with dualvar support
-        GlobalVariable.getGlobalVariable("main::,").set("");    // initialize $, to ""
+        // Initialize $, (output field separator) with special variable class
+        if (!GlobalVariable.globalVariables.containsKey("main::,")) {
+            var ofs = new OutputFieldSeparator();
+            ofs.set("");
+            GlobalVariable.globalVariables.put("main::,", ofs);
+        }
         GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
         // Only set $\ if it hasn't been set yet - prevents overwriting during re-entrant calls
         if (!GlobalVariable.globalVariables.containsKey("main::\\")) {
-            GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
+            var ors = new OutputRecordSeparator();
+            ors.set(compilerOptions.outputRecordSeparator);    // initialize $\
+            GlobalVariable.globalVariables.put("main::\\", ors);
         }
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         GlobalVariable.getGlobalVariable("main::?");
@@ -184,17 +191,17 @@ public class GlobalContext {
         System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
 
         /* Initialize @INC.
-           @INC Search order is:
-            - "-I" argument
-            - JAR_PERLLIB, the jar directory: src/main/perl/lib
-            - PERL5LIB env
-            - ~/.perlonjava/lib (user installed modules)
+           @INC Search order mirrors Perl 5's site_perl > core pattern:
+            - "-I" argument              (highest priority, user override)
+            - PERL5LIB env               (user environment override)
+            - ~/.perlonjava/lib          (user-installed CPAN modules, like site_perl)
+            - JAR_PERLLIB                (bundled modules, like core lib — lowest priority)
+           This allows CPAN-installed modules to override bundled ones.
            See also: https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
          */
         List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
-        inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib
         String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar("")).toString().split(":");
         for (String directory : directories) {
             if (!directory.isEmpty()) {
@@ -210,6 +217,7 @@ public class GlobalContext {
                 inc.add(new RuntimeScalar(userLib));
             }
         }
+        inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib (lowest priority)
 
         // Initialize %INC
         GlobalVariable.getGlobalHash("main::INC");

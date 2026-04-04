@@ -427,7 +427,9 @@ sub _create_install_makefile {
     
     # Build install commands for module/data/share files
     my @install_cmds;
+    my @blib_cmds;     # Also copy to blib/lib for test compatibility
     my %dirs_seen;
+    my %blib_dirs_seen;
     for my $src (sort keys %$pm) {
         my $dest = $pm->{$src};
         my $dir = dirname($dest);
@@ -435,6 +437,26 @@ sub _create_install_makefile {
             push @install_cmds, _shell_mkdir($dir);
         }
         push @install_cmds, _shell_cp($src, $dest);
+        
+        # Build blib/lib copy command: derive relative path from source
+        # Source is like "lib/Text/CSV.pm" -> blib dest is "blib/lib/Text/CSV.pm"
+        my $blib_rel;
+        if ($src =~ m{^lib/(.*)$}) {
+            $blib_rel = $1;
+        } elsif ($src =~ m{^blib/lib/(.*)$}) {
+            $blib_rel = $1;
+        } else {
+            # Flat layout: compute from dest path relative to INSTALL_BASE
+            ($blib_rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
+        }
+        if ($blib_rel) {
+            my $blib_dest = "blib/lib/$blib_rel";
+            my $blib_dir = dirname($blib_dest);
+            unless ($blib_dirs_seen{$blib_dir}++) {
+                push @blib_cmds, _shell_mkdir($blib_dir);
+            }
+            push @blib_cmds, _shell_cp($src, $blib_dest);
+        }
     }
     
     # Build install commands for scripts
@@ -452,6 +474,7 @@ sub _create_install_makefile {
     }
     
     my $install_cmds_str = join("\n", @install_cmds) || "\t\@true";
+    my $blib_cmds_str = join("\n", @blib_cmds) || "\t\@true";
     my $script_cmds_str = join("\n", @script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
     
@@ -501,12 +524,16 @@ INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_RF = rm -rf
 
-all: pm_to_blib pl_files config
+all: pm_to_blib pure_all pl_files config
 \t\@echo "PerlOnJava: $name v$version installed ($file_count files)"
 
 # Copy module and data files to installation directory
 pm_to_blib:
 $install_cmds_str
+
+# Copy to blib/lib for test compatibility (make test uses PERL5LIB=./blib/lib)
+pure_all:
+$blib_cmds_str
 
 # Process PL_FILES
 pl_files:
@@ -534,7 +561,7 @@ realclean: clean
 distclean: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
-.PHONY: all pm_to_blib pl_files config test install clean realclean distclean install_scripts
+.PHONY: all pm_to_blib pure_all pl_files config test install clean realclean distclean install_scripts
 MAKEFILE
 
     # Call MY::postamble if it exists (File::ShareDir::Install uses this)

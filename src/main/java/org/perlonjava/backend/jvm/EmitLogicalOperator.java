@@ -328,7 +328,7 @@ public class EmitLogicalOperator {
         Label endLabel = new Label();
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            evalTrace("EmitLogicalOperatorSimple VOID op=" + node.operator + " emit LHS in SCALAR; RHS in SCALAR");
+            evalTrace("EmitLogicalOperatorSimple VOID op=" + node.operator + " emit LHS in SCALAR; RHS in VOID");
 
             OperatorNode voidDeclaration = FindDeclarationVisitor.findOperator(node.right, "my");
             String voidSavedOperator = null;
@@ -348,8 +348,7 @@ public class EmitLogicalOperator {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", getBoolean, "()Z", false);
                 mv.visitJumpInsn(compareOpcode, endLabel);
 
-                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                mv.visitInsn(Opcodes.POP);
+                node.right.accept(emitterVisitor.with(RuntimeContextType.VOID));
 
                 mv.visitLabel(endLabel);
             } finally {
