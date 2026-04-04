@@ -120,6 +120,16 @@ public class EvalStringHandler {
             opts.fileName = sourceName + " (eval)";
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
+            // Add standard variables that are always available in eval context.
+            // This matches PerlLanguageProvider and evalStringWithInterpreter which
+            // ensure @_ is visible in the symbol table. Without this, named subs
+            // parsed inside this eval (e.g., eval q{sub foo { shift }}) would get
+            // an empty filteredSnapshot and fail strict vars checks for @_.
+            symbolTable.enterScope();
+            symbolTable.addVariable("this", "", null);
+            symbolTable.addVariable("@_", "our", null);
+            symbolTable.addVariable("wantarray", "", null);
+
             // Inherit lexical pragma flags from parent if available
             if (currentCode != null) {
                 int strictOpts = (siteStrictOptions >= 0) ? siteStrictOptions : currentCode.strictOptions;
