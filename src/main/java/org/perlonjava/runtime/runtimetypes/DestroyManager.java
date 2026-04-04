@@ -57,19 +57,18 @@ public class DestroyManager {
      */
     public static void registerForDestroy(RuntimeBase target, int blessId) {
         // Fast path: check cache first (ConcurrentHashMap.get is lock-free)
-        int cacheKey = Math.abs(blessId);
-        Boolean hasDestroy = destroyCache.get(cacheKey);
+        Boolean hasDestroy = destroyCache.get(blessId);
         if (hasDestroy != null) {
             if (!hasDestroy) {
                 return; // Class doesn't have DESTROY, skip
             }
         } else {
             // Cache miss: do the method resolution once
-            String className = NameNormalizer.getBlessStr(cacheKey);
+            String className = NameNormalizer.getBlessStr(blessId);
             RuntimeScalar destroyMethod = InheritanceResolver.findMethodInHierarchy(
                     "DESTROY", className, null, 0);
             boolean found = (destroyMethod != null);
-            destroyCache.put(cacheKey, found);
+            destroyCache.put(blessId, found);
             if (!found) {
                 return; // No DESTROY method, nothing to do
             }
@@ -115,7 +114,7 @@ public class DestroyManager {
      * @param blessId the bless ID of the class whose cache entry should be invalidated
      */
     public static void invalidateDestroyCache(int blessId) {
-        destroyCache.remove(Math.abs(blessId));
+        destroyCache.remove(blessId);
     }
 
     /**
@@ -152,7 +151,7 @@ public class DestroyManager {
         while ((task = pendingDestroys.poll()) != null) {
             hasPendingDestroy = !pendingDestroys.isEmpty();
             try {
-                String className = NameNormalizer.getBlessStr(Math.abs(task.blessId));
+                String className = NameNormalizer.getBlessStr(task.blessId);
                 RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
                         "DESTROY", className, null, 0);
                 if (method == null) {
