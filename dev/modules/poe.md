@@ -150,9 +150,71 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
 | 01_sysrw.t hangs | 1 driver test | Medium (I/O) |
 | signals.t 1 failure | 1 test | Low |
 
+### Event Loop Tests (t/30_loops/select/)
+
+| Test File | Result | Notes |
+|-----------|--------|-------|
+| 00_info.t | **PASS** (2/2) | |
+| all_errors.t | SKIP | |
+| k_alarms.t | **PASS** (37/37) | Alarm scheduling works |
+| k_aliases.t | **PASS** (20/20) | Session aliases work |
+| k_detach.t | **PASS** (9/9) | Session detach works |
+| k_run_returns.t | **PASS** (1/1) | |
+| k_selects.t | PARTIAL (5/17) | File handle watchers |
+| k_sig_child.t | PARTIAL (5/15) | Child signal handling |
+| k_signals.t | PARTIAL (2/8) | Signal delivery |
+| k_signals_rerun.t | FAIL | |
+| sbk_signal_init.t | **PASS** (1/1) | |
+| ses_nfa.t | TIMEOUT | NFA session hangs |
+| ses_session.t | PARTIAL (7/41) | Core session tests |
+| comp_tcp.t | FAIL (0/34) | TCP networking |
+| wheel_accept.t | FAIL | Socket accept |
+| wheel_run.t | FAIL (0/103) | Needs fork/IO::Pty |
+| wheel_sf_tcp.t | FAIL | Socket factory TCP |
+| wheel_sf_udp.t | FAIL | Socket factory UDP |
+| wheel_sf_unix.t | FAIL (0/12) | Socket factory Unix |
+| wheel_tail.t | FAIL | FollowTail |
+| z_kogman_sig_order.t | **PASS** (7/7) | |
+| z_merijn_sigchld_system.t | **PASS** (4/4) | |
+| z_steinert_signal_integrity.t | **PASS** (2/2) | |
+
+**Event loop summary**: 10/35 fully pass. Core event loop works (alarms, aliases, detach, signals).
+
+## Fix Plan - Remaining Phases
+
+### Phase 3: Event loop and session hardening (high impact)
+
+| Step | Target | Expected Impact | Difficulty |
+|------|--------|-----------------|------------|
+| 3.1 | Fix ses_session.t (7/41) | Core session lifecycle validation | Medium |
+| 3.2 | Fix k_selects.t (5/17) | File handle watcher support | Medium |
+| 3.3 | Fix k_signals.t (2/8) and k_sig_child.t (5/15) | Signal delivery | Medium |
+| 3.4 | Fix signals.t (45/46) | 1 remaining test failure | Low |
+| 3.5 | Fix Storable path for POE test runner | Unblocks 3 filter tests | Low |
+| 3.6 | Fix ses_nfa.t timeout | NFA state machine tests | Medium |
+
+### Phase 4: Extended features (lower priority)
+
+| Step | Target | Expected Impact | Difficulty |
+|------|--------|-----------------|------------|
+| 4.1 | HTTP::Message bytes handling | 03_http.t (58 more tests) | Medium |
+| 4.2 | Socket/network tests (comp_tcp, wheel_sf_*) | TCP/UDP networking | Hard |
+| 4.3 | IO::Poll stub | 4 poll-related loop tests | Medium |
+| 4.4 | File handle dup fix | 15_kernel_internal.t (5 tests) | Hard |
+| 4.5 | wheel_tail.t (FollowTail) | File watching | Medium |
+
+### Phase 5: JVM limitations (not fixable without major work)
+
+| Feature | Reason |
+|---------|--------|
+| wheel_run.t (103 tests) | Needs fork + IO::Pty (native) |
+| IO::Tty / IO::Pty | XS module, needs C compiler |
+| wheel_curses.t | Needs Curses (native) |
+| wheel_readline.t | Needs terminal |
+
 ## Progress Tracking
 
-### Current Status: Phase 2 complete
+### Current Status: Phase 3 in progress
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -167,13 +229,14 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
 - [x] Phase 2: Core fixes (2026-04-04, commit 76bf09bd9)
   - Fixed indirect object syntax with variable class + parenthesized args
   - Fixed ConcurrentModificationException in hash each() iteration
-  - 35/53 test files now fully pass
+  - 35/53 unit+resource tests fully pass, 10/35 event loop tests fully pass
 
-### Next Steps
-1. Investigate why Storable isn't found by POE's test runner
-2. Run 30_loops/select/ and 90_regression/ tests (event loop tests)
-3. Fix HTTP::Message bytes handling for 03_http.t
-4. Consider IO::Poll stub for additional loop tests
+### Next Steps (Phase 3)
+1. Debug ses_session.t to understand why 34/41 tests fail
+2. Debug k_selects.t to understand file handle watcher issues
+3. Debug k_signals.t / k_sig_child.t for signal delivery issues
+4. Fix signals.t 1 remaining failure
+5. Fix Storable path issue for POE test runner
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
