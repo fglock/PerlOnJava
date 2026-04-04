@@ -80,7 +80,8 @@ our @EXPORT_OK = qw(
     asctime clock ctime difftime gmtime localtime mktime strftime tzset
 
     # Signal functions
-    raise sigaction signal
+    raise sigaction sigprocmask signal
+    SigSet SigAction SIG_SETMASK
 
     # Locale functions
     localeconv setlocale
@@ -333,6 +334,46 @@ sub strerror { POSIX::_strerror(@_) }
 # Signal functions
 sub signal { POSIX::_signal(@_) }
 sub raise { POSIX::_raise(@_) }
+sub uname { POSIX::_uname(@_) }
+sub sigprocmask { POSIX::_sigprocmask(@_) }
+
+# Signal action - stub classes for JVM
+sub sigaction {
+    # On JVM, sigaction is a no-op stub
+    return 0;
+}
+
+# SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK constants
+use constant SIG_BLOCK   => 0;
+use constant SIG_UNBLOCK => 1;
+use constant SIG_SETMASK => 2;
+use constant SIG_DFL     => 0;
+use constant SIG_IGN     => 1;
+use constant SIG_ERR     => -1;
+
+# POSIX::SigSet - minimal stub for JVM
+package POSIX::SigSet;
+sub new {
+    my $class = shift;
+    return bless { signals => [@_] }, $class;
+}
+sub emptyset { $_[0]->{signals} = []; return 1; }
+sub fillset  { return 1; }
+sub addset   { push @{$_[0]->{signals}}, $_[1]; return 1; }
+sub delset   { $_[0]->{signals} = [grep { $_ != $_[1] } @{$_[0]->{signals}}]; return 1; }
+sub ismember { return grep { $_ == $_[1] } @{$_[0]->{signals}} ? 1 : 0; }
+
+# POSIX::SigAction - minimal stub for JVM
+package POSIX::SigAction;
+sub new {
+    my ($class, $handler, $sigset, $flags) = @_;
+    return bless { handler => $handler, sigset => $sigset, flags => $flags || 0 }, $class;
+}
+sub handler { return $_[0]->{handler} }
+sub mask    { return $_[0]->{sigset} }
+sub flags   { return $_[0]->{flags} }
+
+package POSIX;
 
 # Constants - generate subs for each constant that has Java implementation
 # Note: O_* and WNOHANG/WUNTRACED are defined with 'use constant' above
