@@ -1948,6 +1948,11 @@ public class IOOperator {
             RuntimeIO writerIO = new RuntimeIO();
             writerIO.ioHandle = writerHandle;
 
+            // Register RuntimeIOs using the same fd numbers as FileDescriptorTable
+            // so that select() can find them via RuntimeIO.getByFileno()
+            readerIO.registerExternalFd(readerHandle.getFd());
+            writerIO.registerExternalFd(writerHandle.getFd());
+
             // Handle autovivification for read handle (like open() does)
             RuntimeGlob readGlob = null;
             if ((readHandle.type == RuntimeScalarType.GLOB || readHandle.type == RuntimeScalarType.GLOBREFERENCE) 
