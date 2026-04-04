@@ -7,6 +7,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -296,6 +297,9 @@ public class Encode extends PerlModuleBase {
             Charset charset = getCharset(encodingName);
             // Convert the string to bytes assuming it contains raw octets
             byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+            // Trim orphan trailing bytes for fixed-width encodings
+            // (Perl's Encode silently drops incomplete trailing code units)
+            bytes = trimOrphanBytes(bytes, charset);
             String decoded = new String(bytes, charset);
 
             return new RuntimeScalar(decoded).getList();
@@ -438,6 +442,8 @@ public class Encode extends PerlModuleBase {
         try {
             Charset charset = getCharset(charsetName);
             byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+            // Trim orphan trailing bytes for fixed-width encodings
+            bytes = trimOrphanBytes(bytes, charset);
             String decoded = new String(bytes, charset);
             return new RuntimeScalar(decoded).getList();
         } catch (Exception e) {
@@ -482,6 +488,8 @@ public class Encode extends PerlModuleBase {
             byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
 
             // Decode from source encoding
+            // Trim orphan trailing bytes for fixed-width encodings
+            bytes = trimOrphanBytes(bytes, fromCharset);
             String decoded = new String(bytes, fromCharset);
 
             // Encode to target encoding
@@ -516,6 +524,29 @@ public class Encode extends PerlModuleBase {
             arg.type = BYTE_STRING;
         }
         return scalarUndef.getList();
+    }
+
+    /**
+     * Trims orphan trailing bytes for fixed-width encodings.
+     * Perl's Encode silently drops incomplete trailing code units
+     * (e.g., an odd byte at the end of UTF-16 input).
+     * Java's String(byte[], Charset) replaces them with U+FFFD instead.
+     */
+    private static byte[] trimOrphanBytes(byte[] bytes, Charset charset) {
+        String name = charset.name().toLowerCase();
+        int codeUnitSize = 0;
+        if (name.contains("utf-16") || name.contains("utf16") || name.contains("ucs-2") || name.contains("ucs2")) {
+            codeUnitSize = 2;
+        } else if (name.contains("utf-32") || name.contains("utf32")) {
+            codeUnitSize = 4;
+        }
+        if (codeUnitSize > 1) {
+            int remainder = bytes.length % codeUnitSize;
+            if (remainder != 0) {
+                bytes = Arrays.copyOf(bytes, bytes.length - remainder);
+            }
+        }
+        return bytes;
     }
 
     /**
