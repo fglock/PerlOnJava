@@ -1,12 +1,69 @@
 # Object Lifecycle: DESTROY and Weak References
 
 **Status**: Design Proposal (Technically Reviewed)  
-**Version**: 1.0  
+**Version**: 1.1  
 **Created**: 2026-03-26  
+**Updated**: 2026-04-04  
 **Supersedes**: destroy_support.md, weak_references.md, auto_close.md  
 **Related**: moo_support.md (Phases 30-31)
 
-## Overview
+## Current State (v1.1 — 2026-04-04)
+
+### Cleaner/Proxy DESTROY Removed
+
+An initial implementation using `java.lang.ref.Cleaner` + proxy object reconstruction
+was attempted and removed. The approach:
+
+1. At `bless()` time, registered objects with a `Cleaner` to detect GC
+2. Captured internal data (hash elements, array elements) separately from the object
+3. When the Cleaner fired, enqueued a `DestroyTask` with the captured data
+4. At safe points, reconstructed a proxy object and called DESTROY on it
+
+**Why it was removed — the proxy reconstruction is fundamentally fragile:**
+
+- **`close()` corruption**: Calling `close($self->{_fh})` inside DESTROY on a
+  proxy hash corrupts subsequent hash access (`$self->{_filename}` fails with
+  "Not a HASH reference"). The exact mechanism is unclear but reproducible.
+- **Overloaded class ID collision**: Classes with overloading get negative blessIds.
+  The original code used `Math.abs(blessId)` as cache keys, colliding with normal
+  class IDs (fixed before removal, but illustrates the fragility).
+- **Incomplete reconstruction**: The proxy can't fully replicate the original object's
+  behavior — tied variables, magic, overloaded operators, etc. may all behave
+  differently on a reconstructed wrapper vs. the original.
+
+**The fundamental Cleaner limitation**: The cleaning action **must not** hold a
+reference to the tracked object (or it's never GC'd and the Cleaner never fires).
+This forces proxy reconstruction, which is inherently lossy.
+
+### What Still Works
+
+- **Tied variable DESTROY**: Works via `TieScalar.tiedDestroy()` / `tieCallIfExists("DESTROY")`.
+  These use a different mechanism (scope-based cleanup) and are unaffected.
+- **`weaken()` / `isweak()`**: Stubs (no-op / always false). JVM's tracing GC handles
+  circular references natively, so the primary use case (breaking cycles) is unnecessary.
+
+### Impact on POE
+
+POE uses `POE::Session::AnonEvent::DESTROY` to decrement session reference counts
+when postback/callback coderefs go out of scope. Without DESTROY:
+- POE's core event loop (yield, delay, signals, timers, I/O) works correctly
+- Sessions that use postbacks won't get automatic cleanup
+- The event loop may not exit naturally (session refcount never reaches 0)
+- **Workaround**: Explicit `$postback = undef` or patching POE to use explicit
+  session management instead of relying on DESTROY timing
+
+### Future Directions
+
+If DESTROY support is revisited, the recommended approach is **scope-based cleanup**
+rather than GC-based proxy reconstruction:
+
+1. **Reference counting for blessed objects only** — track refcount at `bless()` time,
+   decrement on reassignment/undef, call DESTROY when count reaches 0
+2. **`Local.localTeardown()`** — deterministic cleanup at scope exit for lexical variables
+3. **`DeferBlock` integration** — leverage existing scope-exit callback infrastructure
+
+The GC-based Cleaner approach should only be used as a safety net for escaped
+references, not as the primary DESTROY mechanism.
 
 This document covers Perl's object lifecycle management in PerlOnJava:
 1. **DESTROY** - Destructor methods called when objects become unreachable
