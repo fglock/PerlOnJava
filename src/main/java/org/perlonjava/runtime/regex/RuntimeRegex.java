@@ -1088,14 +1088,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
                 RuntimeScalar rv = new RuntimeScalar(finalResult);
-                if (wasByteString) {
+                if (wasByteString && !containsWideChars(finalResult)) {
                     rv.type = RuntimeScalarType.BYTE_STRING;
                 }
                 return rv;
             } else {
                 // Save the modified string back to the original scalar
                 string.set(finalResult);
-                if (wasByteString) {
+                if (wasByteString && !containsWideChars(finalResult)) {
                     string.type = RuntimeScalarType.BYTE_STRING;
                 }
                 // Return the number of substitutions made
@@ -1626,6 +1626,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         return null;
+    }
+
+    /**
+     * Check if a string contains any characters with codepoints > 255.
+     * Used to determine if a substitution result should be upgraded from
+     * BYTE_STRING to STRING (e.g., when the replacement introduced wide characters).
+     */
+    private static boolean containsWideChars(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 255) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

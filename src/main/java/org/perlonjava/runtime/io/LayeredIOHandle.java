@@ -152,6 +152,7 @@ public class LayeredIOHandle implements IOHandle {
         // For encoding layers, use precise character-based reading
         StringBuilder result = new StringBuilder();
         int charactersNeeded = maxBytes;
+        boolean hasEncoding = hasEncodingLayer();
 
         // First, drain any previously buffered decoded characters
         if (decodedCharBuffer.length() > 0) {
@@ -165,9 +166,16 @@ public class LayeredIOHandle implements IOHandle {
         int safetyLimit = Math.max(maxBytes * 8, 64); // Prevent infinite loops
 
         while (charactersNeeded > 0 && safetyLimit > 0) {
-            // Read enough bytes to decode at least one character even for wide encodings.
-            // For UTF-32 (4 bytes/char), reading only `charactersNeeded` bytes is insufficient.
-            int bytesToRead = Math.min(128, Math.max(4, charactersNeeded * 4));
+            // For encoding layers (UTF-16, UTF-32), read extra bytes to ensure we decode
+            // at least enough characters. For non-encoding layers (e.g., :crlf), read
+            // conservatively to avoid over-consuming from the delegate (which would make
+            // tell() inaccurate since it reports the delegate's position).
+            int bytesToRead;
+            if (hasEncoding) {
+                bytesToRead = Math.min(128, Math.max(4, charactersNeeded * 4));
+            } else {
+                bytesToRead = Math.min(128, charactersNeeded);
+            }
             RuntimeScalar chunk = delegate.doRead(bytesToRead, charset);
             String chunkStr = chunk.toString();
 
