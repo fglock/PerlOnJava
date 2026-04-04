@@ -925,8 +925,9 @@ public class Variable {
                     if (TokenUtils.peek(parser).text.equals("}")) {
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-                        // Issue ambiguity warning if needed
-                        if (isAmbiguous) {
+                        // Issue ambiguity warning if needed (not inside string interpolation,
+                        // matching Perl 5 which only warns in code context)
+                        if (isAmbiguous && !isStringInterpolation) {
                             String accessType = "";
                             if (operand instanceof BinaryOperatorNode binOp) {
                                 if (binOp.operator.equals("[")) {

@@ -10,10 +10,12 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.frontend.parser.StringParser.parseRawString;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 
 public class ParseHeredoc {
     static OperatorNode parseHeredoc(Parser parser, String tokenText) {
@@ -212,6 +214,16 @@ public class ParseHeredoc {
             String string = content.toString();
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Final heredoc content: <<" + string + ">>");
 
+            // Without `use utf8`, convert Unicode chars back to UTF-8 byte values,
+            // matching Perl 5's treatment of source bytes as Latin-1/octets.
+            // Skip if source is already ISO-8859-1 (isByteStringSource) — chars already
+            // represent raw byte values and need no conversion.
+            if (!parser.ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                    && !parser.ctx.compilerOptions.isUnicodeSource
+                    && !parser.ctx.compilerOptions.isByteStringSource) {
+                string = convertToOctets(string);
+            }
+
             // Rewrite the heredoc node, according to the delimiter
             Node operand = null;
             switch (delimiter) {
@@ -292,5 +304,20 @@ public class ParseHeredoc {
             parser.getHeredocNodes().clear();
             parser.getHeredocNodes().addAll(savedHeredocNodes);
         }
+    }
+
+    /**
+     * Convert a Unicode string back to UTF-8 byte values.
+     * Without `use utf8`, Perl treats source bytes as Latin-1/octets.
+     * Since Java reads source files as UTF-8 and decodes multi-byte sequences
+     * into single characters, we need to reverse this for Perl compatibility.
+     */
+    private static String convertToOctets(String str) {
+        byte[] utf8Bytes = str.getBytes(StandardCharsets.UTF_8);
+        StringBuilder octetString = new StringBuilder(utf8Bytes.length);
+        for (byte b : utf8Bytes) {
+            octetString.append((char) (b & 0xFF));
+        }
+        return octetString.toString();
     }
 }
