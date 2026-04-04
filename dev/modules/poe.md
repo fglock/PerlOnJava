@@ -4,7 +4,7 @@
 
 **Module**: POE 1.370 (Perl Object Environment - event-driven multitasking framework)
 **Test command**: `./jcpan -t POE`
-**Status**: 35/53 test files fully pass (unit + resource tests), up from ~15/97
+**Status**: 35/53 unit+resource tests pass, ses_session.t 35/41 (up from 7/41), 10+/35 event loop tests pass
 
 ## Dependency Tree
 
@@ -63,6 +63,32 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
 ### Bug 7: Socket.pm missing IPPROTO constants - FIXED
 
 **Fix**: Added `IPPROTO_TCP`, `IPPROTO_UDP`, `IPPROTO_ICMP` to both `Socket.java` and `Socket.pm`.
+
+### Bug 8: %SIG not pre-populated with signal names - FIXED (commit ba803dc49)
+
+**Root cause**: `%SIG` was empty in PerlOnJava. Perl pre-populates it with signal names as keys (undef values). POE discovers available signals via `keys %SIG`.
+
+**Fix**: `RuntimeSigHash.java` constructor now pre-populates with POSIX signals plus platform-specific signals (macOS: EMT, INFO, IOT; Linux: CLD, STKFLT, PWR, IOT).
+
+### Bug 9: DESTROY not called for blessed objects - FIXED (commit 338bd4a90)
+
+**Root cause**: PerlOnJava had no DESTROY support. POE and many modules rely on DESTROY for cleanup.
+
+**Fix**: New `DestroyManager.java` using `java.lang.ref.Cleaner` to detect when blessed objects become GC-unreachable and schedule DESTROY calls on the main thread at safe points. Per-blessId cache makes the check O(1). Exceptions in DESTROY are caught and printed as "(in cleanup)" warnings matching Perl behavior.
+
+**Note**: DESTROY timing differs from Perl. Perl uses reference counting (DESTROY fires immediately when last reference drops). JVM uses tracing GC (DESTROY fires when GC collects, typically at global destruction). This is expected behavior and not fixable without a reference-counting layer.
+
+### Bug 10: foreach doesn't see array modifications during iteration - FIXED (commit f79f9f6e8)
+
+**Root cause**: `RuntimeArrayIterator` cached `elements.size()` at creation time. Perl's foreach sees elements pushed to the array during the loop body. This broke POE's `Kernel->stop()` which uses exactly this pattern to walk the session tree:
+```perl
+my @children = ($self);
+foreach my $session (@children) {
+    push @children, $self->_data_ses_get_children($session->ID);
+}
+```
+
+**Fix**: Changed `hasNext()` to check `elements.size()` dynamically instead of using a cached value. This was the root cause of ses_session.t hanging after test 31 — nested child sessions were not being found during stop(), leaving orphan sessions keeping the event loop alive.
 
 ## Current Test Results (2026-04-04)
 
@@ -166,7 +192,7 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
 | k_signals_rerun.t | FAIL | |
 | sbk_signal_init.t | **PASS** (1/1) | |
 | ses_nfa.t | TIMEOUT | NFA session hangs |
-| ses_session.t | PARTIAL (7/41) | Core session tests |
+| ses_session.t | PARTIAL (35/41) | Signal delivery + DESTROY timing |
 | comp_tcp.t | FAIL (0/34) | TCP networking |
 | wheel_accept.t | FAIL | Socket accept |
 | wheel_run.t | FAIL (0/103) | Needs fork/IO::Pty |
@@ -230,13 +256,32 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
   - Fixed indirect object syntax with variable class + parenthesized args
   - Fixed ConcurrentModificationException in hash each() iteration
   - 35/53 unit+resource tests fully pass, 10/35 event loop tests fully pass
+- [x] Phase 3.1: Session lifecycle fixes (2026-04-04, commits ba803dc49, 338bd4a90, f79f9f6e8)
+  - Pre-populated %SIG with OS signal names (Bug 8)
+  - Implemented DESTROY for blessed objects via java.lang.ref.Cleaner (Bug 9)
+  - Fixed foreach to see array modifications during iteration (Bug 10)
+  - ses_session.t: 7/41 → 35/41 (28 new passing tests)
+  - Event loop restart, session tree walk, postbacks/callbacks all work
 
-### Next Steps (Phase 3)
-1. Debug ses_session.t to understand why 34/41 tests fail
-2. Debug k_selects.t to understand file handle watcher issues
-3. Debug k_signals.t / k_sig_child.t for signal delivery issues
-4. Fix signals.t 1 remaining failure
-5. Fix Storable path issue for POE test runner
+### Key Findings (Phase 3.1)
+- **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
+  PerlOnJava's RuntimeArrayIterator was caching size at creation. This broke POE::Kernel->stop()
+  which walks the session tree by pushing children during foreach.
+- **DESTROY timing**: GC-based DESTROY fires at global destruction, not immediately when last
+  reference drops. This is an expected JVM limitation. POE's DESTROY-count tests (30-31, 35-36)
+  will always show 0 at assertion time. Not fixable without reference counting.
+- **Signal delivery**: `kill("ALRM", $$)` doesn't trigger %SIG handlers within POE event loop.
+  ses_session.t tests 21-22 expect 5 SIGALRMs and 5 SIGPIPEs but get 0.
+- **4-arg select()**: Returns 0 immediately when bit vectors are defined (line 67-69 of
+  IOOperator.java). Only the all-undef sleep path works. This affects pipe-based I/O
+  monitoring but POE's timer-based event loop still functions.
+
+### Next Steps (Phase 3 continued)
+1. Implement signal delivery: `kill("ALRM", $$)` should trigger %SIG{ALRM} handler
+2. Implement 4-arg select() for file descriptor monitoring (needed for k_selects.t, pipe I/O)
+3. Debug ses_nfa.t timeout (may be fixed by foreach fix)
+4. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
+5. Debug k_sig_child.t (5/15) — child signal handling
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
