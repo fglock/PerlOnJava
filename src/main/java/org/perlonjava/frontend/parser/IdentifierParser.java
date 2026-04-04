@@ -286,8 +286,12 @@ public class IdentifierParser {
                             hex = "\\x{" + Integer.toHexString(cp) + "}";
                         }
                     } else if (cp <= 255) {
-                        // Perl tends to report non-ASCII bytes as \x{..} in these contexts
-                        hex = "\\x{" + Integer.toHexString(cp) + "}";
+                        if (insideBraces) {
+                            // Inside ${...}, Perl formats non-ASCII bytes as \xNN (uppercase, no braces)
+                            hex = String.format("\\x%02X", cp);
+                        } else {
+                            hex = "\\x{" + Integer.toHexString(cp) + "}";
+                        }
                     } else {
                         hex = "\\x{" + Integer.toHexString(cp) + "}";
                     }
