@@ -180,8 +180,10 @@ public class ErrnoVariable extends RuntimeScalar {
     public RuntimeScalar set(int value) {
         this.errno = value;
         this.message = value == 0 ? "" : nativeStrerror(value);
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = value;
+        // Must use DUALVAR so reference dereference paths that read type/value
+        // directly will see the string message, not just the numeric errno.
+        this.type = RuntimeScalarType.DUALVAR;
+        this.value = new DualVar(new RuntimeScalar(value), new RuntimeScalar(this.message));
         return this;
     }
     
