@@ -318,6 +318,10 @@ public class Utf8 extends PerlModuleBase {
      * @return true if the scalar is a UTF-8 string (not BYTE_STRING), false otherwise.
      */
     public static boolean isUtf8(RuntimeScalar scalar) {
+        // Resolve proxy types (ScalarSpecialVariable for $1, $&, etc.)
+        if (scalar instanceof ScalarSpecialVariable sv) {
+            scalar = sv.getValueAsScalar();
+        }
         return scalar.type != BYTE_STRING;
     }
 

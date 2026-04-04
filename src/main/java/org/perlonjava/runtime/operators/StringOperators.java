@@ -87,6 +87,17 @@ public class StringOperators {
     }
 
     /**
+     * Helper to create a string result that preserves BYTE_STRING type from the source.
+     */
+    private static RuntimeScalar makeStringResult(String value, RuntimeScalar source) {
+        RuntimeScalar result = new RuntimeScalar(value);
+        if (source.type == RuntimeScalarType.BYTE_STRING) {
+            result.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return result;
+    }
+
+    /**
      * Escapes all non-alphanumeric characters in the string representation of the given {@link RuntimeScalar}.
      *
      * @param runtimeScalar the {@link RuntimeScalar} to be quoted
@@ -105,7 +116,7 @@ public class StringOperators {
                 quoted.append("\\").append(c);
             }
         }
-        return new RuntimeScalar(quoted.toString());
+        return makeStringResult(quoted.toString(), runtimeScalar);
     }
 
     /**
@@ -122,7 +133,7 @@ public class StringOperators {
         // NFKC would decompose these to their ASCII equivalents, which is wrong.
         str = CaseMap.fold().apply(str);
 
-        return new RuntimeScalar(str);
+        return makeStringResult(str, runtimeScalar);
     }
 
     /**
@@ -149,7 +160,7 @@ public class StringOperators {
     public static RuntimeScalar lc(RuntimeScalar runtimeScalar) {
         // Convert the string to lowercase using ICU4J for proper Unicode handling
         String str = UCharacter.toLowerCase(runtimeScalar.toString());
-        return new RuntimeScalar(str);
+        return makeStringResult(str, runtimeScalar);
     }
 
     /**
@@ -172,7 +183,7 @@ public class StringOperators {
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {
-            return new RuntimeScalar(str);
+            return makeStringResult(str, runtimeScalar);
         }
         // Get the first code point and convert it to lowercase using ICU4J
         int firstCodePoint = str.codePointAt(0);
@@ -180,7 +191,7 @@ public class StringOperators {
         String firstChar = str.substring(0, charCount);
         String rest = str.substring(charCount);
         String lowerFirst = UCharacter.toLowerCase(firstChar);
-        return new RuntimeScalar(lowerFirst + rest);
+        return makeStringResult(lowerFirst + rest, runtimeScalar);
     }
 
     /**
@@ -193,7 +204,7 @@ public class StringOperators {
     public static RuntimeScalar uc(RuntimeScalar runtimeScalar) {
         // Convert the string to uppercase using ICU4J for proper Unicode handling
         String str = UCharacter.toUpperCase(runtimeScalar.toString());
-        return new RuntimeScalar(str);
+        return makeStringResult(str, runtimeScalar);
     }
 
     /**
@@ -224,7 +235,7 @@ public class StringOperators {
                 titleFirst = String.valueOf(Character.toChars(titleCodePoint));
             }
         }
-        return new RuntimeScalar(titleFirst + rest);
+        return makeStringResult(titleFirst + rest, runtimeScalar);
     }
 
     /**
@@ -451,7 +462,11 @@ public class StringOperators {
 
         // Always update the original scalar if we modified the string
         if (!str.equals(originalStr)) {
+            boolean wasByteString = runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
             runtimeScalar.set(str);
+            if (wasByteString) {
+                runtimeScalar.type = RuntimeScalarType.BYTE_STRING;
+            }
         }
 
         return getScalarInt(charsRemoved);
@@ -470,7 +485,11 @@ public class StringOperators {
         String lastChar = str.substring(str.length() - lastCharSize);
         String remainingStr = str.substring(0, str.length() - lastCharSize);
 
+        boolean wasByteString = runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
         runtimeScalar.set(remainingStr);
+        if (wasByteString) {
+            runtimeScalar.type = RuntimeScalarType.BYTE_STRING;
+        }
         return new RuntimeScalar(lastChar);
     }
 

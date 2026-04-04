@@ -65,6 +65,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
+    // Track whether the last successful match was on a BYTE_STRING input,
+    // so that captures ($1, $2, $&, etc.) preserve BYTE_STRING type.
+    public static boolean lastMatchWasByteString = false;
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;
     // Compiled regex pattern for Unicode strings (Unicode \w, \d)
@@ -646,6 +649,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found = true;
+                lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
                 int captureCount = matcher.groupCount();
 
                 // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
@@ -691,7 +695,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                     // Global match and no captures, in list context return the matched string
                     String matchedStr = regex.hasBackslashK ? lastMatchedString : matcher.group(0);
-                    matchedGroups.add(new RuntimeScalar(matchedStr));
+                    matchedGroups.add(makeMatchResultScalar(matchedStr));
                 } else {
                     // save captures in return list if needed
                     if (ctx == RuntimeContextType.LIST) {
@@ -704,13 +708,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                 // because Java creates separate groups for each alternative
                                 // but Perl reuses group numbers across alternatives
                                 if (matchedStr != null) {
-                                    matchedGroups.add(new RuntimeScalar(matchedStr));
+                                    matchedGroups.add(makeMatchResultScalar(matchedStr));
                                 }
                             } else {
                                 // Include undef for groups that didn't participate in the match
                                 // This is important for patterns like m{^(.*/)?(.*)}s where
                                 // the optional group returns undef when it doesn't match
-                                matchedGroups.add(new RuntimeScalar(matchedStr));
+                                matchedGroups.add(makeMatchResultScalar(matchedStr));
                             }
                         }
                     }
@@ -990,6 +994,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         try {
             while (matcher.find()) {
                 found++;
+                lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
 
                 // Initialize $1, $2, @+, @- only when we have a match
                 globalMatcher = matcher;
@@ -1074,6 +1079,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (found > 0) {
             String finalResult = resultBuffer.toString();
+            boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
 
             // Store as last successful pattern for empty pattern reuse
             lastMatchUsedPFlag = regex.hasPreservesMatch;
@@ -1081,10 +1087,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
-                return new RuntimeScalar(finalResult);
+                RuntimeScalar rv = new RuntimeScalar(finalResult);
+                if (wasByteString) {
+                    rv.type = RuntimeScalarType.BYTE_STRING;
+                }
+                return rv;
             } else {
                 // Save the modified string back to the original scalar
                 string.set(finalResult);
+                if (wasByteString) {
+                    string.type = RuntimeScalarType.BYTE_STRING;
+                }
                 // Return the number of substitutions made
                 return RuntimeScalarCache.getScalarInt(found);
             }
@@ -1179,6 +1192,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return null;
         }
         return lastCaptureGroups[lastCaptureGroups.length - 1];
+    }
+
+    /**
+     * Creates a RuntimeScalar from a regex match result string, preserving
+     * BYTE_STRING type if the matched input was a byte string.
+     */
+    public static RuntimeScalar makeMatchResultScalar(String value) {
+        if (value == null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        RuntimeScalar scalar = new RuntimeScalar(value);
+        if (lastMatchWasByteString) {
+            scalar.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return scalar;
     }
 
     public static RuntimeScalar matcherStart(int group) {
