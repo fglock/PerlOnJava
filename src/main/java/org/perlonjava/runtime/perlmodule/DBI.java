@@ -259,7 +259,7 @@ public class DBI extends PerlModuleBase {
             // Use database-specific SQL to retrieve the last auto-generated ID.
             // This is more reliable than getGeneratedKeys() because it works
             // regardless of which statement was most recently prepared/executed.
-            String jdbcUrl = finalDbh.get("Name").toString();
+            String jdbcUrl = conn.getMetaData().getURL();
             String sql;
             if (jdbcUrl.contains("sqlite")) {
                 sql = "SELECT last_insert_rowid()";
@@ -267,10 +267,8 @@ public class DBI extends PerlModuleBase {
                 sql = "SELECT LAST_INSERT_ID()";
             } else if (jdbcUrl.contains("postgresql")) {
                 sql = "SELECT lastval()";
-            } else if (jdbcUrl.contains("h2")) {
-                sql = "SELECT SCOPE_IDENTITY()";
             } else {
-                // Generic fallback: try getGeneratedKeys() on the last statement
+                // Generic fallback (H2, etc.): use getGeneratedKeys() on the last statement
                 RuntimeScalar sthRef = finalDbh.get("sth");
                 if (sthRef != null && RuntimeScalarType.isReference(sthRef)) {
                     RuntimeHash sth = sthRef.hashDeref();
@@ -656,7 +654,6 @@ public class DBI extends PerlModuleBase {
 
         return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
-            String name = dbh.get("Name").toString();
 
             conn.close();
             dbh.put("Active", new RuntimeScalar(false));
@@ -852,7 +849,7 @@ public class DBI extends PerlModuleBase {
 
             // For SQLite, use PRAGMA table_info() to preserve original type case
             // (JDBC getColumns() uppercases type names like varchar -> VARCHAR)
-            String jdbcUrl = dbh.get("Name").toString();
+            String jdbcUrl = conn.getMetaData().getURL();
             if (jdbcUrl.contains("sqlite")) {
                 return columnInfoViaPragma(dbh, conn, table);
             }
