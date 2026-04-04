@@ -32,7 +32,11 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
-            ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
+            RuntimeBase target = (RuntimeBase) runtimeScalar.value;
+            int blessId = NameNormalizer.getBlessId(str);
+            target.setBlessId(blessId);
+            // Register for DESTROY if the class has a DESTROY method
+            DestroyManager.registerForDestroy(target, blessId);
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
         }
