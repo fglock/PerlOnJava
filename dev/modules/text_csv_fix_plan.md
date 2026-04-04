@@ -12,11 +12,11 @@ The CPAN **Text::CSV 2.06** is a thin wrapper that delegates to `Text::CSV_PP` (
 
 When a user installs Text::CSV via `jcpan`, the CPAN version (+ CSV_PP) should override the bundled version. The bundled version remains as a zero-install fallback for users who don't need the full CPAN feature set.
 
-## Current Test Results (after Phase 4)
+## Current Test Results (after Phase 6)
 
-**27/40 test programs pass.** ~30,700 subtests ran, 114 actually failed.
+**34/40 test programs pass.** ~31,000 subtests ran, ~72 actually failed.
 
-Passing: `00_pod` (skip), `01_is_pp`, `10_base`, `12_acc`, `15_flags`, `16_import`, `30_types`, `40_misc`, `41_null`, `55_combi`, `60_samples`, `65_allow`, `66_formula`, `67_emptrow`, `68_header`, `71_pp`, `71_strict`, `77_getall`, `78_fragment`, `79_callbacks`, `80_diag`, `81_subclass`, `90_csv`, `92_stream`, `csv_method`, `fields_containing_0`, `rt99774`.
+Passing: `00_pod` (skip), `01_is_pp`, `10_base`, `12_acc`, `15_flags`, `16_import`, `20_file`, `21_lexicalio`, `22_scalario`, `30_types`, `40_misc`, `41_null`, `45_eol`, `46_eol_si`, `55_combi`, `60_samples`, `65_allow`, `66_formula`, `67_emptrow`, `68_header`, `71_pp`, `71_strict`, `77_getall`, `78_fragment`, `79_callbacks`, `80_diag`, `81_subclass`, `90_csv`, `91_csv_cb`, `92_stream`, `csv_method`, `fields_containing_0`, `rt99774`, `50_utf8`.
 
 ## Fix Phases
 
@@ -133,7 +133,7 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
 
 ## Progress Tracking
 
-### Current Status: Phase 5 complete — 30/40 programs pass
+### Current Status: Phase 6 complete — 34/40 programs pass
 
 ### Completed
 - [x] Phase 1: strict vars + use lib (2026-04-03)
@@ -182,17 +182,22 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
     - t/51_utf8.t: 128/207 -> 132/167 (+4)
     - t/85_util.t: 318/1448 -> 330/330 (all pass)
   - Result: 30/40 programs pass (up from 27/40)
+- [x] Phase 5b: `$\` / `$,` aliasing fix (2026-04-03) — committed as `a73f378e2`
+  - Created: OutputRecordSeparator.java, OutputFieldSeparator.java
+  - Modified: IOOperator.java (static getters), GlobalContext.java (special types), GlobalRuntimeScalar.java (save/restore)
+  - Root cause: `print` read `$\`/`$,` directly from global map; `for $\ ($rs) { print }` leaked aliased value
+  - Impact: t/45_eol.t: 18→6 failures; t/46_eol_si.t: 12→0 failures
+- [x] Phase 6: `goto LABEL` in interpreter-fallback closures (2026-04-03)
+  - File: InterpretedCode.java, `withCapturedVars()` method
+  - Root cause: `withCapturedVars()` created a copy but dropped `gotoLabelPcs` and `usesLocalization`
+  - Fix: Copy `gotoLabelPcs` and `usesLocalization` to the new InterpretedCode in `withCapturedVars()`
+  - Impact: t/45_eol.t: 6→0 (all 1182 pass); t/20_file.t: 108→109; t/21_lexicalio.t: 108→109; t/22_scalario.t: 135→136
+  - Result: 34/40 programs pass (up from 30/40)
 
-### Remaining Failures (10 test files)
+### Remaining Failures (6 test files)
 
 | Test | ok/total | Failures | Category |
 |------|----------|----------|----------|
-| t/20_file.t | 108/109 | 1 | EOL content comparison |
-| t/21_lexicalio.t | 108/109 | 1 | EOL content comparison |
-| t/22_scalario.t | 135/136 | 1 | EOL content comparison |
-| t/45_eol.t | 1164/1182 | 18 | EOL edge cases |
-| t/46_eol_si.t | 550/562 | 12 | EOL edge cases |
-| t/50_utf8.t | 92/93 | 1 | `use bytes` + regex |
 | t/51_utf8.t | 132/167 | 35 | UTF-8 flag tracking |
 | t/70_rt.t | 1/20469 | crash | Undefined ARRAY ref early |
 | t/75_hashref.t | 58/58 | 0+44 not run | Scalar::Util::readonly |
@@ -202,15 +207,11 @@ These failures are caused by broader PerlOnJava limitations, not Text::CSV bugs:
 
 1. **t/70_rt.t** (20469 tests) — Requires encoding-aware lexer (see design below). The source file contains raw `\xab`/`\xbb` bytes in regex patterns. Without Latin-1 source reading, these are corrupted to U+FFFD by UTF-8 decoding.
 
-2. **EOL edge cases** (t/20_file.t, t/21_lexicalio.t, t/22_scalario.t, t/45_eol.t, t/46_eol_si.t — 33 failures total) — `\r\n` EOL content comparison and mixed EOL handling. The remaining test 47 failure in t/20/21/22 is about CSV content with `eol("\r\n")`.
+2. **t/51_utf8.t** (167 tests, 35 failures) — UTF-8 flag tracking issues: fields with wide characters (like `\x{060c}`) should get UTF-8 flag set by CSV_PP's internal detection, but currently don't. Also "Wide character in print" warnings missing.
 
-3. **t/51_utf8.t** (167 tests, 35 failures) — UTF-8 flag tracking issues: fields with wide characters (like `\x{060c}`) should get UTF-8 flag set by CSV_PP's internal detection, but currently don't. Also "Wide character in print" warnings missing.
+3. **t/76_magic.t** (44 tests, 1 failure) — TieScalar edge case.
 
-4. **t/50_utf8.t** (93 tests, 1 failure) — `use bytes` + regex interaction.
-
-5. **t/76_magic.t** (44 tests, 1 failure) — TieScalar edge case.
-
-6. **t/75_hashref.t** (58 tests, 0 actual failures but 44 not run) — Requires `Scalar::Util::readonly()` implementation.
+4. **t/75_hashref.t** (58 tests, 0 actual failures but 44 not run) — Requires `Scalar::Util::readonly()` implementation.
 
 ---
 
