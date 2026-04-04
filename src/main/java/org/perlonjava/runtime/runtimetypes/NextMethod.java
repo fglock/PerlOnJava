@@ -247,7 +247,8 @@ public class NextMethod {
 
                     // Look for the actual Perl method call (not internal Java calls)
                     if (!filename.contains(".java") && !pkg.isEmpty() &&
-                            !subroutineName.isEmpty() && !subroutineName.equals("(eval)")) {
+                            !subroutineName.isEmpty() && !subroutineName.equals("(eval)") &&
+                            !subroutineName.endsWith("::__ANON__")) {
 
                         // Extract method name from subroutine name
                         if (subroutineName.contains("::")) {

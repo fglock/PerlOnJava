@@ -1750,10 +1750,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
 
+                // In Perl, caller() always returns a defined subroutine name.
+                // For anonymous code blocks (closures, callbacks), use __ANON__.
+                if (subName == null || subName.isEmpty()) {
+                    if (frame > 0 && frame - 1 < stackTraceSize) {
+                        String pkg = stackTrace.get(frame - 1).getFirst();
+                        subName = (pkg != null && !pkg.isEmpty() ? pkg : "main") + "::__ANON__";
+                    }
+                }
+
                 if (subName != null && !subName.isEmpty()) {
                     res.add(new RuntimeScalar(subName));  // subroutine
                 } else {
-                    // If no subroutine name or empty, add undef
                     res.add(RuntimeScalarCache.scalarUndef);
                 }
 
@@ -1855,7 +1863,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
             // operations (e.g., MODIFY_*_ATTRIBUTES called from Java).
             // The excess frames beyond the Java stack trace are served from CallerStack.
-            int callerStackFrame = frame - stackTraceSize;
+            // Skip entries already consumed by ExceptionFormatter to avoid duplicates.
+            int callerStackFrame = frame - stackTraceSize + result.callerStackConsumed();
             CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
             if (info != null) {
                 if (ctx == RuntimeContextType.SCALAR) {
