@@ -1133,12 +1133,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * Inner class implementing the Iterator interface for RuntimeArray.
      */
     private class RuntimeArrayIterator implements Iterator<RuntimeScalar> {
-        private final int size = elements.size();
         private int currentIndex = 0;
 
         @Override
         public boolean hasNext() {
-            return currentIndex < size;
+            return currentIndex < elements.size();
         }
 
         @Override
