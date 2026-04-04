@@ -4,7 +4,7 @@
 
 **Module**: POE 1.370 (Perl Object Environment - event-driven multitasking framework)
 **Test command**: `./jcpan -t POE`
-**Status**: 35/53 unit+resource tests pass, ses_session.t 35/41 (up from 7/41), 10+/35 event loop tests pass
+**Status**: 35/53 unit+resource tests pass, ses_session.t 37/41 (up from 7/41), ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20
 
 ## Dependency Tree
 
@@ -311,8 +311,20 @@ foreach my $session (@children) {
   - Fixed 4-arg select() to poll pipe readiness instead of marking always ready (Bug 14)
   - select() now properly blocks when monitoring InternalPipeHandle with timeout
   - POE event loop no longer busy-loops; timer-based events fire correctly
+- [x] Phase 3.4: Signal pipe and postback fixes (2026-04-04, commit eff2f356d)
+  - Fixed pipe fd registry mismatch (Bug 15) — pipe() created RuntimeIO objects but never
+    registered them in RuntimeIO.filenoToIO, making pipes invisible to select(). Added
+    registerExternalFd() to RuntimeIO and InternalPipeHandle.getFd() getter.
+  - Fixed platform EAGAIN value (Bug 16) — InternalPipeHandle.sysread() hard-coded errno 11
+    (Linux EAGAIN). On macOS EAGAIN=35, causing POE to see "Resource deadlock avoided" instead
+    of EAGAIN. Fixed to use ErrnoVariable.EAGAIN() for platform-correct values.
+  - Patched POE::Session postback/callback auto-cleanup (Bug 17) — DESTROY won't fire on
+    PerlOnJava, so postbacks/callbacks now auto-decrement session refcount when called.
+    This allows sessions to exit properly without relying on DESTROY.
+  - ses_session.t: 7/41 → 37/41 (signal delivery + postback cleanup working)
+  - ses_nfa.t: 39/39 (perfect), k_alarms.t: 37/37 (perfect), k_aliases.t: 20/20 (perfect)
 
-### Key Findings (Phase 3.1-3.3)
+### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
   PerlOnJava's RuntimeArrayIterator was caching size at creation. This broke POE::Kernel->stop()
   which walks the session tree by pushing children during foreach.
@@ -320,21 +332,26 @@ foreach my $session (@children) {
   implementations and cannot guarantee deterministic timing. Perl's DESTROY depends on
   reference counting (fires immediately when last reference drops). The JVM's tracing GC
   is fundamentally incompatible with this semantic. DESTROY is not implemented.
-- **Impact on POE**: ses_session.t hangs because POE::Session::AnonEvent postbacks use
-  DESTROY to decrement session refcounts. Without DESTROY, the server session's refcount
-  never reaches zero, keeping the event loop alive. This is a known, documented limitation.
-- **Signal delivery**: `kill("ALRM", $$)` doesn't trigger %SIG handlers within POE event loop.
-  ses_session.t tests 21-22 expect 5 SIGALRMs and 5 SIGPIPEs but get 0.
+- **DESTROY workaround for POE**: POE::Session::AnonEvent postbacks/callbacks now auto-cleanup
+  when called (decrement session refcount on first invocation). This replaces DESTROY-based
+  cleanup for the common one-shot postback pattern. 4 ses_session.t failures remain for tests
+  that explicitly count DESTROY invocations.
+- **Dual fd registry**: pipe() registered handles in FileDescriptorTable but not RuntimeIO.filenoToIO.
+  select() only consulted RuntimeIO, making pipes invisible. Fixed by registerExternalFd().
+- **Platform errno**: Hard-coded Linux errno values (EAGAIN=11) caused mismatches on macOS
+  (EAGAIN=35). Fixed to use ErrnoVariable.EAGAIN() which probes the platform.
+- **Signal delivery**: Now works end-to-end: kill() → %SIG handler → signal pipe write →
+  select() detects pipe → POE dispatches signal event.
 - **require expression parsing**: `require File::Spec->catfile(...)` was parsed as
   `require File::Spec` (module) instead of `require <expr>`. This prevented Time::HiRes
   from loading, causing monotime() to return integer seconds instead of float.
 
-### Next Steps (Phase 3 continued)
-1. Implement signal delivery: `kill("ALRM", $$)` should trigger %SIG{ALRM} handler
-2. Debug ses_nfa.t timeout (may be fixed by foreach fix)
-3. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
-4. Debug k_sig_child.t (5/15) — child signal handling
-5. Debug k_selects.t (5/17) — file handle watchers (4-arg select now implemented)
+### Next Steps (Phase 4)
+1. Debug k_selects.t (5/17) — hangs after pipe creation tests
+2. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
+3. Debug k_sig_child.t — child signal handling (requires fork support)
+4. HTTP::Message bytes handling for 03_http.t
+5. Socket/network tests (comp_tcp, wheel_sf_*)
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
