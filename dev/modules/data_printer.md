@@ -6,7 +6,7 @@
 - **Test command**: `./jcpan -j 8 -t Data::Printer`
 - **Branch**: `feature/data-printer-phase3`
 - **PR**: #434
-- **Status**: Phase 6 complete — 576/624 subtests passing (92.3%)
+- **Status**: Phase 7 complete — 599/647 subtests passing (92.6%)
 
 ## Test Results Summary
 
@@ -16,10 +16,11 @@
 | After Phase 1 | 23/41 | 512/545 | 93.9% |
 | After Phase 2 | 23/41 | 512/545 | 93.9% |
 | After Phase 3-6 | **29/41** | **576/624** | **92.3%** |
+| After Phase 7 (DBI) | **29/41** | **599/647** | **92.6%** |
 
 Note: subtest totals changed between runs because some tests that previously crashed now run to completion, adding subtests to the total.
 
-### Current Test Status (After Phase 6)
+### Current Test Status (After Phase 7)
 
 | Test File | Status | Failures | Root Cause |
 |-----------|--------|----------|------------|
@@ -58,7 +59,7 @@ Note: subtest totals changed between runs because some tests that previously cra
 | t/026-caller_message.t | PASS | | |
 | t/027-nativeperlclass.t | SKIP | | `class` keyword not implemented |
 | t/100-filter_datetime.t | PASS | | |
-| t/101-filter_db.t | **FAIL** 1/1 | 1 | DBI connect returns undef (24 planned, 1 ran) |
+| t/101-filter_db.t | **FAIL** 1/24 | 8 | DESTROY not supported — `undef $sth` can't decrement Kids (16 DBIC skipped) |
 | t/102-filter_digest.t | **PASS** | | Fixed Phase 6f: Digest::SHA @ISA |
 | t/103-filter_contenttype.t | **FAIL** 1/32 | 29 | Hexdump trailing null bytes |
 | t/104-filter_web.t | PASS | | |
@@ -184,15 +185,30 @@ Lvalue operators (`substr`, `vec`, `chop`, `++/--`) already work correctly — w
 - Changed `@ISA = qw(Exporter)` to `@ISA = qw(Exporter Digest::base)`. The previous assignment was overwriting the `Digest::base` parent set by `use base "Digest::base"` on the line above.
 - **Files**: `src/main/perl/lib/Digest/SHA.pm`
 
-## Remaining Failures (48/624 subtests)
+### Phase 7: DBI filter support (COMPLETED 2026-04-03)
 
-### Unfixable (JVM limitations) — ~28 subtests
+**Fixed**: DBI connect failures preventing Data::Printer's DB filter tests from running.
+
+- **DSN attribute parsing**: Updated DBI.pm connect wrapper regex from `/^dbi:(\w+):(.*)$/i` to `/^dbi:(\w+)(?:\(([^)]*)\))?:(.*)$/i` to handle attribute syntax like `dbi:Mem(RaiseError=1):`. Parses embedded attributes and merges into `$attr` hash.
+- **DBI.java connect()**: Removed `args.size() < 4` requirement — defaults user/pass to empty string when not provided.
+- **DBI::db / DBI::st class names**: Changed `bless ... "DBI"` to `bless ... "DBI::db"` for database handles and `bless ... "DBI::st"` for statement handles. Added `@DBI::db::ISA = ('DBI')` and `@DBI::st::ISA = ('DBI')` for method inheritance. Data::Printer's DB filter registers for `DBI::db` and `DBI::st` classes specifically.
+- **Handle attribute tracking**: Initialize `Kids`, `ActiveKids`, `Statement` on connect. Increment `Kids` and set `Statement` on prepare. Only increment `ActiveKids` for result-returning statements (`NUM_OF_FIELDS > 0`). Decrement `ActiveKids` on finish. Set `Active = 0` on disconnect.
+- **$sth->{Statement}**: Set to SQL string in Java prepare method (was only stored as lowercase `sql`).
+- **$dbh->{Name}**: Set to DSN rest (e.g., `dbname=:memory:`) instead of full JDBC URL. The DB filter parses this with `split /[;=]/` to show key-value pairs.
+- **DBD::Mem shim**: New file `src/main/perl/lib/DBD/Mem.pm` that maps `dbi:Mem:` to `jdbc:sqlite::memory:` (using bundled sqlite-jdbc driver).
+- **Result**: t/101-filter_db.t went from 0/8 DBI tests passing to 7/8 passing. Remaining 1 failure: `undef $sth` can't decrement Kids because DESTROY is not supported.
+- **Files**: `DBI.pm`, `DBI.java`, `DBD/Mem.pm`
+
+## Remaining Failures (48/647 subtests)
+
+### Unfixable (JVM limitations) — ~29 subtests
 
 | Category | Tests | Subtests | Why |
 |----------|-------|----------|-----|
 | Weak references | t/003-ref, t/009-array | 3 | `weaken`/`isweak` not implemented; JVM uses GC, not refcounting |
 | Refcount tracking | t/013-refcount, t/021-p_vs_object | 23 | JVM has no SV refcount; `Scalar::Util::refcount` would need JVM-specific instrumentation |
 | Colored refcount | t/998-color | 1 | Same colored output includes `(refcount: 2)` which we can't produce |
+| DESTROY cleanup | t/101-filter_db | 1 | `undef $sth` can't decrement Kids count without DESTROY support |
 
 ### Missing ref types — ~13 subtests
 
@@ -202,13 +218,12 @@ Lvalue operators (`substr`, `vec`, `chop`, `++/--`) already work correctly — w
 | FORMAT refs | t/007.format (1), t/025-profiles (partial) | 1 | Format references not implemented on JVM. |
 | Profile cascading | t/025-profiles | 10 | The Dumper and JSON profiles iterate all ref types and check which ones they can serialize. Missing LVALUE and FORMAT types cause off-by-one in the type list, shifting all warning messages. For example, the JSON profile reports "cannot express vstrings" where it should say "cannot express subroutines" because the type array is shifted. |
 
-### Other — 7 subtests
+### Other — 6 subtests
 
 | Category | Tests | Subtests | Why |
 |----------|-------|----------|-----|
 | Read-only constants | t/002-scalar | 4 | Literal `123` not detected as read-only. `Scalar::Util::readonly(123)` returns 0 because PerlOnJava's `$` prototype copies the value, losing the read-only flag. Tests 36-37: `Internals::SvREADONLY` on a ref shows stringified ref instead of value. |
 | B::Deparse | t/012-code | 2 | Code decompilation not possible — JVM bytecode can't be decompiled back to Perl. Shows `sub { "DUMMY" }` instead of actual code body. |
-| DBI filter | t/101-filter_db | 1 | `DBI->connect("dbi:Mem:")` returns undef; the in-memory DBD driver may not be available. 24 tests planned but only 1 ran. |
 | ContentType hex dump | t/103-filter_contenttype | 1 | Hexdump shows trailing null bytes `00000000` that Perl 5 doesn't. Minor string truncation difference. |
 
 ### Future: MAGIC type consolidation
