@@ -144,6 +144,11 @@ sub _method_check {
 
         return 1 if $code_stash eq $package;   # Defined locally
         return 1 if $code_stash eq 'constant'; # Constant subs
+        # Companion/helper packages (e.g. DateTime::PP for DateTime) install
+        # functions via glob assignment — these are intentional methods, not imports.
+        # In PerlOnJava, method calls are resolved at runtime through the stash,
+        # so we must not remove them.
+        return 1 if index($code_stash, "${package}::") == 0;  # Companion package
         return 1 if $does && eval { $package->$does($code_stash) };  # Role methods
 
         return 0;  # Imported - clean it
