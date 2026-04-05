@@ -1,6 +1,6 @@
 # WWW::Mechanize Support for PerlOnJava
 
-## Status: Phase 9 Complete — 99.4% non-server pass rate + HTTP::Daemon working
+## Status: Phase 10 Complete — 99.4% non-server pass rate + all local server tests pass
 
 **Branch**: `feature/www-mechanize-support`
 **Date started**: 2026-04-04
@@ -131,7 +131,7 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 9 complete — 529/532 non-server subtests (99.4%) + HTTP::Daemon working
+### Current Status: Phase 10 complete — 529/532 non-server subtests (99.4%) + all 18 local server tests pass
 
 ### Completed Phases
 - [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
@@ -175,6 +175,13 @@ make
   - HTTP::Daemon new/accept/get_request/send_response: all working (pure Perl, no changes needed)
   - LocalServer piped-open pattern works with jperl
   - WWW::Mechanize t/local/ tests: 17/19 pass (0 failures, 2 server-exit timeouts)
+- [x] Phase 10: closeIOOnDrop for gensym'd socket globs (2026-04-05)
+  - Added `closeIOOnDrop()` to RuntimeScalar.java: closes IO on `undef()` and `set()` for GLOBREFERENCE
+  - Fixed RuntimeIO.java fallback to use `getExistingGlobalIO()` (non-auto-vivifying) instead of `getGlobalIO()`
+  - Added `getExistingGlobalIO()` to GlobalVariable.java
+  - Root cause: `getRuntimeIO()` fallback re-created stash entries that gensym had deleted, preventing socket close
+  - All 18 local server tests pass with no timeouts (including redirect tests)
+  - back.t: 47/47, get.t: 34/34 (both previously had server-exit timeouts)
 
 ### Bug 7: HTMLParser argspec "self" doubled for method callbacks (FIXED)
 - **File**: `HTMLParser.java:fireEvent()` + `buildEventDataFromArgspec()`
@@ -227,15 +234,15 @@ make
 | image-parse.t | 41/42 | 1 remaining CSS background-url edge case | Low priority |
 | mech-dump/file_not_found.t | 1/1 | Fixed by Capture::Tiny fileno/dup fix | ✅ FIXED |
 
-**Local server test results: 17/19 pass (0 failures, 2 timeouts)**
+**Local server test results: 18/18 pass (0 failures, 0 timeouts)**
 
 | Test File | Result | Notes |
 |-----------|--------|-------|
-| t/local/back.t | 32 pass, TIMEOUT | Server doesn't exit cleanly |
-| t/local/get.t | 33 pass, TIMEOUT | Server doesn't exit cleanly |
+| t/local/back.t | 47/47 | ✅ |
+| t/local/get.t | 34/34 | ✅ (including redirect test) |
 | t/local/click.t | 9/9 | ✅ |
 | t/local/click_button.t | 15/15 | ✅ |
-| t/local/content.t | 10/10 | ✅ |
+| t/local/content.t | 3/3 | ✅ |
 | t/local/encoding.t | 6/6 | ✅ |
 | t/local/failure.t | 15/15 | ✅ |
 | t/local/follow.t | 32/32 | ✅ |
@@ -254,17 +261,18 @@ make
 
 ### Remaining Issues
 
-1. **Server-exit timeouts** — back.t and get.t pass all subtests but the log-server
-   process doesn't exit cleanly, causing the test harness to wait until timeout.
-   Root cause is likely the server's accept loop not seeing connection close.
-
-2. **cookies.t** — Uses `TestServer.pm` which requires `open FH, '-|'` fork-open pattern
+1. **cookies.t** — Uses `TestServer.pm` which requires `open FH, '-|'` fork-open pattern
    (no exec). This is a true fork dependency that can't be worked around.
 
-3. **XHTML marked_sections** — find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing
+2. **XHTML marked_sections** — find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing
    not implemented in HTMLParser. Low priority.
 
-4. **CSS background-url extraction** — image-parse.t (1 failure). Edge case.
+3. **CSS background-url extraction** — image-parse.t (1 failure). Edge case.
+
+4. **`getGlobHash()` auto-vivification** — `${*$gensym}{"key"}` still auto-vivifies stash
+   entries via `GlobalVariable.getGlobalHash()` because the gensym'd glob's `hashSlot` is
+   null (RuntimeStashEntry.createReference() stores the original stash entry, not a detached
+   copy). This doesn't affect IO closing but is a correctness issue. Low priority.
 
 ---
 
@@ -428,10 +436,11 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/loca
 - **Note**: Bytecode compiler did NOT have this bug (only checks `isTrueLoop`).
 
 ### Next Steps
-- All Phase 1-9 fixes are complete
+- All Phase 1-10 fixes are complete
 - Non-server tests: 529/532 (99.4%)
-- Local server tests: 17/19 (0 failures, 2 server-exit timeouts)
+- Local server tests: 18/18 (all pass, 0 timeouts)
 - HTTP::Daemon: fully working in pure Perl
 - Capture::Tiny capture*: fully working
-- Remaining: CDATA (2 tests), CSS url (1 test), server-exit timeouts (2 tests), cookies.t (fork)
+- closeIOOnDrop: gensym'd socket globs properly closed on undef/reassign
+- Remaining: CDATA (2 tests), CSS url (1 test), cookies.t (fork)
 - PR #440 ready for review
