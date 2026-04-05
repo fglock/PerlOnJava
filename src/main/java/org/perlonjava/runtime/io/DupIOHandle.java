@@ -9,23 +9,74 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 /**
- * A reference-counted IOHandle wrapper that enables proper filehandle duplication.
+ * A reference-counted IOHandle wrapper that enables proper filehandle duplication
+ * semantics — the Java equivalent of POSIX {@code dup(2)}.
  *
- * <p>When Perl does {@code open(SAVE, ">&STDERR")}, it creates a new file descriptor
+ * <h3>Background: Perl's filehandle duplication</h3>
+ * <p>When Perl executes {@code open(SAVE, ">&STDERR")}, it creates a new file descriptor
  * (via dup()) that shares the same underlying file description. Both fds are independent:
- * closing one does not affect the other. The underlying resource is only released when
- * ALL duplicates are closed.
+ * closing one does not affect the other. The underlying OS resource (file, pipe, socket)
+ * is only released when ALL duplicates are closed.</p>
  *
- * <p>This class implements that semantic by wrapping a delegate IOHandle with a shared
- * reference count. Each DupIOHandle tracks its own closed state. When close() is called,
- * the refcount is decremented; the delegate is only actually closed when the last
- * DupIOHandle is closed.
+ * <p>Java doesn't expose POSIX file descriptors, so we simulate this behavior with
+ * reference-counted wrappers around an underlying {@link IOHandle} delegate.</p>
+ *
+ * <h3>Architecture</h3>
+ * <pre>
+ *   ┌──────────────────────┐     ┌──────────────────────┐
+ *   │ DupIOHandle (fd=1)   │     │ DupIOHandle (fd=5)   │
+ *   │ closed=false         │     │ closed=false         │
+ *   │ refCount ─────────────┼─────┼─▶ AtomicInteger(2)  │
+ *   │ delegate ─────────────┼─────┼─▶ StandardIO         │
+ *   └──────────────────────┘     └──────────────────────┘
+ *                                      (shared)
+ * </pre>
+ *
+ * <h3>Lifecycle</h3>
+ * <ol>
+ *   <li><b>Creation via {@link #createPair(IOHandle, int)}</b>: Called the first time
+ *       a handle is duplicated. Creates two DupIOHandles sharing the same delegate and
+ *       a new {@code AtomicInteger(2)} refCount. The first wrapper preserves the
+ *       original's fd; the second gets a new fd from {@link FileDescriptorTable}.</li>
+ *   <li><b>Subsequent dups via {@link #addDup(DupIOHandle)}</b>: Increments the shared
+ *       refCount and creates a new DupIOHandle with a new fd. No limit on how many
+ *       dups can be created.</li>
+ *   <li><b>Close</b>: Each DupIOHandle tracks its own {@code closed} flag. On close:
+ *       <ul>
+ *         <li>Marks itself as closed (further I/O operations will fail)</li>
+ *         <li>Unregisters its fd from {@link FileDescriptorTable}</li>
+ *         <li>Decrements the shared refCount</li>
+ *         <li>If refCount reaches 0 (last dup closed), actually closes the delegate</li>
+ *         <li>If refCount > 0 (other dups still open), just flushes the delegate</li>
+ *       </ul>
+ *   </li>
+ * </ol>
+ *
+ * <h3>Thread safety</h3>
+ * <p>The refCount uses {@link AtomicInteger} for thread-safe decrement. The {@code closed}
+ * flag is per-instance and not synchronized — this matches the Perl model where each
+ * filehandle is used by a single thread. If concurrent access is needed in the future,
+ * the closed flag should be made volatile or synchronized.</p>
+ *
+ * <h3>fd number management</h3>
+ * <p>Each DupIOHandle holds a synthetic fd number assigned by {@link FileDescriptorTable}.
+ * The {@link #fileno()} method returns this fd (not the delegate's fd), so each duplicate
+ * has a unique fileno as Perl expects. This fd is registered in FileDescriptorTable for
+ * lookup by select() and in RuntimeIO for lookup by {@code findFileHandleByDescriptor()}.</p>
+ *
+ * @see IOOperator#duplicateFileHandle(RuntimeIO)  where DupIOHandles are created
+ * @see IOOperator#openFileHandleDup(String, String)  entry point for Perl's open() dup modes
+ * @see FileDescriptorTable  synthetic fd allocation and lookup
  */
 public class DupIOHandle implements IOHandle {
 
+    /** The underlying I/O implementation (StandardIO, FileIOHandle, etc.) — never another DupIOHandle. */
     private final IOHandle delegate;
+    /** Shared across all dups of the same delegate. Decremented on close; delegate closed at zero. */
     private final AtomicInteger refCount;
+    /** Per-instance closed flag. Once true, all I/O operations on THIS dup return errors. */
     private boolean closed = false;
+    /** Synthetic fd number unique to this dup, assigned by FileDescriptorTable. */
     private final int fd;
 
     /**
@@ -202,6 +253,19 @@ public class DupIOHandle implements IOHandle {
 
     // ---- Close with reference counting ----
 
+    /**
+     * Closes this duplicate handle.
+     *
+     * <p>Semantics:
+     * <ol>
+     *   <li>If already closed, returns an error (matches Perl's "close on closed fh").</li>
+     *   <li>Marks this instance as closed — subsequent I/O operations will fail.</li>
+     *   <li>Unregisters this fd from {@link FileDescriptorTable}.</li>
+     *   <li>Decrements the shared refCount atomically.</li>
+     *   <li>If this was the <em>last</em> duplicate (refCount → 0), closes the delegate.</li>
+     *   <li>Otherwise, just flushes the delegate to ensure buffered data is written.</li>
+     * </ol>
+     */
     @Override
     public RuntimeScalar close() {
         if (closed) {

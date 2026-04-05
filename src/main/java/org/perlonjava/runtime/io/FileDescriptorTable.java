@@ -6,29 +6,60 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 
 /**
- * Maps simulated file descriptor numbers to IOHandle objects.
+ * Maps simulated file descriptor numbers to {@link IOHandle} objects.
  *
- * <p>Java doesn't expose real POSIX file descriptors. This table assigns
- * sequential integers starting from 3 (0, 1, 2 are reserved for
- * stdin, stdout, stderr) and allows lookup by FD number.
+ * <h3>Why this exists</h3>
+ * <p>Java doesn't expose real POSIX file descriptors. Perl code, however, relies on
+ * numeric fd values for operations like {@code fileno()}, {@code select()}, and
+ * {@code open(FH, ">&=", $fd)}. This table assigns sequential integers starting
+ * from 3 (0, 1, 2 are reserved for stdin, stdout, stderr) and provides fd→IOHandle
+ * lookup.</p>
  *
- * <p>Used by:
- * <ul>
- *   <li>{@code fileno()} — to return a consistent FD for each handle</li>
- *   <li>4-arg {@code select()} — to map bit-vector bits back to handles</li>
- * </ul>
+ * <h3>Relationship to other fd registries</h3>
+ * <p>There are <b>three</b> fd-related registries in the system, each serving a
+ * different purpose:</p>
+ * <table border="1">
+ *   <tr><th>Registry</th><th>Maps</th><th>Used by</th></tr>
+ *   <tr>
+ *     <td>{@code FileDescriptorTable} (this class)</td>
+ *     <td>fd → {@link IOHandle}</td>
+ *     <td>{@code select()}, {@link DupIOHandle} registration</td>
+ *   </tr>
+ *   <tr>
+ *     <td>{@code RuntimeIO.filenoToIO}</td>
+ *     <td>fd → {@link RuntimeIO}</td>
+ *     <td>{@link IOOperator#findFileHandleByDescriptor(int)} fallback</td>
+ *   </tr>
+ *   <tr>
+ *     <td>{@code IOOperator.fileDescriptorMap}</td>
+ *     <td>fd → {@link RuntimeIO}</td>
+ *     <td>{@link IOOperator#findFileHandleByDescriptor(int)} first check</td>
+ *   </tr>
+ * </table>
  *
- * <p>Thread-safe: uses ConcurrentHashMap and AtomicInteger.
+ * <p>These registries are kept in sync via {@link #advancePast(int)} and
+ * {@link RuntimeIO#advanceFilenoCounterPast(int)} to prevent fd collisions between
+ * handles allocated by different subsystems (e.g., DupIOHandle vs. socket/pipe).</p>
+ *
+ * <h3>Thread safety</h3>
+ * <p>Uses {@link ConcurrentHashMap} and {@link AtomicInteger} for thread-safe access.</p>
+ *
+ * @see DupIOHandle        uses this table for fd allocation and registration
+ * @see IOOperator         uses this table indirectly via DupIOHandle
+ * @see RuntimeIO          parallel fd→RuntimeIO registry for higher-level lookups
  */
 public class FileDescriptorTable {
 
-    // Next FD number to assign.  0–2 are stdin/stdout/stderr.
+    /** Next fd to allocate. Starts at 3 (0=stdin, 1=stdout, 2=stderr are reserved). */
     private static final AtomicInteger nextFd = new AtomicInteger(3);
 
-    // FD number → IOHandle (for select() lookup)
+    /** Forward map: fd number → IOHandle. Used by select() to find handles from fd bits. */
     private static final ConcurrentHashMap<Integer, IOHandle> fdToHandle = new ConcurrentHashMap<>();
 
-    // IOHandle identity → FD number (to avoid assigning multiple FDs to the same handle)
+    /**
+     * Reverse map: IOHandle identity hash → fd number.
+     * Prevents assigning multiple fds to the same IOHandle object (identity, not equality).
+     */
     private static final ConcurrentHashMap<Integer, Integer> handleToFd = new ConcurrentHashMap<>();
 
     /**

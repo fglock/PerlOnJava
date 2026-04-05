@@ -34,7 +34,12 @@ public class IOOperator {
     // Simple socket option storage: key is "socketHashCode:level:optname", value is the option value
     private static final Map<String, Integer> globalSocketOptions = new ConcurrentHashMap<>();
 
-    // File descriptor to RuntimeIO mapping for duplication support
+    /**
+     * Explicit fd → RuntimeIO mapping for handles registered by user code (e.g., socket()).
+     * This is the first registry checked by {@link #findFileHandleByDescriptor(int)}.
+     * Separate from {@link FileDescriptorTable} (fd→IOHandle) and {@code RuntimeIO.filenoToIO}
+     * (fd→RuntimeIO) which are populated automatically by DupIOHandle and pipe/socket creation.
+     */
     private static final Map<Integer, RuntimeIO> fileDescriptorMap = new ConcurrentHashMap<>();
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
@@ -2523,53 +2528,112 @@ public class IOOperator {
     }
 
     /**
-     * Find a RuntimeIO handle by its file descriptor number.
-     * This is a simplified implementation that maps standard file descriptors.
+     * Finds a RuntimeIO handle by its file descriptor number.
+     *
+     * <p><b>Lookup order:</b>
+     * <ol>
+     *   <li>{@code fileDescriptorMap} — IOOperator's own ConcurrentHashMap populated by
+     *       {@link #registerFileDescriptor(int, RuntimeIO)}. Handles registered here
+     *       come from explicit user calls (e.g. socket()).</li>
+     *   <li>Standard descriptors 0/1/2 — mapped to the static {@code RuntimeIO.stdin},
+     *       {@code RuntimeIO.stdout}, {@code RuntimeIO.stderr} fields. These represent
+     *       the <em>original</em> System.in/System.out/System.err wrappers and always
+     *       correspond to fds 0/1/2.
+     *       <p><b>Note:</b> This is intentionally different from looking up via the glob
+     *       table. When Perl does {@code open(STDOUT, ">file")}, the glob *main::STDOUT
+     *       is updated to point to the file, but the file gets a <em>new</em> fd (e.g. 5).
+     *       The user asking for fd 1 specifically wants the original stdout — not whatever
+     *       STDOUT happens to point to now. The glob-table approach is used by
+     *       {@link #openFileHandleDup(String, String)} for <em>named</em> handle lookup
+     *       (e.g. {@code ">&STDOUT"}) where the user wants the current handle.</p></li>
+     *   <li>{@code RuntimeIO.getByFileno(fd)} — the fileno→RuntimeIO registry populated
+     *       by {@link RuntimeIO#registerExternalFd(int)}. This catches handles that were
+     *       created by {@link #duplicateFileHandle(RuntimeIO)} (which wraps in DupIOHandle
+     *       and registers the new fd) or by pipe/socket operations.</li>
+     * </ol>
+     *
+     * @param fd the file descriptor number to look up
+     * @return the RuntimeIO handle, or null if the fd is unknown
      */
     private static RuntimeIO findFileHandleByDescriptor(int fd) {
-        // Check if we have it in our mapping
+        // 1. Check IOOperator's own explicit registration map
         RuntimeIO handle = fileDescriptorMap.get(fd);
         if (handle != null) {
             return handle;
         }
 
-        // Handle standard file descriptors
+        // 2. Standard descriptors: use static fields which always represent fds 0/1/2.
+        //    We do NOT use the glob table here because after STDOUT redirection
+        //    (e.g., open(STDOUT, ">file")), the glob's IO has a different fd number,
+        //    but the user is asking for the handle at fd 1 specifically.
         switch (fd) {
-            case 0: // STDIN
-                return RuntimeIO.stdin;
-            case 1: // STDOUT
-                return RuntimeIO.stdout;
-            case 2: // STDERR
-                return RuntimeIO.stderr;
+            case 0: return RuntimeIO.stdin;
+            case 1: return RuntimeIO.stdout;
+            case 2: return RuntimeIO.stderr;
         }
 
-        // Check RuntimeIO's fileno registry (handles dup'd fds registered via registerExternalFd)
+        // 3. Check RuntimeIO's fileno→IO registry (populated by registerExternalFd
+        //    for dup'd handles, pipes, sockets, etc.)
         handle = RuntimeIO.getByFileno(fd);
         if (handle != null) {
             return handle;
         }
 
-        return null; // Unknown file descriptor
+        return null;
     }
 
     /**
-     * Create a duplicate of a RuntimeIO handle.
-     * This creates a new RuntimeIO that shares the same underlying IOHandle.
-     */
-    /**
-     * Opens a filehandle by duplicating an existing one (for 2-argument open with dup mode).
-     * This handles cases like: open(my $fh, ">&1")
+     * Opens a filehandle by duplicating an existing one — implements Perl's dup modes
+     * in two-argument and three-argument {@code open()}.
      *
-     * @param fileName The file descriptor number or handle name
-     * @param mode     The duplication mode (>&, <&, etc.)
-     * @return RuntimeIO handle that duplicates the original, or null on error
+     * <h3>Perl forms handled:</h3>
+     * <pre>
+     *   open(my $fh, ">&STDOUT")    # dup STDOUT for writing  → mode=">&"  fileName="STDOUT"
+     *   open(my $fh, "<&STDIN")     # dup STDIN for reading   → mode="<&"  fileName="STDIN"
+     *   open(my $fh, ">&1")         # dup fd 1 (STDOUT)       → mode=">&"  fileName="1"
+     *   open(my $fh, ">&=STDOUT")   # parsimonious dup        → mode=">&=" fileName="STDOUT"
+     *   open(my $fh, ">&=1")        # parsimonious dup by fd  → mode=">&=" fileName="1"
+     * </pre>
+     *
+     * <h3>Parsimonious vs. full dup:</h3>
+     * <ul>
+     *   <li><b>Full dup</b> ({@code >&} / {@code <&}): creates a new DupIOHandle wrapper
+     *       with its own fd number. The original and duplicate share the same underlying
+     *       IOHandle via reference counting (see {@link DupIOHandle}). Closing one does
+     *       not close the other; the underlying resource is freed only when the last
+     *       duplicate is closed.</li>
+     *   <li><b>Parsimonious dup</b> ({@code >&=} / {@code <&=}): returns the <em>same</em>
+     *       RuntimeIO object without creating a DupIOHandle wrapper. This means both Perl
+     *       filehandles share the exact same RuntimeIO. Perl uses this when it wants a
+     *       lightweight alias (e.g., fdopen semantics).</li>
+     * </ul>
+     *
+     * <h3>Source handle resolution:</h3>
+     * <ol>
+     *   <li><b>Numeric fileName</b> (e.g. "1", "2"): delegates to
+     *       {@link #findFileHandleByDescriptor(int)} which looks up the fd via the
+     *       fileDescriptorMap, glob table, and RuntimeIO fileno registry.</li>
+     *   <li><b>Named fileName</b> (e.g. "STDOUT", "MyPkg::LOG"): looks up the handle
+     *       via the glob table ({@code GlobalVariable.getGlobalIO()}). This is essential
+     *       because standard handles can be redirected at runtime, so we must use the
+     *       <em>current</em> glob IO slot, not cached static references.</li>
+     * </ol>
+     *
+     * @param fileName the file descriptor number (as a string) or bare filehandle name
+     * @param mode     the duplication mode string: {@code ">&"}, {@code "<&"},
+     *                 {@code ">&="}, or {@code "<&="}
+     * @return a RuntimeIO handle — either a new DupIOHandle-wrapped duplicate (full dup)
+     *         or the same RuntimeIO (parsimonious dup)
+     * @throws PerlCompilerException if the source fd/handle cannot be found
      */
     public static RuntimeIO openFileHandleDup(String fileName, String mode) {
-        boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
+        // Parsimonious dup (>&= or <&=) returns the same handle without wrapping.
+        // Full dup (>& or <&) creates a reference-counted DupIOHandle wrapper.
+        boolean isParsimonious = mode.endsWith("=");
 
         RuntimeIO sourceHandle = null;
 
-        // Check if it's a numeric file descriptor
+        // --- Branch 1: Numeric file descriptor (e.g. "1" for STDOUT) ---
         if (fileName.matches("^\\d+$")) {
             int fd = Integer.parseInt(fileName);
             sourceHandle = findFileHandleByDescriptor(fd);
@@ -2577,64 +2641,122 @@ public class IOOperator {
                 throw new PerlCompilerException("Bad file descriptor: " + fd);
             }
         } else {
-            // Handle named filehandles like STDERR, STDOUT, STDIN
-            switch (fileName.toUpperCase()) {
-                case "STDIN":
-                    sourceHandle = RuntimeIO.stdin;
-                    break;
-                case "STDOUT":
-                    sourceHandle = RuntimeIO.stdout;
-                    break;
-                case "STDERR":
-                    sourceHandle = RuntimeIO.stderr;
-                    break;
-                default:
-                    // Try to look up as a global filehandle
-                    // First, try the current package if no :: qualifier is present
-                    if (!fileName.contains("::")) {
-                        // Use RuntimeCode.getCurrentPackage() which uses caller() to determine
-                        // the current package - this works for both JVM-compiled and interpreter code
-                        String currentPkg = RuntimeCode.getCurrentPackage();
-                        // Remove trailing "::" for consistent naming
-                        if (currentPkg.endsWith("::")) {
-                            currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
-                        }
-                        if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
-                            String currentPkgName = currentPkg + "::" + fileName;
-                            RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
-                            if (currentGlob != null) {
-                                sourceHandle = currentGlob.getRuntimeIO();
-                                if (sourceHandle != null && sourceHandle.ioHandle != null) {
-                                    break;  // Found it in current package
-                                }
-                            }
+            // --- Branch 2: Named filehandle (e.g. "STDOUT", "MyPkg::LOG") ---
+            // We resolve named handles via the glob table rather than a switch on
+            // well-known names. This is important because:
+            //   1. Standard handles (STDIN/STDOUT/STDERR) can be redirected at runtime.
+            //      The glob *main::STDOUT{IO} is updated by open(STDOUT, ">file"),
+            //      while RuntimeIO.stdout (static field) still points to System.out.
+            //   2. User-defined filehandles in any package are naturally supported.
+            //
+            // Resolution order for unqualified names:
+            //   a) Try current package first (e.g. MyPkg::LOGFILE)
+            //   b) Fall back to main:: (e.g. main::STDOUT)
+
+            if (!fileName.contains("::")) {
+                // (a) Try current package (determined via caller stack)
+                String currentPkg = RuntimeCode.getCurrentPackage();
+                if (currentPkg.endsWith("::")) {
+                    currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
+                }
+                if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
+                    String currentPkgName = currentPkg + "::" + fileName;
+                    RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
+                    if (currentGlob != null) {
+                        sourceHandle = currentGlob.getRuntimeIO();
+                        if (sourceHandle == null || sourceHandle.ioHandle == null) {
+                            sourceHandle = null; // Not found here — fall through to main::
                         }
                     }
-                    // Fall back to main:: or fully qualified name
-                    String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
-                    RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
-                    if (glob != null) {
-                        sourceHandle = glob.getRuntimeIO();
-                    }
-                    if (sourceHandle == null || sourceHandle.ioHandle == null) {
-                        throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
-                    }
+                }
+            }
+            if (sourceHandle == null) {
+                // (b) Fall back to main:: or use fully-qualified name as-is
+                String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
+                RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
+                if (glob != null) {
+                    sourceHandle = glob.getRuntimeIO();
+                }
+            }
+            if (sourceHandle == null || sourceHandle.ioHandle == null) {
+                throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
             }
         }
 
         if (isParsimonious) {
-            return sourceHandle;
+            // Parsimonious dup (>&= / <&=): create a BorrowedIOHandle that shares
+            // the same fd and delegates all I/O, but does NOT close the underlying
+            // handle when closed. This matches Perl's fdopen() semantics where
+            // closing the fdopen'd handle leaves the original handle operational.
+            //
+            // Example:  open(F, ">&=STDOUT")  → F shares STDOUT's fd
+            //           close(F)               → only flushes; STDOUT keeps working
+            RuntimeIO borrowed = new RuntimeIO();
+            borrowed.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+            borrowed.currentLineNumber = sourceHandle.currentLineNumber;
+            return borrowed;
         } else {
+            // Full dup: wrap in DupIOHandle with reference counting
             return duplicateFileHandle(sourceHandle);
         }
     }
 
+    /**
+     * Creates a full duplicate of a RuntimeIO handle, wrapping both the original and
+     * the new copy in {@link DupIOHandle} reference-counted wrappers.
+     *
+     * <h3>How it works — first dup vs. subsequent dup:</h3>
+     *
+     * <p><b>Case 1: First dup of a "raw" handle</b> (original.ioHandle is NOT a DupIOHandle):
+     * <pre>
+     *   Before:  original.ioHandle → StandardIO (fd=1)
+     *
+     *   After:   original.ioHandle → DupIOHandle[A] (fd=1, refCount=2) → StandardIO
+     *            duplicate.ioHandle → DupIOHandle[B] (fd=N, refCount=2) → StandardIO
+     *                                  (same refCount, same delegate)
+     * </pre>
+     * The original's fd is preserved (DupIOHandle[A] is registered at the original fd
+     * via {@link FileDescriptorTable#registerAt(int, IOHandle)}). The duplicate gets a
+     * newly allocated fd. Both wrappers share the same {@code AtomicInteger} refCount
+     * and the same underlying delegate IOHandle.
+     *
+     * <p><b>Case 2: Subsequent dup of an already-wrapped handle</b> (original.ioHandle
+     * IS a DupIOHandle):
+     * <pre>
+     *   Before:  original.ioHandle → DupIOHandle[A] (fd=1, refCount=2) → StandardIO
+     *            earlier_dup       → DupIOHandle[B] (fd=5, refCount=2) → StandardIO
+     *
+     *   After:   original.ioHandle → DupIOHandle[A] (fd=1, refCount=3) → StandardIO
+     *            earlier_dup       → DupIOHandle[B] (fd=5, refCount=3) → StandardIO
+     *            new_dup           → DupIOHandle[C] (fd=N, refCount=3) → StandardIO
+     * </pre>
+     * The new DupIOHandle shares the existing refCount (which is incremented) and the
+     * same delegate. The original's wrapper is untouched.
+     *
+     * <h3>Why we wrap the original too (Case 1):</h3>
+     * <p>Without wrapping the original, closing the original would close the underlying
+     * resource, breaking the duplicate. By wrapping both with a shared refCount, the
+     * underlying resource is only closed when the <em>last</em> wrapper is closed.</p>
+     *
+     * <h3>fd registration:</h3>
+     * <p>Each DupIOHandle is registered in two places:
+     * <ul>
+     *   <li>{@link FileDescriptorTable} — for fd→IOHandle lookup (used by select())</li>
+     *   <li>{@link RuntimeIO#registerExternalFd(int)} — for fd→RuntimeIO lookup (used by
+     *       {@link #findFileHandleByDescriptor(int)} fallback)</li>
+     * </ul>
+     *
+     * @param original the source RuntimeIO to duplicate (will be modified if not already
+     *                 wrapped in DupIOHandle)
+     * @return a new RuntimeIO whose ioHandle is a DupIOHandle sharing the same delegate
+     */
     private static RuntimeIO duplicateFileHandle(RuntimeIO original) {
         if (original == null || original.ioHandle == null) {
             return null;
         }
 
-        // Get the real underlying IOHandle (unwrap existing DupIOHandle if any)
+        // Unwrap: if the original is already a DupIOHandle, extract the real delegate
+        // so we always wrap the actual I/O implementation (StandardIO, FileIOHandle, etc.)
         IOHandle realHandle = original.ioHandle;
         DupIOHandle existingDup = null;
         if (realHandle instanceof DupIOHandle dup) {
@@ -2642,7 +2764,9 @@ public class IOOperator {
             realHandle = dup.getDelegate();
         }
 
-        // Get the original's fileno before wrapping (to preserve it)
+        // Capture the original's current fd BEFORE wrapping, so we can preserve it.
+        // After wrapping, the original's ioHandle will be replaced with a DupIOHandle
+        // that reports this same fd via fileno().
         int originalFd;
         try {
             RuntimeScalar fileno = original.ioHandle.fileno();
@@ -2655,21 +2779,26 @@ public class IOOperator {
         duplicate.currentLineNumber = original.currentLineNumber;
 
         if (existingDup != null) {
-            // Original is already wrapped in a DupIOHandle — add another dup sharing same refcount
+            // --- Case 2: Original already wrapped → just add another dup ---
+            // Increments the shared refCount and creates a new DupIOHandle with a new fd.
             DupIOHandle newDup = DupIOHandle.addDup(existingDup);
             duplicate.ioHandle = newDup;
             duplicate.registerExternalFd(newDup.getFd());
         } else {
-            // First dup of this handle — wrap both original and duplicate with DupIOHandle
-            // The original wrapper preserves the original's fd number
+            // --- Case 1: First dup → wrap BOTH original and duplicate ---
+            // createPair() creates two DupIOHandles with refCount=2 sharing the same delegate.
+            // pair[0] is registered at originalFd to preserve the original's fileno.
+            // pair[1] gets a newly allocated fd.
             DupIOHandle[] pair = DupIOHandle.createPair(realHandle,
                     originalFd >= 0 ? originalFd : FileDescriptorTable.nextFdValue());
 
-            // Replace original's ioHandle with the refcounted wrapper
+            // Replace original's ioHandle with the refcounted wrapper.
+            // This is a MUTATION of the original — necessary so that closing the original
+            // decrements the refCount instead of closing the underlying resource directly.
             original.ioHandle = pair[0];
             original.registerExternalFd(pair[0].getFd());
 
-            // Set up the duplicate
+            // Set up the duplicate with the second wrapper
             duplicate.ioHandle = pair[1];
             duplicate.registerExternalFd(pair[1].getFd());
         }
@@ -2685,7 +2814,15 @@ public class IOOperator {
     }
 
     /**
-     * Register a RuntimeIO handle with a file descriptor number for duplication support.
+     * Registers a RuntimeIO handle at a specific file descriptor number in
+     * IOOperator's {@code fileDescriptorMap}.
+     *
+     * <p>This is separate from {@link FileDescriptorTable} (which maps fd→IOHandle)
+     * and {@link RuntimeIO#registerExternalFd(int)} (which maps fd→RuntimeIO).
+     * Handles registered here are checked first by {@link #findFileHandleByDescriptor(int)}.
+     *
+     * @param fd     the file descriptor number
+     * @param handle the RuntimeIO handle to register
      */
     public static void registerFileDescriptor(int fd, RuntimeIO handle) {
         if (handle != null) {
@@ -2694,7 +2831,10 @@ public class IOOperator {
     }
 
     /**
-     * Unregister a file descriptor when the handle is closed.
+     * Removes a file descriptor from IOOperator's {@code fileDescriptorMap}.
+     * Called when a handle is closed to prevent stale lookups.
+     *
+     * @param fd the file descriptor number to unregister
      */
     public static void unregisterFileDescriptor(int fd) {
         fileDescriptorMap.remove(fd);
