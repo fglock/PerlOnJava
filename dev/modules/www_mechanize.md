@@ -1,6 +1,6 @@
 # WWW::Mechanize Support for PerlOnJava
 
-## Status: Phase 7 In Progress
+## Status: Phase 7 Complete — 98.1% pass rate
 
 **Branch**: `feature/www-mechanize-support`
 **Date started**: 2026-04-04
@@ -131,7 +131,7 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 7 in progress — remaining test failures
+### Current Status: Phase 7 complete — 522/532 subtests pass (98.1%)
 
 ### Completed Phases
 - [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
@@ -156,6 +156,12 @@ make
   - Fixed self-closing `/>` to emit `'/' => '/'` attribute in non-XML mode
   - `make` passes (all unit tests green)
   - WWW::Mechanize non-local tests: 513/529 pass (97.0%)
+- [x] Phase 7: Labeled blocks, script/style raw text, media.types (2026-04-05)
+  - Fixed EmitStatement.java: labeled blocks are valid targets for unlabeled last/next/redo
+  - Added HTMLParser raw text handling for script/style/xmp/listing/plaintext/textarea/title
+  - Bundled LWP/media.types data file for MIME type lookups
+  - `make` passes (all unit tests green)
+  - WWW::Mechanize non-local tests: 522/532 pass (98.1%)
 
 ### Bug 7: HTMLParser argspec "self" doubled for method callbacks (FIXED)
 - **File**: `HTMLParser.java:fireEvent()` + `buildEventDataFromArgspec()`
@@ -196,41 +202,50 @@ make
 - **Fix**: In non-XML mode, add `'/'` to attrs/attrseq; only emit synthetic end tag
   when `xml_mode` is true.
 
-### Phase 7: Remaining failures (in progress)
+### Phase 7: Remaining failures — RESOLVED (2026-04-05)
 
-**Non-local test results: 513/529 pass (97.0%)**
+**Non-local test results: 522/532 pass (98.1%)**
 
-| Test File | Result | Root Cause |
-|-----------|--------|------------|
-| dump.t | 1/7 | Capture::Tiny STDOUT capture (fork); URL truncation in link/image dump; form parsing edge cases (raw HTML leaking into option values) |
-| find_link_xhtml.t | 8/10 | XHTML `<![CDATA[...]]>` / `marked_sections` not implemented |
-| image-parse.t | 41/47 (incomplete) | `<div style="background:url(...)">` CSS background not extracted from non-img elements; Test::Deep crash on undef from missing image |
-| upload.t | 3/5 (incomplete) | Unknown — needs investigation |
-| cookies.t | TIMEOUT | Needs fork() for HTTP::Daemon |
-| frames.t | TIMEOUT | Needs fork() for HTTP::Daemon |
+| Test File | Result | Root Cause | Status |
+|-----------|--------|------------|--------|
+| dump.t | 1/7 | Capture::Tiny STDOUT capture needs fork() | Won't fix (JVM limitation) |
+| field.t | 15/16 (TODO fail) | Expected: HTML::TokeParser limitation | OK (TODO test) |
+| find_link_xhtml.t | 8/10 | XHTML `<![CDATA[...]]>` / `marked_sections` not implemented | Low priority |
+| image-parse.t | 41/42 | 1 remaining CSS background-url edge case | Low priority |
+| mech-dump/file_not_found.t | 0/1 | Capture::Tiny STDERR capture needs fork() | Won't fix (JVM limitation) |
+| cookies.t | TIMEOUT | Needs fork() for HTTP::Daemon | Won't fix (JVM limitation) |
+| t/local/*.t | TIMEOUT | Needs fork() for HTTP::Daemon | Won't fix (JVM limitation) |
 
-#### Actionable items for Phase 7:
+### Remaining Issues (all low priority or JVM limitations)
 
-1. **HTMLParser: `<script>` content should not be parsed as HTML** (find_link_xhtml.t)
-   - Script/style element content should be treated as raw text (RCDATA/CDATA)
-   - This prevents false link/image extraction from JavaScript strings
-   - File: `HTMLParser.java:parseHtml()` — after start tag for script/style, skip to `</script>` / `</style>`
+1. **Capture::Tiny / fork()** — dump.t (6 failures), mech-dump/file_not_found.t (1 failure), cookies.t (timeout), all t/local/ tests (timeout). These all need fork() which is not available on JVM.
 
-2. **HTMLParser: CSS `background:url(...)` on non-img elements** (image-parse.t)
-   - WWW::Mechanize extracts images from inline `style="background:url(...)"` on any element
-   - Currently only works for `<img>` tags
-   - This is a WWW::Mechanize-level feature, not an HTML::Parser fix
-   - Lower priority — requires understanding how Mech discovers CSS images
+2. **XHTML marked_sections** — find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing not implemented in HTMLParser.
 
-3. **dump.t form parsing edge cases**
-   - Raw HTML leaking into option values (`value="2">` instead of `2`)
-   - Submit button value truncation (`Submi` instead of `Submit`)
-   - These may be resolved by the chunked parsing fix (needs re-verification)
+3. **CSS background-url extraction** — image-parse.t (1 failure). WWW::Mechanize extracts images from inline `style="background:url(...)"` on non-img elements.
 
-4. **Timeouts (cookies.t, frames.t)** — Known fork() limitation, won't fix
+### Bug 11: HTMLParser script/style raw text handling (FIXED)
+- **File**: `HTMLParser.java:parseHtml()`
+- **Symptom**: Tags inside `<script>` and `<style>` elements parsed as HTML,
+  causing false link/image extraction from JavaScript strings
+- **Root cause**: Content inside raw text elements (script, style, xmp, listing,
+  plaintext, textarea, title) was being parsed for HTML tags instead of treated
+  as raw text until the matching close tag.
+- **Fix**: After emitting a start tag event for raw text elements, scan ahead for
+  the case-insensitive closing tag and emit the content as a single text event.
+
+### Bug 12: Unlabeled last/next/redo in labeled blocks (FIXED)
+- **File**: `EmitStatement.java`
+- **Symptom**: `LABEL: { for (1..1) {} last; }` causes program exit instead of
+  exiting the labeled block
+- **Root cause**: `isUnlabeledTarget` was set to `false` for labeled simple blocks
+  (`isSimpleBlock=true` AND `labelName != null`). This prevented unlabeled `last`
+  from finding the block as a target, causing non-local ARETURN (program exit).
+- **Fix**: Set `isUnlabeledTarget = true` unconditionally. All blocks (labeled or
+  not) are valid targets for unlabeled last/next/redo per Perl semantics.
+- **Note**: Bytecode compiler did NOT have this bug (only checks `isTrueLoop`).
 
 ### Next Steps
-1. Implement `<script>`/`<style>` raw text handling in HTMLParser
-2. Re-run tests to check if dump.t improved after Phase 6 fixes
-3. Investigate upload.t and image-parse.t remaining failures
-4. Update PR with final results
+- All actionable fixes are complete
+- Remaining failures are either JVM limitations (fork/Capture::Tiny) or low-priority features (CDATA, CSS url extraction)
+- PR #440 ready for review
