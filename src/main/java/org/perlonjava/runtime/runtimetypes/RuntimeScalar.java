@@ -1019,12 +1019,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     };
                 }
                 String refStr = typeName + "(0x" + Integer.toHexString(value.hashCode()) + ")";
-                // For REFERENCE type, the blessId is on the value, not on the reference itself
+                // For REFERENCE type, the blessId is on the value (referent), not on the
+                // reference itself. We handle it here; the outer blessId check is skipped
+                // for REFERENCE type to avoid double-prepending the class name for circular
+                // self-references like: $x = bless \$x, 'Foo'
                 yield (valueBlessId == 0 ? refStr : NameNormalizer.getBlessStr(valueBlessId) + "=" + refStr);
             }
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).toStringRef();
             default -> "SCALAR(0x" + Integer.toHexString(value.hashCode()) + ")";
         };
+        // Only apply outer blessId for non-REFERENCE types.
+        // REFERENCE type already handles blessing through valueBlessId above.
+        if (type == REFERENCE) {
+            return ref;
+        }
         return (blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId) + "=" + ref);
     }
 

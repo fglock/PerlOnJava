@@ -99,6 +99,9 @@ public class Lexer {
     /**
      * Helper method to check if a character is ASCII whitespace only.
      * This excludes Unicode whitespace characters that should be treated as invalid identifier characters.
+     * Note: \r is included as whitespace. It is consumed by consumeWhitespace() along with
+     * spaces and tabs, which preserves it in the token text. This is critical for eval'd code
+     * (e.g., from Template Toolkit) where \r inside string literals must be preserved.
      */
     private static boolean isAsciiWhitespace(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
@@ -149,10 +152,6 @@ public class Lexer {
             if (current == '\n') {
                 position++;
                 return new LexerToken(LexerTokenType.NEWLINE, "\n");
-            } else if (current == '\r') {
-                // Skip carriage return characters
-                position++;
-                return nextToken(); // Continue to next character
             } else {
                 return consumeWhitespace();
             }
@@ -173,8 +172,8 @@ public class Lexer {
         int start = position;
         while (position < length
                 && input.charAt(position) != '\n'
-                && input.charAt(position) != '\r'
-                && (input.charAt(position) == ' ' || input.charAt(position) == '\t' || input.charAt(position) == '\f')) {
+                && (input.charAt(position) == ' ' || input.charAt(position) == '\t'
+                    || input.charAt(position) == '\r' || input.charAt(position) == '\f')) {
             position++;
         }
         return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));

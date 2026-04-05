@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.perlmodule.Warnings;
@@ -296,12 +297,37 @@ public class WarnDie {
 
     /**
      * Gets the Perl source location string (" at FILE line N") from the current
-     * Java call stack. Scans for JVM-compiled Perl frames (org.perlonjava.anon*)
-     * and uses ByteCodeSourceMapper to resolve to the Perl source file and line.
+     * execution context. First checks interpreter frames (which don't create
+     * org.perlonjava.anon* JVM stack entries), then falls back to scanning the
+     * JVM call stack for compiled Perl frames.
      *
      * @return A location string like " at script.pl line 42", or empty string if not found
      */
     static String getPerlLocationFromStack() {
+        // Check interpreter state first - interpreter frames don't create
+        // org.perlonjava.anon* JVM stack entries, so JVM stack scanning
+        // would skip them and find the wrong (calling Java code) location.
+        var frame = InterpreterState.current();
+        if (frame != null && frame.code() != null) {
+            var pcs = InterpreterState.getPcStack();
+            if (!pcs.isEmpty()) {
+                int currentPc = pcs.getLast();
+                if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                    var pcEntry = frame.code().pcToTokenIndex.floorEntry(currentPc);
+                    if (pcEntry != null) {
+                        int tokenIndex = pcEntry.getValue();
+                        if (frame.code().errorUtil != null) {
+                            var loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                            if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+                                return " at " + loc.fileName() + " line " + loc.lineNumber();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fall back to JVM stack scanning for compiled Perl frames
         Throwable t = new Throwable();
         HashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName = new HashMap<>();
         for (StackTraceElement element : t.getStackTrace()) {

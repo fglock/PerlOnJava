@@ -14,6 +14,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
+
 public class DataSection {
 
     /**
@@ -99,16 +101,16 @@ public class DataSection {
 
     /**
      * Extracts DATA section content from raw file bytes.
-     * In Perl 5, &lt;DATA&gt; reads raw bytes from the file. This method searches for
-     * the __DATA__ or __END__ marker in the raw bytes and returns the content
-     * after it as a Latin-1 string (each byte = one character), preserving
-     * non-UTF-8 bytes that would be corrupted by UTF-8 decoding.
+     * In Perl 5, &lt;DATA&gt; reads raw bytes from the file by default. However,
+     * when {@code use utf8} is active, Perl 5 decodes the DATA content as UTF-8,
+     * matching the source encoding pragma.
      *
      * @param rawBytes    the raw file bytes (after BOM removal)
      * @param markerText  the marker to search for ("__DATA__" or "__END__")
-     * @return the DATA content as a Latin-1 string, or null if marker not found
+     * @param useUtf8     true if {@code use utf8} is active (decode as UTF-8)
+     * @return the DATA content as a string, or null if marker not found
      */
-    private static String extractDataFromRawBytes(byte[] rawBytes, String markerText) {
+    private static String extractDataFromRawBytes(byte[] rawBytes, String markerText, boolean useUtf8) {
         byte[] marker = markerText.getBytes(StandardCharsets.US_ASCII);
         int markerLen = marker.length;
 
@@ -152,8 +154,12 @@ public class DataSection {
                 dataStart++;
             }
 
-            // Return remaining bytes as Latin-1 string (each byte = one character)
-            return new String(rawBytes, dataStart, rawBytes.length - dataStart, StandardCharsets.ISO_8859_1);
+            // Return remaining bytes as a string.
+            // With `use utf8`, decode as UTF-8 (matching Perl 5 behavior where the
+            // DATA handle inherits the source encoding). Without it, use Latin-1
+            // (each byte = one character), preserving raw binary data.
+            var charset = useUtf8 ? StandardCharsets.UTF_8 : StandardCharsets.ISO_8859_1;
+            return new String(rawBytes, dataStart, rawBytes.length - dataStart, charset);
         }
 
         return null; // Marker not found
@@ -203,7 +209,8 @@ public class DataSection {
                 byte[] rawBytes = parser.ctx.compilerOptions.rawCodeBytes;
                 String rawContent = null;
                 if (rawBytes != null) {
-                    rawContent = extractDataFromRawBytes(rawBytes, token.text);
+                    boolean useUtf8 = parser.ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8);
+                    rawContent = extractDataFromRawBytes(rawBytes, token.text, useUtf8);
                 }
 
                 if (rawContent != null) {

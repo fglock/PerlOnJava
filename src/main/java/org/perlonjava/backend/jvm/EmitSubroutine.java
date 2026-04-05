@@ -225,25 +225,29 @@ public class EmitSubroutine {
                     false);
 
             // 5. Create a CODE variable using RuntimeCode.makeCodeObject
+            // Always pass the current package name (CvSTASH) so anonymous subs
+            // know which package they were compiled in. This is critical for
+            // $AUTOLOAD being set in the correct package and for B::svref_2object->STASH->NAME.
             if (node.prototype != null) {
                 mv.visitLdcInsn(node.prototype);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                        "makeCodeObject",
-                        "(Ljava/lang/Object;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
             } else {
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                        "makeCodeObject",
-                        "(Ljava/lang/Object;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
+                mv.visitInsn(Opcodes.ACONST_NULL);
             }
+            mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "makeCodeObject",
+                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
         } catch (InterpreterFallbackException fallback) {
             // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using interpreter fallback for subroutine");
+            
+            // Set CvSTASH on the InterpretedCode if not already set
+            if (fallback.interpretedCode.packageName == null) {
+                fallback.interpretedCode.packageName = ctx.symbolTable.getCurrentPackage();
+            }
             
             // Store the InterpretedCode in the interpretedSubs map with a unique key
             String fallbackKey = "interpreted_" + System.identityHashCode(fallback.interpretedCode);

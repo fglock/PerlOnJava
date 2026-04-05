@@ -1337,6 +1337,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static RuntimeScalar makeCodeObject(Object codeObject, String prototype) throws Exception {
+        return makeCodeObject(codeObject, prototype, null);
+    }
+
+    /**
+     * Factory method to create a CODE object with CvSTASH (package name) tracking.
+     * The packageName parameter sets the CvSTASH equivalent, which determines where
+     * $AUTOLOAD is set and what B::svref_2object->STASH->NAME returns.
+     *
+     * @param codeObject  the instance of the compiled Class
+     * @param prototype   the prototype string (may be null)
+     * @param packageName the compile-time package (CvSTASH equivalent, may be null)
+     * @return a RuntimeScalar representing the CODE object
+     * @throws Exception if an error occurs during method retrieval
+     */
+    public static RuntimeScalar makeCodeObject(Object codeObject, String prototype, String packageName) throws Exception {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
@@ -1346,6 +1361,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Create a new RuntimeCode using the functional interface
         RuntimeCode code = new RuntimeCode(subroutine, prototype);
+        // Set CvSTASH (the package where this sub was compiled)
+        if (packageName != null) {
+            code.packageName = packageName;
+        }
         RuntimeScalar codeRef = new RuntimeScalar(code);
 
         // Set the __SUB__ instance field

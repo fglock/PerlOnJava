@@ -963,11 +963,14 @@ public abstract class StringSegmentParser {
             return false;
         }
 
-        // In regex patterns, $) should NOT be interpolated as the EGID variable.
-        // The ) typically closes a regex group, so $) means end-of-string anchor + closing paren.
-        // Similarly, $( in regex is usually $ anchor + opening paren, not the real GID variable.
-        // But in double-quoted strings, $( and $) SHOULD interpolate to the GID/EGID values.
-        if (isRegex && "$".equals(sigil) && (")".equals(nextToken.text) || "(".equals(nextToken.text))) {
+        // In regex patterns, $ followed by certain regex metacharacters should NOT be
+        // interpolated as special variables. Instead, $ is the end-of-string anchor:
+        //   $) = anchor + closing group (not $EGID)
+        //   $( = anchor + opening group (not $GID)
+        //   $| = anchor + alternation (not $OUTPUT_AUTOFLUSH)
+        // In double-quoted strings, these SHOULD interpolate to their variable values.
+        if (isRegex && "$".equals(sigil)
+                && (")".equals(nextToken.text) || "(".equals(nextToken.text) || "|".equals(nextToken.text))) {
             return false;
         }
 
