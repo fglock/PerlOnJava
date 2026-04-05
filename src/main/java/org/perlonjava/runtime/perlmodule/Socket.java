@@ -17,32 +17,35 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class Socket extends PerlModuleBase {
 
-    // Socket constants
+    // Platform detection
+    private static final boolean IS_WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
+
+    // Socket constants - platform dependent where noted
     public static final int AF_INET = 2;
-    public static final int AF_INET6 = 10;
+    public static final int AF_INET6 = IS_WINDOWS ? 23 : 10;
     public static final int AF_UNIX = 1;
     public static final int PF_INET = 2;  // Protocol family same as address family
-    public static final int PF_INET6 = 10;
+    public static final int PF_INET6 = IS_WINDOWS ? 23 : 10;
     public static final int PF_UNIX = 1;
     public static final int PF_UNSPEC = 0;
     public static final int SOMAXCONN = 128;
     public static final int SOCK_STREAM = 1;
     public static final int SOCK_DGRAM = 2;
     public static final int SOCK_RAW = 3;
-    public static final int SOL_SOCKET = 1;
-    public static final int SO_REUSEADDR = 2;
-    public static final int SO_KEEPALIVE = 9;
-    public static final int SO_BROADCAST = 6;
-    public static final int SO_LINGER = 13;
-    public static final int SO_ERROR = 4;
-    public static final int SO_TYPE = 4104;
+    public static final int SOL_SOCKET = IS_WINDOWS ? 0xFFFF : 1;
+    public static final int SO_REUSEADDR = IS_WINDOWS ? 4 : 2;
+    public static final int SO_KEEPALIVE = IS_WINDOWS ? 8 : 9;
+    public static final int SO_BROADCAST = IS_WINDOWS ? 32 : 6;
+    public static final int SO_LINGER = IS_WINDOWS ? 128 : 13;
+    public static final int SO_ERROR = IS_WINDOWS ? 0x1007 : 4;
+    public static final int SO_TYPE = IS_WINDOWS ? 0x1008 : 4104;
     public static final int TCP_NODELAY = 1;
     public static final int IPPROTO_TCP = 6;
     public static final int IPPROTO_UDP = 17;
     public static final int IPPROTO_ICMP = 1;
     public static final int IPPROTO_IP = 0;
     public static final int IPPROTO_IPV6 = 41;
-    public static final int IP_TOS = 1;
+    public static final int IP_TOS = IS_WINDOWS ? 3 : 1;
     public static final int IP_TTL = 2;
     public static final int SHUT_RD = 0;
     public static final int SHUT_WR = 1;
@@ -59,8 +62,8 @@ public class Socket extends PerlModuleBase {
     public static final int NIx_NOSERV = 2;
     public static final int EAI_NONAME = 8;
     // IPV6 constants
-    public static final int IPV6_V6ONLY = 26;
-    public static final int SO_REUSEPORT = 15;
+    public static final int IPV6_V6ONLY = IS_WINDOWS ? 27 : 26;
+    public static final int SO_REUSEPORT = IS_WINDOWS ? -1 : 15;  // Not available on Windows
     // INADDR constants as 4-byte packed binary strings
     public static final String INADDR_ANY = "\0\0\0\0";           // 0.0.0.0
     public static final String INADDR_LOOPBACK = "\177\0\0\1";    // 127.0.0.1

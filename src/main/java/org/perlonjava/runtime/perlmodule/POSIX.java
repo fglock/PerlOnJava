@@ -686,7 +686,8 @@ public class POSIX extends PerlModuleBase {
         return new RuntimeScalar(System.getProperty("os.name").toLowerCase().contains("mac") ? 18 : 20).getList();
     }
 
-    // Errno constants (standard POSIX values)
+    // Errno constants - platform dependent
+    // Linux uses standard POSIX values; macOS shares most; Windows CRT uses different values for EAGAIN and above
     public static RuntimeList const_EPERM(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
     public static RuntimeList const_ENOENT(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
     public static RuntimeList const_ESRCH(RuntimeArray a, int c) { return new RuntimeScalar(3).getList(); }
@@ -697,7 +698,7 @@ public class POSIX extends PerlModuleBase {
     public static RuntimeList const_ENOEXEC(RuntimeArray a, int c) { return new RuntimeScalar(8).getList(); }
     public static RuntimeList const_EBADF(RuntimeArray a, int c) { return new RuntimeScalar(9).getList(); }
     public static RuntimeList const_ECHILD(RuntimeArray a, int c) { return new RuntimeScalar(10).getList(); }
-    public static RuntimeList const_EAGAIN(RuntimeArray a, int c) { return new RuntimeScalar(11).getList(); }
+    public static RuntimeList const_EAGAIN(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 11 : IS_MAC ? 35 : 11).getList(); }
     public static RuntimeList const_ENOMEM(RuntimeArray a, int c) { return new RuntimeScalar(12).getList(); }
     public static RuntimeList const_EACCES(RuntimeArray a, int c) { return new RuntimeScalar(13).getList(); }
     public static RuntimeList const_EFAULT(RuntimeArray a, int c) { return new RuntimeScalar(14).getList(); }
@@ -712,7 +713,7 @@ public class POSIX extends PerlModuleBase {
     public static RuntimeList const_ENFILE(RuntimeArray a, int c) { return new RuntimeScalar(23).getList(); }
     public static RuntimeList const_EMFILE(RuntimeArray a, int c) { return new RuntimeScalar(24).getList(); }
     public static RuntimeList const_ENOTTY(RuntimeArray a, int c) { return new RuntimeScalar(25).getList(); }
-    public static RuntimeList const_ETXTBSY(RuntimeArray a, int c) { return new RuntimeScalar(26).getList(); }
+    public static RuntimeList const_ETXTBSY(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 134 : 26).getList(); }
     public static RuntimeList const_EFBIG(RuntimeArray a, int c) { return new RuntimeScalar(27).getList(); }
     public static RuntimeList const_ENOSPC(RuntimeArray a, int c) { return new RuntimeScalar(28).getList(); }
     public static RuntimeList const_ESPIPE(RuntimeArray a, int c) { return new RuntimeScalar(29).getList(); }
@@ -740,6 +741,7 @@ public class POSIX extends PerlModuleBase {
 
     // Terminal I/O (termios) constants - platform dependent
     private static final boolean IS_MAC = System.getProperty("os.name").toLowerCase().contains("mac");
+    private static final boolean IS_WINDOWS = System.getProperty("os.name").toLowerCase().contains("win");
 
     // Input mode flags
     public static RuntimeList const_BRKINT(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
@@ -850,7 +852,7 @@ public class POSIX extends PerlModuleBase {
         return new RuntimeScalar(1).getList();
     }
 
-    // _SC_OPEN_MAX constant (macOS=5, Linux=4)
+    // _SC_OPEN_MAX constant (macOS=5, Linux=4, Windows=4)
     public static RuntimeList const_SC_OPEN_MAX(RuntimeArray a, int c) {
         return new RuntimeScalar(IS_MAC ? 5 : 4).getList();
     }
@@ -876,7 +878,10 @@ public class POSIX extends PerlModuleBase {
         // _SC_OPEN_MAX: macOS=5, Linux=4
         int scOpenMax = IS_MAC ? 5 : 4;
         if (name == scOpenMax) {
-            // Return a reasonable max open files for JVM
+            // On Windows, ulimit is not available; return a reasonable default
+            if (IS_WINDOWS) {
+                return new RuntimeScalar(2048).getList();
+            }
             // Use ulimit value if available, otherwise default to 1024
             try {
                 Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", "ulimit -n"});
