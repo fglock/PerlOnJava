@@ -1,6 +1,6 @@
 # WWW::Mechanize Support for PerlOnJava
 
-## Status: Phase 1 In Progress
+## Status: Phase 7 In Progress
 
 **Branch**: `feature/www-mechanize-support`
 **Date started**: 2026-04-04
@@ -131,7 +131,7 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 5 complete
+### Current Status: Phase 7 in progress — remaining test failures
 
 ### Completed Phases
 - [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
@@ -150,6 +150,12 @@ make
   - `make` passes (all unit tests green)
   - WWW::Mechanize non-local tests: 431/478 pass (90.2%)
   - Local tests: 14/139 pass (need fork() for HTTP::Daemon)
+- [x] Phase 6: Chunked parsing, strict subs, self-closing tags (2026-04-05)
+  - Fixed HTMLParser to buffer incomplete tags across parse() chunk boundaries
+  - Fixed strict subs to allow trailing `::` barewords (package name constants)
+  - Fixed self-closing `/>` to emit `'/' => '/'` attribute in non-XML mode
+  - `make` passes (all unit tests green)
+  - WWW::Mechanize non-local tests: 513/529 pass (97.0%)
 
 ### Bug 7: HTMLParser argspec "self" doubled for method callbacks (FIXED)
 - **File**: `HTMLParser.java:fireEvent()` + `buildEventDataFromArgspec()`
@@ -161,20 +167,70 @@ make
 - **Fix**: Added `skipSelf` parameter to `buildEventDataFromArgspec()`.
   STRING callbacks use skipSelf=true; CODE/ARRAY use skipSelf=false.
 
-### Remaining Failures (non-local tests)
-- area_link.t: 7/9 — self-closing `<area/>` attribute parsing
-- dump.t: 1/7 — likely needs file handle / select
-- find_image.t: 32/39 — image parsing edge cases
-- find_inputs.t: 10/11 — form input finding
-- find_link.t: 68/70 — minor link attribute issues
-- find_link_xhtml.t: 8/10 — XHTML self-closing tag handling
-- form_with_fields.t: 21/23 — form field matching
-- form_with_fields_passthrough_params.t: 15/17 — form field passthrough
-- submit_form.t: 1/9 — form submission
-- tick.t: 5/6 — checkbox tick handling
-- cookies.t: TIMEOUT — needs fork for HTTP::Daemon
-- frames.t: TIMEOUT — needs fork for HTTP::Daemon
+### Bug 8: HTMLParser incomplete tag buffering across chunks (FIXED)
+- **File**: `HTMLParser.java:parseHtml()`
+- **Symptom**: Tags split at 512-byte chunk boundary get truncated (e.g., URL
+  `http://www.bbc.co.uk/` becomes `http://www.bbc`)
+- **Root cause**: `parseHtml()` buffered incomplete comments/declarations/PIs but
+  NOT incomplete start or end tags. When `HTML::PullParser` feeds 512-byte chunks,
+  any tag straddling a boundary was parsed with truncated content.
+- **Fix**: Added incomplete tag detection after attribute parsing. If `>` not found
+  before end of input, buffer from `tagStart` for next `parse()` call. Also handles
+  bare `<` at end of input and incomplete end tags.
+
+### Bug 9: Strict subs rejects trailing `::` barewords (FIXED)
+- **Files**: `EmitLiteral.java:emitIdentifier()` + `BytecodeCompiler.java`
+- **Symptom**: `Bareword "Tie::RefHash::" not allowed while "strict subs" in use`
+- **Root cause**: The strict subs check had zero exemptions for any bareword pattern.
+  In Perl, barewords ending with `::` are package name constants, always allowed.
+- **Fix**: Added early return for names ending with `::` that strips the trailing `::` and
+  emits as a string literal. Applied in both JVM and bytecode backends.
+
+### Bug 10: Self-closing `/>` emits synthetic end tag in non-XML mode (FIXED)
+- **File**: `HTMLParser.java:parseHtml()`
+- **Symptom**: `get_phrase()` stops early at synthetic `</input>` end tag; `<area/>`
+  missing `'/' => '/'` attribute expected by tests
+- **Root cause**: In non-XML mode, `/>` was treated as self-closing with a synthetic
+  end event. Perl's HTML::Parser treats `/` as a boolean attribute `'/' => '/'` and
+  does NOT emit an end event. Synthetic end tags only happen in `xml_mode`.
+- **Fix**: In non-XML mode, add `'/'` to attrs/attrseq; only emit synthetic end tag
+  when `xml_mode` is true.
+
+### Phase 7: Remaining failures (in progress)
+
+**Non-local test results: 513/529 pass (97.0%)**
+
+| Test File | Result | Root Cause |
+|-----------|--------|------------|
+| dump.t | 1/7 | Capture::Tiny STDOUT capture (fork); URL truncation in link/image dump; form parsing edge cases (raw HTML leaking into option values) |
+| find_link_xhtml.t | 8/10 | XHTML `<![CDATA[...]]>` / `marked_sections` not implemented |
+| image-parse.t | 41/47 (incomplete) | `<div style="background:url(...)">` CSS background not extracted from non-img elements; Test::Deep crash on undef from missing image |
+| upload.t | 3/5 (incomplete) | Unknown — needs investigation |
+| cookies.t | TIMEOUT | Needs fork() for HTTP::Daemon |
+| frames.t | TIMEOUT | Needs fork() for HTTP::Daemon |
+
+#### Actionable items for Phase 7:
+
+1. **HTMLParser: `<script>` content should not be parsed as HTML** (find_link_xhtml.t)
+   - Script/style element content should be treated as raw text (RCDATA/CDATA)
+   - This prevents false link/image extraction from JavaScript strings
+   - File: `HTMLParser.java:parseHtml()` — after start tag for script/style, skip to `</script>` / `</style>`
+
+2. **HTMLParser: CSS `background:url(...)` on non-img elements** (image-parse.t)
+   - WWW::Mechanize extracts images from inline `style="background:url(...)"` on any element
+   - Currently only works for `<img>` tags
+   - This is a WWW::Mechanize-level feature, not an HTML::Parser fix
+   - Lower priority — requires understanding how Mech discovers CSS images
+
+3. **dump.t form parsing edge cases**
+   - Raw HTML leaking into option values (`value="2">` instead of `2`)
+   - Submit button value truncation (`Submi` instead of `Submit`)
+   - These may be resolved by the chunked parsing fix (needs re-verification)
+
+4. **Timeouts (cookies.t, frames.t)** — Known fork() limitation, won't fix
 
 ### Next Steps
-- Investigate remaining failures (mostly HTML attribute/form parsing edge cases)
-- Local tests require fork() — known JVM limitation
+1. Implement `<script>`/`<style>` raw text handling in HTMLParser
+2. Re-run tests to check if dump.t improved after Phase 6 fixes
+3. Investigate upload.t and image-parse.t remaining failures
+4. Update PR with final results
