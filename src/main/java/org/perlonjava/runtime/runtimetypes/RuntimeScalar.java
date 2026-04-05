@@ -298,6 +298,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return getNumberLarge();
     }
 
+    // Inlineable fast path for getNumber() with operation context for "isn't numeric" warnings
+    public RuntimeScalar getNumber(String operation) {
+        if (type == INTEGER || type == DOUBLE) {
+            return this;
+        }
+        // For string types, pass operation context so warnings include "in <operation>"
+        if (type == STRING || type == BYTE_STRING || type == VSTRING) {
+            return NumberParser.parseNumber(this, operation);
+        }
+        return getNumberLarge();
+    }
+
     // Slow path for getNumber()
     public RuntimeScalar getNumberLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
@@ -337,6 +349,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // For tied scalars, fetch first then check the fetched value
         if (type == TIED_SCALAR) {
             return this.tiedFetch().getNumberWarn(operation);
+        }
+        // For string types, pass operation context so "isn't numeric" warnings include it
+        if (type == STRING || type == BYTE_STRING || type == VSTRING) {
+            return NumberParser.parseNumber(this, operation);
         }
         // All other types are defined, just convert to number
         return getNumberLarge();
