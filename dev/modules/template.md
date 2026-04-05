@@ -97,7 +97,21 @@ XS module with a Perl parent.
 
 ## Next Steps
 
-1. **leak.t** — DESTROY not implemented (known limitation, not fixable without DESTROY support)
+### Ready for merge
+This branch is ready for review and merge. All actionable failures have been fixed.
+The only remaining failure (`leak.t`) is due to a known PerlOnJava limitation (no DESTROY support).
+
+### Post-merge: jcpan parallel test ordering
+When running `./jcpan -j 8 -t Template`, the compile tests (`compile2.t`, `compile3.t`,
+`compile5.t`) may spuriously fail because they depend on `compile1.t` having run first
+to populate the compiled template cache. Running them sequentially (or with `-j 1`) always
+passes. This is a test-harness ordering issue, not a PerlOnJava bug.
+
+### Not planned (known limitation)
+- **leak.t tests 7, 11** — These tests verify that DESTROY is called when objects go out
+  of scope. PerlOnJava does not implement DESTROY (the JVM's tracing GC handles circular
+  references natively, making destructor-based cleanup unnecessary). These 2 subtests will
+  remain failing until/unless DESTROY support is added to PerlOnJava.
 
 ---
 
