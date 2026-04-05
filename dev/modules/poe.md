@@ -4,7 +4,7 @@
 
 **Module**: POE 1.370 (Perl Object Environment - event-driven multitasking framework)
 **Test command**: `./jcpan -t POE`
-**Status**: 35/53 unit+resource tests pass, ses_session.t 37/41 (up from 7/41), ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17
+**Status**: 38/53 unit+resource tests pass, ses_session.t 37/41, ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17, filehandles.t 131/132, 01_sysrw.t 17/17, 15_kernel_internal.t 12/12
 
 ## Dependency Tree
 
@@ -127,7 +127,7 @@ foreach my $session (@children) {
 - A poll loop with 10ms intervals respects the timeout parameter
 - Both pollable fds and NIO selector are checked each iteration
 
-## Current Test Results (2026-04-04)
+## Current Test Results (2026-04-05)
 
 ### Unit Tests (t/10_units/)
 
@@ -146,10 +146,10 @@ foreach my $session (@children) {
 | 03_base/12_assert_retval.t | **PASS** (22/22) | |
 | 03_base/13_assert_data.t | **PASS** (7/7) | |
 | 03_base/14_kernel.t | **PASS** (6/6) | |
-| 03_base/15_kernel_internal.t | PARTIAL (7/12) | File handle dup bug |
+| 03_base/15_kernel_internal.t | **PASS** (12/12) | Fixed by DupIOHandle (Phase 4.8) |
 | 03_base/16_nfa_usage.t | **PASS** (11/11) | |
 | 03_base/17_detach_start.t | **PASS** (14/14) | |
-| 04_drivers/01_sysrw.t | TIMEOUT | Hangs on I/O test |
+| 04_drivers/01_sysrw.t | **PASS** (17/17) | Fixed by DupIOHandle + non-blocking pipe I/O |
 | 05_filters/01_block.t | **PASS** (42/42) | |
 | 05_filters/02_grep.t | **PASS** (48/48) | |
 | 05_filters/03_http.t | PARTIAL (79/137) | HTTP::Message bytes issue |
@@ -186,12 +186,12 @@ foreach my $session (@children) {
 | events.t | **PASS** (38/38) | |
 | extrefs.t | **PASS** (31/31) | |
 | extrefs_gc.t | **PASS** (5/5) | |
-| filehandles.t | FAIL (1/132) | Socket.getChannel() null |
+| filehandles.t | **PASS** (131/132) | Fixed by DupIOHandle; 1 TODO test |
 | sessions.t | **PASS** (58/58) | |
 | sids.t | **PASS** (7/7) | |
-| signals.t | PARTIAL (45/46) | 1 test failure |
+| signals.t | **PASS** (46/46) | 2 TODO skips count as pass |
 
-### Summary: 35 test files fully pass, 18 fail/partial
+### Summary: 38 test files fully pass, 15 fail/partial
 
 ## Remaining Issues
 
@@ -200,18 +200,17 @@ foreach my $session (@children) {
 | Issue | Impact | Category |
 |-------|--------|----------|
 | CORE::GLOBAL::require override not supported | 09_resources.t | Runtime feature |
-| File handle dup (open FH, ">&OTHER") shares state | 15_kernel_internal.t | I/O subsystem |
-| Socket.getChannel() returns null | filehandles.t | Network I/O |
+| DESTROY not called for blessed objects | wheel_readwrite, wheel_tail, wheel_sf_*, wheel_accept, ses_session (4 tests) | JVM limitation |
 | IO::Poll not available | 4 loop tests | Missing module |
 
 ### Issues worth fixing
 
 | Issue | Impact | Difficulty |
 |-------|--------|------------|
+| DESTROY workaround (Phase 4.5) | 20-30+ tests across 5+ wheel test files | Medium-Hard |
 | Storable not found by POE test runner | 3 filter tests | Low (path issue?) |
 | HTTP::Message bytes handling | 03_http.t (58 tests) | Medium |
-| 01_sysrw.t hangs | 1 driver test — **MOSTLY FIXED** (15/17 pass, 2 blocked by dup/close) | Medium (I/O) |
-| signals.t 1 failure | 1 test | Low |
+| TIOCSWINSZ stub (Phase 4.6) | wheel_run, k_signals_rerun | Low |
 
 ### Event Loop Tests (t/30_loops/select/)
 
@@ -228,8 +227,8 @@ foreach my $session (@children) {
 | k_signals.t | PARTIAL (2/8) | Signal delivery |
 | k_signals_rerun.t | FAIL | |
 | sbk_signal_init.t | **PASS** (1/1) | |
-| ses_nfa.t | TIMEOUT | NFA session hangs |
-| ses_session.t | PARTIAL (35/41) | Signal delivery + DESTROY timing |
+| ses_nfa.t | **PASS** (39/39) | NFA state machine works |
+| ses_session.t | PARTIAL (37/41) | 4 failures from DESTROY count checks |
 | comp_tcp.t | FAIL (0/34) | TCP networking |
 | wheel_accept.t | PARTIAL (1/2) | Hangs after test 1 |
 | wheel_readwrite.t | PARTIAL (16/28) | I/O events don't fire, hangs |
@@ -244,43 +243,134 @@ foreach my $session (@children) {
 | connect_errors.t | **PASS** (3/3) | |
 | k_signals_rerun.t | PARTIAL (1/9) | TIOCSWINSZ error in child processes |
 
-**Event loop summary**: 13/35 fully pass. Core event loop works (alarms, aliases, detach, signals).
+**Event loop summary**: 14/35 fully pass. Core event loop works (alarms, aliases, detach, signals, NFA).
 
 ## Fix Plan - Remaining Phases
 
-### Phase 3: Event loop and session hardening (high impact)
+### Completed Phases (1-3, 4.1-4.4, 4.8)
 
-| Step | Target | Expected Impact | Difficulty |
-|------|--------|-----------------|------------|
-| 3.1 | Fix ses_session.t (7/41) | Core session lifecycle validation | Medium |
-| 3.2 | Fix k_selects.t (5/17) | File handle watcher support | Medium |
-| 3.3 | Fix k_signals.t (2/8) and k_sig_child.t (5/15) | Signal delivery | Medium |
-| 3.4 | Fix signals.t (45/46) | 1 remaining test failure | Low |
-| 3.5 | Fix Storable path for POE test runner | Unblocks 3 filter tests | Low |
-| 3.6 | Fix ses_nfa.t timeout | NFA state machine tests | Medium |
+All phases through 4.4 and Phase 4.8 are complete. See Progress Tracking below for details.
 
-### Phase 4: Extended features (lower priority)
+### Phase 4.5: Implement DESTROY workaround — HIGHEST REMAINING IMPACT
 
-| Step | Target | Expected Impact | Difficulty |
-|------|--------|-----------------|------------|
-| 4.1 | HTTP::Message bytes handling | 03_http.t (58 more tests) | Medium |
-| 4.2 | Socket/network tests (comp_tcp, wheel_sf_*) | TCP/UDP networking | Hard |
-| 4.3 | IO::Poll stub | 4 poll-related loop tests | Medium |
-| 4.4 | File handle dup fix | 15_kernel_internal.t (5 tests) + 01_sysrw.t (2 tests) | Hard — see Phase 4.8 |
-| 4.5 | wheel_tail.t (FollowTail) | File watching | Medium |
+**Status**: Not started
+**Difficulty**: Medium-Hard
+**Expected impact**: 20-30+ additional test passes across 5+ test files
+
+**Problem**: All POE::Wheel test hangs (wheel_readwrite, wheel_tail, wheel_sf_tcp, wheel_accept,
+wheel_sf_udp) are caused by DESTROY never being called when POE::Wheel objects go out of scope.
+When wheels are created in eval or deleted via `delete $heap->{wheel}`, DESTROY never fires.
+This leaves orphan select() watchers and anonymous event handlers registered in the kernel,
+preventing sessions from stopping.
+
+**Affected tests**:
+- wheel_readwrite (28 tests) — constructor tests pass, I/O events work, hangs on cleanup
+- wheel_tail (10 tests) — FollowTail watching works, hangs on `delete $heap->{wheel}`
+- wheel_sf_tcp (9 tests) — TCP server works, hangs between phases
+- wheel_accept (2 tests) — accept works, hangs on cleanup
+- wheel_sf_udp (10 tests) — UDP sockets created, hangs on cleanup
+- ses_session (4 of 41 tests) — explicitly count DESTROY invocations
+
+**POE::Wheel DESTROY cleanup pattern** (all wheels follow this):
+1. Remove I/O watchers: `$poe_kernel->select_read($handle)`, `select_write($handle)`
+2. Cancel timers: `$poe_kernel->delay($state_name)` (FollowTail only)
+3. Remove anonymous states: `$poe_kernel->state($state_name)`
+4. Free wheel ID: `POE::Wheel::free_wheel_id($id)`
+
+**Recommended approach**: Option A — trigger DESTROY on hash `delete`/scalar overwrite when
+a blessed reference is replaced. POE's pattern is always `$heap->{wheel} = Wheel->new(...)`
+with a single reference, so calling DESTROY when the hash value is overwritten or deleted is
+correct 99% of the time. For safety, DESTROY should be made idempotent.
+
+**Implementation plan**:
+1. In `RuntimeHash.delete()`: before removing a value, check if it's a blessed reference
+   whose class defines DESTROY. If so, call DESTROY on it.
+2. In `RuntimeScalar.set()`: when overwriting a blessed reference, check for DESTROY.
+3. Guard against double-DESTROY: track whether DESTROY has already been called (e.g.,
+   a flag on the RuntimeScalar or the blessed object's internal hash).
+4. DESTROY should be called in void context, catching any exceptions (like Perl does).
+
+**Alternative approaches** (see DESTROY Workaround Options section for full analysis):
+- Option B: Scope-based tied proxy (more accurate, more complex)
+- Option C: Patch POE::Wheel subclasses (fragile, no Java changes)
+- Option D: Full reference counting (correct but very complex)
+- Option F: POE::Kernel session GC (targeted but doesn't generalize)
+
+### Phase 4.6: Add TIOCSWINSZ stub — LOW EFFORT
+
+**Status**: Not started
+**Difficulty**: Low
+**Expected impact**: k_signals_rerun (8 tests), some wheel_run child process tests
+
+**Problem**: Wheel::Run uses `require 'sys/ioctl.ph'` inside an eval to get TIOCSWINSZ for
+terminal window size. PerlOnJava doesn't have sys/ioctl.ph, causing bareword errors.
+
+**Implementation plan**:
+1. Create `src/main/perl/lib/sys/ioctl.ph` with TIOCSWINSZ constant (0x5413 on Linux,
+   0x40087468 on macOS)
+2. OR: make the eval silently fail (already in an eval, just needs the require to not
+   blow up with a compilation error)
+
+**Note**: Most wheel_run tests also need fork, so the real impact is limited to
+k_signals_rerun (8 of 9 failures are from TIOCSWINSZ in child processes).
+
+### Phase 4.7: Windows platform support — CI CRITICAL
+
+**Status**: Not started
+**Difficulty**: Low-Medium (mostly lookup tables)
+
+POE's core event loop uses Java NIO (cross-platform), and POE itself has `$^O eq 'MSWin32'`
+guards. But several PerlOnJava subsystems only have macOS/Linux branches.
+
+| Step | Target | Severity | Difficulty |
+|------|--------|----------|------------|
+| 4.7.1 | **Fix EAGAIN/errno on Windows** — `FFMPosixWindows.strerror()` is a 10-entry stub. `ErrnoVariable` probes strerror to discover EAGAIN/EINPROGRESS/etc., which all resolve to 0 on Windows. POE's non-blocking I/O depends on these. Fix: add Windows errno constants directly, bypassing strerror probing. | Critical | Medium |
+| 4.7.2 | **Add Windows errno table** — `ErrnoHash.java` and `Errno.pm` have macOS/Linux tables only, fall through to Linux on Windows. Fix: add `MSWin32` branch with MSVC CRT errno values. | High | Low |
+| 4.7.3 | **Add Windows branch to RuntimeSigHash** — `%SIG` is pre-populated with Unix signals (HUP, USR1, PIPE, etc.) that don't exist on Windows. POE iterates `keys %SIG` and tries to install handlers. Fix: Windows branch with only INT, TERM, ABRT, FPE, ILL, SEGV, BREAK. | High | Low |
+| 4.7.4 | **Add Windows branch to POSIX.java** — IS_MAC flag gives macOS vs "everything else" (Linux). Windows gets Linux signal/termios values. Fix: add IS_WINDOWS flag, return Windows-correct signal constants, skip termios. | Medium | Low |
+| 4.7.5 | **Fix Socket.java constants** — SOL_SOCKET=1 (Linux) vs 0xFFFF (Windows), SO_REUSEADDR=2 vs 4, etc. These matter if passed to native setsockopt. Java abstracts most of this, so impact depends on implementation path. Fix: platform-detect and use correct values. | Medium | Low |
+| 4.7.6 | **Fix sysconf for Windows** — Runs `ulimit -n` which doesn't exist on Windows. Already has catch block defaulting to 1024, but should use a cleaner approach (e.g., `_getmaxstdio()` or just return 2048). | Low | Low |
+
+**What already works on Windows (no changes needed):**
+- `select()` via Java NIO Selector — cross-platform
+- Pipe handling via Java `PipedInputStream`/`PipedOutputStream` — cross-platform
+- POE::Loop::Select — has `$^O eq 'MSWin32'` guards
+- `socketpair` via loopback TCP — the standard Windows approach
+- `$^O` correctly set to `MSWin32` on Windows
+
+### Phase 4.9: Storable path fix — LOW EFFORT
+
+**Status**: Not started
+**Difficulty**: Low
+**Expected impact**: 3 filter tests (07_reference.t, 51_reference_die.t, 99_filterchange.t)
+
+**Problem**: POE's test runner can't find Storable at test time. Storable is available in
+PerlOnJava (XSLoader backend) but the test's @INC doesn't include the right path.
+
+**Implementation plan**: Investigate why `use Storable` fails inside POE's filter tests.
+Likely needs adding the correct lib path or fixing Storable's module resolution.
+
+### Phase 4.10: HTTP::Message bytes handling — MEDIUM EFFORT
+
+**Status**: Not started
+**Difficulty**: Medium
+**Expected impact**: 58 additional tests in 03_http.t (79/137 currently)
+
+**Problem**: HTTP::Message byte-string handling has issues when processing HTTP requests/responses
+through POE::Filter::HTTPD. The exact nature of the bytes vs. characters mismatch needs investigation.
 
 ### Phase 5: JVM limitations (not fixable without major work)
 
-| Feature | Reason |
-|---------|--------|
-| wheel_run.t (103 tests) | Needs fork + IO::Pty (native) |
-| IO::Tty / IO::Pty | XS module, needs C compiler |
-| wheel_curses.t | Needs Curses (native) |
-| wheel_readline.t | Needs terminal |
+| Feature | Reason | Tests affected |
+|---------|--------|----------------|
+| fork() | JVM cannot fork | k_sig_child (10), k_signals (6), wheel_run IO::Pty tests |
+| IO::Tty / IO::Pty | XS module, needs C compiler | wheel_run (32 skip), wheel_curses, wheel_readline |
+| DESTROY count accuracy | JVM tracing GC, not refcounting | ses_session (4 tests check exact DESTROY counts) |
+| CORE::GLOBAL::require | Not implemented | 09_resources.t (6 tests) |
 
 ## Progress Tracking
 
-### Current Status: Phase 4.3 analysis complete — DESTROY is the root cause of all wheel hangs
+### Current Status: Phase 4.8 complete — DESTROY workaround (Phase 4.5) is next highest impact
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -356,6 +446,20 @@ foreach my $session (@children) {
     OperatorHandler, and CompileBinaryOperator. Returns new position (or "0 but true"),
     unlike seek which returns 1/0.
   - Analyzed event loop I/O hang pattern — root cause is DESTROY (see below)
+- [x] Phase 4.8: Refcounted filehandle duplication (2026-04-05, commits 490c53f89, 116d88c7a)
+  - Fixed non-blocking syswrite for pipe handles — writer checks buffer capacity, returns
+    EAGAIN when full. Added shared writerClosedFlag for EOF detection.
+  - Added EBADF errno support — sysread/syswrite on closed/invalid handles now set $! to EBADF
+  - Created DupIOHandle class — refcounted IOHandle wrapper enabling proper Perl dup semantics.
+    Each dup'd handle has independent closed state and fd number; underlying resource only
+    closed when last dup is closed. Original handle preserves its fileno after duplication.
+  - Fixed findFileHandleByDescriptor() to check RuntimeIO's fileno registry — dup'd handles
+    registered via registerExternalFd() were invisible to open-by-fd-number (e.g., open($fh, ">&6"))
+  - Added FileDescriptorTable.registerAt() and nextFdValue() methods
+  - 01_sysrw.t: 15/17 → 17/17 (dup/close cycle works)
+  - 15_kernel_internal.t: 7/12 → 12/12 (fd management works)
+  - filehandles.t: 1/132 → 131/132 (only 1 TODO test fails)
+  - signals.t: 45/46 → 46/46
 
 ### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
@@ -443,156 +547,16 @@ POE's pattern is always `$heap->{wheel} = Wheel->new(...)` with a single referen
 calling DESTROY when the hash value is overwritten or deleted is correct 99% of the time.
 For safety, DESTROY could be made idempotent (track whether it's already been called).
 
-### Next Steps (Phase 4)
+### Next Steps
 
-#### Current Event Loop Test Inventory (35 test files, ~596 tests total)
-
-**Fully passing (13 files, 178 tests):**
-- 00_info (2/2), k_alarms (37/37), k_aliases (20/20), k_detach (9/9),
-  k_run_returns (1/1), k_selects (17/17), sbk_signal_init (1/1),
-  ses_nfa (39/39), ses_session (37/41), z_kogman_sig_order (7/7),
-  z_merijn_sigchld_system (4/4), z_steinert_signal_integrity (2/2),
-  connect_errors (3/3)
-
-**Partially passing (10 files):**
-- ses_session: 37/41 — 4 failures from DESTROY (JVM limitation, won't fix)
-- k_signals: 2/8 — remaining tests need fork()
-- k_sig_child: 5/15 — remaining tests need fork()
-- wheel_tail: 4/10 — sysseek works; hangs due to DESTROY (FollowTail cleanup)
-- wheel_run: 42/103 — 10 pass, 32 skip (IO::Pty), blocked by `TIOCSWINSZ` constant
-- wheel_sf_tcp: 4/9 — hangs after test 4 (event loop stalls after first TCP message)
-- wheel_sf_udp: 4/10 — UDP sockets created but datagrams never delivered
-- wheel_accept: 1/2 — hangs after test 1 (accept callback never fires)
-- wheel_readwrite: 16/28 — constructor tests pass, I/O events don't fire, hangs
-- k_signals_rerun: 1/9 — child processes fail with TIOCSWINSZ error
-
-**Blocked by missing `sysseek` — FIXED (commit 5b0ca1383):**
-- sysseek now implemented for both JVM and interpreter backends
-- wheel_tail FollowTail file-based watching works in isolation
-- Remaining wheel_tail failures are DESTROY-related, not sysseek-related
-
-**Blocked by missing `TIOCSWINSZ` (Wheel::Run ioctl):**
-- wheel_run additional tests beyond test 42, k_signals_rerun (8 of 9 fail)
-- TIOCSWINSZ is an ioctl constant from sys/ioctl.ph; needs stub or ioctl.ph generation
-
-**Event loop I/O hang pattern (root cause: DESTROY):**
-- wheel_readwrite, wheel_sf_tcp, wheel_accept, wheel_sf_udp, wheel_tail all hang
-  because POE::Wheel DESTROY never fires when wheels go out of scope
-- The I/O subsystem itself works — select(), sysread/syswrite, fileno all verified
-- Constructor/setup tests pass, then sessions hang because orphan watchers remain
-
-**Skipped (platform/network):**
-- all_errors (0, skip), comp_tcp (0, skip network), comp_tcp_concurrent (0),
-  wheel_curses (0, skip IO::Pty), wheel_readline (0), wheel_sf_unix (0, skip),
-  wheel_sf_ipv6 (0, skip GetAddrInfo), z_rt53302_fh_watchers (0, skip network)
-
-**Fork-dependent (JVM limitation, won't fix):**
-- wheel_run (103), k_sig_child, k_signals_rerun, z_rt39872_sigchld*,
-  z_leolo_wheel_run, z_merijn_sigchld_system (passes via system())
-
-#### Phase 4.1: Add Socket pack_sockaddr_un/unpack_sockaddr_un stubs — DONE
-- Impact: Unblocks POE::Wheel::SocketFactory loading
-- Enables: wheel_sf_tcp (9), wheel_sf_udp (10), wheel_accept (2), connect_errors (3)
-- Difficulty: Low (stub functions that die on actual use)
-- Result: connect_errors 3/3 PASS, wheel_sf_tcp 4/9 (hangs after test 4), wheel_accept 1/2 (hangs)
-
-#### Phase 4.2: Add POSIX terminal/file constants — DONE
-- Added: 80+ constants (stat permissions, terminal I/O, baud rates, sysconf/_SC_OPEN_MAX, setsid)
-- Added: S_IS* file type test functions (S_ISBLK, S_ISCHR, S_ISDIR, etc.) as pure Perl
-- Impact: Unblocks POE::Wheel::Run and Wheel::FollowTail loading
-- Result:
-  - Wheel::FollowTail loads, 4/10 pass — blocked by missing `sysseek` operator
-  - Wheel::Run loads, 42/103 (6 pass, 36 skip for IO::Pty) — blocked by missing `TIOCSWINSZ` ioctl constant
-- New blockers found:
-  - **sysseek**: Not implemented in PerlOnJava. FollowTail uses `sysseek($fh, 0, SEEK_CUR)`
-    to get current file position. Error: "Operator sysseek doesn't have a defined JVM descriptor"
-  - **TIOCSWINSZ**: Bareword ioctl constant used in Wheel::Run for terminal window size.
-    Error: 'Bareword "TIOCSWINSZ" not allowed while "strict subs"'. This is a `require`
-    inside an eval — a constant from sys/ioctl.ph that doesn't exist on JVM.
-
-#### Phase 4.3: Debug event loop I/O hang — DONE (analysis complete)
-- Root cause: DESTROY not called for POE::Wheel objects (see analysis above)
-- The I/O subsystem works correctly; all hangs traced to orphan select watchers
-- Fixed fileno() for regular files (Bug 21) — unrelated but needed for POE
-- See "DESTROY Workaround Options" section for implementation plan
-
-#### Phase 4.4: Implement sysseek — DONE (commit 5b0ca1383)
-- sysseek implemented for JVM backend (CoreOperatorResolver, EmitBinaryOperatorNode,
-  OperatorHandler, CompileBinaryOperator) and interpreter backend
-- Returns new position or "0 but true", unlike seek which returns 1/0
-- POE::Wheel::FollowTail file-based watching now works in isolation
-
-#### Phase 4.5: Implement DESTROY workaround (highest remaining impact)
-- Affects: wheel_readwrite (28), wheel_tail (10), wheel_sf_tcp (9), wheel_accept (2),
-  wheel_sf_udp (10), ses_session (4), plus any module using DESTROY for cleanup
-- Recommended: Option A — trigger DESTROY on hash delete/set when blessed ref is overwritten
-- Expected impact: 20-30+ additional test passes across 5+ test files
-- Difficulty: Medium-Hard (requires changes to RuntimeHash.delete/RuntimeScalar.set)
-
-#### Phase 4.6: Add TIOCSWINSZ stub (unblocks Wheel::Run child processes)
-- Affects: wheel_run (42/103), k_signals_rerun (1/9)
-- TIOCSWINSZ is loaded via `require 'sys/ioctl.ph'` inside an eval
-- Options: (a) create a stub sys/ioctl.ph, or (b) make the eval silently fail
-- Most wheel_run tests also need fork, so impact is limited
-- k_signals_rerun would benefit most (8 failures all from TIOCSWINSZ in child)
-
-#### Phase 4.7: Windows platform support
-
-POE's core event loop uses Java NIO (cross-platform), and POE itself has `$^O eq 'MSWin32'`
-guards. But several PerlOnJava subsystems only have macOS/Linux branches.
-
-| Step | Target | Severity | Difficulty |
-|------|--------|----------|------------|
-| 4.7.1 | **Fix EAGAIN/errno on Windows** — `FFMPosixWindows.strerror()` is a 10-entry stub. `ErrnoVariable` probes strerror to discover EAGAIN/EINPROGRESS/etc., which all resolve to 0 on Windows. POE's non-blocking I/O depends on these. Fix: add Windows errno constants directly, bypassing strerror probing. | Critical | Medium |
-| 4.7.2 | **Add Windows errno table** — `ErrnoHash.java` and `Errno.pm` have macOS/Linux tables only, fall through to Linux on Windows. Fix: add `MSWin32` branch with MSVC CRT errno values. | High | Low |
-| 4.7.3 | **Add Windows branch to RuntimeSigHash** — `%SIG` is pre-populated with Unix signals (HUP, USR1, PIPE, etc.) that don't exist on Windows. POE iterates `keys %SIG` and tries to install handlers. Fix: Windows branch with only INT, TERM, ABRT, FPE, ILL, SEGV, BREAK. | High | Low |
-| 4.7.4 | **Add Windows branch to POSIX.java** — IS_MAC flag gives macOS vs "everything else" (Linux). Windows gets Linux signal/termios values. Fix: add IS_WINDOWS flag, return Windows-correct signal constants, skip termios. | Medium | Low |
-| 4.7.5 | **Fix Socket.java constants** — SOL_SOCKET=1 (Linux) vs 0xFFFF (Windows), SO_REUSEADDR=2 vs 4, etc. These matter if passed to native setsockopt. Java abstracts most of this, so impact depends on implementation path. Fix: platform-detect and use correct values. | Medium | Low |
-| 4.7.6 | **Fix sysconf for Windows** — Runs `ulimit -n` which doesn't exist on Windows. Already has catch block defaulting to 1024, but should use a cleaner approach (e.g., `_getmaxstdio()` or just return 2048). | Low | Low |
-
-**What already works on Windows (no changes needed):**
-- `select()` via Java NIO Selector — cross-platform
-- Pipe handling via Java `PipedInputStream`/`PipedOutputStream` — cross-platform
-- POE::Loop::Select — has `$^O eq 'MSWin32'` guards
-- `socketpair` via loopback TCP — the standard Windows approach
-- `$^O` correctly set to `MSWin32` on Windows
-
-#### Phase 4.8: Fix filehandle dup (open FH, ">&OTHER") — proper fd duplication
-
-**Root cause**: `duplicateFileHandle()` in IOOperator.java (line 2610) does `duplicate.ioHandle = original.ioHandle` — both RuntimeIO objects share the **same** IOHandle object. When the original is closed, the duplicate becomes invalid. Also, fileno() returns the same fd for both (no new fd allocated).
-
-**What Perl does**: `open(SAVE, ">&STDERR")` calls `dup(2)` which creates a new fd (e.g., 3) pointing to the same underlying file description. The two fds are independent — closing one doesn't affect the other.
-
-**Reproduction**:
-```perl
-# Works once, fails on second cycle
-open(SAVE_STDERR, ">&STDERR") or die $!;  # SAVE gets fd 2, should get fd 3
-close(STDERR);                              # Closes fd 2 — also closes SAVE's ioHandle!
-open(STDERR, ">&SAVE_STDERR");              # Reopens from "already closed" SAVE
-close(SAVE_STDERR);                         # "Handle is already closed"
-```
-
-**Impact**: 
-- 01_sysrw.t: tests 16-17 blocked (dup/close/reopen STDERR cycle)
-- 15_kernel_internal.t: 5 tests (fd management)
-- Any module using STDERR save/restore pattern (common in test suites)
-- POE::Wheel::Run I/O redirection
-
-**Fix plan**:
-1. `duplicateFileHandle()` must create a **new IOHandle** that wraps/shares the same underlying stream but has independent close semantics
-2. For `StandardIO` handles (STDIN/STDOUT/STDERR): create a new IOHandle wrapper that delegates read/write but tracks its own closed state; closing the duplicate should NOT close the underlying stream
-3. For `CustomFileChannel` handles: create a new IOHandle that dups the `FileChannel` (FileChannel doesn't support true dup, but we can wrap it with a refcount so close only releases when all dups are closed)
-4. For `InternalPipeHandle`: create a new IOHandle sharing the same PipedInputStream/PipedOutputStream with independent close tracking
-5. For `SocketIO`: wrap with independent close state
-6. Assign a **new fd number** via `FileDescriptorTable.register()` for the duplicate
-7. Register the duplicate in `RuntimeIO.filenoToIO` so select()/fileno() see it
-
-**Difficulty**: Medium-Hard (affects all IOHandle types, needs careful close semantics)
-
-**Alternatives considered**:
-- Shared refcount on IOHandle: when all dups are closed, actually close the stream. Simpler but requires every IOHandle to be refcounted.
-- OS-level dup via FFM: call native dup(fd) and wrap the result. Only works for real OS fds, not Java pipes.
+**Priority order:**
+1. **Phase 4.5: DESTROY workaround** — highest remaining impact (20-30+ tests)
+2. **Phase 4.6: TIOCSWINSZ stub** — low effort, unblocks k_signals_rerun
+3. **Phase 4.9: Storable path fix** — low effort, 3 filter tests
+4. **Phase 4.10: HTTP::Message bytes** — medium effort, 58 tests in 03_http.t
+5. **Phase 4.7: Windows platform support** — CI critical
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
 - `dev/modules/io_stringy.md` - IO module porting patterns
+- `dev/design/object_lifecycle.md` - DESTROY and object lifecycle design
