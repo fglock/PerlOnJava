@@ -126,9 +126,19 @@ public class OperatorParser {
                     if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
                         TokenUtils.consume(parser); // Consume the '>' token
                         // Return a BinaryOperatorNode representing a readline operation
-                        return new BinaryOperatorNode("readline",
+                        BinaryOperatorNode readlineNode = new BinaryOperatorNode("readline",
                                 fileHandle,
                                 new ListNode(parser.tokenIndex), parser.tokenIndex);
+                        // Annotate with handle name for error messages (e.g., "FILE")
+                        if (fileHandle instanceof IdentifierNode idNode) {
+                            String name = idNode.name;
+                            int colonIdx = name.lastIndexOf("::");
+                            if (colonIdx >= 0 && colonIdx + 2 < name.length()) {
+                                name = name.substring(colonIdx + 2);
+                            }
+                            readlineNode.setAnnotation("handleName", name);
+                        }
+                        return readlineNode;
                     }
                 }
             }
@@ -145,9 +155,15 @@ public class OperatorParser {
                 if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
                     TokenUtils.consume(parser); // Consume the '>' token
                     // Return a BinaryOperatorNode representing a readline operation
-                    return new BinaryOperatorNode("readline",
+                    BinaryOperatorNode readlineNode = new BinaryOperatorNode("readline",
                             var,
                             new ListNode(parser.tokenIndex), parser.tokenIndex);
+                    // Annotate with handle name for error messages (e.g., "$f", "$fh")
+                    if (var instanceof OperatorNode opNode && opNode.operator.equals("$")
+                            && opNode.operand instanceof IdentifierNode idNode) {
+                        readlineNode.setAnnotation("handleName", "$" + idNode.name);
+                    }
+                    return readlineNode;
                 }
             }
 
@@ -164,9 +180,12 @@ public class OperatorParser {
                 if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
                     TokenUtils.consume(parser); // Consume the '>' token
                     // Return a BinaryOperatorNode representing a readline operation
-                    return new BinaryOperatorNode("readline",
+                    BinaryOperatorNode readlineNode = new BinaryOperatorNode("readline",
                             new IdentifierNode("main::" + tokenText, currentTokenIndex),
                             new ListNode(parser.tokenIndex), parser.tokenIndex);
+                    // Annotate with handle name for error messages
+                    readlineNode.setAnnotation("handleName", tokenText);
+                    return readlineNode;
                 }
             }
         }

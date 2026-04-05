@@ -536,6 +536,7 @@ public class WarnDie {
             }
             return name;
         }
-        return null;
+        // Fall back to the variable name set during the last readline (e.g., "$f")
+        return RuntimeIO.lastReadlineHandleName;
     }
 }

@@ -46,26 +46,19 @@ public class StringOperators {
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }
-        // Convert the RuntimeScalar to a string and return its byte length.
-        // In Perl 5, strings that contain only characters <= 0xFF are stored
-        // internally as Latin-1 (1 byte per character). Only strings with
-        // characters > 0xFF are stored as UTF-8. Under 'use bytes', length()
-        // returns the internal byte count, so:
-        // - Latin-1 strings: byte count == character count
-        // - UTF-8 strings: byte count may be > character count
+        // In Perl 5, `use bytes; length(...)` returns the internal byte count:
+        // - BYTE_STRING (SvUTF8=0 in Perl 5): stored as Latin-1, byte count == char count
+        // - STRING (SvUTF8=1 in Perl 5): stored as UTF-8, byte count may be > char count
+        //
+        // In PerlOnJava:
+        // - BYTE_STRING: string literals with chars <= 0xFF, byte data from pack("A",...), etc.
+        // - STRING: pack("U",...), utf8::upgrade, literals with chars > 0xFF
         String str = runtimeScalar.toString();
-        // Check if string has any character > 0xFF (would be UTF-8 in Perl 5)
-        boolean hasWideChars = false;
-        for (int i = 0; i < str.length(); i++) {
-            if (str.charAt(i) > 0xFF) {
-                hasWideChars = true;
-                break;
-            }
-        }
-        if (!hasWideChars) {
-            // Latin-1 equivalent: 1 byte per character
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            // Latin-1: 1 byte per character
             return getScalarInt(str.length());
         }
+        // STRING type: return UTF-8 byte count
         try {
             return getScalarInt(str.getBytes(StandardCharsets.UTF_8).length);
         } catch (Exception e) {

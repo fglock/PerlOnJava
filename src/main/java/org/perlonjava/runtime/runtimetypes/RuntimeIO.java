@@ -129,6 +129,12 @@ public class RuntimeIO extends RuntimeScalar {
      * Updated whenever a filehandle is used for I/O operations.
      */
     public static RuntimeIO lastAccesseddHandle;
+    /**
+     * The variable/handle name used in the last readline operation (e.g., "$f", "STDIN").
+     * Set by the JVM backend before calling readline, used by WarnDie for error messages
+     * when the handle's globName is null (e.g., lexical filehandles).
+     */
+    public static String lastReadlineHandleName;
     // Tracks the last handle used for output writes (print/say/etc). This must not
     // clobber lastAccesseddHandle, which is used for ${^LAST_FH} and $.
     public static RuntimeIO lastWrittenHandle;
