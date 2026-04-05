@@ -87,7 +87,7 @@ public class CompileBinaryOperator {
 
         // Handle I/O and misc binary operators that use MiscOpcodeHandler (filehandle + args → list)
         switch (node.operator) {
-            case "binmode", "seek", "eof", "close", "fileno", "getc", "printf":
+            case "binmode", "seek", "sysseek", "eof", "close", "fileno", "getc", "printf":
                 compileBinaryAsListOp(bytecodeCompiler, node);
                 return;
             case "tell":
@@ -681,6 +681,7 @@ public class CompileBinaryOperator {
         int opcode = switch (node.operator) {
             case "binmode" -> Opcodes.BINMODE;
             case "seek" -> Opcodes.SEEK;
+            case "sysseek" -> Opcodes.SYSSEEK;
             case "eof" -> Opcodes.EOF_OP;
             case "close" -> Opcodes.CLOSE;
             case "fileno" -> Opcodes.FILENO;
