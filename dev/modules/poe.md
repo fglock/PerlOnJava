@@ -237,7 +237,7 @@ foreach my $session (@children) {
 | wheel_sf_tcp.t | PARTIAL (4/9) | Hangs after test 4 |
 | wheel_sf_udp.t | PARTIAL (4/10) | UDP datagrams never delivered |
 | wheel_sf_unix.t | FAIL (0/12) | Socket factory Unix |
-| wheel_tail.t | PARTIAL (4/10) | Blocked by missing sysseek |
+| wheel_tail.t | PARTIAL (4/10) | sysseek now works; hangs due to DESTROY |
 | z_kogman_sig_order.t | **PASS** (7/7) | |
 | z_merijn_sigchld_system.t | **PASS** (4/4) | |
 | z_steinert_signal_integrity.t | **PASS** (2/2) | |
@@ -280,7 +280,7 @@ foreach my $session (@children) {
 
 ## Progress Tracking
 
-### Current Status: Phase 4.3 in progress
+### Current Status: Phase 4.3 analysis complete — DESTROY is the root cause of all wheel hangs
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -346,6 +346,16 @@ foreach my $session (@children) {
   - Added setsid() and sysconf(_SC_OPEN_MAX) implementations
   - Platform-aware macOS/Linux detection for all platform-dependent constants
   - Wheel::FollowTail loads (4/10 pass), Wheel::Run loads (42/103: 6 pass, 36 skip)
+- [x] Phase 4.3: fileno fix + sysseek + event loop analysis (2026-04-04, commits 14ea123a9, 5b0ca1383)
+  - Fixed fileno() returning undef for regular file handles (Bug 21) — open() paths for
+    regular files, JAR resources, scalar-backed handles, and pipes all created IO handles
+    without calling assignFileno(), making fileno($fh) return undef. Added assignFileno()
+    calls in all four open paths in RuntimeIO.java.
+  - Implemented sysseek operator for JVM backend (Bug 22) — sysseek was only in the
+    interpreter backend. Added JVM support via CoreOperatorResolver, EmitBinaryOperatorNode,
+    OperatorHandler, and CompileBinaryOperator. Returns new position (or "0 but true"),
+    unlike seek which returns 1/0.
+  - Analyzed event loop I/O hang pattern — root cause is DESTROY (see below)
 
 ### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
@@ -381,6 +391,58 @@ foreach my $session (@children) {
   `require File::Spec` (module) instead of `require <expr>`. This prevented Time::HiRes
   from loading, causing monotime() to return integer seconds instead of float.
 
+### Key Findings (Phase 4.3) — DESTROY Root Cause Analysis
+
+**The event loop I/O hang is caused by POE::Wheel DESTROY not being called**, not by
+I/O subsystem bugs. The underlying I/O works correctly:
+
+- `fileno()` now works for all handle types (regular files, JARs, scalars, pipes)
+- `select()` correctly detects readability on regular file handles
+- `sysread()`/`syswrite()` work on tmpfiles, pipes, and sockets
+- `sysseek()` works correctly (returns position, "0 but true" at offset 0)
+- POE::Wheel::ReadWrite I/O events fire correctly in isolation
+
+**Verified working in isolation**: A standalone POE session with a ReadWrite wheel on a
+tmpfile receives all input events, flushes writes, and completes. The state machine
+(read→pause→seek→resume→write→shutdown) works as expected.
+
+**What fails**: When wheels are created in eval (test_new validation) or deleted via
+`delete $heap->{wheel}`, DESTROY never fires. This leaves orphan select() watchers
+and anonymous event handlers registered in the kernel, preventing sessions from stopping.
+
+**POE::Wheel DESTROY cleanup pattern** (all wheels follow this):
+1. Remove I/O watchers: `$poe_kernel->select_read($handle)`, `select_write($handle)`
+2. Cancel timers: `$poe_kernel->delay($state_name)` (FollowTail only)
+3. Remove anonymous states: `$poe_kernel->state($state_name)`
+4. Free wheel ID: `POE::Wheel::free_wheel_id($id)`
+
+**Specific test impacts:**
+- **wheel_readwrite.t test 12**: `ReadWrite->new(Handle=>\*DATA, LowMark=>3, HighMark=>8,
+  LowEvent=>"low")` succeeds when it should die (missing HighEvent validation in POE).
+  The wheel registers a select watcher on \*DATA, and without DESTROY, it's never removed.
+  This keeps Part 1's session alive forever, preventing Part 2 from running.
+- **wheel_tail.t**: FollowTail file-based watching works (creates file, reads lines, detects
+  resets), but the session hangs after `delete $heap->{wheel}` because the FollowTail's
+  delay timer and select watcher aren't cleaned up.
+- **wheel_sf_tcp.t**, **wheel_accept.t**: TCP server accepts connections (test 1 passes),
+  but subsequent wheel lifecycle depends on DESTROY for cleanup between phases.
+
+### DESTROY Workaround Options (Not Yet Implemented)
+
+| Option | Approach | Pros | Cons |
+|--------|----------|------|------|
+| A | **Trigger DESTROY on `delete`/`set`** — when overwriting a blessed reference in a hash/scalar, check if the class defines DESTROY and call it | Simple to implement; covers the `delete $heap->{wheel}` pattern | May call DESTROY too early if other references exist; not refcount-accurate |
+| B | **Scope-based cleanup via tied proxy** — wrap wheel references in a tied scalar that calls DESTROY when the scalar is overwritten | More accurate lifecycle tracking | Complex; requires patching POE internals |
+| C | **Patch POE::Wheel subclasses** — add explicit `_cleanup()` methods, patch POE::Kernel to call them when sessions stop | Clean, no Java changes needed | Fragile; must patch every Wheel subclass |
+| D | **Implement reference counting** — track refcounts for blessed objects at the RuntimeScalar level | Correct Perl 5 semantics | Very complex; massive changes to RuntimeScalar, affects performance |
+| E | **GC-based DESTROY with Cleaner** — register cleanup actions with java.lang.ref.Cleaner, run when GC collects | No refcounting needed | Unpredictable timing; previously attempted and reverted |
+| F | **POE::Kernel session GC** — when a session has no pending events/timers *except* select watchers, force-remove all watchers | Targeted to POE's specific deadlock pattern | Doesn't generalize; requires understanding POE's invariants |
+
+**Recommended approach**: Option A (trigger DESTROY on delete/set) is the most pragmatic.
+POE's pattern is always `$heap->{wheel} = Wheel->new(...)` with a single reference, so
+calling DESTROY when the hash value is overwritten or deleted is correct 99% of the time.
+For safety, DESTROY could be made idempotent (track whether it's already been called).
+
 ### Next Steps (Phase 4)
 
 #### Current Event Loop Test Inventory (35 test files, ~596 tests total)
@@ -396,7 +458,7 @@ foreach my $session (@children) {
 - ses_session: 37/41 — 4 failures from DESTROY (JVM limitation, won't fix)
 - k_signals: 2/8 — remaining tests need fork()
 - k_sig_child: 5/15 — remaining tests need fork()
-- wheel_tail: 4/10 — blocked by missing `sysseek` operator
+- wheel_tail: 4/10 — sysseek works; hangs due to DESTROY (FollowTail cleanup)
 - wheel_run: 42/103 — 10 pass, 32 skip (IO::Pty), blocked by `TIOCSWINSZ` constant
 - wheel_sf_tcp: 4/9 — hangs after test 4 (event loop stalls after first TCP message)
 - wheel_sf_udp: 4/10 — UDP sockets created but datagrams never delivered
@@ -404,18 +466,20 @@ foreach my $session (@children) {
 - wheel_readwrite: 16/28 — constructor tests pass, I/O events don't fire, hangs
 - k_signals_rerun: 1/9 — child processes fail with TIOCSWINSZ error
 
-**Blocked by missing `sysseek` (FollowTail):**
-- wheel_tail (10), z_rt54319_bazerka_followtail (6)
-- `sysseek` needs JVM implementation (seek via unbuffered I/O)
+**Blocked by missing `sysseek` — FIXED (commit 5b0ca1383):**
+- sysseek now implemented for both JVM and interpreter backends
+- wheel_tail FollowTail file-based watching works in isolation
+- Remaining wheel_tail failures are DESTROY-related, not sysseek-related
 
 **Blocked by missing `TIOCSWINSZ` (Wheel::Run ioctl):**
 - wheel_run additional tests beyond test 42, k_signals_rerun (8 of 9 fail)
 - TIOCSWINSZ is an ioctl constant from sys/ioctl.ph; needs stub or ioctl.ph generation
 
-**Event loop I/O hang pattern (shared root cause):**
-- wheel_readwrite, wheel_sf_tcp, wheel_accept, wheel_sf_udp all hang or fail
-  because select()-based I/O callbacks don't fire for pipe/socket watchers
-- Constructor/setup tests pass, but the POE event loop never delivers data events
+**Event loop I/O hang pattern (root cause: DESTROY):**
+- wheel_readwrite, wheel_sf_tcp, wheel_accept, wheel_sf_udp, wheel_tail all hang
+  because POE::Wheel DESTROY never fires when wheels go out of scope
+- The I/O subsystem itself works — select(), sysread/syswrite, fileno all verified
+- Constructor/setup tests pass, then sessions hang because orphan watchers remain
 
 **Skipped (platform/network):**
 - all_errors (0, skip), comp_tcp (0, skip network), comp_tcp_concurrent (0),
@@ -446,24 +510,26 @@ foreach my $session (@children) {
     Error: 'Bareword "TIOCSWINSZ" not allowed while "strict subs"'. This is a `require`
     inside an eval — a constant from sys/ioctl.ph that doesn't exist on JVM.
 
-#### Phase 4.3: Debug event loop I/O hang (highest impact remaining)
-- Affects: wheel_readwrite (16/28), wheel_sf_tcp (4/9), wheel_accept (1/2), wheel_sf_udp (4/10)
-- Symptom: POE event loop runs but select()-based I/O callbacks never fire for
-  pipe/socket watchers. Constructor/setup tests pass, then hangs.
-- Investigation approach:
-  1. Start with wheel_readwrite — simplest case (pipe-based I/O)
-  2. Trace POE::Kernel::_data_handle_condition to see what select() returns
-  3. Check if file descriptors are registered correctly in the select loop
-  4. Verify syswrite/sysread work on the pipe handles outside POE
-- Fixing this likely unblocks 20+ additional test passes across 4 test files
+#### Phase 4.3: Debug event loop I/O hang — DONE (analysis complete)
+- Root cause: DESTROY not called for POE::Wheel objects (see analysis above)
+- The I/O subsystem works correctly; all hangs traced to orphan select watchers
+- Fixed fileno() for regular files (Bug 21) — unrelated but needed for POE
+- See "DESTROY Workaround Options" section for implementation plan
 
-#### Phase 4.4: Implement sysseek (unblocks FollowTail)
-- Affects: wheel_tail (4/10 → ~8/10), z_rt54319_bazerka_followtail (0/6 → ~6/6)
-- sysseek($fh, $pos, $whence) — unbuffered seek, returns new position
-- Implementation: delegate to RuntimeIO seek, return position
-- Difficulty: Low-Medium
+#### Phase 4.4: Implement sysseek — DONE (commit 5b0ca1383)
+- sysseek implemented for JVM backend (CoreOperatorResolver, EmitBinaryOperatorNode,
+  OperatorHandler, CompileBinaryOperator) and interpreter backend
+- Returns new position or "0 but true", unlike seek which returns 1/0
+- POE::Wheel::FollowTail file-based watching now works in isolation
 
-#### Phase 4.5: Add TIOCSWINSZ stub (unblocks Wheel::Run child processes)
+#### Phase 4.5: Implement DESTROY workaround (highest remaining impact)
+- Affects: wheel_readwrite (28), wheel_tail (10), wheel_sf_tcp (9), wheel_accept (2),
+  wheel_sf_udp (10), ses_session (4), plus any module using DESTROY for cleanup
+- Recommended: Option A — trigger DESTROY on hash delete/set when blessed ref is overwritten
+- Expected impact: 20-30+ additional test passes across 5+ test files
+- Difficulty: Medium-Hard (requires changes to RuntimeHash.delete/RuntimeScalar.set)
+
+#### Phase 4.6: Add TIOCSWINSZ stub (unblocks Wheel::Run child processes)
 - Affects: wheel_run (42/103), k_signals_rerun (1/9)
 - TIOCSWINSZ is loaded via `require 'sys/ioctl.ph'` inside an eval
 - Options: (a) create a stub sys/ioctl.ph, or (b) make the eval silently fail
