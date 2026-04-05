@@ -947,11 +947,11 @@ public class IOOperator {
 
         // Check if fh is null (invalid filehandle)
         if (fh == null) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("sysread() on unopened filehandle"),
                     new RuntimeScalar("\n")
             );
+            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -966,11 +966,11 @@ public class IOOperator {
 
         // Check for closed handle
         if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("sysread() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
+            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1021,13 +1021,13 @@ public class IOOperator {
         try {
             result = baseHandle.sysread(length);
         } catch (Exception e) {
-            // e.printStackTrace();
             // This might happen with write-only handles
-            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("Filehandle opened only for output"),
                     new RuntimeScalar("\n")
             );
+            // Set $! after warn() since warn() may clobber it (e.g., when STDERR is closed)
+            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1111,11 +1111,11 @@ public class IOOperator {
 
         // Check if fh is null (invalid filehandle)
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("syswrite() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
+            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1202,20 +1202,20 @@ public class IOOperator {
             if (e instanceof java.nio.channels.ClosedChannelException ||
                     (msg != null && msg.contains("closed"))) {
                 // Closed channel
-                getGlobalVariable("main::!").set("Bad file descriptor");
                 WarnDie.warn(
                         new RuntimeScalar("syswrite() on closed filehandle"),
                         new RuntimeScalar("\n")
                 );
+                getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
                 return new RuntimeScalar(); // undef
             } else if (e instanceof java.nio.channels.NonWritableChannelException ||
                     exceptionType.contains("NonWritableChannel")) {
                 // Read-only handle
-                getGlobalVariable("main::!").set("Bad file descriptor");
                 WarnDie.warn(
                         new RuntimeScalar("Filehandle opened only for input"),
                         new RuntimeScalar("\n")
                 );
+                getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
                 return new RuntimeScalar(); // undef
             } else {
                 // Other errors
@@ -1974,12 +1974,13 @@ public class IOOperator {
             }
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
-            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
+            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream(InternalPipeHandle.PIPE_BUFFER_SIZE);
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
-            // Create IOHandle implementations for the pipe ends
-            InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
-            InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
+            // Create IOHandle implementations for the pipe ends with shared state
+            InternalPipeHandle[] pair = InternalPipeHandle.createPair(pipeIn, pipeOut);
+            InternalPipeHandle readerHandle = pair[0];
+            InternalPipeHandle writerHandle = pair[1];
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
