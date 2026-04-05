@@ -223,7 +223,7 @@ foreach my $session (@children) {
 | k_aliases.t | **PASS** (20/20) | Session aliases work |
 | k_detach.t | **PASS** (9/9) | Session detach works |
 | k_run_returns.t | **PASS** (1/1) | |
-| k_selects.t | PARTIAL (5/17) | File handle watchers |
+| k_selects.t | **PASS** (17/17) | File handle watchers |
 | k_sig_child.t | PARTIAL (5/15) | Child signal handling |
 | k_signals.t | PARTIAL (2/8) | Signal delivery |
 | k_signals_rerun.t | FAIL | |
@@ -231,17 +231,20 @@ foreach my $session (@children) {
 | ses_nfa.t | TIMEOUT | NFA session hangs |
 | ses_session.t | PARTIAL (35/41) | Signal delivery + DESTROY timing |
 | comp_tcp.t | FAIL (0/34) | TCP networking |
-| wheel_accept.t | FAIL | Socket accept |
-| wheel_run.t | FAIL (0/103) | Needs fork/IO::Pty |
-| wheel_sf_tcp.t | FAIL | Socket factory TCP |
-| wheel_sf_udp.t | FAIL | Socket factory UDP |
+| wheel_accept.t | PARTIAL (1/2) | Hangs after test 1 |
+| wheel_readwrite.t | PARTIAL (16/28) | I/O events don't fire, hangs |
+| wheel_run.t | PARTIAL (42/103) | 10 pass, 32 skip (IO::Pty), blocked by TIOCSWINSZ |
+| wheel_sf_tcp.t | PARTIAL (4/9) | Hangs after test 4 |
+| wheel_sf_udp.t | PARTIAL (4/10) | UDP datagrams never delivered |
 | wheel_sf_unix.t | FAIL (0/12) | Socket factory Unix |
-| wheel_tail.t | FAIL | FollowTail |
+| wheel_tail.t | PARTIAL (4/10) | Blocked by missing sysseek |
 | z_kogman_sig_order.t | **PASS** (7/7) | |
 | z_merijn_sigchld_system.t | **PASS** (4/4) | |
 | z_steinert_signal_integrity.t | **PASS** (2/2) | |
+| connect_errors.t | **PASS** (3/3) | |
+| k_signals_rerun.t | PARTIAL (1/9) | TIOCSWINSZ error in child processes |
 
-**Event loop summary**: 10/35 fully pass. Core event loop works (alarms, aliases, detach, signals).
+**Event loop summary**: 13/35 fully pass. Core event loop works (alarms, aliases, detach, signals).
 
 ## Fix Plan - Remaining Phases
 
@@ -277,7 +280,7 @@ foreach my $session (@children) {
 
 ## Progress Tracking
 
-### Current Status: Phase 3 in progress
+### Current Status: Phase 4.3 in progress
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -332,6 +335,17 @@ foreach my $session (@children) {
   - Fixed socketpair() stream init (Bug 20) — SocketIO created without input/output
     streams, causing sysread() to fail. Also improved sysread() channel fallback.
   - k_selects.t: 5/17 → 17/17 (all pass)
+- [x] Phase 4.1: Socket pack_sockaddr_un/unpack_sockaddr_un stubs (2026-04-05, commit a15fbce47)
+  - Added stub implementations for AF_UNIX sockaddr packing/unpacking
+  - Registered in Socket.java and Socket.pm @EXPORT
+  - Unblocked POE::Wheel::SocketFactory loading
+  - connect_errors: 3/3 PASS, wheel_sf_tcp: 4/9 (hangs), wheel_accept: 1/2 (hangs)
+- [x] Phase 4.2: POSIX terminal/file constants (2026-04-05, commit 34934234d)
+  - Added 80+ POSIX constants: stat permissions, terminal I/O, baud rates, sysconf
+  - Added S_IS* file type functions as pure Perl (S_ISBLK, S_ISCHR, S_ISDIR, etc.)
+  - Added setsid() and sysconf(_SC_OPEN_MAX) implementations
+  - Platform-aware macOS/Linux detection for all platform-dependent constants
+  - Wheel::FollowTail loads (4/10 pass), Wheel::Run loads (42/103: 6 pass, 36 skip)
 
 ### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
@@ -371,34 +385,37 @@ foreach my $session (@children) {
 
 #### Current Event Loop Test Inventory (35 test files, ~596 tests total)
 
-**Fully passing (12 files, 175 tests):**
+**Fully passing (13 files, 178 tests):**
 - 00_info (2/2), k_alarms (37/37), k_aliases (20/20), k_detach (9/9),
   k_run_returns (1/1), k_selects (17/17), sbk_signal_init (1/1),
   ses_nfa (39/39), ses_session (37/41), z_kogman_sig_order (7/7),
-  z_merijn_sigchld_system (4/4), z_steinert_signal_integrity (2/2)
+  z_merijn_sigchld_system (4/4), z_steinert_signal_integrity (2/2),
+  connect_errors (3/3)
 
-**Partially passing (3 files):**
+**Partially passing (10 files):**
 - ses_session: 37/41 — 4 failures from DESTROY (JVM limitation, won't fix)
 - k_signals: 2/8 — remaining tests need fork()
 - k_sig_child: 5/15 — remaining tests need fork()
+- wheel_tail: 4/10 — blocked by missing `sysseek` operator
+- wheel_run: 42/103 — 10 pass, 32 skip (IO::Pty), blocked by `TIOCSWINSZ` constant
+- wheel_sf_tcp: 4/9 — hangs after test 4 (event loop stalls after first TCP message)
+- wheel_sf_udp: 4/10 — UDP sockets created but datagrams never delivered
+- wheel_accept: 1/2 — hangs after test 1 (accept callback never fires)
+- wheel_readwrite: 16/28 — constructor tests pass, I/O events don't fire, hangs
+- k_signals_rerun: 1/9 — child processes fail with TIOCSWINSZ error
 
-**Blocked by missing Socket pack_sockaddr_un/unpack_sockaddr_un (5 files):**
-- wheel_sf_tcp (9), wheel_sf_udp (10), wheel_accept (2),
-  connect_errors (3), wheel_tail (10, also needs POSIX S_ISCHR/S_ISBLK)
-- POE::Wheel::SocketFactory imports these at load time; TCP/UDP code
-  paths don't actually use them, so stubs unblock all SocketFactory tests
+**Blocked by missing `sysseek` (FollowTail):**
+- wheel_tail (10), z_rt54319_bazerka_followtail (6)
+- `sysseek` needs JVM implementation (seek via unbuffered I/O)
 
-**Blocked by missing POSIX constants (7 files):**
-- OPOST, TCSANOW: k_signals_rerun (9), wheel_run_size (4),
-  z_leolo_wheel_run (14), z_rt39872_sigchld (6), z_rt39872_sigchld_stop (4)
-- S_ISCHR, S_ISBLK: z_rt54319_bazerka_followtail (6), wheel_tail (10)
-- ISTRIP, IXON, CSIZE, PARENB: needed by Wheel::Run's terminal handling
-- Most of these tests also need fork(), so unblocking load only helps
-  wheel_tail and z_rt54319_bazerka_followtail
+**Blocked by missing `TIOCSWINSZ` (Wheel::Run ioctl):**
+- wheel_run additional tests beyond test 42, k_signals_rerun (8 of 9 fail)
+- TIOCSWINSZ is an ioctl constant from sys/ioctl.ph; needs stub or ioctl.ph generation
 
-**Running but failing (1 file):**
-- wheel_readwrite: 15/28 — constructor tests pass, I/O event tests fail
-  (input/flushed/error events never fire through ReadWrite wheel)
+**Event loop I/O hang pattern (shared root cause):**
+- wheel_readwrite, wheel_sf_tcp, wheel_accept, wheel_sf_udp all hang or fail
+  because select()-based I/O callbacks don't fire for pipe/socket watchers
+- Constructor/setup tests pass, but the POE event loop never delivers data events
 
 **Skipped (platform/network):**
 - all_errors (0, skip), comp_tcp (0, skip network), comp_tcp_concurrent (0),
@@ -409,27 +426,49 @@ foreach my $session (@children) {
 - wheel_run (103), k_sig_child, k_signals_rerun, z_rt39872_sigchld*,
   z_leolo_wheel_run, z_merijn_sigchld_system (passes via system())
 
-#### Phase 4.1: Add Socket pack_sockaddr_un/unpack_sockaddr_un stubs
+#### Phase 4.1: Add Socket pack_sockaddr_un/unpack_sockaddr_un stubs — DONE
 - Impact: Unblocks POE::Wheel::SocketFactory loading
 - Enables: wheel_sf_tcp (9), wheel_sf_udp (10), wheel_accept (2), connect_errors (3)
 - Difficulty: Low (stub functions that die on actual use)
+- Result: connect_errors 3/3 PASS, wheel_sf_tcp 4/9 (hangs after test 4), wheel_accept 1/2 (hangs)
 
-#### Phase 4.2: Add POSIX terminal/file constants
-- Add: OPOST, TCSANOW, ISTRIP, IXON, CSIZE, PARENB, S_ISCHR, S_ISBLK
+#### Phase 4.2: Add POSIX terminal/file constants — DONE
+- Added: 80+ constants (stat permissions, terminal I/O, baud rates, sysconf/_SC_OPEN_MAX, setsid)
+- Added: S_IS* file type test functions (S_ISBLK, S_ISCHR, S_ISDIR, etc.) as pure Perl
 - Impact: Unblocks POE::Wheel::Run and Wheel::FollowTail loading
-- Enables: wheel_tail (10), z_rt54319_bazerka_followtail (6)
-- Note: Most Wheel::Run tests still need fork, but the module will load
+- Result:
+  - Wheel::FollowTail loads, 4/10 pass — blocked by missing `sysseek` operator
+  - Wheel::Run loads, 42/103 (6 pass, 36 skip for IO::Pty) — blocked by missing `TIOCSWINSZ` ioctl constant
+- New blockers found:
+  - **sysseek**: Not implemented in PerlOnJava. FollowTail uses `sysseek($fh, 0, SEEK_CUR)`
+    to get current file position. Error: "Operator sysseek doesn't have a defined JVM descriptor"
+  - **TIOCSWINSZ**: Bareword ioctl constant used in Wheel::Run for terminal window size.
+    Error: 'Bareword "TIOCSWINSZ" not allowed while "strict subs"'. This is a `require`
+    inside an eval — a constant from sys/ioctl.ph that doesn't exist on JVM.
 
-#### Phase 4.3: Debug wheel_readwrite I/O failures
-- 15/28 pass (constructor validation), 13 fail (I/O events don't fire)
-- Investigate why input/flushed events don't trigger through ReadWrite wheel
-- Likely issue: ReadWrite uses IO::Handle buffered I/O or pipe handles
-  that don't trigger select() properly
+#### Phase 4.3: Debug event loop I/O hang (highest impact remaining)
+- Affects: wheel_readwrite (16/28), wheel_sf_tcp (4/9), wheel_accept (1/2), wheel_sf_udp (4/10)
+- Symptom: POE event loop runs but select()-based I/O callbacks never fire for
+  pipe/socket watchers. Constructor/setup tests pass, then hangs.
+- Investigation approach:
+  1. Start with wheel_readwrite — simplest case (pipe-based I/O)
+  2. Trace POE::Kernel::_data_handle_condition to see what select() returns
+  3. Check if file descriptors are registered correctly in the select loop
+  4. Verify syswrite/sysread work on the pipe handles outside POE
+- Fixing this likely unblocks 20+ additional test passes across 4 test files
 
-#### Phase 4.4: Test and fix SocketFactory-dependent tests
-- After Phase 4.1, run wheel_sf_tcp, wheel_sf_udp, wheel_accept
-- These use TCP/UDP sockets which our NIO select supports
-- May reveal additional socket handling issues
+#### Phase 4.4: Implement sysseek (unblocks FollowTail)
+- Affects: wheel_tail (4/10 → ~8/10), z_rt54319_bazerka_followtail (0/6 → ~6/6)
+- sysseek($fh, $pos, $whence) — unbuffered seek, returns new position
+- Implementation: delegate to RuntimeIO seek, return position
+- Difficulty: Low-Medium
+
+#### Phase 4.5: Add TIOCSWINSZ stub (unblocks Wheel::Run child processes)
+- Affects: wheel_run (42/103), k_signals_rerun (1/9)
+- TIOCSWINSZ is loaded via `require 'sys/ioctl.ph'` inside an eval
+- Options: (a) create a stub sys/ioctl.ph, or (b) make the eval silently fail
+- Most wheel_run tests also need fork, so impact is limited
+- k_signals_rerun would benefit most (8 failures all from TIOCSWINSZ in child)
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
