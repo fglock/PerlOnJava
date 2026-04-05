@@ -131,12 +131,50 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 5 complete
 
 ### Completed Phases
-- (none yet)
+- [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
+  - Fixed IdentifierParser.java: NEWLINE/WHITESPACE/comma after `::`
+  - Fixed Universal.java: Added CODE case to isa()
+- [x] Phase 2: HTMLParser array-ref accumulator + argspec (2026-04-04)
+  - Added ARRAYREFERENCE handler branch in fireEvent()
+  - Implemented buildEventDataFromArgspec() for argspec token parsing
+  - Added argspec processing for STRING and CODE callback types
+- [x] Phase 3: Overload AUTOLOAD dispatch fix (2026-04-04)
+  - Fixed OverloadContext.java to set $AUTOLOAD for overload dispatch
+- [x] Phase 4: Devel::Cycle stub (2026-04-04)
+  - Created src/main/perl/lib/Devel/Cycle.pm no-op stub
+- [x] Phase 5: Verification (2026-04-04)
+  - Fixed HTMLParser skipSelf bug for method callbacks
+  - `make` passes (all unit tests green)
+  - WWW::Mechanize non-local tests: 431/478 pass (90.2%)
+  - Local tests: 14/139 pass (need fork() for HTTP::Daemon)
+
+### Bug 7: HTMLParser argspec "self" doubled for method callbacks (FIXED)
+- **File**: `HTMLParser.java:fireEvent()` + `buildEventDataFromArgspec()`
+- **Symptom**: `Not an ARRAY reference` when HTML::TreeBuilder parses HTML
+- **Root cause**: For STRING (method name) callbacks, "self" in argspec was both
+  pushed as the invocant AND included in the argspec args. The XS behavior is
+  to use "self" only as the invocant for method dispatch, not as an argument.
+  This doubled $self, shifting all other args by 1 position.
+- **Fix**: Added `skipSelf` parameter to `buildEventDataFromArgspec()`.
+  STRING callbacks use skipSelf=true; CODE/ARRAY use skipSelf=false.
+
+### Remaining Failures (non-local tests)
+- area_link.t: 7/9 — self-closing `<area/>` attribute parsing
+- dump.t: 1/7 — likely needs file handle / select
+- find_image.t: 32/39 — image parsing edge cases
+- find_inputs.t: 10/11 — form input finding
+- find_link.t: 68/70 — minor link attribute issues
+- find_link_xhtml.t: 8/10 — XHTML self-closing tag handling
+- form_with_fields.t: 21/23 — form field matching
+- form_with_fields_passthrough_params.t: 15/17 — form field passthrough
+- submit_form.t: 1/9 — form submission
+- tick.t: 5/6 — checkbox tick handling
+- cookies.t: TIMEOUT — needs fork for HTTP::Daemon
+- frames.t: TIMEOUT — needs fork for HTTP::Daemon
 
 ### Next Steps
-1. Fix IdentifierParser.java (Bug 1)
-2. Fix Universal.java (Bug 2)
-3. Build and test
+- Investigate remaining failures (mostly HTML attribute/form parsing edge cases)
+- Local tests require fork() — known JVM limitation
