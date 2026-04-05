@@ -2799,7 +2799,50 @@ public class IOOperator {
     }
 
     public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {
-        return seek(ctx, args);
+        return sysseekImpl(args[0].scalar(), args[1].scalar().getLong(),
+                args.length > 2 ? args[2].scalar().getInt() : IOHandle.SEEK_SET);
+    }
+
+    /**
+     * sysseek for JVM backend (RuntimeScalar, RuntimeList) signature.
+     */
+    public static RuntimeScalar sysseek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
+        long position = runtimeList.getFirst().getLong();
+        int whence = IOHandle.SEEK_SET;
+        if (runtimeList.size() > 1) {
+            whence = runtimeList.elements.get(1).scalar().getInt();
+        }
+        return sysseekImpl(fileHandle, position, whence);
+    }
+
+    /**
+     * sysseek implementation: like seek but returns the new position
+     * (or "0 but true" if position is 0), or undef on failure.
+     */
+    private static RuntimeScalar sysseekImpl(RuntimeScalar fileHandle, long position, int whence) {
+        RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
+        if (runtimeIO != null && runtimeIO.ioHandle != null) {
+            if (runtimeIO instanceof TieHandle tieHandle) {
+                RuntimeList args = new RuntimeList();
+                args.add(new RuntimeScalar(position));
+                args.add(new RuntimeScalar(whence));
+                return TieHandle.tiedSeek(tieHandle, args);
+            }
+            RuntimeIO.lastAccesseddHandle = runtimeIO;
+            RuntimeScalar result = runtimeIO.ioHandle.seek(position, whence);
+            if (result.getBoolean()) {
+                // seek succeeded — return the new position
+                RuntimeScalar tellResult = runtimeIO.ioHandle.tell();
+                long newPos = tellResult.getLong();
+                if (newPos == 0) {
+                    return new RuntimeScalar("0 but true");
+                }
+                return new RuntimeScalar(newPos);
+            }
+            // seek failed
+            return new RuntimeScalar();
+        }
+        return new RuntimeScalar();
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {
