@@ -368,10 +368,68 @@ foreach my $session (@children) {
   from loading, causing monotime() to return integer seconds instead of float.
 
 ### Next Steps (Phase 4)
-1. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
-2. Debug k_sig_child.t — child signal handling (requires fork support)
-3. HTTP::Message bytes handling for 03_http.t
-4. Socket/network tests (comp_tcp, wheel_sf_*)
+
+#### Current Event Loop Test Inventory (35 test files, ~596 tests total)
+
+**Fully passing (12 files, 175 tests):**
+- 00_info (2/2), k_alarms (37/37), k_aliases (20/20), k_detach (9/9),
+  k_run_returns (1/1), k_selects (17/17), sbk_signal_init (1/1),
+  ses_nfa (39/39), ses_session (37/41), z_kogman_sig_order (7/7),
+  z_merijn_sigchld_system (4/4), z_steinert_signal_integrity (2/2)
+
+**Partially passing (3 files):**
+- ses_session: 37/41 — 4 failures from DESTROY (JVM limitation, won't fix)
+- k_signals: 2/8 — remaining tests need fork()
+- k_sig_child: 5/15 — remaining tests need fork()
+
+**Blocked by missing Socket pack_sockaddr_un/unpack_sockaddr_un (5 files):**
+- wheel_sf_tcp (9), wheel_sf_udp (10), wheel_accept (2),
+  connect_errors (3), wheel_tail (10, also needs POSIX S_ISCHR/S_ISBLK)
+- POE::Wheel::SocketFactory imports these at load time; TCP/UDP code
+  paths don't actually use them, so stubs unblock all SocketFactory tests
+
+**Blocked by missing POSIX constants (7 files):**
+- OPOST, TCSANOW: k_signals_rerun (9), wheel_run_size (4),
+  z_leolo_wheel_run (14), z_rt39872_sigchld (6), z_rt39872_sigchld_stop (4)
+- S_ISCHR, S_ISBLK: z_rt54319_bazerka_followtail (6), wheel_tail (10)
+- ISTRIP, IXON, CSIZE, PARENB: needed by Wheel::Run's terminal handling
+- Most of these tests also need fork(), so unblocking load only helps
+  wheel_tail and z_rt54319_bazerka_followtail
+
+**Running but failing (1 file):**
+- wheel_readwrite: 15/28 — constructor tests pass, I/O event tests fail
+  (input/flushed/error events never fire through ReadWrite wheel)
+
+**Skipped (platform/network):**
+- all_errors (0, skip), comp_tcp (0, skip network), comp_tcp_concurrent (0),
+  wheel_curses (0, skip IO::Pty), wheel_readline (0), wheel_sf_unix (0, skip),
+  wheel_sf_ipv6 (0, skip GetAddrInfo), z_rt53302_fh_watchers (0, skip network)
+
+**Fork-dependent (JVM limitation, won't fix):**
+- wheel_run (103), k_sig_child, k_signals_rerun, z_rt39872_sigchld*,
+  z_leolo_wheel_run, z_merijn_sigchld_system (passes via system())
+
+#### Phase 4.1: Add Socket pack_sockaddr_un/unpack_sockaddr_un stubs
+- Impact: Unblocks POE::Wheel::SocketFactory loading
+- Enables: wheel_sf_tcp (9), wheel_sf_udp (10), wheel_accept (2), connect_errors (3)
+- Difficulty: Low (stub functions that die on actual use)
+
+#### Phase 4.2: Add POSIX terminal/file constants
+- Add: OPOST, TCSANOW, ISTRIP, IXON, CSIZE, PARENB, S_ISCHR, S_ISBLK
+- Impact: Unblocks POE::Wheel::Run and Wheel::FollowTail loading
+- Enables: wheel_tail (10), z_rt54319_bazerka_followtail (6)
+- Note: Most Wheel::Run tests still need fork, but the module will load
+
+#### Phase 4.3: Debug wheel_readwrite I/O failures
+- 15/28 pass (constructor validation), 13 fail (I/O events don't fire)
+- Investigate why input/flushed events don't trigger through ReadWrite wheel
+- Likely issue: ReadWrite uses IO::Handle buffered I/O or pipe handles
+  that don't trigger select() properly
+
+#### Phase 4.4: Test and fix SocketFactory-dependent tests
+- After Phase 4.1, run wheel_sf_tcp, wheel_sf_udp, wheel_accept
+- These use TCP/UDP sockets which our NIO select supports
+- May reveal additional socket handling issues
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
