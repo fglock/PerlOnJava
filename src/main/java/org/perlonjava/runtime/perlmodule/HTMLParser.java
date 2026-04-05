@@ -883,6 +883,42 @@ public class HTMLParser extends PerlModuleBase {
                                 new RuntimeScalar(tagName),
                                 new RuntimeScalar("</" + tagName + ">"));
                     }
+
+                    // Raw text elements: <script>, <style>, <xmp>, <listing>, <plaintext>
+                    // Content inside these elements is not parsed for tags
+                    if (!selfClosing && (tagName.equals("script") || tagName.equals("style")
+                            || tagName.equals("xmp") || tagName.equals("listing")
+                            || tagName.equals("plaintext") || tagName.equals("textarea")
+                            || tagName.equals("title"))) {
+                        String endTag = "</" + tagName;
+                        int endIdx = findCaseInsensitive(html, endTag, i);
+                        if (endIdx >= 0) {
+                            // Emit raw content as text
+                            if (endIdx > i) {
+                                fireEvent(self, selfHash, pstate, "text",
+                                        new RuntimeScalar(html.substring(i, endIdx)));
+                            }
+                            // Parse and emit the end tag
+                            int endTagEnd = html.indexOf('>', endIdx);
+                            if (endTagEnd >= 0) {
+                                endTagEnd++;
+                                fireEvent(self, selfHash, pstate, "end",
+                                        new RuntimeScalar(tagName),
+                                        new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+                                i = endTagEnd;
+                            } else {
+                                // Incomplete end tag - buffer for next parse()
+                                pstate.put("_buf", new RuntimeScalar(html.substring(endIdx)));
+                                return;
+                            }
+                        } else {
+                            // No closing tag found - buffer everything for next parse()
+                            pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                            // Re-emit the start tag on next parse when we have the full content
+                            return;
+                        }
+                    }
+
                     textStart = i;
                 }
             } else {
@@ -895,6 +931,27 @@ public class HTMLParser extends PerlModuleBase {
             fireEvent(self, selfHash, pstate, "text",
                     new RuntimeScalar(html.substring(textStart)));
         }
+    }
+
+    /**
+     * Case-insensitive search for a substring in a string, starting at fromIndex.
+     * Used to find closing tags like </script> regardless of case.
+     */
+    private static int findCaseInsensitive(String haystack, String needle, int fromIndex) {
+        int needleLen = needle.length();
+        int limit = haystack.length() - needleLen;
+        for (int i = fromIndex; i <= limit; i++) {
+            if (haystack.regionMatches(true, i, needle, 0, needleLen)) {
+                // Make sure the next char after the tag name is > or whitespace or /
+                int afterName = i + needleLen;
+                if (afterName >= haystack.length() || haystack.charAt(afterName) == '>'
+                        || Character.isWhitespace(haystack.charAt(afterName))
+                        || haystack.charAt(afterName) == '/') {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     // ================================================================

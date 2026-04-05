@@ -270,9 +270,9 @@ public class EmitStatement {
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
                 // A simple-block For3Node (isSimpleBlock=true) is used to model bare/labeled
                 // blocks like `{ ... }` and `LABEL: { ... }` (including `... } continue { ... }`).
-                // Unlabeled next/last/redo must be allowed for *bare* blocks (no label), but
-                // must *not* accidentally target pseudo-loops like `SKIP: { ... }`.
-                boolean isUnlabeledTarget = !node.isSimpleBlock || node.labelName == null;
+                // In Perl, blocks (labeled or not) are valid targets for unlabeled last/next/redo.
+                // They act as loops that execute once. SKIP: { last SKIP; } patterns use labeled
+                // last, so making labeled blocks targetable by unlabeled last is safe.
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,
@@ -280,7 +280,7 @@ public class EmitStatement {
                         endLabel,
                         RuntimeContextType.VOID,
                         true,
-                        isUnlabeledTarget);
+                        true);
 
                 // Visit the loop body
                 if (needsReturnValue) {
