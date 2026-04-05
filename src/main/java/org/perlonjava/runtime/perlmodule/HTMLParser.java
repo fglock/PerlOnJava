@@ -139,6 +139,7 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_eof", scalarFalse);
         pstate.put("_buf", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
+        pstate.put("_in_cdata", scalarFalse);
 
         // Store in self
         selfHash.put("_hparser_xs_state", pstate.createReference());
@@ -453,7 +454,7 @@ public class HTMLParser extends PerlModuleBase {
             // Array ref accumulator - used by PullParser/TokeParser
             // Build event data per argspec and push as array ref onto accumulator
             RuntimeArray accum = (RuntimeArray) cb.value;
-            RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false);
+            RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false, pstate);
             RuntimeArray.push(accum, eventData.createReference());
         } else if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
             // Method name - call as $self->method(...)
@@ -464,7 +465,7 @@ public class HTMLParser extends PerlModuleBase {
             // skipSelf=true: "self" in argspec specifies the invocant for method dispatch
             // but should NOT be duplicated in the method arguments
             if (!argspec.isEmpty()) {
-                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, true);
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, true, pstate);
                 for (int idx = 0; idx < eventData.size(); idx++) {
                     RuntimeArray.push(callArgs, eventData.get(idx));
                 }
@@ -486,7 +487,7 @@ public class HTMLParser extends PerlModuleBase {
             // Code reference - call directly
             RuntimeArray callArgs = new RuntimeArray();
             if (!argspec.isEmpty()) {
-                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false);
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false, pstate);
                 for (int idx = 0; idx < eventData.size(); idx++) {
                     RuntimeArray.push(callArgs, eventData.get(idx));
                 }
@@ -529,7 +530,7 @@ public class HTMLParser extends PerlModuleBase {
      * For declaration events, eventArgs = [decl_text]
      * For process events, eventArgs = [pi_text]
      */
-    private static RuntimeArray buildEventDataFromArgspec(String argspec, String eventName, RuntimeScalar[] eventArgs, RuntimeScalar self, boolean skipSelf) {
+    private static RuntimeArray buildEventDataFromArgspec(String argspec, String eventName, RuntimeScalar[] eventArgs, RuntimeScalar self, boolean skipSelf, RuntimeHash pstate) {
         RuntimeArray result = new RuntimeArray();
         if (argspec.isEmpty()) {
             // No argspec - pass raw event args
@@ -621,7 +622,9 @@ public class HTMLParser extends PerlModuleBase {
 
                 case "is_cdata":
                     // Boolean: is this CDATA section?
-                    RuntimeArray.push(result, scalarFalse);
+                    // Check the _in_cdata flag set by marked section parsing
+                    RuntimeScalar inCdata = pstate.get("_in_cdata");
+                    RuntimeArray.push(result, (inCdata != null && inCdata.getBoolean()) ? scalarTrue : scalarFalse);
                     break;
 
                 case "self":
@@ -746,9 +749,82 @@ public class HTMLParser extends PerlModuleBase {
                             new RuntimeScalar(html.substring(tagStart, i)));
                     textStart = i;
                 } else if (i < len && html.charAt(i) == '!') {
-                    // Comment or declaration
+                    // Comment, marked section, or declaration
                     i++;
-                    if (i + 1 < len && html.charAt(i) == '-' && html.charAt(i + 1) == '-') {
+
+                    // Check for marked sections: <![KEYWORD[...]]>
+                    boolean markedSections = pstate.get("marked_sections").getBoolean()
+                            || pstate.get("xml_mode").getBoolean();
+                    if (i < len && html.charAt(i) == '[') {
+                        if (markedSections) {
+                            i++; // skip '['
+                            // Extract keyword (CDATA, INCLUDE, IGNORE, etc.)
+                            int kwStart = i;
+                            while (i < len && html.charAt(i) != '[' && html.charAt(i) != ']') i++;
+                            String keyword = html.substring(kwStart, i).trim().toUpperCase();
+
+                            if (i < len && html.charAt(i) == '[') {
+                                i++; // skip second '['
+                                int contentStart = i;
+                                int endIdx = html.indexOf("]]>", i);
+
+                                if (endIdx < 0) {
+                                    // Unterminated marked section - buffer
+                                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                    return;
+                                }
+
+                                String content = html.substring(contentStart, endIdx);
+                                i = endIdx + 3; // skip ]]>
+
+                                switch (keyword) {
+                                    case "CDATA":
+                                        // Emit as text with is_cdata=true
+                                        pstate.put("_in_cdata", scalarTrue);
+                                        fireEvent(self, selfHash, pstate, "text",
+                                                new RuntimeScalar(content));
+                                        pstate.put("_in_cdata", scalarFalse);
+                                        break;
+                                    case "IGNORE":
+                                        // Skip content entirely
+                                        break;
+                                    case "INCLUDE":
+                                    default:
+                                        // Recursively parse content as HTML
+                                        // Save and restore textStart since we recurse
+                                        RuntimeScalar savedBuf = pstate.get("_buf");
+                                        pstate.put("_buf", new RuntimeScalar(""));
+                                        parseHtml(self, selfHash, pstate, content);
+                                        pstate.put("_buf", savedBuf);
+                                        break;
+                                }
+                            } else {
+                                // Malformed <![...] without second [ - treat as declaration
+                                int endIdx = html.indexOf('>', i);
+                                if (endIdx >= 0) {
+                                    String decl = html.substring(tagStart, endIdx + 1);
+                                    i = endIdx + 1;
+                                    fireEvent(self, selfHash, pstate, "declaration",
+                                            new RuntimeScalar(decl));
+                                } else {
+                                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                    return;
+                                }
+                            }
+                        } else {
+                            // marked_sections disabled - treat as bogus comment (text up to >)
+                            int endIdx = html.indexOf('>', i);
+                            if (endIdx >= 0) {
+                                String comment = html.substring(i, endIdx);
+                                i = endIdx + 1;
+                                fireEvent(self, selfHash, pstate, "comment",
+                                        new RuntimeScalar(comment));
+                            } else {
+                                pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                return;
+                            }
+                        }
+                    } else if (i + 1 < len && html.charAt(i) == '-' && html.charAt(i + 1) == '-') {
                         // Comment
                         i += 2;
                         int commentStart = i;
@@ -891,7 +967,16 @@ public class HTMLParser extends PerlModuleBase {
                             || tagName.equals("plaintext") || tagName.equals("textarea")
                             || tagName.equals("title"))) {
                         String endTag = "</" + tagName;
-                        int endIdx = findCaseInsensitive(html, endTag, i);
+                        // For script content, only marked_sections (not xml_mode) enables CDATA-skipping.
+                        // xml_mode alone doesn't change how script closing tags interact with CDATA sections.
+                        boolean msEnabled = pstate.get("marked_sections").getBoolean();
+                        int endIdx;
+                        if (msEnabled) {
+                            // With marked_sections, skip over <![CDATA[...]]> when looking for end tag
+                            endIdx = findEndTagSkippingCdata(html, endTag, i);
+                        } else {
+                            endIdx = findCaseInsensitive(html, endTag, i);
+                        }
                         if (endIdx >= 0) {
                             // Emit raw content as text
                             if (endIdx > i) {
@@ -950,6 +1035,42 @@ public class HTMLParser extends PerlModuleBase {
                     return i;
                 }
             }
+        }
+        return -1;
+    }
+
+    /**
+     * Find end tag for raw text elements (like </script>) while skipping CDATA sections.
+     * When marked_sections is enabled, </script> inside <![CDATA[...]]> is not a real end tag.
+     */
+    private static int findEndTagSkippingCdata(String haystack, String endTag, int fromIndex) {
+        int pos = fromIndex;
+        int len = haystack.length();
+        while (pos < len) {
+            // Look for <![CDATA[ marker
+            int cdataStart = haystack.indexOf("<![CDATA[", pos);
+            // Look for end tag
+            int tagIdx = findCaseInsensitive(haystack, endTag, pos);
+
+            if (tagIdx < 0) {
+                // No end tag found at all
+                return -1;
+            }
+
+            if (cdataStart >= 0 && cdataStart < tagIdx) {
+                // CDATA section starts before the end tag - skip past ]]>
+                int cdataEnd = haystack.indexOf("]]>", cdataStart + 9);
+                if (cdataEnd >= 0) {
+                    pos = cdataEnd + 3;
+                    continue;
+                } else {
+                    // Unterminated CDATA section - no end tag found
+                    return -1;
+                }
+            }
+
+            // End tag is not inside a CDATA section
+            return tagIdx;
         }
         return -1;
     }

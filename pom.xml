@@ -86,6 +86,7 @@
                     <include>**/*.pm</include>
                     <include>**/*.pl</include>
                     <include>**/*.pod</include>
+                    <include>**/media.types</include>
                     <include>bin/**</include>
                 </includes>
             </resource>
