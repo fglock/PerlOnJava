@@ -518,6 +518,14 @@ public class EmitLiteral {
             return;
         }
 
+        // Barewords ending with :: are package name constants, always allowed under strict subs
+        // e.g., Tie::RefHash:: is equivalent to "Tie::RefHash"
+        if (node.name.endsWith("::")) {
+            String packageName = node.name.substring(0, node.name.length() - 2);
+            new StringNode(packageName, node.tokenIndex).accept(visitor);
+            return;
+        }
+
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS)) {
             throw new PerlCompilerException(
                     node.tokenIndex,

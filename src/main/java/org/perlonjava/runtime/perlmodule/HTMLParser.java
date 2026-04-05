@@ -719,6 +719,12 @@ public class HTMLParser extends PerlModuleBase {
                 int tagStart = i;
                 i++; // skip '<'
 
+                // If we're at end of input, buffer the '<' for next parse() call
+                if (i >= len) {
+                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                    return;
+                }
+
                 if (i < len && html.charAt(i) == '/') {
                     // End tag
                     i++;
@@ -728,6 +734,11 @@ public class HTMLParser extends PerlModuleBase {
                     }
                     String tagName = html.substring(nameStart, i).toLowerCase();
                     while (i < len && html.charAt(i) != '>') i++;
+                    if (i >= len) {
+                        // Incomplete end tag - buffer for next parse() call
+                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        return;
+                    }
                     if (i < len) i++; // skip '>'
 
                     fireEvent(self, selfHash, pstate, "end",
@@ -839,9 +850,23 @@ public class HTMLParser extends PerlModuleBase {
                     boolean selfClosing = false;
                     if (i < len && html.charAt(i) == '/') {
                         selfClosing = true;
+                        // In non-XML mode, treat / as boolean attribute (matches Perl HTML::Parser)
+                        boolean xmlMode = pstate.get("xml_mode").getBoolean();
+                        if (!xmlMode) {
+                            attrs.put("/", new RuntimeScalar("/"));
+                            RuntimeArray.push(attrSeq, new RuntimeScalar("/"));
+                        }
                         i++;
                     }
-                    if (i < len && html.charAt(i) == '>') i++;
+
+                    // Check if tag is complete (found closing >)
+                    if (i < len && html.charAt(i) == '>') {
+                        i++;
+                    } else if (i >= len) {
+                        // Incomplete tag - buffer for next parse() call
+                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        return;
+                    }
 
                     String origText = html.substring(tagStart, i);
 
@@ -851,7 +876,9 @@ public class HTMLParser extends PerlModuleBase {
                             attrSeq.createReference(),
                             new RuntimeScalar(origText));
 
-                    if (selfClosing) {
+                    // In XML mode, self-closing tags emit an end event
+                    // In non-XML mode, self-closing / is just a boolean attribute
+                    if (selfClosing && pstate.get("xml_mode").getBoolean()) {
                         fireEvent(self, selfHash, pstate, "end",
                                 new RuntimeScalar(tagName),
                                 new RuntimeScalar("</" + tagName + ">"));
