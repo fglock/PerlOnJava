@@ -216,13 +216,78 @@ make
 | cookies.t | TIMEOUT | Needs fork() for HTTP::Daemon | Won't fix (JVM limitation) |
 | t/local/*.t | TIMEOUT | Needs fork() for HTTP::Daemon | Won't fix (JVM limitation) |
 
-### Remaining Issues (all low priority or JVM limitations)
+### Remaining Issues — Analysis and Path Forward
 
-1. **Capture::Tiny / fork()** — dump.t (6 failures), mech-dump/file_not_found.t (1 failure), cookies.t (timeout), all t/local/ tests (timeout). These all need fork() which is not available on JVM.
+#### 1. HTTP::Daemon tests (cookies.t + 18 t/local/ tests) — LIKELY FIXABLE
 
-2. **XHTML marked_sections** — find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing not implemented in HTMLParser.
+**Key finding: HTTP::Daemon itself does NOT use fork().** It is pure Perl on top of
+`IO::Socket::IP`. The fork dependency comes from the *test harnesses*, not the module.
 
-3. **CSS background-url extraction** — image-parse.t (1 failure). WWW::Mechanize extracts images from inline `style="background:url(...)"` on non-img elements.
+| Test Harness | Pattern | PerlOnJava Support |
+|---|---|---|
+| `LocalServer.pm` (18 tests) | `open $fh, qq'$^X "log-server" ... \|'` (piped open) | Already supported (`RuntimeIO.openPipe`) |
+| `TestServer.pm` (cookies.t) | `open $fh, '-\|'` (fork-open, no exec) | Not supported (requires true fork) |
+
+**Recommended approach — try pure Perl HTTP::Daemon first (low effort, high impact):**
+1. Test `HTTP::Daemon->new()` — does `IO::Socket::IP` server mode work?
+2. Test `$d->accept()` — does glob stash `${*$sock}{'httpd_daemon'}` work on socket objects?
+3. Test `get_request()` — does `sysread` + 4-arg `select` work on accepted connections?
+4. Test `LocalServer::spawn()` end-to-end — piped open runs `jperl log-server`
+5. If pure Perl fails: Java-backed HTTP::Daemon (~400 LOC, similar to `HttpTiny.java`)
+
+**Technical risks**: glob stash on socket objects, `vec()`+`fileno()` for select bitmask,
+`sysread` on accepted socket connections.
+
+**Impact**: ~20 WWW::Mechanize tests + 100+ libwww-perl tests across other CPAN modules.
+
+#### 2. Capture::Tiny capture* functions (dump.t, mech-dump) — LIKELY FIXABLE WITHOUT FORK
+
+**Key finding: `capture*` functions do NOT use fork.** Only `tee*` functions do.
+Test::Output (used by dump.t) only uses `capture*`, never `tee*`.
+
+The capture path works by:
+1. Saving STDOUT/STDERR via `open $handle, ">&STDOUT"` (filehandle dup)
+2. Redirecting to temp files via `open \*STDOUT, ">&" . fileno($tmpfile)`
+3. Running user code
+4. Restoring original handles
+5. Reading captured content from temp files
+
+PerlOnJava already has filehandle dup support in `IOOperator.java` (lines 452-543).
+The issue is likely that `fileno()` on STDOUT/STDERR returns undef or that the
+dup-to-fd-number path (`">&" . fileno(...)`) doesn't work correctly.
+
+**Recommended approach — diagnose and fix the dup path (medium effort, very high impact):**
+1. Test `fileno(STDOUT)`, `fileno(STDERR)` — do they return valid fd numbers?
+2. Test `open my $save, ">&STDOUT"` then `open \*STDOUT, ">&" . fileno($tmpfile)`
+3. Fix whatever breaks in the dup/redirect chain
+4. If pure Perl Capture::Tiny still fails: Java-backed implementation (~300 LOC)
+
+**Impact**: 2 WWW::Mechanize tests + **50+ CPAN test files** (Specio, DateTime,
+DateTime-Locale, List-MoreUtils, Params-Util, Devel-StackTrace, Exception-Class, etc.)
+
+#### 3. Capture::Tiny tee* functions — LOW PRIORITY
+
+Only needed if CPAN tests call `tee`/`tee_stdout`/`tee_stderr`/`tee_merged`.
+Most don't. Could be implemented with Java threads (~100 LOC) if ever needed.
+
+#### 4. XHTML marked_sections — LOW PRIORITY
+
+find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing not implemented in HTMLParser.
+Rarely encountered in practice.
+
+#### 5. CSS background-url extraction — LOW PRIORITY
+
+image-parse.t (1 failure). WWW::Mechanize extracts images from inline
+`style="background:url(...)"` on non-img elements. Edge case.
+
+### Priority Summary
+
+| Priority | Item | Effort | Impact |
+|----------|------|--------|--------|
+| **P1** | Capture::Tiny capture* (fix dup/fileno) | Medium | 50+ CPAN test files |
+| **P2** | HTTP::Daemon pure Perl (test socket server) | Low-Medium | 20+ WWW::Mechanize + 100+ libwww |
+| **P3** | Java-backed fallbacks (if pure Perl fails) | Medium-High | Same as above |
+| **P4** | CDATA, CSS url, tee* | Low | 3 tests |
 
 ### Bug 11: HTMLParser script/style raw text handling (FIXED)
 - **File**: `HTMLParser.java:parseHtml()`
@@ -246,6 +311,7 @@ make
 - **Note**: Bytecode compiler did NOT have this bug (only checks `isTrueLoop`).
 
 ### Next Steps
-- All actionable fixes are complete
-- Remaining failures are either JVM limitations (fork/Capture::Tiny) or low-priority features (CDATA, CSS url extraction)
+- All Phase 1-7 fixes are complete (98.1% non-server tests pass)
+- P1: Investigate Capture::Tiny `fileno(STDOUT)` / filehandle dup chain
+- P2: Test HTTP::Daemon pure Perl in server mode
 - PR #440 ready for review
