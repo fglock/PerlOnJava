@@ -21,8 +21,9 @@ its test suite on PerlOnJava.
 | After Fix 3+4 | **19/106** | **57/2884** | **2884** | Interpreter `our` binding + XSLoader @ISA fallback |
 | After Fix 5+6 | **16/106** | — | — | Error location attribution + compiled template loading |
 | After Fix 7 | **3/106** | ~23/2884 | **2884** | XSLoader jar: shim overrides + stale .ttc cleanup |
+| After Fix 8 | **2/106** | ~3/2884 | **2884** | `use bytes` length fix for Latin-1 strings |
 
-### Current: 103/106 passing (97%), 11 skipped, 3 truly failing
+### Current: 104/106 passing (98%), 11 skipped, 2 truly failing
 
 ---
 
@@ -83,7 +84,7 @@ XS module with a Perl parent.
 
 ---
 
-## Remaining Failures (3/106 programs)
+## Remaining Failures (2/106 programs)
 
 ### evalperl.t — 1/19 subtests failing
 
@@ -97,19 +98,12 @@ XS module with a Perl parent.
 |------|--------|-------|-------|
 | leak.t | 2 | 11 | Tests 7, 11 — DESTROY not implemented in PerlOnJava (known limitation) |
 
-### unicode.t — 20/20 subtests failing (deferred)
-
-| Test | Failed | Total | Issue |
-|------|--------|-------|-------|
-| unicode.t | 20 | 20 | BOM detection/stripping not implemented (UTF-8/16/32). Deep encoding issue, deferred. |
-
 ---
 
 ## Next Steps
 
 1. **evalperl.t test 11** — Investigate EVAL_PERL context propagation to included templates
-2. **unicode.t** — BOM detection/stripping (deferred — deep encoding work)
-3. **leak.t** — DESTROY not implemented (known limitation, not fixable without DESTROY support)
+2. **leak.t** — DESTROY not implemented (known limitation, not fixable without DESTROY support)
 
 ---
 
@@ -135,11 +129,16 @@ XS module with a Perl parent.
   - Many tests that appeared failing were actually passing (stale .ttc cache files were the issue)
   - Files: XSLoader.java, EvalStringHandler.java, Template/Stash/XS.pm
 - [x] Template tests: **103/106 passing** (3 failing, 11 skipped) — **97% pass rate**
+- [x] Fix 8: `use bytes` length fix for Latin-1 strings (2025-04-05)
+  - `lengthBytes` now returns character count for strings with all chars <= 0xFF (Latin-1)
+  - Previously always used UTF-8 byte count, causing BOM detection in Template::Provider to fail
+  - unicode.t: 0/20 → **20/20** — all BOM formats (UTF-8/16BE/16LE/32BE/32LE) now detected and decoded
+  - File: StringOperators.java
+- [x] Template tests: **104/106 passing** (2 failing, 11 skipped) — **98% pass rate**
 
 ### Remaining (not planned)
 - [ ] evalperl.t test 11 — EVAL_PERL context propagation
 - [ ] leak.t tests 7, 11 — DESTROY not implemented
-- [ ] unicode.t — BOM handling deferred
 
 ---
 

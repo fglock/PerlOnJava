@@ -46,12 +46,29 @@ public class StringOperators {
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }
-        // Convert the RuntimeScalar to a string and return its byte length
+        // Convert the RuntimeScalar to a string and return its byte length.
+        // In Perl 5, strings that contain only characters <= 0xFF are stored
+        // internally as Latin-1 (1 byte per character). Only strings with
+        // characters > 0xFF are stored as UTF-8. Under 'use bytes', length()
+        // returns the internal byte count, so:
+        // - Latin-1 strings: byte count == character count
+        // - UTF-8 strings: byte count may be > character count
         String str = runtimeScalar.toString();
+        // Check if string has any character > 0xFF (would be UTF-8 in Perl 5)
+        boolean hasWideChars = false;
+        for (int i = 0; i < str.length(); i++) {
+            if (str.charAt(i) > 0xFF) {
+                hasWideChars = true;
+                break;
+            }
+        }
+        if (!hasWideChars) {
+            // Latin-1 equivalent: 1 byte per character
+            return getScalarInt(str.length());
+        }
         try {
             return getScalarInt(str.getBytes(StandardCharsets.UTF_8).length);
         } catch (Exception e) {
-            // If UTF-8 encoding fails, fall back to character count
             return getScalarInt(str.codePointCount(0, str.length()));
         }
     }
