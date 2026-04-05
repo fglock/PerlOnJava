@@ -1,6 +1,6 @@
 # WWW::Mechanize Support for PerlOnJava
 
-## Status: Phase 7 Complete — 98.1% pass rate
+## Status: Phase 9 Complete — 99.4% non-server pass rate + HTTP::Daemon working
 
 **Branch**: `feature/www-mechanize-support`
 **Date started**: 2026-04-04
@@ -131,7 +131,7 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 7 complete — 522/532 subtests pass (98.1%)
+### Current Status: Phase 9 complete — 529/532 non-server subtests (99.4%) + HTTP::Daemon working
 
 ### Completed Phases
 - [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
@@ -162,6 +162,19 @@ make
   - Bundled LWP/media.types data file for MIME type lookups
   - `make` passes (all unit tests green)
   - WWW::Mechanize non-local tests: 522/532 pass (98.1%)
+- [x] Phase 8: Capture::Tiny fileno/dup chain fix (2026-04-05)
+  - Fixed fileno() to return valid fd numbers for all file/pipe handles
+  - Bridged findFileHandleByDescriptor() to RuntimeIO fileno registry
+  - Added guard for empty fd in dup mode (prevents STDOUT corruption)
+  - Added fileno unregistration on close() to prevent fd leaks
+  - Capture::Tiny capture/capture_stdout/capture_stderr/capture_merged: WORKING
+  - `make` passes (all unit tests green)
+  - WWW::Mechanize non-local tests: 529/532 pass (99.4%)
+  - dump.t: 1/7 -> 7/7, mech-dump/file_not_found.t: 0/1 -> 1/1
+- [x] Phase 9: HTTP::Daemon pure Perl verified (2026-04-05)
+  - HTTP::Daemon new/accept/get_request/send_response: all working (pure Perl, no changes needed)
+  - LocalServer piped-open pattern works with jperl
+  - WWW::Mechanize t/local/ tests: 17/19 pass (0 failures, 2 server-exit timeouts)
 
 ### Bug 7: HTMLParser argspec "self" doubled for method callbacks (FIXED)
 - **File**: `HTMLParser.java:fireEvent()` + `buildEventDataFromArgspec()`
@@ -204,94 +217,58 @@ make
 
 ### Phase 7: Remaining failures — RESOLVED (2026-04-05)
 
-**Non-local test results: 522/532 pass (98.1%)**
+**Non-local test results: 529/532 pass (99.4%)**
 
 | Test File | Result | Root Cause | Status |
 |-----------|--------|------------|--------|
-| dump.t | 1/7 | Capture::Tiny STDOUT capture needs fork() | Won't fix (JVM limitation) |
+| dump.t | 7/7 | Fixed by Capture::Tiny fileno/dup fix | ✅ FIXED |
 | field.t | 15/16 (TODO fail) | Expected: HTML::TokeParser limitation | OK (TODO test) |
 | find_link_xhtml.t | 8/10 | XHTML `<![CDATA[...]]>` / `marked_sections` not implemented | Low priority |
 | image-parse.t | 41/42 | 1 remaining CSS background-url edge case | Low priority |
-| mech-dump/file_not_found.t | 0/1 | Capture::Tiny STDERR capture needs fork() | Won't fix (JVM limitation) |
-| cookies.t | TIMEOUT | Needs fork() for HTTP::Daemon | Won't fix (JVM limitation) |
-| t/local/*.t | TIMEOUT | Needs fork() for HTTP::Daemon | Won't fix (JVM limitation) |
+| mech-dump/file_not_found.t | 1/1 | Fixed by Capture::Tiny fileno/dup fix | ✅ FIXED |
 
-### Remaining Issues — Analysis and Path Forward
+**Local server test results: 17/19 pass (0 failures, 2 timeouts)**
 
-#### 1. HTTP::Daemon tests (cookies.t + 18 t/local/ tests) — LIKELY FIXABLE
+| Test File | Result | Notes |
+|-----------|--------|-------|
+| t/local/back.t | 32 pass, TIMEOUT | Server doesn't exit cleanly |
+| t/local/get.t | 33 pass, TIMEOUT | Server doesn't exit cleanly |
+| t/local/click.t | 9/9 | ✅ |
+| t/local/click_button.t | 15/15 | ✅ |
+| t/local/content.t | 10/10 | ✅ |
+| t/local/encoding.t | 6/6 | ✅ |
+| t/local/failure.t | 15/15 | ✅ |
+| t/local/follow.t | 32/32 | ✅ |
+| t/local/form.t | 38/38 | ✅ |
+| t/local/head.t | 8/8 | ✅ |
+| t/local/nonascii.t | 5/5 | ✅ |
+| t/local/overload.t | SKIP | Test skips itself |
+| t/local/page_stack.t | 26/26 | ✅ |
+| t/local/post.t | 5/5 | ✅ |
+| t/local/referer.t | 14/14 | ✅ |
+| t/local/reload.t | 15/15 | ✅ |
+| t/local/select_multiple.t | 19/19 | ✅ |
+| t/local/submit.t | 13/13 | ✅ |
+| t/history.t | 27/27 | ✅ |
+| cookies.t | TIMEOUT | Needs TestServer fork-open pattern |
 
-**Key finding: HTTP::Daemon itself does NOT use fork().** It is pure Perl on top of
-`IO::Socket::IP`. The fork dependency comes from the *test harnesses*, not the module.
+### Remaining Issues
 
-| Test Harness | Pattern | PerlOnJava Support |
-|---|---|---|
-| `LocalServer.pm` (18 tests) | `open $fh, qq'$^X "log-server" ... \|'` (piped open) | Already supported (`RuntimeIO.openPipe`) |
-| `TestServer.pm` (cookies.t) | `open $fh, '-\|'` (fork-open, no exec) | Not supported (requires true fork) |
+1. **Server-exit timeouts** — back.t and get.t pass all subtests but the log-server
+   process doesn't exit cleanly, causing the test harness to wait until timeout.
+   Root cause is likely the server's accept loop not seeing connection close.
 
-**Recommended approach — try pure Perl HTTP::Daemon first (low effort, high impact):**
-1. Test `HTTP::Daemon->new()` — does `IO::Socket::IP` server mode work?
-2. Test `$d->accept()` — does glob stash `${*$sock}{'httpd_daemon'}` work on socket objects?
-3. Test `get_request()` — does `sysread` + 4-arg `select` work on accepted connections?
-4. Test `LocalServer::spawn()` end-to-end — piped open runs `jperl log-server`
-5. If pure Perl fails: Java-backed HTTP::Daemon (~400 LOC, similar to `HttpTiny.java`)
+2. **cookies.t** — Uses `TestServer.pm` which requires `open FH, '-|'` fork-open pattern
+   (no exec). This is a true fork dependency that can't be worked around.
 
-**Technical risks**: glob stash on socket objects, `vec()`+`fileno()` for select bitmask,
-`sysread` on accepted socket connections.
+3. **XHTML marked_sections** — find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing
+   not implemented in HTMLParser. Low priority.
 
-**Impact**: ~20 WWW::Mechanize tests + 100+ libwww-perl tests across other CPAN modules.
-
-#### 2. Capture::Tiny capture* functions (dump.t, mech-dump) — LIKELY FIXABLE WITHOUT FORK
-
-**Key finding: `capture*` functions do NOT use fork.** Only `tee*` functions do.
-Test::Output (used by dump.t) only uses `capture*`, never `tee*`.
-
-The capture path works by:
-1. Saving STDOUT/STDERR via `open $handle, ">&STDOUT"` (filehandle dup)
-2. Redirecting to temp files via `open \*STDOUT, ">&" . fileno($tmpfile)`
-3. Running user code
-4. Restoring original handles
-5. Reading captured content from temp files
-
-PerlOnJava already has filehandle dup support in `IOOperator.java` (lines 452-543).
-The issue is likely that `fileno()` on STDOUT/STDERR returns undef or that the
-dup-to-fd-number path (`">&" . fileno(...)`) doesn't work correctly.
-
-**Recommended approach — diagnose and fix the dup path (medium effort, very high impact):**
-1. Test `fileno(STDOUT)`, `fileno(STDERR)` — do they return valid fd numbers?
-2. Test `open my $save, ">&STDOUT"` then `open \*STDOUT, ">&" . fileno($tmpfile)`
-3. Fix whatever breaks in the dup/redirect chain
-4. If pure Perl Capture::Tiny still fails: Java-backed implementation (~300 LOC)
-
-**Impact**: 2 WWW::Mechanize tests + **50+ CPAN test files** (Specio, DateTime,
-DateTime-Locale, List-MoreUtils, Params-Util, Devel-StackTrace, Exception-Class, etc.)
-
-#### 3. Capture::Tiny tee* functions — LOW PRIORITY
-
-Only needed if CPAN tests call `tee`/`tee_stdout`/`tee_stderr`/`tee_merged`.
-Most don't. Could be implemented with Java threads (~100 LOC) if ever needed.
-
-#### 4. XHTML marked_sections — LOW PRIORITY
-
-find_link_xhtml.t (2 failures). `<![CDATA[...]]>` parsing not implemented in HTMLParser.
-Rarely encountered in practice.
-
-#### 5. CSS background-url extraction — LOW PRIORITY
-
-image-parse.t (1 failure). WWW::Mechanize extracts images from inline
-`style="background:url(...)"` on non-img elements. Edge case.
-
-### Priority Summary
-
-| Priority | Item | Effort | Impact |
-|----------|------|--------|--------|
-| **P1** | Capture::Tiny capture* (fix dup/fileno) | Medium | 50+ CPAN test files |
-| **P2** | HTTP::Daemon pure Perl (test socket server) | Low-Medium | 20+ WWW::Mechanize + 100+ libwww |
-| **P3** | Java-backed fallbacks (if pure Perl fails) | Medium-High | Same as above |
-| **P4** | CDATA, CSS url, tee* | Low | 3 tests |
+4. **CSS background-url extraction** — image-parse.t (1 failure). Edge case.
 
 ---
 
-## Phase 8: Capture::Tiny capture* Implementation
+## Phase 8: Capture::Tiny capture* Implementation — COMPLETE
 
 ### Problem
 
@@ -367,7 +344,7 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/dump
 
 ---
 
-## Phase 9: HTTP::Daemon Pure Perl Testing
+## Phase 9: HTTP::Daemon Pure Perl Testing — COMPLETE
 
 ### Problem
 
@@ -451,7 +428,10 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/loca
 - **Note**: Bytecode compiler did NOT have this bug (only checks `isTrueLoop`).
 
 ### Next Steps
-- All Phase 1-7 fixes are complete (98.1% non-server tests pass)
-- P1: Investigate Capture::Tiny `fileno(STDOUT)` / filehandle dup chain
-- P2: Test HTTP::Daemon pure Perl in server mode
+- All Phase 1-9 fixes are complete
+- Non-server tests: 529/532 (99.4%)
+- Local server tests: 17/19 (0 failures, 2 server-exit timeouts)
+- HTTP::Daemon: fully working in pure Perl
+- Capture::Tiny capture*: fully working
+- Remaining: CDATA (2 tests), CSS url (1 test), server-exit timeouts (2 tests), cookies.t (fork)
 - PR #440 ready for review
