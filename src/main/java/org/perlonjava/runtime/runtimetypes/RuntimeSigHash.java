@@ -39,6 +39,11 @@ public class RuntimeSigHash extends RuntimeHash {
     // Linux-specific signals
     private static final List<String> LINUX_SIGNALS = List.of("CLD", "STKFLT", "PWR", "IOT");
 
+    // Windows supports only a small subset of signals
+    private static final List<String> WINDOWS_SIGNALS = List.of(
+            "INT", "TERM", "ABRT", "FPE", "ILL", "SEGV", "BREAK"
+    );
+
     /**
      * Construct a pre-populated %SIG hash. Like Perl, all available OS signal
      * names appear as keys with undef values. __WARN__ and __DIE__ are Perl
@@ -46,19 +51,26 @@ public class RuntimeSigHash extends RuntimeHash {
      */
     public RuntimeSigHash() {
         super();
-        // Pre-populate with POSIX signals
-        for (String sig : POSIX_SIGNALS) {
-            elements.put(sig, new RuntimeScalar());
-        }
-        // Add platform-specific signals
         String os = System.getProperty("os.name", "").toLowerCase();
-        if (os.contains("mac") || os.contains("darwin")) {
-            for (String sig : MACOS_SIGNALS) {
+        if (os.contains("win")) {
+            // Windows: only a small subset of signals are available
+            for (String sig : WINDOWS_SIGNALS) {
                 elements.put(sig, new RuntimeScalar());
             }
-        } else if (os.contains("linux")) {
-            for (String sig : LINUX_SIGNALS) {
+        } else {
+            // Pre-populate with POSIX signals
+            for (String sig : POSIX_SIGNALS) {
                 elements.put(sig, new RuntimeScalar());
+            }
+            // Add platform-specific signals
+            if (os.contains("mac") || os.contains("darwin")) {
+                for (String sig : MACOS_SIGNALS) {
+                    elements.put(sig, new RuntimeScalar());
+                }
+            } else if (os.contains("linux")) {
+                for (String sig : LINUX_SIGNALS) {
+                    elements.put(sig, new RuntimeScalar());
+                }
             }
         }
     }
