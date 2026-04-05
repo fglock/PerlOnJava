@@ -210,7 +210,7 @@ foreach my $session (@children) {
 |-------|--------|------------|
 | Storable not found by POE test runner | 3 filter tests | Low (path issue?) |
 | HTTP::Message bytes handling | 03_http.t (58 tests) | Medium |
-| 01_sysrw.t hangs | 1 driver test | Medium (I/O) |
+| 01_sysrw.t hangs | 1 driver test — **MOSTLY FIXED** (15/17 pass, 2 blocked by dup/close) | Medium (I/O) |
 | signals.t 1 failure | 1 test | Low |
 
 ### Event Loop Tests (t/30_loops/select/)
@@ -266,7 +266,7 @@ foreach my $session (@children) {
 | 4.1 | HTTP::Message bytes handling | 03_http.t (58 more tests) | Medium |
 | 4.2 | Socket/network tests (comp_tcp, wheel_sf_*) | TCP/UDP networking | Hard |
 | 4.3 | IO::Poll stub | 4 poll-related loop tests | Medium |
-| 4.4 | File handle dup fix | 15_kernel_internal.t (5 tests) | Hard |
+| 4.4 | File handle dup fix | 15_kernel_internal.t (5 tests) + 01_sysrw.t (2 tests) | Hard — see Phase 4.8 |
 | 4.5 | wheel_tail.t (FollowTail) | File watching | Medium |
 
 ### Phase 5: JVM limitations (not fixable without major work)
@@ -556,6 +556,42 @@ guards. But several PerlOnJava subsystems only have macOS/Linux branches.
 - POE::Loop::Select — has `$^O eq 'MSWin32'` guards
 - `socketpair` via loopback TCP — the standard Windows approach
 - `$^O` correctly set to `MSWin32` on Windows
+
+#### Phase 4.8: Fix filehandle dup (open FH, ">&OTHER") — proper fd duplication
+
+**Root cause**: `duplicateFileHandle()` in IOOperator.java (line 2610) does `duplicate.ioHandle = original.ioHandle` — both RuntimeIO objects share the **same** IOHandle object. When the original is closed, the duplicate becomes invalid. Also, fileno() returns the same fd for both (no new fd allocated).
+
+**What Perl does**: `open(SAVE, ">&STDERR")` calls `dup(2)` which creates a new fd (e.g., 3) pointing to the same underlying file description. The two fds are independent — closing one doesn't affect the other.
+
+**Reproduction**:
+```perl
+# Works once, fails on second cycle
+open(SAVE_STDERR, ">&STDERR") or die $!;  # SAVE gets fd 2, should get fd 3
+close(STDERR);                              # Closes fd 2 — also closes SAVE's ioHandle!
+open(STDERR, ">&SAVE_STDERR");              # Reopens from "already closed" SAVE
+close(SAVE_STDERR);                         # "Handle is already closed"
+```
+
+**Impact**: 
+- 01_sysrw.t: tests 16-17 blocked (dup/close/reopen STDERR cycle)
+- 15_kernel_internal.t: 5 tests (fd management)
+- Any module using STDERR save/restore pattern (common in test suites)
+- POE::Wheel::Run I/O redirection
+
+**Fix plan**:
+1. `duplicateFileHandle()` must create a **new IOHandle** that wraps/shares the same underlying stream but has independent close semantics
+2. For `StandardIO` handles (STDIN/STDOUT/STDERR): create a new IOHandle wrapper that delegates read/write but tracks its own closed state; closing the duplicate should NOT close the underlying stream
+3. For `CustomFileChannel` handles: create a new IOHandle that dups the `FileChannel` (FileChannel doesn't support true dup, but we can wrap it with a refcount so close only releases when all dups are closed)
+4. For `InternalPipeHandle`: create a new IOHandle sharing the same PipedInputStream/PipedOutputStream with independent close tracking
+5. For `SocketIO`: wrap with independent close state
+6. Assign a **new fd number** via `FileDescriptorTable.register()` for the duplicate
+7. Register the duplicate in `RuntimeIO.filenoToIO` so select()/fileno() see it
+
+**Difficulty**: Medium-Hard (affects all IOHandle types, needs careful close semantics)
+
+**Alternatives considered**:
+- Shared refcount on IOHandle: when all dups are closed, actually close the stream. Simpler but requires every IOHandle to be refcounted.
+- OS-level dup via FFM: call native dup(fd) and wrap the result. Only works for real OS fds, not Java pipes.
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
