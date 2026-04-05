@@ -81,11 +81,8 @@ public class Readline {
 
             if (content.length() > 0) {
                 String contentStr = content.toString();
-                for (int i = 0; i < contentStr.length(); i++) {
-                    if (contentStr.charAt(i) == '\n') {
-                        runtimeIO.currentLineNumber++;
-                    }
-                }
+                // In Perl 5, slurp mode increments $. by 1 (not per line)
+                runtimeIO.currentLineNumber++;
                 RuntimeScalar result = new RuntimeScalar(contentStr);
                 if (isByteData) {
                     result.type = RuntimeScalarType.BYTE_STRING;
@@ -159,15 +156,10 @@ public class Readline {
             return scalarUndef;
         }
 
-        // Increment the line number counter if a paragraph was read
+        // Increment the line number counter once per paragraph read.
+        // In Perl 5, $. counts paragraphs (not lines) in paragraph mode.
         if (inParagraph) {
-            // Count the number of lines in the paragraph
-            String paragraphStr = paragraph.toString();
-            for (int i = 0; i < paragraphStr.length(); i++) {
-                if (paragraphStr.charAt(i) == '\n') {
-                    runtimeIO.currentLineNumber++;
-                }
-            }
+            runtimeIO.currentLineNumber++;
         }
 
         RuntimeScalar result = new RuntimeScalar(paragraph.toString());

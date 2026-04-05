@@ -1367,6 +1367,10 @@ public class RuntimeIO extends RuntimeScalar {
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
         ioHandle = new ClosedIOHandle();
+        // Reset line number to 0 on close, matching Perl 5 behavior.
+        // This ensures $. becomes 0 and error messages don't include
+        // stale filehandle context after close.
+        currentLineNumber = 0;
         return ret;
     }
 

@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.io.Serial;
 import java.util.HashMap;
@@ -62,10 +63,25 @@ public class PerlCompilerException extends RuntimeException {
     }
 
     /**
+     * Formats the error message with location and optional filehandle context.
+     * Format: "MESSAGE at FILE line N[, <FH> chunk/line N].\n"
+     */
+    private static String formatWithLocation(String message, String fileName, int lineNumber) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(message).append(" at ").append(fileName).append(" line ").append(lineNumber);
+        // Append filehandle context if available (e.g., ", <DATA> chunk 1")
+        String fhContext = WarnDie.getFilehandleContext();
+        if (fhContext != null) {
+            sb.append(fhContext);
+        }
+        sb.append(".\n");
+        return sb.toString();
+    }
+
+    /**
      * Builds the error message with " at FILE line N.\n" suffix by finding the
-     * current Perl execution location. Uses the interpreter's current PC first
-     * (which correctly tracks #line directives), then falls back to JVM stack
-     * scanning for compiled Perl code.
+     * current Perl execution location. Checks JVM stack first for compiled Perl
+     * frames (most specific), then falls back to interpreter state.
      *
      * <p>This is different from caller(0) which returns where the current sub
      * was CALLED FROM (the call site). For error messages, we need where the
@@ -73,8 +89,52 @@ public class PerlCompilerException extends RuntimeException {
      */
     private static String buildErrorMessage(String message) {
         try {
-            // 1. Check interpreter state first — interpreter frames have accurate
-            //    PC tracking that honors #line directives via ErrorMessageUtil.
+            // Scan the JVM stack to find the innermost Perl execution context.
+            // We need to determine whether the error originated in JVM-compiled code
+            // (anon class) or interpreter-executed code. The key insight:
+            // - If an interpreter execution frame (bytecode.* package) appears on the
+            //   stack BEFORE any compiled Perl class, the interpreter is the innermost
+            //   context and has the most accurate location via ErrorMessageUtil.
+            // - If a compiled Perl class appears first, use JVM stack resolution
+            //   via ByteCodeSourceMapper.
+            var t = new Throwable();
+            var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
+            for (StackTraceElement element : t.getStackTrace()) {
+                String className = element.getClassName();
+
+                // Interpreter execution frame — use interpreter state for location
+                if (className.startsWith("org.perlonjava.backend.bytecode.")) {
+                    var frame = InterpreterState.current();
+                    if (frame != null && frame.code() != null) {
+                        var pcs = InterpreterState.getPcStack();
+                        if (!pcs.isEmpty()) {
+                            int currentPc = pcs.getLast();
+                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                var pcEntry = frame.code().pcToTokenIndex.floorEntry(currentPc);
+                                if (pcEntry != null && frame.code().errorUtil != null) {
+                                    var loc = frame.code().errorUtil.getSourceLocationAccurate(pcEntry.getValue());
+                                    if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+                                        return formatWithLocation(message, loc.fileName(), loc.lineNumber());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break; // Interpreter found but couldn't resolve — fall through
+                }
+
+                // JVM-compiled Perl frame — resolve via ByteCodeSourceMapper
+                if (className.contains("org.perlonjava.anon") ||
+                        className.contains("org.perlonjava.runtime.perlmodule")) {
+                    var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
+                    if (loc != null && loc.sourceFileName() != null && !loc.sourceFileName().isEmpty()) {
+                        return formatWithLocation(message, loc.sourceFileName(), loc.lineNumber());
+                    }
+                }
+            }
+
+            // Last resort: try interpreter state even if no interpreter frame was
+            // found on the stack (edge case guard)
             var frame = InterpreterState.current();
             if (frame != null && frame.code() != null) {
                 var pcs = InterpreterState.getPcStack();
@@ -85,25 +145,9 @@ public class PerlCompilerException extends RuntimeException {
                         if (pcEntry != null && frame.code().errorUtil != null) {
                             var loc = frame.code().errorUtil.getSourceLocationAccurate(pcEntry.getValue());
                             if (loc.fileName() != null && !loc.fileName().isEmpty()) {
-                                return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
+                                return formatWithLocation(message, loc.fileName(), loc.lineNumber());
                             }
                         }
-                    }
-                }
-            }
-
-            // 2. Fall back to JVM stack scanning for compiled Perl frames.
-            //    Scans for org.perlonjava.anon* classes which are generated by
-            //    eval STRING / compiled Perl code, and resolves via ByteCodeSourceMapper.
-            var t = new Throwable();
-            var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
-            for (StackTraceElement element : t.getStackTrace()) {
-                String className = element.getClassName();
-                if (className.contains("org.perlonjava.anon") ||
-                        className.contains("org.perlonjava.runtime.perlmodule")) {
-                    var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
-                    if (loc != null && loc.sourceFileName() != null && !loc.sourceFileName().isEmpty()) {
-                        return message + " at " + loc.sourceFileName() + " line " + loc.lineNumber() + ".\n";
                     }
                 }
             }

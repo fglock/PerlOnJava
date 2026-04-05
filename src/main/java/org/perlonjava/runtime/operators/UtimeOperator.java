@@ -16,12 +16,22 @@ public class UtimeOperator {
     private static final boolean IS_WINDOWS = NativeUtils.IS_WINDOWS;
 
     public static RuntimeScalar utime(int ctx, RuntimeBase... args) {
-        if (args.length < 2) {
+        // Flatten args into a list to handle utime(@array, $file) correctly.
+        // Without flattening, @array arrives as a single RuntimeArray element
+        // and args[0].scalar() returns the array length instead of the first element.
+        var flat = new java.util.ArrayList<RuntimeScalar>();
+        for (RuntimeBase arg : args) {
+            for (RuntimeScalar s : arg) {
+                flat.add(s);
+            }
+        }
+
+        if (flat.size() < 3) {
             return new RuntimeScalar(0);
         }
 
-        RuntimeScalar accessTimeArg = args[0].scalar();
-        RuntimeScalar modTimeArg = args[1].scalar();
+        RuntimeScalar accessTimeArg = flat.get(0);
+        RuntimeScalar modTimeArg = flat.get(1);
 
         boolean useCurrentTime = !accessTimeArg.getDefinedBoolean() && !modTimeArg.getDefinedBoolean();
 
@@ -39,13 +49,9 @@ public class UtimeOperator {
 
         int successCount = 0;
 
-        for (int i = 2; i < args.length; i++) {
-            RuntimeBase arg = args[i];
-
-            for (RuntimeScalar fileArg : arg) {
-                if (changeFileTimes(fileArg, accessTime, modTime)) {
-                    successCount++;
-                }
+        for (int i = 2; i < flat.size(); i++) {
+            if (changeFileTimes(flat.get(i), accessTime, modTime)) {
+                successCount++;
             }
         }
 

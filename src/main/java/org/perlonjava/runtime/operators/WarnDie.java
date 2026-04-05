@@ -370,12 +370,12 @@ public class WarnDie {
             // Error message
             String out = message.toString();
             if (!out.endsWith("\n")) {
-                // Add filehandle context if available
+                // Add " at FILE line N" location
+                out += where.toString();
+                // Add filehandle context if available (e.g., ", <DATA> chunk 1")
                 String filehandleContext = getFilehandleContext();
                 if (filehandleContext != null && !filehandleContext.isEmpty()) {
-                    out += " " + filehandleContext;
-                } else {
-                    out += where.toString();
+                    out += filehandleContext;
                 }
                 // Perl adds a period and newline to die messages
                 if (!out.endsWith("\n")) {
@@ -492,16 +492,28 @@ public class WarnDie {
 
     /**
      * Gets the current filehandle context for error messages.
-     * Returns a string like "<$f> line 1" if a filehandle is currently active.
+     * Returns a string like ", <DATA> line 1" or ", <DATA> chunk 1" if a
+     * filehandle is currently active. Uses "chunk" when $/ is set to ""
+     * (paragraph mode), "line" otherwise. Matches Perl 5's behavior.
      *
-     * @return String with filehandle context, or null if no context available
+     * @return String with filehandle context (including leading ", "), or null if no context
      */
-    private static String getFilehandleContext() {
+    public static String getFilehandleContext() {
         if (RuntimeIO.lastAccesseddHandle != null && RuntimeIO.lastAccesseddHandle.currentLineNumber > 0) {
-            // Try to find the variable name for this filehandle
             String handleName = findFilehandleName(RuntimeIO.lastAccesseddHandle);
             if (handleName != null) {
-                return "<" + handleName + "> line " + RuntimeIO.lastAccesseddHandle.currentLineNumber;
+                // Perl 5 uses "line" only when $/ is exactly "\n".
+                // Everything else (undef, "", custom separator, ref) uses "chunk".
+                String unit = "chunk";
+                try {
+                    RuntimeScalar rs = GlobalVariable.getGlobalVariable("main::/");
+                    if (rs.type != RuntimeScalarType.UNDEF && "\n".equals(rs.toString())) {
+                        unit = "line";
+                    }
+                } catch (Exception ignored) {
+                    // Default to "chunk" if we can't read $/
+                }
+                return ", <" + handleName + "> " + unit + " " + RuntimeIO.lastAccesseddHandle.currentLineNumber;
             }
         }
         return null;
@@ -509,16 +521,21 @@ public class WarnDie {
 
     /**
      * Attempts to find the variable name for a given filehandle.
-     * This is a simplified implementation that checks common patterns.
+     * Uses the glob name stored on the RuntimeIO handle.
      *
      * @param handle The RuntimeIO handle to find the name for
-     * @return String with the variable name, or null if not found
+     * @return String with the bare handle name (e.g., "DATA", "STDIN"), or null if not found
      */
     private static String findFilehandleName(RuntimeIO handle) {
-        // For now, return a generic name since finding the exact variable name
-        // requires more complex symbol table traversal
-        // In a full implementation, we would search through the symbol table
-        // to find which variable references this handle
-        return "$f"; // Simplified - matches the test expectation
+        if (handle.globName != null && !handle.globName.isEmpty()) {
+            // Strip package prefix (e.g., "main::DATA" -> "DATA")
+            String name = handle.globName;
+            int colonIdx = name.lastIndexOf("::");
+            if (colonIdx >= 0 && colonIdx + 2 < name.length()) {
+                name = name.substring(colonIdx + 2);
+            }
+            return name;
+        }
+        return null;
     }
 }
