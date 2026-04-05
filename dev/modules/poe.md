@@ -4,7 +4,7 @@
 
 **Module**: POE 1.370 (Perl Object Environment - event-driven multitasking framework)
 **Test command**: `./jcpan -t POE`
-**Status**: 35/53 unit+resource tests pass, ses_session.t 37/41 (up from 7/41), ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20
+**Status**: 35/53 unit+resource tests pass, ses_session.t 37/41 (up from 7/41), ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17
 
 ## Dependency Tree
 
@@ -323,6 +323,15 @@ foreach my $session (@children) {
     This allows sessions to exit properly without relying on DESTROY.
   - ses_session.t: 7/41 → 37/41 (signal delivery + postback cleanup working)
   - ses_nfa.t: 39/39 (perfect), k_alarms.t: 37/37 (perfect), k_aliases.t: 20/20 (perfect)
+- [x] Phase 3.5: select() and fd allocation fixes (2026-04-04, commit b995a5f81)
+  - Fixed select() bitvector write-back (Bug 18) — 4-arg select() copied bitvector args
+    but never wrote results back, causing callers to see unchanged bitvectors
+  - Fixed fd allocation collision (Bug 19) — FileDescriptorTable and RuntimeIO had
+    separate fd counters; socket/socketpair advanced one but not the other, causing
+    pipe() to allocate fds overlapping with existing sockets
+  - Fixed socketpair() stream init (Bug 20) — SocketIO created without input/output
+    streams, causing sysread() to fail. Also improved sysread() channel fallback.
+  - k_selects.t: 5/17 → 17/17 (all pass)
 
 ### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
@@ -338,6 +347,18 @@ foreach my $session (@children) {
   that explicitly count DESTROY invocations.
 - **Dual fd registry**: pipe() registered handles in FileDescriptorTable but not RuntimeIO.filenoToIO.
   select() only consulted RuntimeIO, making pipes invisible. Fixed by registerExternalFd().
+- **Fd counter collision**: FileDescriptorTable and RuntimeIO maintained separate fd counters.
+  socketpair/socket advanced RuntimeIO.nextFileno but not FileDescriptorTable.nextFd, causing
+  pipe() to allocate fds that overlapped with existing socket fds. Fixed by cross-synchronizing
+  both counters (advancePast/advanceFilenoCounterPast).
+- **select() bitvector write-back**: 4-arg select() created snapshot copies of bitvector args
+  for tied-variable safety, but never wrote the modified bitvectors back to the original
+  variables. Callers always saw their original bitvectors unchanged. Fixed to write back
+  after selectWithNIO returns.
+- **socketpair() stream init**: socketpair() used SocketIO(channel, family) constructor which
+  doesn't initialize inputStream/outputStream. sysread() failed with "No input stream
+  available" on blocking sockets. Fixed to use SocketIO(socket) constructor, and made
+  sysread() fall back to channel-based I/O when streams are unavailable.
 - **Platform errno**: Hard-coded Linux errno values (EAGAIN=11) caused mismatches on macOS
   (EAGAIN=35). Fixed to use ErrnoVariable.EAGAIN() which probes the platform.
 - **Signal delivery**: Now works end-to-end: kill() → %SIG handler → signal pipe write →
@@ -347,11 +368,10 @@ foreach my $session (@children) {
   from loading, causing monotime() to return integer seconds instead of float.
 
 ### Next Steps (Phase 4)
-1. Debug k_selects.t (5/17) — hangs after pipe creation tests
-2. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
-3. Debug k_sig_child.t — child signal handling (requires fork support)
-4. HTTP::Message bytes handling for 03_http.t
-5. Socket/network tests (comp_tcp, wheel_sf_*)
+1. Fix Storable path issue for POE test runner (unblocks 3 filter tests)
+2. Debug k_sig_child.t — child signal handling (requires fork support)
+3. HTTP::Message bytes handling for 03_http.t
+4. Socket/network tests (comp_tcp, wheel_sf_*)
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
