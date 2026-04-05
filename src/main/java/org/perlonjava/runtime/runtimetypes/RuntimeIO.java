@@ -488,6 +488,13 @@ public class RuntimeIO extends RuntimeScalar {
 
         // Handle special filenames
         if ("-".equals(actualFileName) || actualFileName.isEmpty()) {
+            if (mode.contains("&")) {
+                // Empty fd in dup mode (e.g., ">&" with no fd number) is an error.
+                // This happens when fileno() returns undef and the caller does
+                // open(*STDOUT, ">&" . fileno($fh)) — the undef concatenates to ">&".
+                handleIOError("Bad file descriptor");
+                return null;
+            }
             if (mode.equals(">") || mode.equals(">>")) {
                 // ">-" or just ">" means stdout
                 fh.ioHandle = new CustomOutputStreamHandle(System.out);
@@ -574,6 +581,9 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
+
+            // Assign a fileno so fileno() returns a valid fd and dup-by-fd works
+            fh.assignFileno();
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -772,6 +782,9 @@ public class RuntimeIO extends RuntimeScalar {
                 handleIOError("open failed: invalid mode for pipe");
                 return null;
             }
+
+            // Assign a fileno so fileno() returns a valid fd and dup-by-fd works
+            fh.assignFileno();
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -1233,6 +1246,7 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public RuntimeScalar close() {
         removeHandle(ioHandle);
+        unregisterFileno();
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
         ioHandle = new ClosedIOHandle();

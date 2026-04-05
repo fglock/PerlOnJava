@@ -2490,10 +2490,10 @@ public class IOOperator {
             case 2: // STDERR
                 return RuntimeIO.stderr;
             default:
-                // Check the RuntimeIO fileno registry (dup'd handles, sockets, regular files)
-                RuntimeIO registeredHandle = RuntimeIO.getByFileno(fd);
-                if (registeredHandle != null) {
-                    return registeredHandle;
+                // Check the RuntimeIO fileno registry (used by all file/pipe/socket handles)
+                RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
+                if (fromRegistry != null) {
+                    return fromRegistry;
                 }
                 return null; // Unknown file descriptor
         }
