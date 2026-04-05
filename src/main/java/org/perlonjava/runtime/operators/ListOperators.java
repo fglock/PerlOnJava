@@ -41,6 +41,14 @@ public class ListOperators {
                 // Apply the Perl map subroutine with the outer @_ as arguments
                 RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
 
+                // Check for non-local control flow (goto/last/next/redo) escaping the map block.
+                // Unlike sort (which throws), map allows goto LABEL to jump out of the block.
+                // Propagate the marker to our caller so the control flow can be handled at
+                // the correct scope (e.g., the enclosing loop or labeled block).
+                if (result.isNonLocalGoto()) {
+                    return result;
+                }
+
                 // `result` list contains aliases to the original array;
                 // We need to make copies of the result elements
                 RuntimeArray arr = new RuntimeArray();
@@ -196,6 +204,13 @@ public class ListOperators {
                     // Apply the Perl filter subroutine with the outer @_ as arguments
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
+                    // Check for non-local control flow (goto/last/next/redo) escaping the grep block.
+                    // Propagate the marker to our caller so the control flow is handled at
+                    // the correct scope (e.g., the enclosing loop or labeled block).
+                    if (result.isNonLocalGoto()) {
+                        return result;
+                    }
+
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
                         // If the result is non-zero, add the element to the filtered list
@@ -259,6 +274,11 @@ public class ListOperators {
                     // Apply the Perl filter subroutine with the argument
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
+                    // Propagate non-local control flow (goto/last/next/redo) out of the block
+                    if (result.isNonLocalGoto()) {
+                        return result;
+                    }
+
                     // Check the result of the filter subroutine
                     if (!result.getFirst().getBoolean()) {
                         return scalarFalse.getList();
@@ -308,6 +328,11 @@ public class ListOperators {
 
                     // Apply the Perl filter subroutine with the argument
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
+
+                    // Propagate non-local control flow (goto/last/next/redo) out of the block
+                    if (result.isNonLocalGoto()) {
+                        return result;
+                    }
 
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
