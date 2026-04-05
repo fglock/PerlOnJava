@@ -44,11 +44,16 @@ public class IOOperator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
+            // Keep references to originals so we can write results back.
+            // Perl's select() modifies bitvector arguments in place.
+            RuntimeScalar rbitsOrig = runtimeList.elements.get(0).scalar();
+            RuntimeScalar wbitsOrig = runtimeList.elements.get(1).scalar();
+            RuntimeScalar ebitsOrig = runtimeList.elements.get(2).scalar();
+
             // Snapshot arguments to avoid multiple FETCH calls on tied variables.
-            // In Perl 5, arguments are evaluated once onto the stack before select runs.
-            RuntimeScalar rbits = new RuntimeScalar().set(runtimeList.elements.get(0).scalar());
-            RuntimeScalar wbits = new RuntimeScalar().set(runtimeList.elements.get(1).scalar());
-            RuntimeScalar ebits = new RuntimeScalar().set(runtimeList.elements.get(2).scalar());
+            RuntimeScalar rbits = new RuntimeScalar().set(rbitsOrig);
+            RuntimeScalar wbits = new RuntimeScalar().set(wbitsOrig);
+            RuntimeScalar ebits = new RuntimeScalar().set(ebitsOrig);
             RuntimeScalar timeout = new RuntimeScalar().set(runtimeList.elements.get(3).scalar());
 
             // Special case: if all bit vectors are undef, just sleep
@@ -73,7 +78,13 @@ public class IOOperator {
 
             // Implement 4-arg select() using NIO Selector
             try {
-                return selectWithNIO(rbits, wbits, ebits, timeout);
+                RuntimeScalar result = selectWithNIO(rbits, wbits, ebits, timeout);
+                // Write modified bitvectors back to the original variables.
+                // Skip undef args (read-only constants that can't be modified).
+                if (rbitsOrig.getDefinedBoolean()) rbitsOrig.set(rbits);
+                if (wbitsOrig.getDefinedBoolean()) wbitsOrig.set(wbits);
+                if (ebitsOrig.getDefinedBoolean()) ebitsOrig.set(ebits);
+                return result;
             } catch (Exception e) {
                 getGlobalVariable("main::!").set(e.getMessage());
                 return new RuntimeScalar(-1);
@@ -2671,37 +2682,63 @@ public class IOOperator {
             RuntimeBase type = args[3];
             RuntimeBase protocol = args[4];
 
-            // Get the actual RuntimeGlob objects from the references
-            RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
-            RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
+            // Create a local socket pair using ServerSocketChannel + SocketChannel
+            // so that select() works via NIO (plain Socket has no channel)
+            ServerSocketChannel serverChannel = ServerSocketChannel.open();
+            serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
 
-            // For simplicity, we'll create a local socket pair using ServerSocket and Socket
-            // This is similar to how socketpair works on Unix systems
+            // Create the first socket channel and connect it
+            SocketChannel channel1 = SocketChannel.open();
+            channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
 
-            // Create a server socket on localhost with a random port
-            ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
-            int port = serverSocket.getLocalPort();
+            // Accept the connection to get the second socket channel
+            SocketChannel channel2 = serverChannel.accept();
 
-            // Create the first socket and connect it to the server
-            Socket socket1 = new Socket();
-            socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+            // Close the server channel as we no longer need it
+            serverChannel.close();
 
-            // Accept the connection on the server side to get the second socket
-            Socket socket2 = serverSocket.accept();
-
-            // Close the server socket as we no longer need it
-            serverSocket.close();
-
-            // Create RuntimeIO objects for both sockets
+            // Create RuntimeIO objects for both sockets.
+            // Use the Socket constructor which initializes inputStream, outputStream,
+            // and preserves the socketChannel reference (via socket.getChannel()).
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(socket1);
+            io1.ioHandle = new SocketIO(channel1.socket());
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(socket2);
+            io2.ioHandle = new SocketIO(channel2.socket());
 
-            // Set the IO handles directly on the existing globs
-            glob1.setIO(io1);
-            glob2.setIO(io2);
+            // Assign small sequential filenos for select() support
+            io1.assignFileno();
+            io2.assignFileno();
+
+            // Handle autovivification for both socket handles (like open() does)
+            RuntimeGlob glob1 = null;
+            if ((sock1Ref.type == RuntimeScalarType.GLOB || sock1Ref.type == RuntimeScalarType.GLOBREFERENCE)
+                    && sock1Ref.value instanceof RuntimeGlob g) {
+                glob1 = g;
+            }
+            if (glob1 != null) {
+                glob1.setIO(io1);
+            } else {
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(io1);
+                sock1Ref.set(newGlob);
+            }
+
+            RuntimeGlob glob2 = null;
+            if ((sock2Ref.type == RuntimeScalarType.GLOB || sock2Ref.type == RuntimeScalarType.GLOBREFERENCE)
+                    && sock2Ref.value instanceof RuntimeGlob g) {
+                glob2 = g;
+            }
+            if (glob2 != null) {
+                glob2.setIO(io2);
+            } else {
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = new RuntimeGlob(null).setIO(io2);
+                sock2Ref.set(newGlob);
+            }
 
             return scalarTrue;
 

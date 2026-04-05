@@ -155,6 +155,8 @@ public class RuntimeIO extends RuntimeScalar {
         int fd = nextFileno.getAndIncrement();
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
+        // Keep FileDescriptorTable in sync to prevent fd collisions with pipe()
+        FileDescriptorTable.advancePast(fd);
         return fd;
     }
 
@@ -184,6 +186,17 @@ public class RuntimeIO extends RuntimeScalar {
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
         // Advance nextFileno past this fd to avoid collisions
+        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
+    }
+
+    /**
+     * Advances the nextFileno counter past the given fd value.
+     * Called by FileDescriptorTable.register() to keep the two fd allocation
+     * systems in sync and prevent fd collisions.
+     *
+     * @param fd the fd value to advance past
+     */
+    public static void advanceFilenoCounterPast(int fd) {
         nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
     }
 

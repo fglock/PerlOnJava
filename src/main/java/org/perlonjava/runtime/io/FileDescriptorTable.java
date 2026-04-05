@@ -3,6 +3,8 @@ package org.perlonjava.runtime.io;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+
 /**
  * Maps simulated file descriptor numbers to IOHandle objects.
  *
@@ -45,7 +47,20 @@ public class FileDescriptorTable {
         int fd = nextFd.getAndIncrement();
         fdToHandle.put(fd, handle);
         handleToFd.put(identity, fd);
+        // Keep RuntimeIO in sync to prevent fd collisions with socket()/socketpair()
+        RuntimeIO.advanceFilenoCounterPast(fd);
         return fd;
+    }
+
+    /**
+     * Advances the nextFd counter past the given fd value.
+     * Called by RuntimeIO.assignFileno() to keep the two fd allocation
+     * systems in sync and prevent fd collisions.
+     *
+     * @param fd the fd value to advance past
+     */
+    public static void advancePast(int fd) {
+        nextFd.updateAndGet(current -> Math.max(current, fd + 1));
     }
 
     /**
