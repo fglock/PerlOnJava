@@ -71,6 +71,102 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_SIGSTOP", "const_SIGSTOP", null);
             module.registerMethod("_const_SIGTSTP", "const_SIGTSTP", null);
 
+            // Stat permission constants
+            module.registerMethod("_const_S_IRUSR", "const_S_IRUSR", null);
+            module.registerMethod("_const_S_IWUSR", "const_S_IWUSR", null);
+            module.registerMethod("_const_S_IXUSR", "const_S_IXUSR", null);
+            module.registerMethod("_const_S_IRWXU", "const_S_IRWXU", null);
+            module.registerMethod("_const_S_IRGRP", "const_S_IRGRP", null);
+            module.registerMethod("_const_S_IWGRP", "const_S_IWGRP", null);
+            module.registerMethod("_const_S_IXGRP", "const_S_IXGRP", null);
+            module.registerMethod("_const_S_IRWXG", "const_S_IRWXG", null);
+            module.registerMethod("_const_S_IROTH", "const_S_IROTH", null);
+            module.registerMethod("_const_S_IWOTH", "const_S_IWOTH", null);
+            module.registerMethod("_const_S_IXOTH", "const_S_IXOTH", null);
+            module.registerMethod("_const_S_IRWXO", "const_S_IRWXO", null);
+            module.registerMethod("_const_S_ISUID", "const_S_ISUID", null);
+            module.registerMethod("_const_S_ISGID", "const_S_ISGID", null);
+
+            // Terminal I/O (termios) constants
+            module.registerMethod("_const_BRKINT", "const_BRKINT", null);
+            module.registerMethod("_const_ECHO", "const_ECHO", null);
+            module.registerMethod("_const_ECHOE", "const_ECHOE", null);
+            module.registerMethod("_const_ECHOK", "const_ECHOK", null);
+            module.registerMethod("_const_ECHONL", "const_ECHONL", null);
+            module.registerMethod("_const_ICANON", "const_ICANON", null);
+            module.registerMethod("_const_ICRNL", "const_ICRNL", null);
+            module.registerMethod("_const_IEXTEN", "const_IEXTEN", null);
+            module.registerMethod("_const_IGNBRK", "const_IGNBRK", null);
+            module.registerMethod("_const_IGNCR", "const_IGNCR", null);
+            module.registerMethod("_const_IGNPAR", "const_IGNPAR", null);
+            module.registerMethod("_const_INLCR", "const_INLCR", null);
+            module.registerMethod("_const_INPCK", "const_INPCK", null);
+            module.registerMethod("_const_ISIG", "const_ISIG", null);
+            module.registerMethod("_const_ISTRIP", "const_ISTRIP", null);
+            module.registerMethod("_const_IXOFF", "const_IXOFF", null);
+            module.registerMethod("_const_IXON", "const_IXON", null);
+            module.registerMethod("_const_NCCS", "const_NCCS", null);
+            module.registerMethod("_const_NOFLSH", "const_NOFLSH", null);
+            module.registerMethod("_const_OPOST", "const_OPOST", null);
+            module.registerMethod("_const_PARENB", "const_PARENB", null);
+            module.registerMethod("_const_PARODD", "const_PARODD", null);
+            module.registerMethod("_const_TOSTOP", "const_TOSTOP", null);
+            module.registerMethod("_const_VEOF", "const_VEOF", null);
+            module.registerMethod("_const_VEOL", "const_VEOL", null);
+            module.registerMethod("_const_VERASE", "const_VERASE", null);
+            module.registerMethod("_const_VINTR", "const_VINTR", null);
+            module.registerMethod("_const_VKILL", "const_VKILL", null);
+            module.registerMethod("_const_VMIN", "const_VMIN", null);
+            module.registerMethod("_const_VQUIT", "const_VQUIT", null);
+            module.registerMethod("_const_VSTART", "const_VSTART", null);
+            module.registerMethod("_const_VSTOP", "const_VSTOP", null);
+            module.registerMethod("_const_VSUSP", "const_VSUSP", null);
+            module.registerMethod("_const_VTIME", "const_VTIME", null);
+            module.registerMethod("_const_B0", "const_B0", null);
+            module.registerMethod("_const_B50", "const_B50", null);
+            module.registerMethod("_const_B75", "const_B75", null);
+            module.registerMethod("_const_B110", "const_B110", null);
+            module.registerMethod("_const_B134", "const_B134", null);
+            module.registerMethod("_const_B150", "const_B150", null);
+            module.registerMethod("_const_B200", "const_B200", null);
+            module.registerMethod("_const_B300", "const_B300", null);
+            module.registerMethod("_const_B600", "const_B600", null);
+            module.registerMethod("_const_B1200", "const_B1200", null);
+            module.registerMethod("_const_B1800", "const_B1800", null);
+            module.registerMethod("_const_B2400", "const_B2400", null);
+            module.registerMethod("_const_B4800", "const_B4800", null);
+            module.registerMethod("_const_B9600", "const_B9600", null);
+            module.registerMethod("_const_B19200", "const_B19200", null);
+            module.registerMethod("_const_B38400", "const_B38400", null);
+            module.registerMethod("_const_CLOCAL", "const_CLOCAL", null);
+            module.registerMethod("_const_CREAD", "const_CREAD", null);
+            module.registerMethod("_const_CS5", "const_CS5", null);
+            module.registerMethod("_const_CS6", "const_CS6", null);
+            module.registerMethod("_const_CS7", "const_CS7", null);
+            module.registerMethod("_const_CS8", "const_CS8", null);
+            module.registerMethod("_const_CSIZE", "const_CSIZE", null);
+            module.registerMethod("_const_CSTOPB", "const_CSTOPB", null);
+            module.registerMethod("_const_HUPCL", "const_HUPCL", null);
+            module.registerMethod("_const_TCSADRAIN", "const_TCSADRAIN", null);
+            module.registerMethod("_const_TCSAFLUSH", "const_TCSAFLUSH", null);
+            module.registerMethod("_const_TCSANOW", "const_TCSANOW", null);
+            module.registerMethod("_const_TCIFLUSH", "const_TCIFLUSH", null);
+            module.registerMethod("_const_TCIOFF", "const_TCIOFF", null);
+            module.registerMethod("_const_TCIOFLUSH", "const_TCIOFLUSH", null);
+            module.registerMethod("_const_TCION", "const_TCION", null);
+            module.registerMethod("_const_TCOFLUSH", "const_TCOFLUSH", null);
+            module.registerMethod("_const_TCOOFF", "const_TCOOFF", null);
+            module.registerMethod("_const_TCOON", "const_TCOON", null);
+
+            // sysconf constant
+            module.registerMethod("_const__SC_OPEN_MAX", "const_SC_OPEN_MAX", null);
+
+            // setsid
+            module.registerMethod("_setsid", "setsid", null);
+
+            // sysconf
+            module.registerMethod("_sysconf", "sysconf", null);
+
             // Errno constants
             module.registerMethod("_const_EPERM", "const_EPERM", null);
             module.registerMethod("_const_ENOENT", "const_ENOENT", null);
@@ -626,6 +722,108 @@ public class POSIX extends PerlModuleBase {
     public static RuntimeList const_EDOM(RuntimeArray a, int c) { return new RuntimeScalar(33).getList(); }
     public static RuntimeList const_ERANGE(RuntimeArray a, int c) { return new RuntimeScalar(34).getList(); }
 
+    // Stat permission constants (standard POSIX values, same on all platforms)
+    public static RuntimeList const_S_IRUSR(RuntimeArray a, int c) { return new RuntimeScalar(0400).getList(); }  // 256
+    public static RuntimeList const_S_IWUSR(RuntimeArray a, int c) { return new RuntimeScalar(0200).getList(); }  // 128
+    public static RuntimeList const_S_IXUSR(RuntimeArray a, int c) { return new RuntimeScalar(0100).getList(); }  // 64
+    public static RuntimeList const_S_IRWXU(RuntimeArray a, int c) { return new RuntimeScalar(0700).getList(); }  // 448
+    public static RuntimeList const_S_IRGRP(RuntimeArray a, int c) { return new RuntimeScalar(040).getList(); }   // 32
+    public static RuntimeList const_S_IWGRP(RuntimeArray a, int c) { return new RuntimeScalar(020).getList(); }   // 16
+    public static RuntimeList const_S_IXGRP(RuntimeArray a, int c) { return new RuntimeScalar(010).getList(); }   // 8
+    public static RuntimeList const_S_IRWXG(RuntimeArray a, int c) { return new RuntimeScalar(070).getList(); }   // 56
+    public static RuntimeList const_S_IROTH(RuntimeArray a, int c) { return new RuntimeScalar(04).getList(); }    // 4
+    public static RuntimeList const_S_IWOTH(RuntimeArray a, int c) { return new RuntimeScalar(02).getList(); }    // 2
+    public static RuntimeList const_S_IXOTH(RuntimeArray a, int c) { return new RuntimeScalar(01).getList(); }    // 1
+    public static RuntimeList const_S_IRWXO(RuntimeArray a, int c) { return new RuntimeScalar(07).getList(); }    // 7
+    public static RuntimeList const_S_ISUID(RuntimeArray a, int c) { return new RuntimeScalar(04000).getList(); } // 2048
+    public static RuntimeList const_S_ISGID(RuntimeArray a, int c) { return new RuntimeScalar(02000).getList(); } // 1024
+
+    // Terminal I/O (termios) constants - platform dependent
+    private static final boolean IS_MAC = System.getProperty("os.name").toLowerCase().contains("mac");
+
+    // Input mode flags
+    public static RuntimeList const_BRKINT(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_IGNBRK(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_IGNCR(RuntimeArray a, int c) { return new RuntimeScalar(128).getList(); }
+    public static RuntimeList const_IGNPAR(RuntimeArray a, int c) { return new RuntimeScalar(4).getList(); }
+    public static RuntimeList const_INLCR(RuntimeArray a, int c) { return new RuntimeScalar(64).getList(); }
+    public static RuntimeList const_INPCK(RuntimeArray a, int c) { return new RuntimeScalar(16).getList(); }
+    public static RuntimeList const_ISTRIP(RuntimeArray a, int c) { return new RuntimeScalar(32).getList(); }
+    public static RuntimeList const_ICRNL(RuntimeArray a, int c) { return new RuntimeScalar(256).getList(); }
+    public static RuntimeList const_IXOFF(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 1024 : 4096).getList(); }
+    public static RuntimeList const_IXON(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 512 : 1024).getList(); }
+
+    // Output mode flags
+    public static RuntimeList const_OPOST(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+
+    // Control mode flags
+    public static RuntimeList const_CLOCAL(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 32768 : 2048).getList(); }
+    public static RuntimeList const_CREAD(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 2048 : 128).getList(); }
+    public static RuntimeList const_CS5(RuntimeArray a, int c) { return new RuntimeScalar(0).getList(); }
+    public static RuntimeList const_CS6(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 256 : 16).getList(); }
+    public static RuntimeList const_CS7(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 512 : 32).getList(); }
+    public static RuntimeList const_CS8(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 768 : 48).getList(); }
+    public static RuntimeList const_CSIZE(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 768 : 48).getList(); }
+    public static RuntimeList const_CSTOPB(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 1024 : 64).getList(); }
+    public static RuntimeList const_HUPCL(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 16384 : 1024).getList(); }
+    public static RuntimeList const_PARENB(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 4096 : 256).getList(); }
+    public static RuntimeList const_PARODD(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 8192 : 512).getList(); }
+
+    // Local mode flags
+    public static RuntimeList const_ECHO(RuntimeArray a, int c) { return new RuntimeScalar(8).getList(); }
+    public static RuntimeList const_ECHOE(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_ECHOK(RuntimeArray a, int c) { return new RuntimeScalar(4).getList(); }
+    public static RuntimeList const_ECHONL(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 16 : 64).getList(); }
+    public static RuntimeList const_ICANON(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 256 : 2).getList(); }
+    public static RuntimeList const_IEXTEN(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 1024 : 32768).getList(); }
+    public static RuntimeList const_ISIG(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 128 : 1).getList(); }
+    public static RuntimeList const_NOFLSH(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 2147483648L : 128L).getList(); }
+    public static RuntimeList const_TOSTOP(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 4194304 : 256).getList(); }
+
+    // Special control characters indices
+    public static RuntimeList const_NCCS(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 20 : 32).getList(); }
+    public static RuntimeList const_VEOF(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 0 : 4).getList(); }
+    public static RuntimeList const_VEOL(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 1 : 11).getList(); }
+    public static RuntimeList const_VERASE(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 3 : 2).getList(); }
+    public static RuntimeList const_VINTR(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 8 : 0).getList(); }
+    public static RuntimeList const_VKILL(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 5 : 3).getList(); }
+    public static RuntimeList const_VMIN(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 16 : 6).getList(); }
+    public static RuntimeList const_VQUIT(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 9 : 1).getList(); }
+    public static RuntimeList const_VSTART(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 12 : 8).getList(); }
+    public static RuntimeList const_VSTOP(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 13 : 9).getList(); }
+    public static RuntimeList const_VSUSP(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 10 : 7).getList(); }
+    public static RuntimeList const_VTIME(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 17 : 5).getList(); }
+
+    // Baud rate constants (platform dependent - macOS uses actual rate, Linux uses index)
+    public static RuntimeList const_B0(RuntimeArray a, int c) { return new RuntimeScalar(0).getList(); }
+    public static RuntimeList const_B50(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 50 : 1).getList(); }
+    public static RuntimeList const_B75(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 75 : 2).getList(); }
+    public static RuntimeList const_B110(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 110 : 3).getList(); }
+    public static RuntimeList const_B134(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 134 : 4).getList(); }
+    public static RuntimeList const_B150(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 150 : 5).getList(); }
+    public static RuntimeList const_B200(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 200 : 6).getList(); }
+    public static RuntimeList const_B300(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 300 : 7).getList(); }
+    public static RuntimeList const_B600(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 600 : 8).getList(); }
+    public static RuntimeList const_B1200(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 1200 : 9).getList(); }
+    public static RuntimeList const_B1800(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 1800 : 10).getList(); }
+    public static RuntimeList const_B2400(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 2400 : 11).getList(); }
+    public static RuntimeList const_B4800(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 4800 : 12).getList(); }
+    public static RuntimeList const_B9600(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 9600 : 13).getList(); }
+    public static RuntimeList const_B19200(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 19200 : 14).getList(); }
+    public static RuntimeList const_B38400(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 38400 : 15).getList(); }
+
+    // tcsetattr/tcflush action constants
+    public static RuntimeList const_TCSANOW(RuntimeArray a, int c) { return new RuntimeScalar(0).getList(); }
+    public static RuntimeList const_TCSADRAIN(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_TCSAFLUSH(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_TCIFLUSH(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_TCIOFF(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 3 : 2).getList(); }
+    public static RuntimeList const_TCIOFLUSH(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 3 : 2).getList(); }
+    public static RuntimeList const_TCION(RuntimeArray a, int c) { return new RuntimeScalar(IS_MAC ? 4 : 3).getList(); }
+    public static RuntimeList const_TCOFLUSH(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_TCOOFF(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_TCOON(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+
     /**
      * POSIX::uname() - returns (sysname, nodename, release, version, machine)
      */
@@ -650,5 +848,46 @@ public class POSIX extends PerlModuleBase {
      */
     public static RuntimeList sigprocmask(RuntimeArray args, int ctx) {
         return new RuntimeScalar(1).getList();
+    }
+
+    // _SC_OPEN_MAX constant (macOS=5, Linux=4)
+    public static RuntimeList const_SC_OPEN_MAX(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_MAC ? 5 : 4).getList();
+    }
+
+    /**
+     * POSIX::setsid() - create a new session
+     * On JVM, we can't truly create a new process session, but we return the PID
+     * as a reasonable approximation (POE uses this for daemon setup).
+     */
+    public static RuntimeList setsid(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(ProcessHandle.current().pid()).getList();
+    }
+
+    /**
+     * POSIX::sysconf($name) - get system configuration values
+     * Supports _SC_OPEN_MAX and returns reasonable defaults for JVM.
+     */
+    public static RuntimeList sysconf(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(-1).getList();
+        }
+        int name = args.get(0).getInt();
+        // _SC_OPEN_MAX: macOS=5, Linux=4
+        int scOpenMax = IS_MAC ? 5 : 4;
+        if (name == scOpenMax) {
+            // Return a reasonable max open files for JVM
+            // Use ulimit value if available, otherwise default to 1024
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", "ulimit -n"});
+                byte[] output = p.getInputStream().readAllBytes();
+                p.waitFor();
+                String val = new String(output).trim();
+                return new RuntimeScalar(Long.parseLong(val)).getList();
+            } catch (Exception e) {
+                return new RuntimeScalar(1024).getList();
+            }
+        }
+        return new RuntimeScalar(-1).getList();
     }
 }

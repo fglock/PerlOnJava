@@ -22,6 +22,7 @@ XSLoader::load('Socket');
 
 our @EXPORT = qw(
     pack_sockaddr_in unpack_sockaddr_in
+    pack_sockaddr_un unpack_sockaddr_un
     inet_aton inet_ntoa getnameinfo getaddrinfo
     sockaddr_in sockaddr_family
     AF_INET AF_INET6 AF_UNIX
