@@ -21,6 +21,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.lang.ref.PhantomReference;
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -160,6 +163,55 @@ public class RuntimeIO extends RuntimeScalar {
     private static final ConcurrentLinkedQueue<Integer> recycledFds = new ConcurrentLinkedQueue<>();
 
     /**
+     * GC-based fd recycling for anonymous lexical filehandles.
+     * <p>
+     * In Perl 5, lexical filehandles ({@code my $fh}) are closed via DESTROY
+     * when the SV's refcount drops to zero at scope exit. PerlOnJava doesn't
+     * implement DESTROY or reference counting; the JVM uses tracing GC instead.
+     * <p>
+     * To reclaim fds from abandoned lexical handles, we register a
+     * {@link PhantomReference} on the anonymous {@link RuntimeGlob} created by
+     * {@code open(my $fh, ...)}. When the glob becomes phantom-reachable (all
+     * RuntimeScalars referencing it have been abandoned), the PhantomReference
+     * is enqueued. {@link #processAbandonedGlobs()} polls this queue, closes
+     * the associated RuntimeIO, and frees the fd for reuse.
+     * <p>
+     * {@code processAbandonedGlobs()} is called from {@link #assignFileno()}.
+     * If no recycled fds are available, {@code System.gc()} is called as a hint
+     * to encourage the JVM to enqueue phantom references sooner.
+     */
+    private static final ReferenceQueue<RuntimeGlob> globGCQueue = new ReferenceQueue<>();
+    private static final ConcurrentHashMap<PhantomReference<RuntimeGlob>, RuntimeIO> phantomToIO = new ConcurrentHashMap<>();
+
+    /**
+     * Registers an anonymous RuntimeGlob for GC-based fd recycling.
+     * When the glob becomes unreachable (all variables referencing it are
+     * reassigned or go out of scope), the associated RuntimeIO will be
+     * closed and its fd freed.
+     *
+     * @param glob the anonymous RuntimeGlob to track
+     * @param io   the RuntimeIO whose fd should be freed when the glob is collected
+     */
+    public static void registerGlobForFdRecycling(RuntimeGlob glob, RuntimeIO io) {
+        PhantomReference<RuntimeGlob> phantom = new PhantomReference<>(glob, globGCQueue);
+        phantomToIO.put(phantom, io);
+    }
+
+    /**
+     * Processes the GC reference queue: closes RuntimeIO handles whose
+     * parent RuntimeGlob has been collected, freeing their fds for reuse.
+     */
+    public static void processAbandonedGlobs() {
+        Reference<? extends RuntimeGlob> ref;
+        while ((ref = globGCQueue.poll()) != null) {
+            RuntimeIO io = phantomToIO.remove(ref);
+            if (io != null && !(io.ioHandle instanceof ClosedIOHandle)) {
+                io.close();
+            }
+        }
+    }
+
+    /**
      * Assigns a fileno to this RuntimeIO and registers it in the fd→IO maps.
      * Reuses released fd numbers when available (lowest first via the recycle pool),
      * otherwise allocates the next sequential fd. This matches POSIX semantics where
@@ -177,13 +229,61 @@ public class RuntimeIO extends RuntimeScalar {
         if (existing != null) {
             return existing;
         }
-        // Try to reuse a recycled fd first (POSIX: lowest available)
-        Integer recycled = recycledFds.poll();
-        int fd = (recycled != null) ? recycled : nextFileno.getAndIncrement();
+        // First, process any GC'd globs to free their fds
+        processAbandonedGlobs();
+        // Try to reuse the lowest freed fd
+        int fd = tryRecycleLowestFd();
+        if (fd >= 0) {
+            filenoToIO.put(fd, this);
+            ioToFileno.put(this, fd);
+            FileDescriptorTable.advancePast(fd);
+            return fd;
+        }
+        // No recycled fds — if there are tracked anonymous globs that might
+        // be collectible, hint the GC and retry a few times with short sleeps
+        // to give the ReferenceHandler thread time to process the queue.
+        if (!phantomToIO.isEmpty()) {
+            for (int attempt = 0; attempt < 5; attempt++) {
+                System.gc();
+                try { Thread.sleep(1); } catch (InterruptedException e) { break; }
+                processAbandonedGlobs();
+                fd = tryRecycleLowestFd();
+                if (fd >= 0) {
+                    filenoToIO.put(fd, this);
+                    ioToFileno.put(this, fd);
+                    FileDescriptorTable.advancePast(fd);
+                    return fd;
+                }
+            }
+        }
+        // Allocate a fresh fd
+        fd = nextFileno.getAndIncrement();
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
-        // Keep FileDescriptorTable in sync to prevent fd collisions with pipe()
         FileDescriptorTable.advancePast(fd);
+        return fd;
+    }
+
+    /**
+     * Tries to recycle the lowest available freed fd.
+     * Returns -1 if none available.
+     */
+    private static int tryRecycleLowestFd() {
+        List<Integer> candidates = new ArrayList<>();
+        Integer recycled;
+        while ((recycled = freedFilenos.poll()) != null) {
+            candidates.add(recycled);
+        }
+        if (candidates.isEmpty()) {
+            return -1;
+        }
+        Collections.sort(candidates);
+        int fd = candidates.get(0);
+        // Put back the rest
+        for (int i = 1; i < candidates.size(); i++) {
+            freedFilenos.add(candidates.get(i));
+        }
+>>>>>>> 547f49215 (feat: implement fd recycling for lexical filehandles via scope-exit cleanup)
         return fd;
     }
 

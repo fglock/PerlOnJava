@@ -209,6 +209,52 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Returns the JVM local variable slot indices for all {@code my} variables
+     * declared in the scopes being exited (from the current top of the symbol
+     * table stack down to {@code scopeIndex}).
+     * <p>
+     * Used by the JVM bytecode emitter to null out local variable slots at
+     * scope exit, enabling GC to collect objects (like anonymous filehandle
+     * globs) that are no longer accessible from Perl code but would otherwise
+     * be held alive by the JVM stack frame.
+     *
+     * @param scopeIndex The scope boundary (inclusive lower bound)
+     * @return list of local variable slot indices to null
+     */
+    public java.util.List<Integer> getMyVariableIndicesInScope(int scopeIndex) {
+        java.util.List<Integer> indices = new java.util.ArrayList<>();
+        for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
+                if ("my".equals(entry.decl())) {
+                    indices.add(entry.index());
+                }
+            }
+        }
+        return indices;
+    }
+
+    /**
+     * Returns the JVM local variable slot indices for {@code my} SCALAR variables
+     * (those starting with {@code $}) declared in the scopes being exited.
+     * Used to emit deterministic IO cleanup calls at scope exit — only scalar
+     * variables can hold GLOBREFERENCE values with anonymous file handles.
+     *
+     * @param scopeIndex The scope boundary (inclusive lower bound)
+     * @return list of scalar variable slot indices for IO cleanup
+     */
+    public java.util.List<Integer> getMyScalarIndicesInScope(int scopeIndex) {
+        java.util.List<Integer> indices = new java.util.ArrayList<>();
+        for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
+                if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("$")) {
+                    indices.add(entry.index());
+                }
+            }
+        }
+        return indices;
+    }
+
+    /**
      * Returns true if we are currently parsing inside a subroutine body (named or anonymous).
      */
     public boolean isInSubroutineBody() {

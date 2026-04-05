@@ -357,6 +357,7 @@ public class EmitBlock {
                     "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
         }
 
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }

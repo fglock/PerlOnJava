@@ -1758,6 +1758,33 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    /**
+     * Called by JVM bytecode at scope exit to deterministically close IO handles
+     * on anonymous lexical filehandles ({@code open(my $fh, ...)}).
+     * <p>
+     * This is the JVM-backend equivalent of Perl 5's DESTROY: when a {@code my $fh}
+     * goes out of scope, its IO handle should be closed and its fd recycled.
+     * Since the JVM's tracing GC is non-deterministic, we call this explicitly
+     * from the emitted scope-exit bytecode to ensure timely fd recycling.
+     * <p>
+     * Only closes IO on anonymous globs (globName == null) — named globs like
+     * {@code *STDOUT} or gensym'd handles may be referenced by other variables
+     * (e.g., in Capture::Tiny's save/restore pattern).
+     *
+     * @param scalar the RuntimeScalar being cleaned up (may be null if slot was already nulled)
+     */
+    public static void scopeExitCleanup(RuntimeScalar scalar) {
+        if (scalar != null && scalar.type == GLOBREFERENCE
+                && scalar.value instanceof RuntimeGlob glob
+                && glob.globName == null) {
+            RuntimeScalar ioSlot = glob.getIO();
+            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                    && !(io.ioHandle instanceof ClosedIOHandle)) {
+                io.close();
+            }
+        }
+    }
+
     public RuntimeScalar defined() {
         return getScalarBoolean(getDefinedBoolean());
     }

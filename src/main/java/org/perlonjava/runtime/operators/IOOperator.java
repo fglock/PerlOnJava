@@ -611,7 +611,10 @@ public class IOOperator {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            newGlob.value = anonGlob;
+            // Register for GC-based fd recycling (mimics Perl's DESTROY on scope exit)
+            RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             // Use set() to modify the lvalue in place
             fileHandle.set(newGlob);
         }
@@ -1312,7 +1315,9 @@ public class IOOperator {
         } else {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            newGlob.value = anonGlob;
+            RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             fileHandle.set(newGlob);
         }
         return scalarTrue;
@@ -1646,7 +1651,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(socketIO);
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(socketIO);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, socketIO);
                 socketHandle.set(newGlob);
             }
             return scalarTrue;
@@ -1877,7 +1884,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, clientRuntimeIO);
                 newSocketHandle.set(newGlob);
             }
 
@@ -1940,7 +1949,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(readerIO);
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(readerIO);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, readerIO);
                 readHandle.set(newGlob);
             }
 
@@ -1956,7 +1967,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(writerIO);
+                RuntimeGlob anonGlob2 = new RuntimeGlob(null).setIO(writerIO);
+                newGlob.value = anonGlob2;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob2, writerIO);
                 writeHandle.set(newGlob);
             }
 
