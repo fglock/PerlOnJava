@@ -90,14 +90,20 @@ Issues include missing `.ttc` files and `EVAL_PERL` not being set.
 
 | Test | Failed | Total | Issue |
 |------|--------|-------|-------|
-| compile1.t | 1 | 15 | `EVAL_PERL not set` |
+| compile1.t | **0** | 18 | **FIXED** — all passing |
 | compile2.t | 2 | 4 | `foo.ttc: No such file or directory` |
 | compile3.t | 3 | 14 | Cached template mtime comparison |
-| compile4.t | 1 | 13 | Similar to compile1 |
-| compile5.t | 3 | 3 | Compiled template loading |
+| compile4.t | **0** | 13 | **FIXED** — all passing |
+| compile5.t | **0** | 14 | **FIXED** — all passing |
 
-**Root cause:** Likely Storable serialization of compiled templates, or
-`COMPILE_DIR`/`COMPILE_EXT` path handling.
+**Fixes applied (2025-04-04):**
+- PerlCompilerException: use current execution location (not caller site) for error messages
+- PerlCompilerException: detect interpreter vs JVM innermost execution context by scanning stack
+- ByteCodeSourceMapper: honor `#line` directives via `getSourceLocationAccurate()`
+- WarnDie: implement Perl 5's `, <FH> line/chunk N` filehandle context suffix
+- Readline: fix `$.` counting in slurp mode (1 per read) and paragraph mode (1 per paragraph)
+- RuntimeIO.close(): reset `currentLineNumber` to 0 on close
+- UtimeOperator: fix timestamp argument handling for compiled template cache loading
 
 ### Category 2: Unicode/Encoding — 2 programs, 22 subtests
 
@@ -171,12 +177,18 @@ stash triggers a code path that expects a hash ref.
 - [x] Fix 4: XSLoader @ISA fallback for modules with pure-Perl parents (2025-04-04)
 - [x] Unit tests pass (`make` green)
 - [x] Template tests: 87/106 passing (19 failing, 11 skipped)
+- [x] Fix 5: Error location attribution — PerlCompilerException, ByteCodeSourceMapper (2025-04-04)
+  - compile1.t: 17/18 → **18/18**, compile4.t: 12/13 → **13/13**
+- [x] Fix 6: Compiled template loading — utime, error location in .ttc, filehandle context (2025-04-04)
+  - compile5.t: ~0/14 → **14/14**
+  - Also fixed: `$.` counting in slurp/paragraph mode, `close()` resets `$.`, `<FH> chunk/line N` suffix
+- [x] Template tests: 90/106 passing (16 failing, 11 skipped)
 
 ### In Progress
-- [ ] Analyze and fix remaining 19 failing test programs
+- [ ] Analyze and fix remaining 16 failing test programs
 
 ### Pending
-- [ ] Commit and create PR
+- [ ] Investigate compile2.t and compile3.t
 
 ---
 
