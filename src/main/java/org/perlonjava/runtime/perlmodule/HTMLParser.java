@@ -453,7 +453,7 @@ public class HTMLParser extends PerlModuleBase {
             // Array ref accumulator - used by PullParser/TokeParser
             // Build event data per argspec and push as array ref onto accumulator
             RuntimeArray accum = (RuntimeArray) cb.value;
-            RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self);
+            RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false);
             RuntimeArray.push(accum, eventData.createReference());
         } else if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
             // Method name - call as $self->method(...)
@@ -461,8 +461,10 @@ public class HTMLParser extends PerlModuleBase {
             RuntimeArray callArgs = new RuntimeArray();
             RuntimeArray.push(callArgs, self);
             // Build args from argspec if available, otherwise pass raw eventArgs
+            // skipSelf=true: "self" in argspec specifies the invocant for method dispatch
+            // but should NOT be duplicated in the method arguments
             if (!argspec.isEmpty()) {
-                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self);
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, true);
                 for (int idx = 0; idx < eventData.size(); idx++) {
                     RuntimeArray.push(callArgs, eventData.get(idx));
                 }
@@ -484,7 +486,7 @@ public class HTMLParser extends PerlModuleBase {
             // Code reference - call directly
             RuntimeArray callArgs = new RuntimeArray();
             if (!argspec.isEmpty()) {
-                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self);
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false);
                 for (int idx = 0; idx < eventData.size(); idx++) {
                     RuntimeArray.push(callArgs, eventData.get(idx));
                 }
@@ -527,7 +529,7 @@ public class HTMLParser extends PerlModuleBase {
      * For declaration events, eventArgs = [decl_text]
      * For process events, eventArgs = [pi_text]
      */
-    private static RuntimeArray buildEventDataFromArgspec(String argspec, String eventName, RuntimeScalar[] eventArgs, RuntimeScalar self) {
+    private static RuntimeArray buildEventDataFromArgspec(String argspec, String eventName, RuntimeScalar[] eventArgs, RuntimeScalar self, boolean skipSelf) {
         RuntimeArray result = new RuntimeArray();
         if (argspec.isEmpty()) {
             // No argspec - pass raw event args
@@ -623,7 +625,11 @@ public class HTMLParser extends PerlModuleBase {
                     break;
 
                 case "self":
-                    RuntimeArray.push(result, self);
+                    // For method callbacks, "self" is already the invocant
+                    // and should not be duplicated in the args
+                    if (!skipSelf) {
+                        RuntimeArray.push(result, self);
+                    }
                     break;
 
                 case "event":
