@@ -982,7 +982,7 @@ public class RuntimeIO extends RuntimeScalar {
                     System.err.println("[JPERL_IO_DEBUG] getRuntimeIO: fallback lookup for " + runtimeGlob.globName);
                     System.err.flush();
                 }
-                RuntimeGlob globalGlob = GlobalVariable.getGlobalIO(runtimeGlob.globName);
+                RuntimeGlob globalGlob = GlobalVariable.getExistingGlobalIO(runtimeGlob.globName);
                 if (globalGlob != null) {
                     RuntimeScalar globalIoScalar = globalGlob.getIO();
                     if (globalIoScalar != null) {

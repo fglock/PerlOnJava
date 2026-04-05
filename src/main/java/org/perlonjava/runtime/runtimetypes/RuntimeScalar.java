@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -725,6 +726,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Slow path for set(RuntimeScalar)
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
+            closeIOOnDrop();
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
             return this;
@@ -749,6 +751,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case READONLY_SCALAR ->
                     throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+        // Close IO handles when overwriting a glob reference with a different value
+        if (this.value != value.value) {
+            closeIOOnDrop();
         }
         this.type = value.type;
         this.value = value.value;
@@ -1660,10 +1666,44 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             InheritanceResolver.invalidateCache();
             return this;
         }
+        // Close IO handles when dropping a glob reference.
+        // This mimics Perl's internal sv_clear behavior where IO handles are closed
+        // when the glob's reference count drops to zero (independent of DESTROY).
+        closeIOOnDrop();
         // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
         return this;
+    }
+
+    /**
+     * Close any IO handle associated with a GLOBREFERENCE value being dropped.
+     * In Perl 5, IO handles are closed by the interpreter's sv_clear/gp_free when
+     * the glob's reference count reaches zero. Since jperl doesn't implement
+     * reference counting or DESTROY, we close IO handles eagerly when a variable
+     * holding a glob reference is cleared or reassigned.
+     * <p>
+     * We only close IO for globs that are NOT currently in any stash (symbol table).
+     * Named globs still in the stash (like *MYFILE) may have other references
+     * (including detached copies created by {@code \*MYFILE}) and should not be closed.
+     * Globs that have been removed from the stash (e.g., by gensym's delete) or
+     * that were never in a stash are safe to close.
+     */
+    private void closeIOOnDrop() {
+        if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
+            // If the glob has a name and a stash entry still exists for that name,
+            // don't close — the IO may be shared with the stash glob or its copies.
+            // Note: \*MYFILE creates a detached copy (different Java object) that
+            // shares the IO slot, so identity checks don't work here.
+            if (glob.globName != null && GlobalVariable.existsGlobalIO(glob.globName)) {
+                return; // Glob name is still in the stash — don't close
+            }
+            RuntimeScalar ioSlot = glob.getIO();
+            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                    && !(io.ioHandle instanceof ClosedIOHandle)) {
+                io.close();
+            }
+        }
     }
 
     public RuntimeScalar defined() {

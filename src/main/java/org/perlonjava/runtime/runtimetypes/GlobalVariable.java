@@ -719,6 +719,18 @@ public class GlobalVariable {
     }
 
     /**
+     * Returns the existing global IO glob for the given key, or null if not present.
+     * Unlike {@link #getGlobalIO(String)}, this method does NOT auto-create entries.
+     * Used by closeIOOnDrop() to check if a glob is still in the stash.
+     *
+     * @param key The key of the global IO reference.
+     * @return The RuntimeGlob if it exists in the stash, null otherwise.
+     */
+    public static RuntimeGlob getExistingGlobalIO(String key) {
+        return globalIORefs.get(key);
+    }
+
+    /**
      * Checks if a glob is defined (has any slot initialized).
      * Used for `defined *$var` which should not throw strict refs and not auto-vivify.
      *
