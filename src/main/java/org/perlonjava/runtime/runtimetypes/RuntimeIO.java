@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -144,16 +145,12 @@ public class RuntimeIO extends RuntimeScalar {
      * Standard fds 0-2 are reserved for stdin/stdout/stderr and are handled
      * natively by StandardIO (not through this registry).
      * <p>
-     * <b>Fd numbers are never recycled.</b> Freed fds are simply removed from the
-     * maps. A recycling mechanism was attempted but removed because, combined
-     * with the eager closeIOOnDrop() behavior, it caused fd collisions: two
-     * distinct RuntimeIO handles would be assigned the same fd number, leading
-     * to one overwriting the other in the registry. Without reference counting
-     * to know when a fd is truly unused, simple fd reuse is unsafe.
-     * <p>
-     * The monotonic counter means fd numbers will grow unboundedly in
-     * long-running programs that open/close many handles, but this only
-     * consumes map entries (not OS file descriptors) and is acceptable.
+     * <b>Fd recycling:</b> Freed fds are collected in a queue and reused by
+     * {@code assignFileno()} (lowest available first) to mimic OS fd allocation.
+     * This is safe because fds are only freed on explicit {@code close()} —
+     * the eager {@code closeIOOnDrop()} was removed from variable assignment
+     * (see RuntimeScalar.setLarge), so fds are never prematurely freed while
+     * other variables still reference the handle.
      */
     private static final AtomicInteger nextFileno = new AtomicInteger(3);
     private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
@@ -1259,6 +1256,9 @@ public class RuntimeIO extends RuntimeScalar {
     /**
      * Closes this I/O handle.
      * Removes from cache, flushes buffers, and releases resources.
+     * <p>
+     * For borrowed handles (parsimonious dup), only detaches from the ioHandle
+     * without flushing or closing it — the owning handle will handle cleanup.
      *
      * @return RuntimeScalar indicating success/failure
      */
@@ -1268,9 +1268,6 @@ public class RuntimeIO extends RuntimeScalar {
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
         ioHandle = new ClosedIOHandle();
-        // Release our fd back to the recycle pool so it can be reused by future opens.
-        // This must happen AFTER close so that the fd is still valid during the close.
-        unregisterFileno();
         return ret;
     }
 
