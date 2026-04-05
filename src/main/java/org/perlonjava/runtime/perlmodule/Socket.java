@@ -77,6 +77,8 @@ public class Socket extends PerlModuleBase {
             // Register socket functions
             socket.registerMethod("pack_sockaddr_in", null);
             socket.registerMethod("unpack_sockaddr_in", null);
+            socket.registerMethod("pack_sockaddr_un", null);
+            socket.registerMethod("unpack_sockaddr_un", null);
             socket.registerMethod("inet_aton", null);
             socket.registerMethod("inet_ntoa", null);
             socket.registerMethod("sockaddr_in", null);
@@ -234,6 +236,50 @@ public class Socket extends PerlModuleBase {
         } catch (Exception e) {
             throw new RuntimeException("unpack_sockaddr_in failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * pack_sockaddr_un(PATH)
+     * Packs a UNIX domain socket path into a sockaddr_un structure.
+     * Stub: UNIX domain sockets are not supported on JVM.
+     */
+    public static RuntimeList pack_sockaddr_un(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for pack_sockaddr_un");
+        }
+        String path = args.get(0).toString();
+        // Build a minimal sockaddr_un: AF_UNIX (1) in first 2 bytes, then the path
+        byte[] pathBytes = path.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] result = new byte[2 + pathBytes.length + 1]; // family + path + null
+        // AF_UNIX = 1 on most platforms
+        result[0] = 0;
+        result[1] = 1;
+        System.arraycopy(pathBytes, 0, result, 2, pathBytes.length);
+        return new RuntimeScalar(new String(result, java.nio.charset.StandardCharsets.ISO_8859_1)).getList();
+    }
+
+    /**
+     * unpack_sockaddr_un(SOCKADDR)
+     * Unpacks a sockaddr_un structure into a UNIX domain socket path.
+     * Stub: UNIX domain sockets are not supported on JVM.
+     */
+    public static RuntimeList unpack_sockaddr_un(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for unpack_sockaddr_un");
+        }
+        String sockaddr = args.get(0).toString();
+        byte[] bytes = new byte[sockaddr.length()];
+        for (int i = 0; i < sockaddr.length(); i++) {
+            bytes[i] = (byte) sockaddr.charAt(i);
+        }
+        if (bytes.length < 3) {
+            throw new RuntimeException("Bad arg length for Socket::unpack_sockaddr_un, length is " + bytes.length + ", should be at least 3");
+        }
+        // Path starts at offset 2, null-terminated
+        int end = 2;
+        while (end < bytes.length && bytes[end] != 0) end++;
+        String path = new String(bytes, 2, end - 2, java.nio.charset.StandardCharsets.UTF_8);
+        return new RuntimeScalar(path).getList();
     }
 
     /**
