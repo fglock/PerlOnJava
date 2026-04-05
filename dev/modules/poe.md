@@ -536,6 +536,27 @@ For safety, DESTROY could be made idempotent (track whether it's already been ca
 - Most wheel_run tests also need fork, so impact is limited
 - k_signals_rerun would benefit most (8 failures all from TIOCSWINSZ in child)
 
+#### Phase 4.7: Windows platform support
+
+POE's core event loop uses Java NIO (cross-platform), and POE itself has `$^O eq 'MSWin32'`
+guards. But several PerlOnJava subsystems only have macOS/Linux branches.
+
+| Step | Target | Severity | Difficulty |
+|------|--------|----------|------------|
+| 4.7.1 | **Fix EAGAIN/errno on Windows** — `FFMPosixWindows.strerror()` is a 10-entry stub. `ErrnoVariable` probes strerror to discover EAGAIN/EINPROGRESS/etc., which all resolve to 0 on Windows. POE's non-blocking I/O depends on these. Fix: add Windows errno constants directly, bypassing strerror probing. | Critical | Medium |
+| 4.7.2 | **Add Windows errno table** — `ErrnoHash.java` and `Errno.pm` have macOS/Linux tables only, fall through to Linux on Windows. Fix: add `MSWin32` branch with MSVC CRT errno values. | High | Low |
+| 4.7.3 | **Add Windows branch to RuntimeSigHash** — `%SIG` is pre-populated with Unix signals (HUP, USR1, PIPE, etc.) that don't exist on Windows. POE iterates `keys %SIG` and tries to install handlers. Fix: Windows branch with only INT, TERM, ABRT, FPE, ILL, SEGV, BREAK. | High | Low |
+| 4.7.4 | **Add Windows branch to POSIX.java** — IS_MAC flag gives macOS vs "everything else" (Linux). Windows gets Linux signal/termios values. Fix: add IS_WINDOWS flag, return Windows-correct signal constants, skip termios. | Medium | Low |
+| 4.7.5 | **Fix Socket.java constants** — SOL_SOCKET=1 (Linux) vs 0xFFFF (Windows), SO_REUSEADDR=2 vs 4, etc. These matter if passed to native setsockopt. Java abstracts most of this, so impact depends on implementation path. Fix: platform-detect and use correct values. | Medium | Low |
+| 4.7.6 | **Fix sysconf for Windows** — Runs `ulimit -n` which doesn't exist on Windows. Already has catch block defaulting to 1024, but should use a cleaner approach (e.g., `_getmaxstdio()` or just return 2048). | Low | Low |
+
+**What already works on Windows (no changes needed):**
+- `select()` via Java NIO Selector — cross-platform
+- Pipe handling via Java `PipedInputStream`/`PipedOutputStream` — cross-platform
+- POE::Loop::Select — has `$^O eq 'MSWin32'` guards
+- `socketpair` via loopback TCP — the standard Windows approach
+- `$^O` correctly set to `MSWin32` on Windows
+
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
 - `dev/modules/io_stringy.md` - IO module porting patterns
