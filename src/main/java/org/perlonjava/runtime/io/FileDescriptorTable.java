@@ -53,6 +53,26 @@ public class FileDescriptorTable {
     }
 
     /**
+     * Register an IOHandle at a specific FD number.
+     * Used when wrapping an existing handle (e.g., for dup) to preserve its fd number.
+     * Replaces any existing handle at that fd.
+     *
+     * @param fd     the file descriptor number to register at
+     * @param handle the IOHandle to register
+     */
+    public static void registerAt(int fd, IOHandle handle) {
+        // Remove any previous handle at this fd
+        IOHandle oldHandle = fdToHandle.put(fd, handle);
+        if (oldHandle != null) {
+            handleToFd.remove(System.identityHashCode(oldHandle));
+        }
+        handleToFd.put(System.identityHashCode(handle), fd);
+        // Ensure nextFd is past this fd
+        nextFd.updateAndGet(current -> Math.max(current, fd + 1));
+        RuntimeIO.advanceFilenoCounterPast(fd);
+    }
+
+    /**
      * Advances the nextFd counter past the given fd value.
      * Called by RuntimeIO.assignFileno() to keep the two fd allocation
      * systems in sync and prevent fd collisions.
@@ -61,6 +81,14 @@ public class FileDescriptorTable {
      */
     public static void advancePast(int fd) {
         nextFd.updateAndGet(current -> Math.max(current, fd + 1));
+    }
+
+    /**
+     * Returns the next fd number that would be allocated, without actually allocating it.
+     * Useful as a fallback when the original fd is unknown.
+     */
+    public static int nextFdValue() {
+        return nextFd.get();
     }
 
     /**

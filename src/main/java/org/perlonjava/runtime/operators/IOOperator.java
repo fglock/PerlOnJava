@@ -2541,9 +2541,15 @@ public class IOOperator {
                 return RuntimeIO.stdout;
             case 2: // STDERR
                 return RuntimeIO.stderr;
-            default:
-                return null; // Unknown file descriptor
         }
+
+        // Check RuntimeIO's fileno registry (handles dup'd fds registered via registerExternalFd)
+        handle = RuntimeIO.getByFileno(fd);
+        if (handle != null) {
+            return handle;
+        }
+
+        return null; // Unknown file descriptor
     }
 
     /**
@@ -2628,22 +2634,50 @@ public class IOOperator {
             return null;
         }
 
-        // Create a new RuntimeIO that shares the same IOHandle
+        // Get the real underlying IOHandle (unwrap existing DupIOHandle if any)
+        IOHandle realHandle = original.ioHandle;
+        DupIOHandle existingDup = null;
+        if (realHandle instanceof DupIOHandle dup) {
+            existingDup = dup;
+            realHandle = dup.getDelegate();
+        }
+
+        // Get the original's fileno before wrapping (to preserve it)
+        int originalFd;
+        try {
+            RuntimeScalar fileno = original.ioHandle.fileno();
+            originalFd = fileno.getDefinedBoolean() ? fileno.getInt() : -1;
+        } catch (Exception e) {
+            originalFd = -1;
+        }
+
         RuntimeIO duplicate = new RuntimeIO();
-        duplicate.ioHandle = original.ioHandle;
         duplicate.currentLineNumber = original.currentLineNumber;
 
+        if (existingDup != null) {
+            // Original is already wrapped in a DupIOHandle — add another dup sharing same refcount
+            DupIOHandle newDup = DupIOHandle.addDup(existingDup);
+            duplicate.ioHandle = newDup;
+            duplicate.registerExternalFd(newDup.getFd());
+        } else {
+            // First dup of this handle — wrap both original and duplicate with DupIOHandle
+            // The original wrapper preserves the original's fd number
+            DupIOHandle[] pair = DupIOHandle.createPair(realHandle,
+                    originalFd >= 0 ? originalFd : FileDescriptorTable.nextFdValue());
+
+            // Replace original's ioHandle with the refcounted wrapper
+            original.ioHandle = pair[0];
+            original.registerExternalFd(pair[0].getFd());
+
+            // Set up the duplicate
+            duplicate.ioHandle = pair[1];
+            duplicate.registerExternalFd(pair[1].getFd());
+        }
+
         if (System.getenv("JPERL_IO_DEBUG") != null) {
-            String origFileno;
-            try {
-                origFileno = original.ioHandle.fileno().toString();
-            } catch (Throwable t) {
-                origFileno = "<err>";
-            }
-            System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: origIoHandle=" + original.ioHandle.getClass().getName() +
-                    " origFileno=" + origFileno +
-                    " origIoHandleId=" + System.identityHashCode(original.ioHandle) +
-                    " dupIoHandleId=" + System.identityHashCode(duplicate.ioHandle));
+            System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: delegate=" + realHandle.getClass().getName() +
+                    " origFd=" + original.ioHandle.fileno() +
+                    " dupFd=" + duplicate.ioHandle.fileno());
             System.err.flush();
         }
 
