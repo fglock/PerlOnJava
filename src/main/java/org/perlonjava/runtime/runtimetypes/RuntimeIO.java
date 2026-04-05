@@ -543,6 +543,7 @@ public class RuntimeIO extends RuntimeScalar {
                     }
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
                     fh.ioHandle = new SeekableJarHandle(is);
+                    fh.assignFileno();
                     addHandle(fh.ioHandle);
                     fh.binmode(ioLayers);
                     return fh;
@@ -561,6 +562,9 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
+
+            // Assign a sequential fileno for Perl's fileno() and select() support
+            fh.assignFileno();
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -674,6 +678,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         fh.ioHandle = scalarIO;
+        fh.assignFileno();
         addHandle(fh.ioHandle);
 
         // Apply any I/O layers
@@ -762,6 +767,7 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
+            fh.assignFileno();
 
             // Apply any I/O layers (excluding the already-processed :noshell)
             if (!ioLayers.isEmpty()) {
