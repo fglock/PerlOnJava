@@ -289,6 +289,146 @@ image-parse.t (1 failure). WWW::Mechanize extracts images from inline
 | **P3** | Java-backed fallbacks (if pure Perl fails) | Medium-High | Same as above |
 | **P4** | CDATA, CSS url, tee* | Low | 3 tests |
 
+---
+
+## Phase 8: Capture::Tiny capture* Implementation
+
+### Problem
+
+Capture::Tiny's `capture`, `capture_stdout`, `capture_stderr`, `capture_merged` functions
+don't need fork — they work by dup'ing STDOUT/STDERR to temp files, running user code,
+then restoring. But they fail because `fileno()` returns undef for regular file handles.
+
+### Capture::Tiny capture* flow (non-fork path)
+
+```
+_capture_tee($do_stdout, $do_stderr, $do_merge, $do_tee=0, $code):
+  1. _copy_std()     → open $save, ">&STDOUT"        (dup by name — WORKS)
+  2. File::Temp->new → $stash->{new}{stdout} = tmpfile
+  3. _open_std()     → open *STDOUT, ">&" . fileno($tmpfile)  ← FAILS (fileno=undef)
+  4. $code->()       → user code prints to redirected STDOUT
+  5. _open_std()     → open *STDOUT, ">&" . fileno($save)     ← FAILS (fileno=undef)
+  6. _slurp()        → seek + readline on tmpfile
+```
+
+### Root cause: 4 bugs in fileno/dup chain
+
+#### Bug 13: `CustomFileChannel.fileno()` returns undef
+- **File**: `CustomFileChannel.java:367-368`
+- **Impact**: `fileno($tmpfile)` returns undef for ALL regular file handles
+- **Fix**: Remove the hardcoded undef return. `RuntimeIO.fileno()` already checks
+  `getAssignedFileno()` first (which returns the registered fd), so if we assign filenos
+  at file open time, `CustomFileChannel.fileno()` is never reached. But as a safety net,
+  delegate to the RuntimeIO registry.
+
+#### Bug 14: Regular file handles never get assigned filenos
+- **File**: `RuntimeIO.java` — `open()` methods that create `CustomFileChannel`
+- **Impact**: Even though `assignFileno()` exists, it's only called for sockets
+- **Fix**: Call `this.assignFileno()` after creating any new IOHandle (CustomFileChannel,
+  PipeOutputChannel, PipeInputChannel). This populates the `filenoToIO`/`ioToFileno`
+  registries so `RuntimeIO.fileno()` returns a valid fd.
+
+#### Bug 15: `findFileHandleByDescriptor()` doesn't check RuntimeIO's fileno registry
+- **File**: `IOOperator.java:2473-2491`
+- **Impact**: Even if fileno returns a valid number, `open *STDOUT, ">&3"` can't find the
+  handle because `findFileHandleByDescriptor()` only checks its own `fileDescriptorMap`
+  (which is never populated) and the hardcoded stdin/stdout/stderr cases.
+- **Fix**: In the `default` case, also check `RuntimeIO.getByFileno(fd)`.
+
+#### Bug 16: Empty fd in dup mode silently corrupts STDOUT
+- **File**: `RuntimeIO.java:449-458`
+- **Impact**: When fileno returns undef, `">&" . undef` becomes `">&"`. The 2-arg open
+  parses this as mode=">&" with empty filename, which falls through to a code path that
+  replaces the handle with `new StandardIO(System.in)` — STDOUT becomes a stdin reader!
+- **Fix**: In the `-`/empty filename branch, check if mode contains `&` and return an error
+  instead of silently corrupting the handle.
+
+### Implementation steps
+
+1. In `RuntimeIO.java`, after every `new CustomFileChannel(...)`, call `this.assignFileno()`
+2. In `RuntimeIO.java`, after `openPipe()` creates pipe handles, call `assignFileno()`
+3. In `IOOperator.findFileHandleByDescriptor()`, add `RuntimeIO.getByFileno(fd)` fallback
+4. In `RuntimeIO.open(String)`, add guard for empty filename with dup mode
+5. Also call `assignFileno()` in `duplicateFileHandle()` so dup'd handles get their own fd
+6. In `RuntimeIO.unassignFileno()` (or close), unregister the fd to prevent leaks
+
+### Test plan
+
+```bash
+# Quick validation
+./jperl -e 'use Capture::Tiny qw(capture); my ($o,$e) = capture { print "hello\n"; warn "err\n" }; print "out=[$o] err=[$e]\n"'
+
+# WWW::Mechanize dump.t
+cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/dump.t
+
+# Broader Capture::Tiny tests
+./jcpan -t Capture::Tiny
+```
+
+---
+
+## Phase 9: HTTP::Daemon Pure Perl Testing
+
+### Problem
+
+The WWW::Mechanize `t/local/*.t` tests (18 files) and `t/cookies.t` need a local HTTP server.
+HTTP::Daemon is pure Perl on `IO::Socket::IP` and does NOT use fork itself.
+
+### Analysis: What HTTP::Daemon needs vs PerlOnJava support
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `IO::Socket::IP->new(Listen=>N)` | ✅ Works | socket/bind/listen chain |
+| `accept($new, $sock)` builtin | ✅ Works | `IOOperator.java:1838` |
+| `${*$self}{'key'}` glob hash stash | ✅ Works | `RuntimeGlob.getGlobHash()` |
+| `vec($fdset, fileno, 1) = 1` | ✅ Works | lvalue vec + small sequential filenos |
+| 4-arg `select()` | ✅ Works | `IOOperator.selectWithNIO()` |
+| `sysread($fh, $buf, N, offset)` | ✅ Works | 4-arg sysread with offset |
+| `print $fh "data"` | ✅ Works | write to socket glob |
+| `fileno($sock)` | ✅ Works | small sequential integers from registry |
+| `getsockopt(SO_TYPE)` | ⚠️ Returns 0 | Not mapped in `SocketIO.mapToJavaSocketOption()` |
+| `getaddrinfo(undef, "0", ...)` | ⚠️ Needs test | Ephemeral port binding |
+
+### Test harness patterns
+
+| Harness | Pattern | PerlOnJava Support |
+|---------|---------|-------------------|
+| `LocalServer.pm` (18 tests) | `open $fh, qq'$^X "log-server" ...\|'` | ✅ Piped open works |
+| `TestServer.pm` (cookies.t) | `open $fh, '-\|'` (fork-open, no exec) | ❌ Needs true fork |
+
+### Implementation steps
+
+1. Test `HTTP::Daemon->new` — does it create a listening socket?
+2. Test `$d->accept` — does it return a blessed `HTTP::Daemon::ClientConn`?
+3. Test glob stash `${*$sock}{'httpd_daemon'}` on the accepted connection
+4. Test full `get_request()` + `send_response()` cycle
+5. Test `LocalServer::spawn()` end-to-end
+6. If `getsockopt(SO_TYPE)` is needed: store socket type during creation, return from
+   `getSocketOption(SOL_SOCKET, SO_TYPE)` — ~10 lines in `SocketIO.java`
+
+### Test plan
+
+```bash
+# Step 1: Basic HTTP::Daemon
+./jperl -e 'use HTTP::Daemon; my $d = HTTP::Daemon->new or die $!; print $d->url, "\n"; print "OK\n"'
+
+# Step 2: Accept + serve (manual test with curl)
+./jperl -e '
+  use HTTP::Daemon;
+  use HTTP::Response;
+  my $d = HTTP::Daemon->new or die;
+  print STDERR "Listening at: ", $d->url, "\n";
+  my $c = $d->accept or die;
+  my $r = $c->get_request or die;
+  $c->send_response(HTTP::Response->new(200, "OK", undef, "Hello World\n"));
+  $c->close;
+'
+# Then in another terminal: curl http://localhost:<port>/
+
+# Step 3: LocalServer spawn (the real test)
+cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/local/get.t
+```
+
 ### Bug 11: HTMLParser script/style raw text handling (FIXED)
 - **File**: `HTMLParser.java:parseHtml()`
 - **Symptom**: Tags inside `<script>` and `<style>` elements parsed as HTML,
