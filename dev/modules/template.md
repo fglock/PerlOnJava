@@ -22,8 +22,9 @@ its test suite on PerlOnJava.
 | After Fix 5+6 | **16/106** | — | — | Error location attribution + compiled template loading |
 | After Fix 7 | **3/106** | ~23/2884 | **2884** | XSLoader jar: shim overrides + stale .ttc cleanup |
 | After Fix 8 | **2/106** | ~3/2884 | **2884** | `use bytes` length fix for Latin-1 strings |
+| After Fix 9 | **1/106** | ~2/2884 | **2884** | Scope `packageExistsCache` sub entries to declaring package |
 
-### Current: 104/106 passing (98%), 11 skipped, 2 truly failing
+### Current: 105/106 passing (99%), 11 skipped, 1 truly failing (leak.t — DESTROY not implemented)
 
 ---
 
@@ -84,13 +85,7 @@ XS module with a Perl parent.
 
 ---
 
-## Remaining Failures (2/106 programs)
-
-### evalperl.t — 1/19 subtests failing
-
-| Test | Failed | Total | Issue |
-|------|--------|-------|-------|
-| evalperl.t | 1 | 19 | Test 11 — `INCLUDE badrawperl` expects raw Perl output but gets empty + file error. EVAL_PERL context not propagating to included templates. |
+## Remaining Failures (1/106 programs)
 
 ### leak.t — 2/11 subtests failing (expected)
 
@@ -102,8 +97,7 @@ XS module with a Perl parent.
 
 ## Next Steps
 
-1. **evalperl.t test 11** — Investigate EVAL_PERL context propagation to included templates
-2. **leak.t** — DESTROY not implemented (known limitation, not fixable without DESTROY support)
+1. **leak.t** — DESTROY not implemented (known limitation, not fixable without DESTROY support)
 
 ---
 
@@ -135,9 +129,15 @@ XS module with a Perl parent.
   - unicode.t: 0/20 → **20/20** — all BOM formats (UTF-8/16BE/16LE/32BE/32LE) now detected and decoded
   - File: StringOperators.java
 - [x] Template tests: **104/106 passing** (2 failing, 11 skipped) — **98% pass rate**
+- [x] Fix 9: Scope `packageExistsCache` sub entries to declaring package (2025-04-05)
+  - `sub error` in `Template::Base` was stored as bare "error" → false in the global cache
+  - This prevented `error` from being used as indirect method class name in other packages
+  - Fix: store qualified name (e.g., "Template::Base::error") and check qualified name at lookup
+  - evalperl.t: 18/19 → **19/19** — RAWPERL blocks with illegal code now correctly eval'd
+  - File: SubroutineParser.java
+- [x] Template tests: **105/106 passing** (1 failing, 11 skipped) — **99% pass rate**
 
 ### Remaining (not planned)
-- [ ] evalperl.t test 11 — EVAL_PERL context propagation
 - [ ] leak.t tests 7, 11 — DESTROY not implemented
 
 ---
