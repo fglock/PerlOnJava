@@ -330,6 +330,15 @@ public class EvalStringHandler {
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = sourceName + " (eval)";
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+            // Add standard variables that are always available in eval context.
+            // Without this, subs parsed inside the eval would fail strict vars
+            // checks for @_ (same setup as the evalStringList overload).
+            symbolTable.enterScope();
+            symbolTable.addVariable("this", "", null);
+            symbolTable.addVariable("@_", "our", null);
+            symbolTable.addVariable("wantarray", "", null);
+
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
                     new JavaClassInfo(),

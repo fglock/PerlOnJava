@@ -19,8 +19,10 @@ its test suite on PerlOnJava.
 | After Fix 1 | 80/106 | ~500/~850 | ~850 | MakeMaker JAR shim |
 | After Fix 2 | 70/106 | 23/842 | 842 | `use constant`/`our` clash |
 | After Fix 3+4 | **19/106** | **57/2884** | **2884** | Interpreter `our` binding + XSLoader @ISA fallback |
+| After Fix 5+6 | **16/106** | — | — | Error location attribution + compiled template loading |
+| After Fix 7 | **3/106** | ~23/2884 | **2884** | XSLoader jar: shim overrides + stale .ttc cleanup |
 
-### Current: 87/106 passing (82%), 11 skipped, 8 truly failing
+### Current: 103/106 passing (97%), 11 skipped, 3 truly failing
 
 ---
 
@@ -81,90 +83,33 @@ XS module with a Perl parent.
 
 ---
 
-## Remaining Failures (19/106 programs, 57/2884 subtests)
+## Remaining Failures (3/106 programs)
 
-### Category 1: Compiled Templates (compile1–5) — 5 programs, 12 subtests
-
-Tests that compile templates to `.ttc` files (Storable-serialized Perl code).
-Issues include missing `.ttc` files and `EVAL_PERL` not being set.
+### evalperl.t — 1/19 subtests failing
 
 | Test | Failed | Total | Issue |
 |------|--------|-------|-------|
-| compile1.t | **0** | 18 | **FIXED** — all passing |
-| compile2.t | 2 | 4 | `foo.ttc: No such file or directory` |
-| compile3.t | 3 | 14 | Cached template mtime comparison |
-| compile4.t | **0** | 13 | **FIXED** — all passing |
-| compile5.t | **0** | 14 | **FIXED** — all passing |
+| evalperl.t | 1 | 19 | Test 11 — `INCLUDE badrawperl` expects raw Perl output but gets empty + file error. EVAL_PERL context not propagating to included templates. |
 
-**Fixes applied (2025-04-04):**
-- PerlCompilerException: use current execution location (not caller site) for error messages
-- PerlCompilerException: detect interpreter vs JVM innermost execution context by scanning stack
-- ByteCodeSourceMapper: honor `#line` directives via `getSourceLocationAccurate()`
-- WarnDie: implement Perl 5's `, <FH> line/chunk N` filehandle context suffix
-- Readline: fix `$.` counting in slurp mode (1 per read) and paragraph mode (1 per paragraph)
-- RuntimeIO.close(): reset `currentLineNumber` to 0 on close
-- UtimeOperator: fix timestamp argument handling for compiled template cache loading
-
-### Category 2: Unicode/Encoding — 2 programs, 22 subtests
+### leak.t — 2/11 subtests failing (expected)
 
 | Test | Failed | Total | Issue |
 |------|--------|-------|-------|
-| unicode.t | 20 | 20 | BOM detection (UTF-8/16/32) not stripping BOMs |
-| stash-xs-unicode.t | 2 | 11 | UTF-8 key fetch/assign |
+| leak.t | 2 | 11 | Tests 7, 11 — DESTROY not implemented in PerlOnJava (known limitation) |
 
-**Root cause:** `Encode` module and BOM-stripping logic in `Template::Provider`.
-PerlOnJava doesn't strip BOMs or decode UTF-16/32 templates.
-
-### Category 3: CRLF Handling — 1 program, 2 subtests
+### unicode.t — 20/20 subtests failing (deferred)
 
 | Test | Failed | Total | Issue |
 |------|--------|-------|-------|
-| chomp.t | 2 | 78 | `\r\n` expected but got `\n` |
-
-**Root cause:** Tests expect Windows CRLF output; PerlOnJava produces LF only.
-
-### Category 4: Filters — 1 program, 8 subtests
-
-| Test | Failed | Total | Issue |
-|------|--------|-------|-------|
-| filter.t | 8 | 162 | Tests 102-105, 110-113 |
-
-**Root cause:** Needs investigation — likely specific filter implementations
-(eval, redirect, or perl-based filters).
-
-### Category 5: Tied Hashes — 1 program, 2 subtests
-
-| Test | Failed | Total | Issue |
-|------|--------|-------|-------|
-| tiedhash.t | 2 | 51 | "Not a HASH reference" in Stash.pm line 281 |
-
-**Root cause:** `DEFAULT list.5 = 80` — assigning to a list element via the
-stash triggers a code path that expects a hash ref.
-
-### Category 6: Minor/Miscellaneous — 9 programs, 11 subtests
-
-| Test | Failed | Total | Issue |
-|------|--------|-------|-------|
-| context.t | 1 | 54 | Test 13 |
-| evalperl.t | 1 | 19 | Test 11 — embedded Perl eval |
-| fileline.t | 3 | 11 | File/line number reporting |
-| html.t | 1 | 18 | HTML entity encoding |
-| leak.t | 2 | 11 | DESTROY-related (expected, no DESTROY in PerlOnJava) |
-| meta.t | 1 | 3 | Metadata count |
-| parser.t | 1 | 37 | Test 35 |
-| proc.t | 2 | 7 | PROCESS directive |
-| url.t | 1 | 23 | Test 23 |
+| unicode.t | 20 | 20 | BOM detection/stripping not implemented (UTF-8/16/32). Deep encoding issue, deferred. |
 
 ---
 
 ## Next Steps
 
-1. **Investigate filter.t failures** (8 subtests) — highest impact fixable category
-2. **Investigate compile tests** — may reveal Storable or eval issues
-3. **Investigate tiedhash.t** — may reveal stash dot-notation bug
-4. **Skip unicode.t** — BOM handling is a deep encoding issue, defer
-5. **Skip leak.t** — DESTROY not implemented, known limitation
-6. **Investigate remaining misc failures** one by one
+1. **evalperl.t test 11** — Investigate EVAL_PERL context propagation to included templates
+2. **unicode.t** — BOM detection/stripping (deferred — deep encoding work)
+3. **leak.t** — DESTROY not implemented (known limitation, not fixable without DESTROY support)
 
 ---
 
@@ -183,12 +128,18 @@ stash triggers a code path that expects a hash ref.
   - compile5.t: ~0/14 → **14/14**
   - Also fixed: `$.` counting in slurp/paragraph mode, `close()` resets `$.`, `<FH> chunk/line N` suffix
 - [x] Template tests: 90/106 passing (16 failing, 11 skipped)
+- [x] Fix 7: XSLoader jar: shim overrides (2025-04-05)
+  - XSLoader now loads jar: PERL5LIB shim overrides after @ISA fallback succeeds
+  - Fixed tiedhash.t: Template::Stash::XS `_assign()` array branch bug corrected
+  - Fixed EvalStringHandler simple evalString to include @_ in symbol table
+  - Many tests that appeared failing were actually passing (stale .ttc cache files were the issue)
+  - Files: XSLoader.java, EvalStringHandler.java, Template/Stash/XS.pm
+- [x] Template tests: **103/106 passing** (3 failing, 11 skipped) — **97% pass rate**
 
-### In Progress
-- [ ] Analyze and fix remaining 16 failing test programs
-
-### Pending
-- [ ] Investigate compile2.t and compile3.t
+### Remaining (not planned)
+- [ ] evalperl.t test 11 — EVAL_PERL context propagation
+- [ ] leak.t tests 7, 11 — DESTROY not implemented
+- [ ] unicode.t — BOM handling deferred
 
 ---
 

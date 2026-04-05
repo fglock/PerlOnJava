@@ -1,10 +1,13 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.backend.bytecode.EvalStringHandler;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -98,6 +101,10 @@ public class XSLoader extends PerlModuleBase {
             String isaKey = moduleName + "::ISA";
             RuntimeArray isa = GlobalVariable.getGlobalArray(isaKey);
             if (isa != null && !isa.isEmpty()) {
+                // @ISA fallback succeeded. Also try to load any jar: PERL5LIB shim
+                // for this module, which may provide method overrides (e.g., bug fixes
+                // for the pure-Perl parent that the XS version would normally handle).
+                loadJarShimOverrides(moduleName);
                 return scalarTrue.getList();
             }
             // Error message matches pattern /object version|loadable object/ that many
@@ -168,5 +175,44 @@ public class XSLoader extends PerlModuleBase {
      */
     public static RuntimeList bootstrap_inherit(RuntimeArray args, int ctx) {
         return load(args, ctx);
+    }
+
+    /**
+     * Tries to load method overrides from a jar: PERL5LIB shim for the given module.
+     * 
+     * When XSLoader::load falls back to @ISA inheritance (because no Java XS class exists),
+     * the CPAN-installed .pm file is already loaded. However, our jar: PERL5LIB may contain
+     * a shim with bug fixes or method overrides that should be applied on top.
+     * 
+     * This method reads the jar: version of the module (if it exists) and evals it,
+     * which installs any subroutine definitions into the already-loaded package namespace.
+     *
+     * @param moduleName The fully qualified Perl module name (e.g., "Template::Stash::XS")
+     */
+    private static void loadJarShimOverrides(String moduleName) {
+        try {
+            // Convert module name to file path: Template::Stash::XS -> Template/Stash/XS.pm
+            String filePath = moduleName.replace("::", "/") + ".pm";
+            String jarPath = GlobalContext.JAR_PERLLIB + "/" + filePath;
+            
+            // Check if a jar: version exists
+            InputStream is = Jar.openInputStream(jarPath);
+            if (is == null) {
+                return; // No jar: shim for this module
+            }
+            
+            // Read the content
+            String code;
+            try {
+                code = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            } finally {
+                is.close();
+            }
+            
+            // Eval the code to install any method overrides into the package
+            EvalStringHandler.evalString(code, new RuntimeBase[0], jarPath, 1);
+        } catch (Exception e) {
+            // Silently ignore - the module works via inheritance anyway
+        }
     }
 }
