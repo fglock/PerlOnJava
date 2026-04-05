@@ -43,7 +43,6 @@ public class ErrnoVariable extends RuntimeScalar {
     private static volatile int _ECONNABORTED = -1;
     private static volatile int _EADDRINUSE = -1;
     private static volatile int _EADDRNOTAVAIL = -1;
-    private static volatile int _EBADF = -1;
 
     // Map of errno constant names to substring patterns in strerror() messages.
     // Used to probe the native strerror() and discover platform-correct values.
@@ -56,8 +55,7 @@ public class ErrnoVariable extends RuntimeScalar {
         Map.entry("ECONNRESET", "connection reset"),
         Map.entry("ECONNABORTED", "connection abort"),
         Map.entry("EADDRINUSE", "address already in use"),
-        Map.entry("EADDRNOTAVAIL", "assign requested address"),
-        Map.entry("EBADF", "bad file descriptor")
+        Map.entry("EADDRNOTAVAIL", "assign requested address")
     );
 
     // Cache of resolved errno constants (probed once, cached forever)
@@ -166,11 +164,6 @@ public class ErrnoVariable extends RuntimeScalar {
     public static int EADDRNOTAVAIL() {
         int v = _EADDRNOTAVAIL;
         if (v == -1) { v = _EADDRNOTAVAIL = lookupErrnoConstant("EADDRNOTAVAIL"); }
-        return v;
-    }
-    public static int EBADF() {
-        int v = _EBADF;
-        if (v == -1) { v = _EBADF = lookupErrnoConstant("EBADF"); }
         return v;
     }
     

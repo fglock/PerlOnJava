@@ -22,14 +22,12 @@ XSLoader::load('Socket');
 
 our @EXPORT = qw(
     pack_sockaddr_in unpack_sockaddr_in
-    pack_sockaddr_un unpack_sockaddr_un
     inet_aton inet_ntoa getnameinfo getaddrinfo
     sockaddr_in sockaddr_family
     AF_INET AF_INET6 AF_UNIX
-    PF_INET PF_INET6 PF_UNIX PF_UNSPEC
+    PF_INET PF_INET6 PF_UNIX
     SOCK_STREAM SOCK_DGRAM SOCK_RAW
     SOL_SOCKET SO_REUSEADDR SO_KEEPALIVE SO_BROADCAST SO_LINGER SO_ERROR SO_TYPE SO_REUSEPORT
-    SOMAXCONN
     INADDR_ANY INADDR_LOOPBACK INADDR_BROADCAST
     IPPROTO_TCP IPPROTO_UDP IPPROTO_ICMP IPPROTO_IP IPPROTO_IPV6
     IP_TOS IP_TTL IPV6_V6ONLY

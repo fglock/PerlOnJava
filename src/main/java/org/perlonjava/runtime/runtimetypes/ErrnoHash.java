@@ -34,8 +34,6 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
         String os = System.getProperty("os.name", "").toLowerCase();
         if (os.contains("mac") || os.contains("darwin")) {
             ERRNO_TABLE = buildDarwinTable();
-        } else if (os.contains("win")) {
-            ERRNO_TABLE = buildWindowsTable();
         } else {
             ERRNO_TABLE = buildLinuxTable();
         }
@@ -352,99 +350,8 @@ public class ErrnoHash extends AbstractMap<String, RuntimeScalar> {
         return Collections.unmodifiableMap(m);
     }
 
-    private static Map<String, Integer> buildWindowsTable() {
-        // Windows CRT errno values from MSVC <errno.h>
-        // Standard POSIX subset (1-42) plus MSVC extended errno (100+)
-        Map<String, Integer> m = new HashMap<>();
-        m.put("EPERM", 1);
-        m.put("ENOENT", 2);
-        m.put("ESRCH", 3);
-        m.put("EINTR", 4);
-        m.put("EIO", 5);
-        m.put("ENXIO", 6);
-        m.put("E2BIG", 7);
-        m.put("ENOEXEC", 8);
-        m.put("EBADF", 9);
-        m.put("ECHILD", 10);
-        m.put("EAGAIN", 11);
-        m.put("EWOULDBLOCK", 135);
-        m.put("ENOMEM", 12);
-        m.put("EACCES", 13);
-        m.put("EFAULT", 14);
-        m.put("EBUSY", 16);
-        m.put("EEXIST", 17);
-        m.put("EXDEV", 18);
-        m.put("ENODEV", 19);
-        m.put("ENOTDIR", 20);
-        m.put("EISDIR", 21);
-        m.put("EINVAL", 22);
-        m.put("ENFILE", 23);
-        m.put("EMFILE", 24);
-        m.put("ENOTTY", 25);
-        m.put("EFBIG", 27);
-        m.put("ENOSPC", 28);
-        m.put("ESPIPE", 29);
-        m.put("EROFS", 30);
-        m.put("EMLINK", 31);
-        m.put("EPIPE", 32);
-        m.put("EDOM", 33);
-        m.put("ERANGE", 34);
-        m.put("EDEADLK", 36);
-        m.put("EDEADLOCK", 36);
-        m.put("ENAMETOOLONG", 38);
-        m.put("ENOLCK", 39);
-        m.put("ENOSYS", 40);
-        m.put("ENOTEMPTY", 41);
-        m.put("EILSEQ", 42);
-        // MSVC extended errno values (100+)
-        m.put("EADDRINUSE", 100);
-        m.put("EADDRNOTAVAIL", 101);
-        m.put("EAFNOSUPPORT", 102);
-        m.put("EALREADY", 103);
-        m.put("EBADMSG", 104);
-        m.put("ECANCELED", 105);
-        m.put("ECONNABORTED", 106);
-        m.put("ECONNREFUSED", 107);
-        m.put("ECONNRESET", 108);
-        m.put("EDESTADDRREQ", 109);
-        m.put("EHOSTUNREACH", 110);
-        m.put("EIDRM", 111);
-        m.put("EINPROGRESS", 112);
-        m.put("EISCONN", 113);
-        m.put("ELOOP", 114);
-        m.put("EMSGSIZE", 115);
-        m.put("ENETDOWN", 116);
-        m.put("ENETUNREACH", 117);
-        m.put("ENETRESET", 118);
-        m.put("ENOBUFS", 119);
-        m.put("ENODATA", 120);
-        m.put("ENOPROTOOPT", 121);
-        m.put("ENOTCONN", 122);
-        m.put("ENOTRECOVERABLE", 123);
-        m.put("ENOTSOCK", 124);
-        m.put("ENOTSUP", 125);
-        m.put("EOPNOTSUPP", 126);
-        m.put("EOVERFLOW", 127);
-        m.put("EOWNERDEAD", 128);
-        m.put("EPROTO", 129);
-        m.put("EPROTONOSUPPORT", 130);
-        m.put("EPROTOTYPE", 131);
-        m.put("ETIME", 132);
-        m.put("ETIMEDOUT", 133);
-        m.put("ETXTBSY", 134);
-        m.put("EWOULDBLOCK", 135);
-        m.put("ETOOMANYREFS", 136);
-        m.put("ESOCKTNOSUPPORT", 137);
-        m.put("EPFNOSUPPORT", 138);
-        m.put("EHOSTDOWN", 139);
-        m.put("EUSERS", 140);
-        m.put("EDQUOT", 141);
-        m.put("ESTALE", 142);
-        m.put("EREMOTE", 143);
-        return Collections.unmodifiableMap(m);
-    }
-
     /**
+     * Provides read access to the errno constant table.
      * Used by ErrnoVariable to resolve errno constant names to values.
      */
     static Map<String, Integer> getErrnoTable() {

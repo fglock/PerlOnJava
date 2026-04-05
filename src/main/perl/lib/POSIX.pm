@@ -61,7 +61,6 @@ our @EXPORT_OK = qw(
     pathconf pause pipe read rename rmdir setgid setpgid setsid setuid
     sleep sysconf tcdrain tcflow tcflush tcgetpgrp tcsendbreak
     tcsetpgrp time times ttyname tzname umask uname unlink utime wait waitpid write
-    _SC_OPEN_MAX
 
     # User/Group functions
     getpwnam getpwuid getgrnam getgrgid
@@ -81,8 +80,7 @@ our @EXPORT_OK = qw(
     asctime clock ctime difftime gmtime localtime mktime strftime tzset
 
     # Signal functions
-    raise sigaction sigprocmask signal
-    SigSet SigAction SIG_SETMASK
+    raise sigaction signal
 
     # Locale functions
     localeconv setlocale
@@ -126,18 +124,6 @@ our @EXPORT_OK = qw(
     # Constants - stat
     S_IRGRP S_IROTH S_IRUSR S_IRWXG S_IRWXO S_IRWXU S_ISGID
     S_ISUID S_IWGRP S_IWOTH S_IWUSR S_IXGRP S_IXOTH S_IXUSR
-    S_ISBLK S_ISCHR S_ISDIR S_ISFIFO S_ISLNK S_ISREG S_ISSOCK
-
-    # Constants - terminal I/O (termios)
-    BRKINT ECHO ECHOE ECHOK ECHONL ICANON ICRNL IEXTEN IGNBRK IGNCR
-    IGNPAR INLCR INPCK ISIG ISTRIP IXOFF IXON
-    NCCS NOFLSH OPOST PARENB PARODD TOSTOP VEOF VEOL VERASE VINTR
-    VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
-    B0 B50 B75 B110 B134 B150 B200 B300 B600 B1200 B1800 B2400
-    B4800 B9600 B19200 B38400
-    CLOCAL CREAD CS5 CS6 CS7 CS8 CSIZE CSTOPB HUPCL
-    TCSADRAIN TCSAFLUSH TCSANOW TCIFLUSH TCIOFF TCIOFLUSH TCION
-    TCOFLUSH TCOOFF TCOON
 
     # Constants - wait
     WEXITSTATUS WIFEXITED WIFSIGNALED WIFSTOPPED WNOHANG WSTOPSIG
@@ -278,12 +264,6 @@ sub setgrent { POSIX::_setgrent() }
 sub endgrent { POSIX::_endgrent() }
 sub getlogin { POSIX::_getlogin() }
 
-# Session management
-sub setsid { POSIX::_setsid() }
-
-# System configuration
-sub sysconf { POSIX::_sysconf(@_) }
-
 # File operations
 sub open { POSIX::_open(@_) }
 sub close { POSIX::_close(@_) }
@@ -353,46 +333,6 @@ sub strerror { POSIX::_strerror(@_) }
 # Signal functions
 sub signal { POSIX::_signal(@_) }
 sub raise { POSIX::_raise(@_) }
-sub uname { POSIX::_uname(@_) }
-sub sigprocmask { POSIX::_sigprocmask(@_) }
-
-# Signal action - stub classes for JVM
-sub sigaction {
-    # On JVM, sigaction is a no-op stub
-    return 0;
-}
-
-# SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK constants
-use constant SIG_BLOCK   => 0;
-use constant SIG_UNBLOCK => 1;
-use constant SIG_SETMASK => 2;
-use constant SIG_DFL     => 0;
-use constant SIG_IGN     => 1;
-use constant SIG_ERR     => -1;
-
-# POSIX::SigSet - minimal stub for JVM
-package POSIX::SigSet;
-sub new {
-    my $class = shift;
-    return bless { signals => [@_] }, $class;
-}
-sub emptyset { $_[0]->{signals} = []; return 1; }
-sub fillset  { return 1; }
-sub addset   { push @{$_[0]->{signals}}, $_[1]; return 1; }
-sub delset   { $_[0]->{signals} = [grep { $_ != $_[1] } @{$_[0]->{signals}}]; return 1; }
-sub ismember { return grep { $_ == $_[1] } @{$_[0]->{signals}} ? 1 : 0; }
-
-# POSIX::SigAction - minimal stub for JVM
-package POSIX::SigAction;
-sub new {
-    my ($class, $handler, $sigset, $flags) = @_;
-    return bless { handler => $handler, sigset => $sigset, flags => $flags || 0 }, $class;
-}
-sub handler { return $_[0]->{handler} }
-sub mask    { return $_[0]->{sigset} }
-sub flags   { return $_[0]->{flags} }
-
-package POSIX;
 
 # Constants - generate subs for each constant that has Java implementation
 # Note: O_* and WNOHANG/WUNTRACED are defined with 'use constant' above
@@ -409,34 +349,10 @@ for my $const (qw(
     SIGHUP SIGINT SIGQUIT SIGILL SIGTRAP SIGABRT SIGBUS SIGFPE SIGKILL
     SIGUSR1 SIGSEGV SIGUSR2 SIGPIPE SIGALRM SIGTERM SIGCHLD SIGCONT
     SIGSTOP SIGTSTP
-
-    S_IRGRP S_IROTH S_IRUSR S_IRWXG S_IRWXO S_IRWXU S_ISGID
-    S_ISUID S_IWGRP S_IWOTH S_IWUSR S_IXGRP S_IXOTH S_IXUSR
-
-    BRKINT ECHO ECHOE ECHOK ECHONL ICANON ICRNL IEXTEN IGNBRK IGNCR
-    IGNPAR INLCR INPCK ISIG ISTRIP IXOFF IXON
-    NCCS NOFLSH OPOST PARENB PARODD TOSTOP VEOF VEOL VERASE VINTR
-    VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
-    B0 B50 B75 B110 B134 B150 B200 B300 B600 B1200 B1800 B2400
-    B4800 B9600 B19200 B38400
-    CLOCAL CREAD CS5 CS6 CS7 CS8 CSIZE CSTOPB HUPCL
-    TCSADRAIN TCSAFLUSH TCSANOW TCIFLUSH TCIOFF TCIOFLUSH TCION
-    TCOFLUSH TCOOFF TCOON
-
-    _SC_OPEN_MAX
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";
 }
-
-# S_IS* file type test functions (take mode argument)
-sub S_ISBLK  { (($_[0]) & 0170000) == 0060000 }
-sub S_ISCHR  { (($_[0]) & 0170000) == 0020000 }
-sub S_ISDIR  { (($_[0]) & 0170000) == 0040000 }
-sub S_ISFIFO { (($_[0]) & 0170000) == 0010000 }
-sub S_ISLNK  { (($_[0]) & 0170000) == 0120000 }
-sub S_ISREG  { (($_[0]) & 0170000) == 0100000 }
-sub S_ISSOCK { (($_[0]) & 0170000) == 0140000 }
 
 # Locale category constants - defined directly since XS _const_ may not exist
 BEGIN {

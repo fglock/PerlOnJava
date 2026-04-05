@@ -243,26 +243,6 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("flock operation is not supported on this handle type.");
     }
 
-    /**
-     * Get the current blocking mode for this handle.
-     *
-     * @return true if the handle is in blocking mode (default), false if non-blocking
-     */
-    default boolean isBlocking() {
-        return true;
-    }
-
-    /**
-     * Set the blocking mode for this handle.
-     *
-     * @param blocking true for blocking mode, false for non-blocking
-     * @return true if the mode was successfully set
-     */
-    default boolean setBlocking(boolean blocking) {
-        // Default: only blocking mode is supported
-        return blocking;
-    }
-
     // System-level I/O operations
     default RuntimeScalar sysread(int length) {
         return RuntimeIO.handleIOError("sysread operation is not supported.");

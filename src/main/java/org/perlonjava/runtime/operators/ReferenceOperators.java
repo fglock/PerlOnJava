@@ -32,9 +32,7 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
-            RuntimeBase target = (RuntimeBase) runtimeScalar.value;
-            int blessId = NameNormalizer.getBlessId(str);
-            target.setBlessId(blessId);
+            ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
         }

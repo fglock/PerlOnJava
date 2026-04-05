@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.io;
 
-import org.perlonjava.runtime.runtimetypes.ErrnoVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
@@ -438,7 +437,7 @@ public class CustomFileChannel implements IOHandle {
                     currentLock = fileChannel.tryLock(0, Long.MAX_VALUE, isShared);
                     if (currentLock == null) {
                         // Would block - return false
-                        getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN()); // EAGAIN/EWOULDBLOCK
+                        getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
                         return RuntimeScalarCache.scalarFalse;
                     }
                 } else {
@@ -454,7 +453,7 @@ public class CustomFileChannel implements IOHandle {
 
         } catch (OverlappingFileLockException e) {
             // This happens when trying to lock a region already locked by this JVM
-            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN()); // EAGAIN
+            getGlobalVariable("main::!").set(11); // EAGAIN
             return RuntimeScalarCache.scalarFalse;
         } catch (IOException e) {
             return handleIOException(e, "flock failed");

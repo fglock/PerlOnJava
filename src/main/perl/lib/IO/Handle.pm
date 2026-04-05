@@ -403,19 +403,21 @@ sub printflush {
 }
 
 sub blocking {
-    my ($fh, @args) = @_;
+    my $fh = shift;
 
     return undef unless defined fileno($fh);
 
     if ($has_java_backend) {
-        if (@args) {
-            return _blocking($fh, $args[0]);
+        # Workaround: pass args explicitly to avoid @_ being evaluated
+        # in scalar context when calling Java-backed _blocking()
+        if (@_) {
+            return _blocking($fh, $_[0]);
         }
         return _blocking($fh);
     }
 
     # Fallback: blocking mode control not available
-    if (@args) {
+    if (@_) {
         $! = "Function not implemented";
         return undef;
     }

@@ -144,13 +144,19 @@ public class IOHandle extends PerlModuleBase {
         }
 
         // Get current blocking status
-        boolean currentBlocking = fh.ioHandle.isBlocking();
+        boolean currentBlocking = true;
+        if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
+            currentBlocking = socketIO.isBlocking();
+        }
 
         if (args.size() == 2) {
             boolean newBlocking = args.get(1).getBoolean();
-            if (!fh.ioHandle.setBlocking(newBlocking)) {
-                // Handle doesn't support the requested mode
-                RuntimeIO.handleIOError("Non-blocking I/O not supported for this handle type");
+            if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
+                // For sockets, actually set blocking mode via NIO channel
+                socketIO.setBlocking(newBlocking);
+            } else if (!newBlocking) {
+                // Non-blocking I/O not supported for non-socket handles
+                RuntimeIO.handleIOError("Non-blocking I/O not supported");
                 return new RuntimeList();
             }
         }
