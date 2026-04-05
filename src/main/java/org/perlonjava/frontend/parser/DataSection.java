@@ -101,16 +101,15 @@ public class DataSection {
 
     /**
      * Extracts DATA section content from raw file bytes.
-     * In Perl 5, &lt;DATA&gt; reads raw bytes from the file by default. However,
-     * when {@code use utf8} is active, Perl 5 decodes the DATA content as UTF-8,
-     * matching the source encoding pragma.
+     * In Perl 5, &lt;DATA&gt; reads raw bytes from the file by default. When
+     * {@code use utf8} is active, a {@code :utf8} IO layer is applied to the
+     * DATA handle (handled by the caller), matching Perl 5 behavior.
      *
      * @param rawBytes    the raw file bytes (after BOM removal)
      * @param markerText  the marker to search for ("__DATA__" or "__END__")
-     * @param useUtf8     true if {@code use utf8} is active (decode as UTF-8)
-     * @return the DATA content as a string, or null if marker not found
+     * @return the DATA content as a string (Latin-1 encoded), or null if marker not found
      */
-    private static String extractDataFromRawBytes(byte[] rawBytes, String markerText, boolean useUtf8) {
+    private static String extractDataFromRawBytes(byte[] rawBytes, String markerText) {
         byte[] marker = markerText.getBytes(StandardCharsets.US_ASCII);
         int markerLen = marker.length;
 
@@ -154,12 +153,10 @@ public class DataSection {
                 dataStart++;
             }
 
-            // Return remaining bytes as a string.
-            // With `use utf8`, decode as UTF-8 (matching Perl 5 behavior where the
-            // DATA handle inherits the source encoding). Without it, use Latin-1
-            // (each byte = one character), preserving raw binary data.
-            var charset = useUtf8 ? StandardCharsets.UTF_8 : StandardCharsets.ISO_8859_1;
-            return new String(rawBytes, dataStart, rawBytes.length - dataStart, charset);
+            // Always store as Latin-1 (each byte = one character) to preserve raw bytes.
+            // The DATA handle's encoding layer (applied by parseDataSection) handles
+            // UTF-8 decoding at read time when `use utf8` is active.
+            return new String(rawBytes, dataStart, rawBytes.length - dataStart, StandardCharsets.ISO_8859_1);
         }
 
         return null; // Marker not found
@@ -207,10 +204,10 @@ public class DataSection {
                 // by the UTF-8 decoding that happens when reading source files.
                 // In Perl 5, <DATA> reads raw bytes from the file.
                 byte[] rawBytes = parser.ctx.compilerOptions.rawCodeBytes;
+                boolean useUtf8 = parser.ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8);
                 String rawContent = null;
                 if (rawBytes != null) {
-                    boolean useUtf8 = parser.ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8);
-                    rawContent = extractDataFromRawBytes(rawBytes, token.text, useUtf8);
+                    rawContent = extractDataFromRawBytes(rawBytes, token.text);
                 }
 
                 if (rawContent != null) {
@@ -232,6 +229,16 @@ public class DataSection {
                     }
 
                     createDataHandle(parser, dataContent.toString());
+                }
+
+                // When `use utf8` is active, apply :utf8 layer to the DATA handle.
+                // This matches Perl 5 behavior where the DATA handle inherits the
+                // source encoding pragma, decoding UTF-8 bytes at read time.
+                if (useUtf8) {
+                    RuntimeIO dataIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
+                    if (dataIO != null) {
+                        dataIO.binmode(":utf8");
+                    }
                 }
             }
         }
