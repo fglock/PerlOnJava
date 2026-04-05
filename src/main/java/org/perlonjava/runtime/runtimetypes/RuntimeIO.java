@@ -136,9 +136,24 @@ public class RuntimeIO extends RuntimeScalar {
 
     /**
      * Fileno registry for select() support.
-     * Maps small sequential integers to RuntimeIO objects, allowing
-     * 4-arg select() to find handles from bit-vector fileno values.
-     * Standard fds 0-2 are reserved for stdin/stdout/stderr.
+     * <p>
+     * Maps small sequential integers ("virtual fds") to RuntimeIO objects,
+     * allowing 4-arg select() to find handles from bit-vector fileno values
+     * and dup-by-fd operations like {@code open(*STDOUT, ">&3")}.
+     * <p>
+     * Standard fds 0-2 are reserved for stdin/stdout/stderr and are handled
+     * natively by StandardIO (not through this registry).
+     * <p>
+     * <b>Fd numbers are never recycled.</b> Freed fds are simply removed from the
+     * maps. A recycling mechanism was attempted but removed because, combined
+     * with the eager closeIOOnDrop() behavior, it caused fd collisions: two
+     * distinct RuntimeIO handles would be assigned the same fd number, leading
+     * to one overwriting the other in the registry. Without reference counting
+     * to know when a fd is truly unused, simple fd reuse is unsafe.
+     * <p>
+     * The monotonic counter means fd numbers will grow unboundedly in
+     * long-running programs that open/close many handles, but this only
+     * consumes map entries (not OS file descriptors) and is acceptable.
      */
     private static final AtomicInteger nextFileno = new AtomicInteger(3);
     private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
@@ -152,8 +167,13 @@ public class RuntimeIO extends RuntimeScalar {
      * Reuses released fd numbers when available (lowest first via the recycle pool),
      * otherwise allocates the next sequential fd. This matches POSIX semantics where
      * close() releases an fd and the next open() reuses the lowest available fd.
+     * <p>
+     * If this RuntimeIO already has an assigned fileno, returns it (idempotent).
+     * Called eagerly from {@code duplicateFileHandle()} for dup'd handles
+     * (so dup-by-fd like {@code open(*FH, ">&3")} can find them), and lazily
+     * from {@code fileno()} for regular file/pipe handles.
      *
-     * @return the assigned fileno
+     * @return the assigned fileno (always >= 3)
      */
     public int assignFileno() {
         Integer existing = ioToFileno.get(this);
@@ -582,8 +602,7 @@ public class RuntimeIO extends RuntimeScalar {
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
 
-            // Assign a fileno so fileno() returns a valid fd and dup-by-fd works
-            fh.assignFileno();
+            // Fileno is assigned lazily when fileno() is called
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -783,8 +802,7 @@ public class RuntimeIO extends RuntimeScalar {
                 return null;
             }
 
-            // Assign a fileno so fileno() returns a valid fd and dup-by-fd works
-            fh.assignFileno();
+            // Fileno is assigned lazily when fileno() is called
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -1376,11 +1394,22 @@ public class RuntimeIO extends RuntimeScalar {
 
     /**
      * Gets the file descriptor number for this handle.
+     * <p>
+     * Resolution order:
+     * <ol>
+     *   <li>Check the fileno registry (for handles that already have an assigned fd)</li>
+     *   <li>Ask the ioHandle for its native fd (StandardIO returns 0/1/2)</li>
+     *   <li>For file channels and pipes, lazily assign a registry fd on first call —
+     *       this avoids consuming fd numbers for handles whose fileno is never queried</li>
+     * </ol>
+     * <p>
+     * The lazy assignment strategy is important for modules like Capture::Tiny
+     * that open many temporary file handles but only need fileno() on a few.
      *
      * @return RuntimeScalar with the file descriptor number, or undef if not available
      */
     public RuntimeScalar fileno() {
-        // Check registry first — socket handles get small sequential filenos
+        // Check registry first — already-assigned handles
         int fd = getAssignedFileno();
         if (fd >= 0) {
             return new RuntimeScalar(fd);
@@ -1388,7 +1417,21 @@ public class RuntimeIO extends RuntimeScalar {
         if (ioHandle == null) {
             return RuntimeScalarCache.scalarUndef;
         }
-        return ioHandle.fileno();
+        // Try the native fileno first (StandardIO returns 0/1/2)
+        RuntimeScalar nativeFd = ioHandle.fileno();
+        if (nativeFd.getDefinedBoolean()) {
+            return nativeFd;
+        }
+        // For file channels and pipes, lazily assign a registry fileno
+        if (ioHandle instanceof CustomFileChannel
+                || ioHandle instanceof PipeInputChannel
+                || ioHandle instanceof PipeOutputChannel
+                || ioHandle instanceof InternalPipeHandle
+                || ioHandle instanceof LayeredIOHandle) {
+            fd = assignFileno();
+            return new RuntimeScalar(fd);
+        }
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
