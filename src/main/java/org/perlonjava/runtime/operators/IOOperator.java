@@ -34,12 +34,7 @@ public class IOOperator {
     // Simple socket option storage: key is "socketHashCode:level:optname", value is the option value
     private static final Map<String, Integer> globalSocketOptions = new ConcurrentHashMap<>();
 
-    /**
-     * Explicit fd → RuntimeIO mapping for handles registered by user code (e.g., socket()).
-     * This is the first registry checked by {@link #findFileHandleByDescriptor(int)}.
-     * Separate from {@link FileDescriptorTable} (fd→IOHandle) and {@code RuntimeIO.filenoToIO}
-     * (fd→RuntimeIO) which are populated automatically by DupIOHandle and pipe/socket creation.
-     */
+    // File descriptor to RuntimeIO mapping for duplication support
     private static final Map<Integer, RuntimeIO> fileDescriptorMap = new ConcurrentHashMap<>();
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
@@ -49,16 +44,11 @@ public class IOOperator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
-            // Keep references to originals so we can write results back.
-            // Perl's select() modifies bitvector arguments in place.
-            RuntimeScalar rbitsOrig = runtimeList.elements.get(0).scalar();
-            RuntimeScalar wbitsOrig = runtimeList.elements.get(1).scalar();
-            RuntimeScalar ebitsOrig = runtimeList.elements.get(2).scalar();
-
             // Snapshot arguments to avoid multiple FETCH calls on tied variables.
-            RuntimeScalar rbits = new RuntimeScalar().set(rbitsOrig);
-            RuntimeScalar wbits = new RuntimeScalar().set(wbitsOrig);
-            RuntimeScalar ebits = new RuntimeScalar().set(ebitsOrig);
+            // In Perl 5, arguments are evaluated once onto the stack before select runs.
+            RuntimeScalar rbits = new RuntimeScalar().set(runtimeList.elements.get(0).scalar());
+            RuntimeScalar wbits = new RuntimeScalar().set(runtimeList.elements.get(1).scalar());
+            RuntimeScalar ebits = new RuntimeScalar().set(runtimeList.elements.get(2).scalar());
             RuntimeScalar timeout = new RuntimeScalar().set(runtimeList.elements.get(3).scalar());
 
             // Special case: if all bit vectors are undef, just sleep
@@ -75,7 +65,6 @@ public class IOOperator {
                         Thread.interrupted();
                         return new RuntimeScalar(0);
                     }
-                    PerlSignalQueue.checkPendingSignals();
                 }
                 // Return 0 to indicate the sleep completed
                 return new RuntimeScalar(0);
@@ -83,13 +72,7 @@ public class IOOperator {
 
             // Implement 4-arg select() using NIO Selector
             try {
-                RuntimeScalar result = selectWithNIO(rbits, wbits, ebits, timeout);
-                // Write modified bitvectors back to the original variables.
-                // Skip undef args (read-only constants that can't be modified).
-                if (rbitsOrig.getDefinedBoolean()) rbitsOrig.set(rbits);
-                if (wbitsOrig.getDefinedBoolean()) wbitsOrig.set(wbits);
-                if (ebitsOrig.getDefinedBoolean()) ebitsOrig.set(ebits);
-                return result;
+                return selectWithNIO(rbits, wbits, ebits, timeout);
             } catch (Exception e) {
                 getGlobalVariable("main::!").set(e.getMessage());
                 return new RuntimeScalar(-1);
@@ -125,8 +108,7 @@ public class IOOperator {
 
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
-            // Track non-socket fds that need polling (pipes, files)
-            List<int[]> pollableFds = new ArrayList<>(); // [fd, wantRead, wantWrite]
+            int nonSocketReady = 0;
 
             for (int fd = 0; fd < maxFd; fd++) {
                 boolean wantRead = isBitSet(rdata, fd);
@@ -139,7 +121,7 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        pollableFds.add(new int[]{fd, wantRead ? 1 : 0, wantWrite ? 1 : 0});
+                        nonSocketReady++;
                         continue;
                     }
 
@@ -170,105 +152,68 @@ public class IOOperator {
                         channelToFd.put(ch, fd);
                     }
                 } else {
-                    // Non-socket handles (pipes, files) — need polling
-                    pollableFds.add(new int[]{fd, wantRead ? 1 : 0, wantWrite ? 1 : 0});
+                    // Non-socket handles (files, pipes) are always ready
+                    nonSocketReady++;
                 }
             }
 
-            // Determine timeout in millis
-            long deadlineNanos = Long.MAX_VALUE;
-            boolean hasTimeout = timeout.getDefinedBoolean();
-            if (hasTimeout) {
+            // Perform the select
+            if (!channelToFd.isEmpty()) {
+                if (!timeout.getDefinedBoolean()) {
+                    selector.select(); // block indefinitely
+                } else {
+                    double sec = timeout.getDouble();
+                    if (sec <= 0) {
+                        selector.selectNow(); // poll
+                    } else {
+                        selector.select((long) (sec * 1000));
+                    }
+                }
+            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
+                // No channels to monitor and no always-ready handles — sleep for timeout
                 double sec = timeout.getDouble();
-                deadlineNanos = System.nanoTime() + (long) (sec * 1_000_000_000L);
+                if (sec > 0) {
+                    long millis = (long) (sec * 1000);
+                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
+                    try {
+                        Thread.sleep(millis, nanos);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
 
-            // Poll loop: check pollable fds and NIO selector, respecting timeout
+            // Build result bit vectors (same size as input)
             byte[] rresult = new byte[rdata.length];
             byte[] wresult = new byte[wdata.length];
             byte[] eresult = new byte[edata.length];
             int totalReady = 0;
 
-            while (true) {
-                // Check pollable (non-socket) handles for readiness
-                totalReady = 0;
-                java.util.Arrays.fill(rresult, (byte) 0);
-                java.util.Arrays.fill(wresult, (byte) 0);
-                java.util.Arrays.fill(eresult, (byte) 0);
+            // Non-socket handles keep their bits set (always ready)
+            for (int fd = 0; fd < maxFd; fd++) {
+                RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                if (rio == null) continue;
+                if (rio.ioHandle instanceof SocketIO) continue;
+                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
+                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
+            }
 
-                for (int[] entry : pollableFds) {
-                    int fd = entry[0];
-                    boolean wantRead = entry[1] != 0;
-                    boolean wantWrite = entry[2] != 0;
+            // Process selected keys
+            for (SelectionKey key : selector.selectedKeys()) {
+                Integer fd = channelToFd.get(key.channel());
+                if (fd == null) continue;
+                int readyOps = key.readyOps();
 
-                    RuntimeIO rio = RuntimeIO.getByFileno(fd);
-                    if (rio == null) continue;
-
-                    if (wantRead) {
-                        boolean ready = false;
-                        if (rio.ioHandle instanceof InternalPipeHandle pipeHandle) {
-                            ready = pipeHandle.hasDataAvailable();
-                        } else {
-                            // Regular files are always read-ready
-                            ready = true;
-                        }
-                        if (ready) { setBit(rresult, fd); totalReady++; }
-                    }
-                    if (wantWrite) {
-                        boolean ready = false;
-                        if (rio.ioHandle instanceof InternalPipeHandle) {
-                            // Write end of pipe is generally always ready to accept writes
-                            ready = true;
-                        } else {
-                            // Regular files are always write-ready
-                            ready = true;
-                        }
-                        if (ready) { setBit(wresult, fd); totalReady++; }
-                    }
+                if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
+                        && isBitSet(rdata, fd)) {
+                    setBit(rresult, fd);
+                    totalReady++;
                 }
-
-                // Check NIO selector (non-blocking poll)
-                if (!channelToFd.isEmpty()) {
-                    selector.selectNow();
-                    for (SelectionKey key : selector.selectedKeys()) {
-                        Integer fd = channelToFd.get(key.channel());
-                        if (fd == null) continue;
-                        int readyOps = key.readyOps();
-
-                        if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
-                                && isBitSet(rdata, fd)) {
-                            setBit(rresult, fd);
-                            totalReady++;
-                        }
-                        if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
-                            setBit(wresult, fd);
-                            totalReady++;
-                        }
-                    }
-                    selector.selectedKeys().clear();
+                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
+                if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
+                    setBit(wresult, fd);
+                    totalReady++;
                 }
-
-                // If anything is ready, return immediately
-                if (totalReady > 0) break;
-
-                // Check timeout
-                if (hasTimeout && System.nanoTime() >= deadlineNanos) break;
-
-                // Nothing ready — sleep briefly and retry (poll interval: 10ms)
-                try {
-                    long remainNanos = hasTimeout ? deadlineNanos - System.nanoTime() : 10_000_000L;
-                    if (remainNanos <= 0) break;
-                    long sleepMs = Math.min(remainNanos / 1_000_000L, 10);
-                    if (sleepMs <= 0) sleepMs = 1;
-                    Thread.sleep(sleepMs);
-                } catch (InterruptedException e) {
-                    PerlSignalQueue.checkPendingSignals();
-                    Thread.interrupted();
-                    break;
-                }
-
-                // Check for pending signals and process DESTROYs
-                PerlSignalQueue.checkPendingSignals();
             }
 
             // Modify the original scalars in place
@@ -945,11 +890,11 @@ public class IOOperator {
 
         // Check if fh is null (invalid filehandle)
         if (fh == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("sysread() on unopened filehandle"),
                     new RuntimeScalar("\n")
             );
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -964,11 +909,11 @@ public class IOOperator {
 
         // Check for closed handle
         if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("sysread() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1019,13 +964,13 @@ public class IOOperator {
         try {
             result = baseHandle.sysread(length);
         } catch (Exception e) {
+            // e.printStackTrace();
             // This might happen with write-only handles
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("Filehandle opened only for output"),
                     new RuntimeScalar("\n")
             );
-            // Set $! after warn() since warn() may clobber it (e.g., when STDERR is closed)
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1109,11 +1054,11 @@ public class IOOperator {
 
         // Check if fh is null (invalid filehandle)
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("syswrite() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1200,20 +1145,20 @@ public class IOOperator {
             if (e instanceof java.nio.channels.ClosedChannelException ||
                     (msg != null && msg.contains("closed"))) {
                 // Closed channel
+                getGlobalVariable("main::!").set("Bad file descriptor");
                 WarnDie.warn(
                         new RuntimeScalar("syswrite() on closed filehandle"),
                         new RuntimeScalar("\n")
                 );
-                getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
                 return new RuntimeScalar(); // undef
             } else if (e instanceof java.nio.channels.NonWritableChannelException ||
                     exceptionType.contains("NonWritableChannel")) {
                 // Read-only handle
+                getGlobalVariable("main::!").set("Bad file descriptor");
                 WarnDie.warn(
                         new RuntimeScalar("Filehandle opened only for input"),
                         new RuntimeScalar("\n")
                 );
-                getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
                 return new RuntimeScalar(); // undef
             } else {
                 // Other errors
@@ -1966,13 +1911,12 @@ public class IOOperator {
             }
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
-            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream(InternalPipeHandle.PIPE_BUFFER_SIZE);
+            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
-            // Create IOHandle implementations for the pipe ends with shared state
-            InternalPipeHandle[] pair = InternalPipeHandle.createPair(pipeIn, pipeOut);
-            InternalPipeHandle readerHandle = pair[0];
-            InternalPipeHandle writerHandle = pair[1];
+            // Create IOHandle implementations for the pipe ends
+            InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
+            InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
@@ -1980,11 +1924,6 @@ public class IOOperator {
 
             RuntimeIO writerIO = new RuntimeIO();
             writerIO.ioHandle = writerHandle;
-
-            // Register RuntimeIOs using the same fd numbers as FileDescriptorTable
-            // so that select() can find them via RuntimeIO.getByFileno()
-            readerIO.registerExternalFd(readerHandle.getFd());
-            writerIO.registerExternalFd(writerHandle.getFd());
 
             // Handle autovivification for read handle (like open() does)
             RuntimeGlob readGlob = null;
@@ -2528,112 +2467,47 @@ public class IOOperator {
     }
 
     /**
-     * Finds a RuntimeIO handle by its file descriptor number.
-     *
-     * <p><b>Lookup order:</b>
-     * <ol>
-     *   <li>{@code fileDescriptorMap} — IOOperator's own ConcurrentHashMap populated by
-     *       {@link #registerFileDescriptor(int, RuntimeIO)}. Handles registered here
-     *       come from explicit user calls (e.g. socket()).</li>
-     *   <li>Standard descriptors 0/1/2 — mapped to the static {@code RuntimeIO.stdin},
-     *       {@code RuntimeIO.stdout}, {@code RuntimeIO.stderr} fields. These represent
-     *       the <em>original</em> System.in/System.out/System.err wrappers and always
-     *       correspond to fds 0/1/2.
-     *       <p><b>Note:</b> This is intentionally different from looking up via the glob
-     *       table. When Perl does {@code open(STDOUT, ">file")}, the glob *main::STDOUT
-     *       is updated to point to the file, but the file gets a <em>new</em> fd (e.g. 5).
-     *       The user asking for fd 1 specifically wants the original stdout — not whatever
-     *       STDOUT happens to point to now. The glob-table approach is used by
-     *       {@link #openFileHandleDup(String, String)} for <em>named</em> handle lookup
-     *       (e.g. {@code ">&STDOUT"}) where the user wants the current handle.</p></li>
-     *   <li>{@code RuntimeIO.getByFileno(fd)} — the fileno→RuntimeIO registry populated
-     *       by {@link RuntimeIO#registerExternalFd(int)}. This catches handles that were
-     *       created by {@link #duplicateFileHandle(RuntimeIO)} (which wraps in DupIOHandle
-     *       and registers the new fd) or by pipe/socket operations.</li>
-     * </ol>
-     *
-     * @param fd the file descriptor number to look up
-     * @return the RuntimeIO handle, or null if the fd is unknown
+     * Find a RuntimeIO handle by its file descriptor number.
+     * This is a simplified implementation that maps standard file descriptors.
      */
     private static RuntimeIO findFileHandleByDescriptor(int fd) {
-        // 1. Check IOOperator's own explicit registration map
+        // Check if we have it in our mapping
         RuntimeIO handle = fileDescriptorMap.get(fd);
         if (handle != null) {
             return handle;
         }
 
-        // 2. Standard descriptors: use static fields which always represent fds 0/1/2.
-        //    We do NOT use the glob table here because after STDOUT redirection
-        //    (e.g., open(STDOUT, ">file")), the glob's IO has a different fd number,
-        //    but the user is asking for the handle at fd 1 specifically.
+        // Handle standard file descriptors
         switch (fd) {
-            case 0: return RuntimeIO.stdin;
-            case 1: return RuntimeIO.stdout;
-            case 2: return RuntimeIO.stderr;
+            case 0: // STDIN
+                return RuntimeIO.stdin;
+            case 1: // STDOUT
+                return RuntimeIO.stdout;
+            case 2: // STDERR
+                return RuntimeIO.stderr;
+            default:
+                return null; // Unknown file descriptor
         }
-
-        // 3. Check RuntimeIO's fileno→IO registry (populated by registerExternalFd
-        //    for dup'd handles, pipes, sockets, etc.)
-        handle = RuntimeIO.getByFileno(fd);
-        if (handle != null) {
-            return handle;
-        }
-
-        return null;
     }
 
     /**
-     * Opens a filehandle by duplicating an existing one — implements Perl's dup modes
-     * in two-argument and three-argument {@code open()}.
+     * Create a duplicate of a RuntimeIO handle.
+     * This creates a new RuntimeIO that shares the same underlying IOHandle.
+     */
+    /**
+     * Opens a filehandle by duplicating an existing one (for 2-argument open with dup mode).
+     * This handles cases like: open(my $fh, ">&1")
      *
-     * <h3>Perl forms handled:</h3>
-     * <pre>
-     *   open(my $fh, ">&STDOUT")    # dup STDOUT for writing  → mode=">&"  fileName="STDOUT"
-     *   open(my $fh, "<&STDIN")     # dup STDIN for reading   → mode="<&"  fileName="STDIN"
-     *   open(my $fh, ">&1")         # dup fd 1 (STDOUT)       → mode=">&"  fileName="1"
-     *   open(my $fh, ">&=STDOUT")   # parsimonious dup        → mode=">&=" fileName="STDOUT"
-     *   open(my $fh, ">&=1")        # parsimonious dup by fd  → mode=">&=" fileName="1"
-     * </pre>
-     *
-     * <h3>Parsimonious vs. full dup:</h3>
-     * <ul>
-     *   <li><b>Full dup</b> ({@code >&} / {@code <&}): creates a new DupIOHandle wrapper
-     *       with its own fd number. The original and duplicate share the same underlying
-     *       IOHandle via reference counting (see {@link DupIOHandle}). Closing one does
-     *       not close the other; the underlying resource is freed only when the last
-     *       duplicate is closed.</li>
-     *   <li><b>Parsimonious dup</b> ({@code >&=} / {@code <&=}): returns the <em>same</em>
-     *       RuntimeIO object without creating a DupIOHandle wrapper. This means both Perl
-     *       filehandles share the exact same RuntimeIO. Perl uses this when it wants a
-     *       lightweight alias (e.g., fdopen semantics).</li>
-     * </ul>
-     *
-     * <h3>Source handle resolution:</h3>
-     * <ol>
-     *   <li><b>Numeric fileName</b> (e.g. "1", "2"): delegates to
-     *       {@link #findFileHandleByDescriptor(int)} which looks up the fd via the
-     *       fileDescriptorMap, glob table, and RuntimeIO fileno registry.</li>
-     *   <li><b>Named fileName</b> (e.g. "STDOUT", "MyPkg::LOG"): looks up the handle
-     *       via the glob table ({@code GlobalVariable.getGlobalIO()}). This is essential
-     *       because standard handles can be redirected at runtime, so we must use the
-     *       <em>current</em> glob IO slot, not cached static references.</li>
-     * </ol>
-     *
-     * @param fileName the file descriptor number (as a string) or bare filehandle name
-     * @param mode     the duplication mode string: {@code ">&"}, {@code "<&"},
-     *                 {@code ">&="}, or {@code "<&="}
-     * @return a RuntimeIO handle — either a new DupIOHandle-wrapped duplicate (full dup)
-     *         or the same RuntimeIO (parsimonious dup)
-     * @throws PerlCompilerException if the source fd/handle cannot be found
+     * @param fileName The file descriptor number or handle name
+     * @param mode     The duplication mode (>&, <&, etc.)
+     * @return RuntimeIO handle that duplicates the original, or null on error
      */
     public static RuntimeIO openFileHandleDup(String fileName, String mode) {
-        // Parsimonious dup (>&= or <&=) returns the same handle without wrapping.
-        // Full dup (>& or <&) creates a reference-counted DupIOHandle wrapper.
-        boolean isParsimonious = mode.endsWith("=");
+        boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
 
         RuntimeIO sourceHandle = null;
 
-        // --- Branch 1: Numeric file descriptor (e.g. "1" for STDOUT) ---
+        // Check if it's a numeric file descriptor
         if (fileName.matches("^\\d+$")) {
             int fd = Integer.parseInt(fileName);
             sourceHandle = findFileHandleByDescriptor(fd);
@@ -2641,172 +2515,79 @@ public class IOOperator {
                 throw new PerlCompilerException("Bad file descriptor: " + fd);
             }
         } else {
-            // --- Branch 2: Named filehandle (e.g. "STDOUT", "MyPkg::LOG") ---
-            // We resolve named handles via the glob table rather than a switch on
-            // well-known names. This is important because:
-            //   1. Standard handles (STDIN/STDOUT/STDERR) can be redirected at runtime.
-            //      The glob *main::STDOUT{IO} is updated by open(STDOUT, ">file"),
-            //      while RuntimeIO.stdout (static field) still points to System.out.
-            //   2. User-defined filehandles in any package are naturally supported.
-            //
-            // Resolution order for unqualified names:
-            //   a) Try current package first (e.g. MyPkg::LOGFILE)
-            //   b) Fall back to main:: (e.g. main::STDOUT)
-
-            if (!fileName.contains("::")) {
-                // (a) Try current package (determined via caller stack)
-                String currentPkg = RuntimeCode.getCurrentPackage();
-                if (currentPkg.endsWith("::")) {
-                    currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
-                }
-                if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
-                    String currentPkgName = currentPkg + "::" + fileName;
-                    RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
-                    if (currentGlob != null) {
-                        sourceHandle = currentGlob.getRuntimeIO();
-                        if (sourceHandle == null || sourceHandle.ioHandle == null) {
-                            sourceHandle = null; // Not found here — fall through to main::
+            // Handle named filehandles like STDERR, STDOUT, STDIN
+            switch (fileName.toUpperCase()) {
+                case "STDIN":
+                    sourceHandle = RuntimeIO.stdin;
+                    break;
+                case "STDOUT":
+                    sourceHandle = RuntimeIO.stdout;
+                    break;
+                case "STDERR":
+                    sourceHandle = RuntimeIO.stderr;
+                    break;
+                default:
+                    // Try to look up as a global filehandle
+                    // First, try the current package if no :: qualifier is present
+                    if (!fileName.contains("::")) {
+                        // Use RuntimeCode.getCurrentPackage() which uses caller() to determine
+                        // the current package - this works for both JVM-compiled and interpreter code
+                        String currentPkg = RuntimeCode.getCurrentPackage();
+                        // Remove trailing "::" for consistent naming
+                        if (currentPkg.endsWith("::")) {
+                            currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
+                        }
+                        if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
+                            String currentPkgName = currentPkg + "::" + fileName;
+                            RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
+                            if (currentGlob != null) {
+                                sourceHandle = currentGlob.getRuntimeIO();
+                                if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                                    break;  // Found it in current package
+                                }
+                            }
                         }
                     }
-                }
-            }
-            if (sourceHandle == null) {
-                // (b) Fall back to main:: or use fully-qualified name as-is
-                String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
-                RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
-                if (glob != null) {
-                    sourceHandle = glob.getRuntimeIO();
-                }
-            }
-            if (sourceHandle == null || sourceHandle.ioHandle == null) {
-                throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+                    // Fall back to main:: or fully qualified name
+                    String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
+                    RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
+                    if (glob != null) {
+                        sourceHandle = glob.getRuntimeIO();
+                    }
+                    if (sourceHandle == null || sourceHandle.ioHandle == null) {
+                        throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+                    }
             }
         }
 
         if (isParsimonious) {
-            // Parsimonious dup (>&= / <&=): create a BorrowedIOHandle that shares
-            // the same fd and delegates all I/O, but does NOT close the underlying
-            // handle when closed. This matches Perl's fdopen() semantics where
-            // closing the fdopen'd handle leaves the original handle operational.
-            //
-            // Example:  open(F, ">&=STDOUT")  → F shares STDOUT's fd
-            //           close(F)               → only flushes; STDOUT keeps working
-            RuntimeIO borrowed = new RuntimeIO();
-            borrowed.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
-            borrowed.currentLineNumber = sourceHandle.currentLineNumber;
-            return borrowed;
+            return sourceHandle;
         } else {
-            // Full dup: wrap in DupIOHandle with reference counting
             return duplicateFileHandle(sourceHandle);
         }
     }
 
-    /**
-     * Creates a full duplicate of a RuntimeIO handle, wrapping both the original and
-     * the new copy in {@link DupIOHandle} reference-counted wrappers.
-     *
-     * <h3>How it works — first dup vs. subsequent dup:</h3>
-     *
-     * <p><b>Case 1: First dup of a "raw" handle</b> (original.ioHandle is NOT a DupIOHandle):
-     * <pre>
-     *   Before:  original.ioHandle → StandardIO (fd=1)
-     *
-     *   After:   original.ioHandle → DupIOHandle[A] (fd=1, refCount=2) → StandardIO
-     *            duplicate.ioHandle → DupIOHandle[B] (fd=N, refCount=2) → StandardIO
-     *                                  (same refCount, same delegate)
-     * </pre>
-     * The original's fd is preserved (DupIOHandle[A] is registered at the original fd
-     * via {@link FileDescriptorTable#registerAt(int, IOHandle)}). The duplicate gets a
-     * newly allocated fd. Both wrappers share the same {@code AtomicInteger} refCount
-     * and the same underlying delegate IOHandle.
-     *
-     * <p><b>Case 2: Subsequent dup of an already-wrapped handle</b> (original.ioHandle
-     * IS a DupIOHandle):
-     * <pre>
-     *   Before:  original.ioHandle → DupIOHandle[A] (fd=1, refCount=2) → StandardIO
-     *            earlier_dup       → DupIOHandle[B] (fd=5, refCount=2) → StandardIO
-     *
-     *   After:   original.ioHandle → DupIOHandle[A] (fd=1, refCount=3) → StandardIO
-     *            earlier_dup       → DupIOHandle[B] (fd=5, refCount=3) → StandardIO
-     *            new_dup           → DupIOHandle[C] (fd=N, refCount=3) → StandardIO
-     * </pre>
-     * The new DupIOHandle shares the existing refCount (which is incremented) and the
-     * same delegate. The original's wrapper is untouched.
-     *
-     * <h3>Why we wrap the original too (Case 1):</h3>
-     * <p>Without wrapping the original, closing the original would close the underlying
-     * resource, breaking the duplicate. By wrapping both with a shared refCount, the
-     * underlying resource is only closed when the <em>last</em> wrapper is closed.</p>
-     *
-     * <h3>fd registration:</h3>
-     * <p>Each DupIOHandle is registered in two places:
-     * <ul>
-     *   <li>{@link FileDescriptorTable} — for fd→IOHandle lookup (used by select())</li>
-     *   <li>{@link RuntimeIO#registerExternalFd(int)} — for fd→RuntimeIO lookup (used by
-     *       {@link #findFileHandleByDescriptor(int)} fallback)</li>
-     * </ul>
-     *
-     * @param original the source RuntimeIO to duplicate (will be modified if not already
-     *                 wrapped in DupIOHandle)
-     * @return a new RuntimeIO whose ioHandle is a DupIOHandle sharing the same delegate
-     */
     private static RuntimeIO duplicateFileHandle(RuntimeIO original) {
         if (original == null || original.ioHandle == null) {
             return null;
         }
 
-        // Unwrap: if the original is already a DupIOHandle, extract the real delegate
-        // so we always wrap the actual I/O implementation (StandardIO, FileIOHandle, etc.)
-        IOHandle realHandle = original.ioHandle;
-        DupIOHandle existingDup = null;
-        if (realHandle instanceof DupIOHandle dup) {
-            existingDup = dup;
-            realHandle = dup.getDelegate();
-        }
-
-        // Capture the original's current fd BEFORE wrapping, so we can preserve it.
-        // After wrapping, the original's ioHandle will be replaced with a DupIOHandle
-        // that reports this same fd via fileno().
-        int originalFd;
-        try {
-            RuntimeScalar fileno = original.ioHandle.fileno();
-            originalFd = fileno.getDefinedBoolean() ? fileno.getInt() : -1;
-        } catch (Exception e) {
-            originalFd = -1;
-        }
-
+        // Create a new RuntimeIO that shares the same IOHandle
         RuntimeIO duplicate = new RuntimeIO();
+        duplicate.ioHandle = original.ioHandle;
         duplicate.currentLineNumber = original.currentLineNumber;
 
-        if (existingDup != null) {
-            // --- Case 2: Original already wrapped → just add another dup ---
-            // Increments the shared refCount and creates a new DupIOHandle with a new fd.
-            DupIOHandle newDup = DupIOHandle.addDup(existingDup);
-            duplicate.ioHandle = newDup;
-            duplicate.registerExternalFd(newDup.getFd());
-        } else {
-            // --- Case 1: First dup → wrap BOTH original and duplicate ---
-            // createPair() creates two DupIOHandles with refCount=2 sharing the same delegate.
-            // pair[0] is registered at originalFd to preserve the original's fileno.
-            // pair[1] gets a newly allocated fd.
-            DupIOHandle[] pair = DupIOHandle.createPair(realHandle,
-                    originalFd >= 0 ? originalFd : FileDescriptorTable.nextFdValue());
-
-            // Replace original's ioHandle with the refcounted wrapper.
-            // This is a MUTATION of the original — necessary so that closing the original
-            // decrements the refCount instead of closing the underlying resource directly.
-            original.ioHandle = pair[0];
-            original.registerExternalFd(pair[0].getFd());
-
-            // Set up the duplicate with the second wrapper
-            duplicate.ioHandle = pair[1];
-            duplicate.registerExternalFd(pair[1].getFd());
-        }
-
         if (System.getenv("JPERL_IO_DEBUG") != null) {
-            System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: delegate=" + realHandle.getClass().getName() +
-                    " origFd=" + original.ioHandle.fileno() +
-                    " dupFd=" + duplicate.ioHandle.fileno());
+            String origFileno;
+            try {
+                origFileno = original.ioHandle.fileno().toString();
+            } catch (Throwable t) {
+                origFileno = "<err>";
+            }
+            System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: origIoHandle=" + original.ioHandle.getClass().getName() +
+                    " origFileno=" + origFileno +
+                    " origIoHandleId=" + System.identityHashCode(original.ioHandle) +
+                    " dupIoHandleId=" + System.identityHashCode(duplicate.ioHandle));
             System.err.flush();
         }
 
@@ -2814,15 +2595,7 @@ public class IOOperator {
     }
 
     /**
-     * Registers a RuntimeIO handle at a specific file descriptor number in
-     * IOOperator's {@code fileDescriptorMap}.
-     *
-     * <p>This is separate from {@link FileDescriptorTable} (which maps fd→IOHandle)
-     * and {@link RuntimeIO#registerExternalFd(int)} (which maps fd→RuntimeIO).
-     * Handles registered here are checked first by {@link #findFileHandleByDescriptor(int)}.
-     *
-     * @param fd     the file descriptor number
-     * @param handle the RuntimeIO handle to register
+     * Register a RuntimeIO handle with a file descriptor number for duplication support.
      */
     public static void registerFileDescriptor(int fd, RuntimeIO handle) {
         if (handle != null) {
@@ -2831,10 +2604,7 @@ public class IOOperator {
     }
 
     /**
-     * Removes a file descriptor from IOOperator's {@code fileDescriptorMap}.
-     * Called when a handle is closed to prevent stale lookups.
-     *
-     * @param fd the file descriptor number to unregister
+     * Unregister a file descriptor when the handle is closed.
      */
     public static void unregisterFileDescriptor(int fd) {
         fileDescriptorMap.remove(fd);
@@ -2857,63 +2627,37 @@ public class IOOperator {
             RuntimeBase type = args[3];
             RuntimeBase protocol = args[4];
 
-            // Create a local socket pair using ServerSocketChannel + SocketChannel
-            // so that select() works via NIO (plain Socket has no channel)
-            ServerSocketChannel serverChannel = ServerSocketChannel.open();
-            serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
-            int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
+            // Get the actual RuntimeGlob objects from the references
+            RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
+            RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
 
-            // Create the first socket channel and connect it
-            SocketChannel channel1 = SocketChannel.open();
-            channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+            // For simplicity, we'll create a local socket pair using ServerSocket and Socket
+            // This is similar to how socketpair works on Unix systems
 
-            // Accept the connection to get the second socket channel
-            SocketChannel channel2 = serverChannel.accept();
+            // Create a server socket on localhost with a random port
+            ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+            int port = serverSocket.getLocalPort();
 
-            // Close the server channel as we no longer need it
-            serverChannel.close();
+            // Create the first socket and connect it to the server
+            Socket socket1 = new Socket();
+            socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
 
-            // Create RuntimeIO objects for both sockets.
-            // Use the Socket constructor which initializes inputStream, outputStream,
-            // and preserves the socketChannel reference (via socket.getChannel()).
+            // Accept the connection on the server side to get the second socket
+            Socket socket2 = serverSocket.accept();
+
+            // Close the server socket as we no longer need it
+            serverSocket.close();
+
+            // Create RuntimeIO objects for both sockets
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(channel1.socket());
+            io1.ioHandle = new SocketIO(socket1);
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(channel2.socket());
+            io2.ioHandle = new SocketIO(socket2);
 
-            // Assign small sequential filenos for select() support
-            io1.assignFileno();
-            io2.assignFileno();
-
-            // Handle autovivification for both socket handles (like open() does)
-            RuntimeGlob glob1 = null;
-            if ((sock1Ref.type == RuntimeScalarType.GLOB || sock1Ref.type == RuntimeScalarType.GLOBREFERENCE)
-                    && sock1Ref.value instanceof RuntimeGlob g) {
-                glob1 = g;
-            }
-            if (glob1 != null) {
-                glob1.setIO(io1);
-            } else {
-                RuntimeScalar newGlob = new RuntimeScalar();
-                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(io1);
-                sock1Ref.set(newGlob);
-            }
-
-            RuntimeGlob glob2 = null;
-            if ((sock2Ref.type == RuntimeScalarType.GLOB || sock2Ref.type == RuntimeScalarType.GLOBREFERENCE)
-                    && sock2Ref.value instanceof RuntimeGlob g) {
-                glob2 = g;
-            }
-            if (glob2 != null) {
-                glob2.setIO(io2);
-            } else {
-                RuntimeScalar newGlob = new RuntimeScalar();
-                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(io2);
-                sock2Ref.set(newGlob);
-            }
+            // Set the IO handles directly on the existing globs
+            glob1.setIO(io1);
+            glob2.setIO(io2);
 
             return scalarTrue;
 
@@ -2974,50 +2718,7 @@ public class IOOperator {
     }
 
     public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {
-        return sysseekImpl(args[0].scalar(), args[1].scalar().getLong(),
-                args.length > 2 ? args[2].scalar().getInt() : IOHandle.SEEK_SET);
-    }
-
-    /**
-     * sysseek for JVM backend (RuntimeScalar, RuntimeList) signature.
-     */
-    public static RuntimeScalar sysseek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        long position = runtimeList.getFirst().getLong();
-        int whence = IOHandle.SEEK_SET;
-        if (runtimeList.size() > 1) {
-            whence = runtimeList.elements.get(1).scalar().getInt();
-        }
-        return sysseekImpl(fileHandle, position, whence);
-    }
-
-    /**
-     * sysseek implementation: like seek but returns the new position
-     * (or "0 but true" if position is 0), or undef on failure.
-     */
-    private static RuntimeScalar sysseekImpl(RuntimeScalar fileHandle, long position, int whence) {
-        RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
-        if (runtimeIO != null && runtimeIO.ioHandle != null) {
-            if (runtimeIO instanceof TieHandle tieHandle) {
-                RuntimeList args = new RuntimeList();
-                args.add(new RuntimeScalar(position));
-                args.add(new RuntimeScalar(whence));
-                return TieHandle.tiedSeek(tieHandle, args);
-            }
-            RuntimeIO.lastAccesseddHandle = runtimeIO;
-            RuntimeScalar result = runtimeIO.ioHandle.seek(position, whence);
-            if (result.getBoolean()) {
-                // seek succeeded — return the new position
-                RuntimeScalar tellResult = runtimeIO.ioHandle.tell();
-                long newPos = tellResult.getLong();
-                if (newPos == 0) {
-                    return new RuntimeScalar("0 but true");
-                }
-                return new RuntimeScalar(newPos);
-            }
-            // seek failed
-            return new RuntimeScalar();
-        }
-        return new RuntimeScalar();
+        return seek(ctx, args);
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {

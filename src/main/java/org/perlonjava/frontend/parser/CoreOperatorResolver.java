@@ -92,7 +92,7 @@ public class CoreOperatorResolver {
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
             case "readline", "eof", "tell" -> OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
-            case "seek", "sysseek" -> OperatorParser.parseSeek(parser, token, currentIndex);
+            case "seek" -> OperatorParser.parseSeek(parser, token, currentIndex);
             case "printf", "print", "say" -> OperatorParser.parsePrint(parser, token, currentIndex);
             case "delete", "exists" -> OperatorParser.parseDelete(parser, token, currentIndex);
             case "defined" -> OperatorParser.parseDefined(parser, token, currentIndex);

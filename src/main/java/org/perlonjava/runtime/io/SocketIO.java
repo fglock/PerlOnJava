@@ -192,7 +192,7 @@ public class SocketIO implements IOHandle {
      *
      * @param newBlocking true for blocking, false for non-blocking
      */
-    public boolean setBlocking(boolean newBlocking) {
+    public void setBlocking(boolean newBlocking) {
         this.blocking = newBlocking;
         try {
             if (socketChannel != null) {
@@ -216,7 +216,6 @@ public class SocketIO implements IOHandle {
         } catch (IOException e) {
             // Silently ignore — the blocking field still tracks the desired state
         }
-        return true;
     }
 
     /**
@@ -502,9 +501,9 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar sysread(int length) {
         try {
-            // Use channel-based I/O when streams aren't available or for
-            // non-blocking sockets (to avoid IllegalBlockingModeException)
-            if (socketChannel != null && (inputStream == null || !blocking)) {
+            // Use channel-based I/O for non-blocking sockets to avoid
+            // IllegalBlockingModeException from stream-based I/O
+            if (!blocking && socketChannel != null) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
                 int bytesRead = socketChannel.read(buf);
                 if (bytesRead == -1) {

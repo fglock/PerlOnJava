@@ -23,6 +23,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
@@ -142,17 +143,26 @@ public class RuntimeIO extends RuntimeScalar {
     private static final AtomicInteger nextFileno = new AtomicInteger(3);
     private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<RuntimeIO, Integer> ioToFileno = new ConcurrentHashMap<>();
+    /** Pool of released fd numbers available for reuse. Perl reuses fds (lowest available),
+     *  so we must do the same to pass tests like io/perlio_leaks.t that verify fd recycling. */
+    private static final ConcurrentLinkedQueue<Integer> recycledFds = new ConcurrentLinkedQueue<>();
 
     /**
-     * Assigns a small sequential fileno to this RuntimeIO and registers it.
-     * Returns the assigned fileno.
+     * Assigns a fileno to this RuntimeIO and registers it in the fd→IO maps.
+     * Reuses released fd numbers when available (lowest first via the recycle pool),
+     * otherwise allocates the next sequential fd. This matches POSIX semantics where
+     * close() releases an fd and the next open() reuses the lowest available fd.
+     *
+     * @return the assigned fileno
      */
     public int assignFileno() {
         Integer existing = ioToFileno.get(this);
         if (existing != null) {
             return existing;
         }
-        int fd = nextFileno.getAndIncrement();
+        // Try to reuse a recycled fd first (POSIX: lowest available)
+        Integer recycled = recycledFds.poll();
+        int fd = (recycled != null) ? recycled : nextFileno.getAndIncrement();
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
         // Keep FileDescriptorTable in sync to prevent fd collisions with pipe()
@@ -173,6 +183,19 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static RuntimeIO getByFileno(int fd) {
         return filenoToIO.get(fd);
+    }
+
+    /**
+     * Unregisters this RuntimeIO from the fileno registry and returns
+     * the fd to the recycle pool for reuse by future {@link #assignFileno()} calls.
+     */
+    public void unregisterFileno() {
+        Integer fd = ioToFileno.remove(this);
+        if (fd != null) {
+            filenoToIO.remove(fd);
+            // Return fd to the recycle pool so it can be reused (POSIX: lowest available)
+            recycledFds.add(fd);
+        }
     }
 
     /**
@@ -198,16 +221,6 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static void advanceFilenoCounterPast(int fd) {
         nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
-    }
-
-    /**
-     * Unregisters this RuntimeIO from the fileno registry.
-     */
-    public void unregisterFileno() {
-        Integer fd = ioToFileno.remove(this);
-        if (fd != null) {
-            filenoToIO.remove(fd);
-        }
     }
 
     static {
@@ -543,7 +556,6 @@ public class RuntimeIO extends RuntimeScalar {
                     }
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
                     fh.ioHandle = new SeekableJarHandle(is);
-                    fh.assignFileno();
                     addHandle(fh.ioHandle);
                     fh.binmode(ioLayers);
                     return fh;
@@ -562,9 +574,6 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
-
-            // Assign a sequential fileno for Perl's fileno() and select() support
-            fh.assignFileno();
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -678,7 +687,6 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         fh.ioHandle = scalarIO;
-        fh.assignFileno();
         addHandle(fh.ioHandle);
 
         // Apply any I/O layers
@@ -767,7 +775,6 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
-            fh.assignFileno();
 
             // Apply any I/O layers (excluding the already-processed :noshell)
             if (!ioLayers.isEmpty()) {
@@ -1229,6 +1236,9 @@ public class RuntimeIO extends RuntimeScalar {
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
         ioHandle = new ClosedIOHandle();
+        // Release our fd back to the recycle pool so it can be reused by future opens.
+        // This must happen AFTER close so that the fd is still valid during the close.
+        unregisterFileno();
         return ret;
     }
 

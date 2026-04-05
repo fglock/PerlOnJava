@@ -147,18 +147,6 @@ public class BorrowedIOHandle implements IOHandle {
     }
 
     @Override
-    public boolean isBlocking() {
-        if (closed) return true;
-        return delegate.isBlocking();
-    }
-
-    @Override
-    public boolean setBlocking(boolean blocking) {
-        if (closed) return blocking;
-        return delegate.setBlocking(blocking);
-    }
-
-    @Override
     public RuntimeScalar sysread(int length) {
         if (closed) return handleClosed("sysread");
         return delegate.sysread(length);

@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -10,9 +9,6 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * In Perl, assigning a string handler to a known signal entry (like $SIG{INT} = "handler")
  * automatically qualifies it to "main::handler". This only applies to known signal names
  * (__WARN__, __DIE__, and OS signals), not to unknown names.
- *
- * <p>Like Perl, %SIG is pre-populated with OS signal names as keys (with undef values).
- * This allows modules like POE to discover available signals via {@code keys %SIG}.
  */
 public class RuntimeSigHash extends RuntimeHash {
 
@@ -24,56 +20,6 @@ public class RuntimeSigHash extends RuntimeHash {
             "TTOU", "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH",
             "IO", "PWR", "SYS", "EMT", "INFO", "ZERO", "NUM32", "NUM33"
     );
-
-    // Standard POSIX signals present on most Unix systems
-    private static final List<String> POSIX_SIGNALS = List.of(
-            "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE",
-            "KILL", "USR1", "SEGV", "USR2", "PIPE", "ALRM", "TERM",
-            "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU", "URG",
-            "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "IO", "SYS"
-    );
-
-    // macOS-specific signals
-    private static final List<String> MACOS_SIGNALS = List.of("EMT", "INFO", "IOT");
-
-    // Linux-specific signals
-    private static final List<String> LINUX_SIGNALS = List.of("CLD", "STKFLT", "PWR", "IOT");
-
-    // Windows supports only a small subset of signals
-    private static final List<String> WINDOWS_SIGNALS = List.of(
-            "INT", "TERM", "ABRT", "FPE", "ILL", "SEGV", "BREAK"
-    );
-
-    /**
-     * Construct a pre-populated %SIG hash. Like Perl, all available OS signal
-     * names appear as keys with undef values. __WARN__ and __DIE__ are Perl
-     * hooks and are NOT pre-populated (they only appear after being set).
-     */
-    public RuntimeSigHash() {
-        super();
-        String os = System.getProperty("os.name", "").toLowerCase();
-        if (os.contains("win")) {
-            // Windows: only a small subset of signals are available
-            for (String sig : WINDOWS_SIGNALS) {
-                elements.put(sig, new RuntimeScalar());
-            }
-        } else {
-            // Pre-populate with POSIX signals
-            for (String sig : POSIX_SIGNALS) {
-                elements.put(sig, new RuntimeScalar());
-            }
-            // Add platform-specific signals
-            if (os.contains("mac") || os.contains("darwin")) {
-                for (String sig : MACOS_SIGNALS) {
-                    elements.put(sig, new RuntimeScalar());
-                }
-            } else if (os.contains("linux")) {
-                for (String sig : LINUX_SIGNALS) {
-                    elements.put(sig, new RuntimeScalar());
-                }
-            }
-        }
-    }
 
     /**
      * Get an element by key, auto-qualifying string handler values for known signals.

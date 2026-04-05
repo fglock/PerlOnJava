@@ -41,9 +41,6 @@ public class Parser {
     // Are we currently parsing a my/our/state declaration's variable list?
     // Used to suppress strict vars checking for the variable being declared.
     public boolean parsingDeclaration = false;
-    // Are we parsing a variable used as the class in indirect object syntax?
-    // Suppresses the "syntax error" check for $var( in Variable.java
-    public boolean parsingIndirectObject = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?

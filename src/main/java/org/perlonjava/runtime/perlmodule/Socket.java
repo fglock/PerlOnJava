@@ -17,35 +17,30 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class Socket extends PerlModuleBase {
 
-    // Platform detection
-    private static final boolean IS_WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
-
-    // Socket constants - platform dependent where noted
+    // Socket constants
     public static final int AF_INET = 2;
-    public static final int AF_INET6 = IS_WINDOWS ? 23 : 10;
+    public static final int AF_INET6 = 10;
     public static final int AF_UNIX = 1;
     public static final int PF_INET = 2;  // Protocol family same as address family
-    public static final int PF_INET6 = IS_WINDOWS ? 23 : 10;
+    public static final int PF_INET6 = 10;
     public static final int PF_UNIX = 1;
-    public static final int PF_UNSPEC = 0;
-    public static final int SOMAXCONN = 128;
     public static final int SOCK_STREAM = 1;
     public static final int SOCK_DGRAM = 2;
     public static final int SOCK_RAW = 3;
-    public static final int SOL_SOCKET = IS_WINDOWS ? 0xFFFF : 1;
-    public static final int SO_REUSEADDR = IS_WINDOWS ? 4 : 2;
-    public static final int SO_KEEPALIVE = IS_WINDOWS ? 8 : 9;
-    public static final int SO_BROADCAST = IS_WINDOWS ? 32 : 6;
-    public static final int SO_LINGER = IS_WINDOWS ? 128 : 13;
-    public static final int SO_ERROR = IS_WINDOWS ? 0x1007 : 4;
-    public static final int SO_TYPE = IS_WINDOWS ? 0x1008 : 4104;
+    public static final int SOL_SOCKET = 1;
+    public static final int SO_REUSEADDR = 2;
+    public static final int SO_KEEPALIVE = 9;
+    public static final int SO_BROADCAST = 6;
+    public static final int SO_LINGER = 13;
+    public static final int SO_ERROR = 4;
+    public static final int SO_TYPE = 4104;
     public static final int TCP_NODELAY = 1;
     public static final int IPPROTO_TCP = 6;
     public static final int IPPROTO_UDP = 17;
     public static final int IPPROTO_ICMP = 1;
     public static final int IPPROTO_IP = 0;
     public static final int IPPROTO_IPV6 = 41;
-    public static final int IP_TOS = IS_WINDOWS ? 3 : 1;
+    public static final int IP_TOS = 1;
     public static final int IP_TTL = 2;
     public static final int SHUT_RD = 0;
     public static final int SHUT_WR = 1;
@@ -62,8 +57,8 @@ public class Socket extends PerlModuleBase {
     public static final int NIx_NOSERV = 2;
     public static final int EAI_NONAME = 8;
     // IPV6 constants
-    public static final int IPV6_V6ONLY = IS_WINDOWS ? 27 : 26;
-    public static final int SO_REUSEPORT = IS_WINDOWS ? -1 : 15;  // Not available on Windows
+    public static final int IPV6_V6ONLY = 26;
+    public static final int SO_REUSEPORT = 15;
     // INADDR constants as 4-byte packed binary strings
     public static final String INADDR_ANY = "\0\0\0\0";           // 0.0.0.0
     public static final String INADDR_LOOPBACK = "\177\0\0\1";    // 127.0.0.1
@@ -80,8 +75,6 @@ public class Socket extends PerlModuleBase {
             // Register socket functions
             socket.registerMethod("pack_sockaddr_in", null);
             socket.registerMethod("unpack_sockaddr_in", null);
-            socket.registerMethod("pack_sockaddr_un", null);
-            socket.registerMethod("unpack_sockaddr_un", null);
             socket.registerMethod("inet_aton", null);
             socket.registerMethod("inet_ntoa", null);
             socket.registerMethod("sockaddr_in", null);
@@ -96,8 +89,6 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("PF_INET", "");
             socket.registerMethod("PF_INET6", "");
             socket.registerMethod("PF_UNIX", "");
-            socket.registerMethod("PF_UNSPEC", "");
-            socket.registerMethod("SOMAXCONN", "");
             socket.registerMethod("SOCK_STREAM", "");
             socket.registerMethod("SOCK_DGRAM", "");
             socket.registerMethod("SOCK_RAW", "");
@@ -239,50 +230,6 @@ public class Socket extends PerlModuleBase {
         } catch (Exception e) {
             throw new RuntimeException("unpack_sockaddr_in failed: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * pack_sockaddr_un(PATH)
-     * Packs a UNIX domain socket path into a sockaddr_un structure.
-     * Stub: UNIX domain sockets are not supported on JVM.
-     */
-    public static RuntimeList pack_sockaddr_un(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
-            throw new IllegalArgumentException("Not enough arguments for pack_sockaddr_un");
-        }
-        String path = args.get(0).toString();
-        // Build a minimal sockaddr_un: AF_UNIX (1) in first 2 bytes, then the path
-        byte[] pathBytes = path.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        byte[] result = new byte[2 + pathBytes.length + 1]; // family + path + null
-        // AF_UNIX = 1 on most platforms
-        result[0] = 0;
-        result[1] = 1;
-        System.arraycopy(pathBytes, 0, result, 2, pathBytes.length);
-        return new RuntimeScalar(new String(result, java.nio.charset.StandardCharsets.ISO_8859_1)).getList();
-    }
-
-    /**
-     * unpack_sockaddr_un(SOCKADDR)
-     * Unpacks a sockaddr_un structure into a UNIX domain socket path.
-     * Stub: UNIX domain sockets are not supported on JVM.
-     */
-    public static RuntimeList unpack_sockaddr_un(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
-            throw new IllegalArgumentException("Not enough arguments for unpack_sockaddr_un");
-        }
-        String sockaddr = args.get(0).toString();
-        byte[] bytes = new byte[sockaddr.length()];
-        for (int i = 0; i < sockaddr.length(); i++) {
-            bytes[i] = (byte) sockaddr.charAt(i);
-        }
-        if (bytes.length < 3) {
-            throw new RuntimeException("Bad arg length for Socket::unpack_sockaddr_un, length is " + bytes.length + ", should be at least 3");
-        }
-        // Path starts at offset 2, null-terminated
-        int end = 2;
-        while (end < bytes.length && bytes[end] != 0) end++;
-        String path = new String(bytes, 2, end - 2, java.nio.charset.StandardCharsets.UTF_8);
-        return new RuntimeScalar(path).getList();
     }
 
     /**
@@ -454,14 +401,6 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList PF_UNIX(RuntimeArray args, int ctx) {
         return new RuntimeScalar(PF_UNIX).getList();
-    }
-
-    public static RuntimeList PF_UNSPEC(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(PF_UNSPEC).getList();
-    }
-
-    public static RuntimeList SOMAXCONN(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(SOMAXCONN).getList();
     }
 
     public static RuntimeList SOCK_RAW(RuntimeArray args, int ctx) {
