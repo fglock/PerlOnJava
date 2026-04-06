@@ -4,7 +4,7 @@
 
 **Module**: POE 1.370 (Perl Object Environment - event-driven multitasking framework)
 **Test command**: `./jcpan -t POE`
-**Status**: 38/53 unit+resource tests pass, ses_session.t 37/41, ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17, filehandles.t 131/132, 01_sysrw.t 17/17, 15_kernel_internal.t 12/12
+**Status**: 38/53 unit+resource tests pass, ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17, filehandles.t 131/132, 01_sysrw.t 17/17, 15_kernel_internal.t 12/12
 
 ## Dependency Tree
 
@@ -152,7 +152,7 @@ foreach my $session (@children) {
 | 04_drivers/01_sysrw.t | **PASS** (17/17) | Fixed by DupIOHandle + non-blocking pipe I/O |
 | 05_filters/01_block.t | **PASS** (42/42) | |
 | 05_filters/02_grep.t | **PASS** (48/48) | |
-| 05_filters/03_http.t | PARTIAL (79/137) | HTTP::Message bytes issue |
+| 05_filters/03_http.t | **PASS** (137/137) | All tests pass now |
 | 05_filters/04_line.t | **PASS** (50/50) | |
 | 05_filters/05_map.t | FAIL | Minor test failure |
 | 05_filters/06_recordblock.t | **PASS** (36/36) | |
@@ -209,7 +209,6 @@ foreach my $session (@children) {
 |-------|--------|------------|
 | DESTROY workaround (Phase 4.5) | 20-30+ tests across 5+ wheel test files | Medium-Hard |
 | Storable not found by POE test runner | 3 filter tests | Low (path issue?) |
-| HTTP::Message bytes handling | 03_http.t (58 tests) | Medium |
 | TIOCSWINSZ stub (Phase 4.6) | wheel_run, k_signals_rerun | Low |
 
 ### Event Loop Tests (t/30_loops/select/)
@@ -228,7 +227,7 @@ foreach my $session (@children) {
 | k_signals_rerun.t | FAIL | |
 | sbk_signal_init.t | **PASS** (1/1) | |
 | ses_nfa.t | **PASS** (39/39) | NFA state machine works |
-| ses_session.t | PARTIAL (37/41) | 4 failures from DESTROY count checks |
+| ses_session.t | HANG | Hangs at POE::Kernel->run() due to DESTROY not implemented (postback refcount never decremented) |
 | comp_tcp.t | FAIL (0/34) | TCP networking |
 | wheel_accept.t | PARTIAL (1/2) | Hangs after test 1 |
 | wheel_readwrite.t | PARTIAL (16/28) | I/O events don't fire, hangs |
@@ -331,14 +330,11 @@ PerlOnJava (XSLoader backend) but the test's @INC doesn't include the right path
 **Implementation plan**: Investigate why `use Storable` fails inside POE's filter tests.
 Likely needs adding the correct lib path or fixing Storable's module resolution.
 
-### Phase 4.10: HTTP::Message bytes handling — MEDIUM EFFORT
+### Phase 4.10: HTTP::Message bytes handling — DONE
 
-**Status**: Not started
-**Difficulty**: Medium
-**Expected impact**: 58 additional tests in 03_http.t (79/137 currently)
-
-**Problem**: HTTP::Message byte-string handling has issues when processing HTTP requests/responses
-through POE::Filter::HTTPD. The exact nature of the bytes vs. characters mismatch needs investigation.
+**Status**: Complete (2026-04-06)
+**Result**: 03_http.t now passes 137/137. The bytes handling issues were resolved by
+earlier fixes to join() BYTE_STRING type preservation and utf8::is_utf8() checks.
 
 ### Phase 4.12: fileno for regular file handles — BLOCKED BY DESTROY
 
@@ -370,7 +366,7 @@ pass in tests that compare fd numbers of handles that were supposed to have been
 
 ## Progress Tracking
 
-### Current Status: Phase 4.7 complete — DESTROY workaround (Phase 4.5) is next highest impact
+### Current Status: Phase 4.10 complete — DESTROY workaround (Phase 4.5) is next highest impact
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -593,11 +589,11 @@ For safety, DESTROY could be made idempotent (track whether it's already been ca
    - Guard against double-DESTROY: track whether DESTROY already called (flag on blessed object)
    - DESTROY should be called in void context, catching any exceptions
    - This also unblocks Phase 4.12 (fileno for regular files + scope-exit cleanup)
+   - **Note**: ses_session.t hangs because POE postbacks use DESTROY-based refcount cleanup.
+     Without DESTROY, sessions using postbacks/callbacks are never garbage collected.
 2. **Phase 4.9: Storable path fix** — low effort, 3 filter tests.
    Investigate why `use Storable` fails inside POE's filter tests (likely @INC path issue).
-3. **Phase 4.10: HTTP::Message bytes** — medium effort, 58 tests in 03_http.t.
-   Investigate bytes vs characters mismatch in HTTP::Message processing.
-4. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
+3. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
    Trivial implementation (add `assignFileno()` in RuntimeIO.open()) but requires DESTROY
    for fd recycling. Will gain +3 tests in require_37033.t and io/dup.t.
 
