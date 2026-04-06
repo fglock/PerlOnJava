@@ -613,6 +613,11 @@ public class IOOperator {
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             // Use set() to modify the lvalue in place
             fileHandle.set(newGlob);
+            // Mark this scalar as the IO owner so scopeExitCleanup will close
+            // the handle when the variable goes out of scope. Copies of this
+            // reference (via set()) won't have ioOwner=true, preventing
+            // premature close of shared handles (e.g., Test2's dup'd STDOUT).
+            fileHandle.ioOwner = true;
         }
         long pid = fh.getPid();
         if (pid > 0) return new RuntimeScalar(pid);

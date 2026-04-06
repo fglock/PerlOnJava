@@ -65,6 +65,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public int type;
     public Object value;
 
+    /**
+     * True if this scalar was the direct target of an {@code open()} call that
+     * created a new anonymous filehandle glob. Used by {@link #scopeExitCleanup}
+     * to distinguish "owned" filehandles (should be closed at scope exit) from
+     * copies/aliases of shared handles (should NOT be closed, as other variables
+     * still reference the same glob).
+     * <p>
+     * Set by {@link org.perlonjava.runtime.operators.IOOperator#open} after creating
+     * a new anonymous glob. NOT copied by {@link #set(RuntimeScalar)}, so copies
+     * like {@code my $io = $handles->[$hid]} remain {@code false}.
+     */
+    public boolean ioOwner;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -1798,7 +1811,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @param scalar the RuntimeScalar being cleaned up (may be null if slot was already nulled)
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
-        if (scalar != null && scalar.type == GLOBREFERENCE
+        if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
             RuntimeScalar ioSlot = glob.getIO();

@@ -8,11 +8,26 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class XSLoader extends PerlModuleBase {
+
+    /**
+     * Non-functional base classes that should be ignored when checking @ISA
+     * for pure-Perl fallback parents. These classes provide infrastructure
+     * (exporting, autoloading) but not the module's actual functionality.
+     * A module with only these in @ISA should NOT get the silent success
+     * treatment — it needs XS or its own pure-Perl fallback code.
+     */
+    private static final Set<String> NON_FUNCTIONAL_ISA = Set.of(
+            "Exporter",
+            "DynaLoader",
+            "AutoLoader",
+            "XSLoader"
+    );
 
     /**
      * Constructor for XSLoader.
@@ -94,13 +109,18 @@ public class XSLoader extends PerlModuleBase {
             
             return scalarTrue.getList();
         } catch (Exception e) {
-            // No Java XS class found. If the module's @ISA already has a pure-Perl
-            // parent (set by the .pm file before calling XSLoader::load), the module
-            // can function through inheritance. Return success so the require doesn't
-            // fail — the pure-Perl methods from the parent will be used.
+            // No Java XS class found. If the module's @ISA already has a
+            // functional pure-Perl parent (set by the .pm file before calling
+            // XSLoader::load), the module can function through inheritance.
+            // Return success so the require doesn't fail.
+            //
+            // We skip non-functional base classes (Exporter, DynaLoader, etc.)
+            // because their presence in @ISA does NOT mean the module can work
+            // without its XS code — e.g. Clone has @ISA=(Exporter) but still
+            // needs its own pure-Perl fallback to define clone().
             String isaKey = moduleName + "::ISA";
             RuntimeArray isa = GlobalVariable.getGlobalArray(isaKey);
-            if (isa != null && !isa.isEmpty()) {
+            if (isa != null && hasFunctionalParent(isa)) {
                 // @ISA fallback succeeded. Also try to load any jar: PERL5LIB shim
                 // for this module, which may provide method overrides (e.g., bug fixes
                 // for the pure-Perl parent that the XS version would normally handle).
@@ -162,6 +182,24 @@ public class XSLoader extends PerlModuleBase {
         
         // Same major version is considered compatible
         return javaMajor.equals(requestedMajor);
+    }
+
+    /**
+     * Checks whether @ISA contains at least one functional parent class.
+     * Non-functional base classes (Exporter, DynaLoader, etc.) are skipped
+     * because they provide infrastructure, not the module's actual methods.
+     *
+     * @param isa The module's @ISA array
+     * @return true if at least one entry is a functional parent
+     */
+    private static boolean hasFunctionalParent(RuntimeArray isa) {
+        for (int i = 0; i < isa.size(); i++) {
+            String parent = isa.get(i).toString();
+            if (!NON_FUNCTIONAL_ISA.contains(parent)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

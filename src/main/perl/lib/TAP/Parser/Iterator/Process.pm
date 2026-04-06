@@ -254,11 +254,12 @@ sub _next {
                 while ( my @ready = $sel->can_read ) {
                     for my $fh (@ready) {
                         my $got = sysread $fh, my ($chunk), $chunk_size;
+                        $got = 0 if !defined $got || $got eq '';
 
                         if ( $got == 0 ) {
                             $sel->remove($fh);
                         }
-                        elsif ( $fh == $err ) {
+                        elsif ( ref $err && $fh == $err ) {
                             print STDERR $chunk;    # echo STDERR
                         }
                         else {
@@ -340,7 +341,9 @@ sub _finish {
 
     # If we have an IO::Select we also have an error handle to close.
     if ( $self->{sel} ) {
-        ( delete $self->{err} )->close;
+        if ( $self->{err} && ref $self->{err} ) {
+            ( delete $self->{err} )->close;
+        }
         delete $self->{sel};
     }
     else {
