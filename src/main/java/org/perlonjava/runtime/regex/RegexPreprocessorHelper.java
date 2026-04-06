@@ -421,17 +421,16 @@ public class RegexPreprocessorHelper {
                     sb.append(String.format("\\x{%X}", octalValue));
                     offset += octalLength - 1; // -1 because caller will increment
                 } else if (octalValue <= 255 && octalLength == 3) {
-                    // Standard 3-digit octal, prepend 0 for Java
-                    sb.append('0');
-                    sb.append(Character.toChars(c2));
+                    // Standard 3-digit octal - convert to hex for Java regex
+                    // Using \x{hex} avoids issues with \0mnn parsing and ensures
+                    // all 3 digits are consumed (e.g., \177 → \x{7F})
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append(String.format("\\x{%X}", octalValue));
+                    offset += octalLength - 1; // -1 because caller will increment
                 } else if (c2 == '0' && octalLength == 1) {
                     // Single \0 becomes \00
                     sb.append('0');
                     sb.append('0');
-                } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
-                    // 3-digit octal starting with 1-3, prepend 0
-                    sb.append('0');
-                    sb.append(Character.toChars(c2));
                 } else {
                     // Short octal or single digit, pass through
                     sb.append(Character.toChars(c2));
@@ -585,6 +584,26 @@ public class RegexPreprocessorHelper {
                                             nextChar = -1;
                                         }
                                     }
+                                } else if (nextChar >= '0' && nextChar <= '7') {
+                                    // Parse bare octal escape (\NNN) as range endpoint
+                                    // e.g., \237 → octal 237 = 159
+                                    int octalVal = nextChar - '0';
+                                    int digits = 1;
+                                    for (int k = 2; k <= 3 && nextPos + k < length; k++) {
+                                        int d = s.codePointAt(nextPos + k);
+                                        if (d >= '0' && d <= '7') {
+                                            octalVal = octalVal * 8 + (d - '0');
+                                            digits++;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    if (digits >= 2) {
+                                        // Multi-digit octal: use computed value
+                                        nextChar = octalVal;
+                                        rangeEndCharCount = 1 + digits; // backslash + digits
+                                    }
+                                    // Single digit \N stays as-is (rangeEndCharCount = 2)
                                 }
                             }
 
@@ -764,20 +783,17 @@ public class RegexPreprocessorHelper {
                                 offset += octalLength - 1; // -1 because outer loop will increment
                                 lastChar = octalValue;
                             } else if (octalValue <= 255 && octalLength == 3) {
-                                // Standard 3-digit octal, prepend 0 for Java
-                                sb.append('0');
-                                sb.append(Character.toChars(c2));
+                                // Standard 3-digit octal - convert to hex for Java regex
+                                // Using \x{hex} avoids issues with \0mnn parsing and ensures
+                                // correct range validation (e.g., [\177-\237])
+                                sb.append(String.format("x{%X}", octalValue));
+                                offset += octalLength - 1; // -1 because outer loop will increment
                                 lastChar = octalValue;
                             } else if (c2 == '0' && octalLength == 1) {
                                 // Single \0 becomes \00
                                 sb.append('0');
                                 sb.append('0');
                                 lastChar = 0;
-                            } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
-                                // 3-digit octal starting with 1-3, prepend 0
-                                sb.append('0');
-                                sb.append(Character.toChars(c2));
-                                lastChar = octalValue;
                             } else {
                                 // Short octal (1-2 digits) — prepend 0 for Java
                                 // In Perl, \1-\7 inside [] are octal; in Java, \N is a backreference
