@@ -103,13 +103,18 @@ public class IOOperator {
         byte[] edata = ebits.getDefinedBoolean() ? getVecBytes(ebits) : new byte[0];
         int maxFd = Math.max(rdata.length, Math.max(wdata.length, edata.length)) * 8;
 
+        // Categorise fds: socket-based (can use NIO Selector) vs non-socket
+        // (pipes, files — must be polled via IOHandle.isReadReady()).
+        Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
+        // Non-socket fds that want read — need polling via isReadReady()
+        List<int[]> pollReadFds = new ArrayList<>();   // [fd, 0=file/1=pipe]
+        // Non-socket fds that want write — always ready (files/pipes)
+        List<Integer> alwaysWriteReady = new ArrayList<>();
+
         Selector selector = Selector.open();
         List<SelectableChannel> madeNonBlocking = new ArrayList<>();
 
         try {
-            Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
-            int nonSocketReady = 0;
-
             for (int fd = 0; fd < maxFd; fd++) {
                 boolean wantRead = isBitSet(rdata, fd);
                 boolean wantWrite = isBitSet(wdata, fd);
@@ -121,7 +126,9 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        nonSocketReady++;
+                        // Socket without selectable channel — treat as always ready
+                        if (wantRead) pollReadFds.add(new int[]{fd, 0});
+                        if (wantWrite) alwaysWriteReady.add(fd);
                         continue;
                     }
 
@@ -137,9 +144,6 @@ public class IOOperator {
                                 : SelectionKey.OP_READ;
                     }
                     if (wantWrite && ch instanceof SocketChannel sc) {
-                        // For non-blocking connects in progress, use OP_CONNECT.
-                        // Perl's select() treats write-readiness as "connect complete",
-                        // but Java NIO requires OP_CONNECT for pending connections.
                         if (sc.isConnectionPending()) {
                             ops |= SelectionKey.OP_CONNECT;
                         } else {
@@ -152,67 +156,103 @@ public class IOOperator {
                         channelToFd.put(ch, fd);
                     }
                 } else {
-                    // Non-socket handles (files, pipes) are always ready
-                    nonSocketReady++;
+                    // Non-socket handle: regular files are always ready,
+                    // pipe handles (ProcessInputHandle) need isReadReady() polling.
+                    if (wantRead) pollReadFds.add(new int[]{fd, 0});
+                    if (wantWrite) alwaysWriteReady.add(fd);
                 }
             }
 
-            // Perform the select
-            if (!channelToFd.isEmpty()) {
-                if (!timeout.getDefinedBoolean()) {
-                    selector.select(); // block indefinitely
-                } else {
-                    double sec = timeout.getDouble();
-                    if (sec <= 0) {
-                        selector.selectNow(); // poll
-                    } else {
-                        selector.select((long) (sec * 1000));
-                    }
-                }
-            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
-                // No channels to monitor and no always-ready handles — sleep for timeout
-                double sec = timeout.getDouble();
-                if (sec > 0) {
-                    long millis = (long) (sec * 1000);
-                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
-                    try {
-                        Thread.sleep(millis, nanos);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
+            // Determine timeout behaviour
+            boolean hasTimeout = timeout.getDefinedBoolean();
+            double timeoutSec = hasTimeout ? timeout.getDouble() : -1;
+            long deadlineNanos = hasTimeout
+                    ? System.nanoTime() + (long) (timeoutSec * 1_000_000_000L)
+                    : Long.MAX_VALUE;
+            // Poll interval for non-socket handles (10 ms)
+            long pollIntervalMs = 10;
 
-            // Build result bit vectors (same size as input)
             byte[] rresult = new byte[rdata.length];
             byte[] wresult = new byte[wdata.length];
             byte[] eresult = new byte[edata.length];
             int totalReady = 0;
 
-            // Non-socket handles keep their bits set (always ready)
-            for (int fd = 0; fd < maxFd; fd++) {
-                RuntimeIO rio = RuntimeIO.getByFileno(fd);
-                if (rio == null) continue;
-                if (rio.ioHandle instanceof SocketIO) continue;
-                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
-                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
+            // Write-ready non-socket fds are always ready (you can always write to a pipe/file)
+            for (int fd : alwaysWriteReady) {
+                setBit(wresult, fd);
+                totalReady++;
             }
 
-            // Process selected keys
-            for (SelectionKey key : selector.selectedKeys()) {
-                Integer fd = channelToFd.get(key.channel());
-                if (fd == null) continue;
-                int readyOps = key.readyOps();
-
-                if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
-                        && isBitSet(rdata, fd)) {
-                    setBit(rresult, fd);
-                    totalReady++;
+            // Polling loop: check non-socket read fds + NIO selector
+            boolean firstIteration = true;
+            while (true) {
+                // Check non-socket read fds for readiness
+                for (int[] entry : pollReadFds) {
+                    int fd = entry[0];
+                    if (isBitSet(rresult, fd)) continue; // Already marked ready
+                    RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                    if (rio == null) continue;
+                    if (rio.ioHandle.isReadReady()) {
+                        setBit(rresult, fd);
+                        totalReady++;
+                    }
                 }
-                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
-                if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
-                    setBit(wresult, fd);
-                    totalReady++;
+
+                // Check NIO selector (non-blocking poll)
+                if (!channelToFd.isEmpty()) {
+                    int nioReady;
+                    if (firstIteration && totalReady == 0 && pollReadFds.isEmpty()) {
+                        // Only socket fds and nothing else ready — let Selector block
+                        if (!hasTimeout) {
+                            nioReady = selector.select();
+                        } else if (timeoutSec <= 0) {
+                            nioReady = selector.selectNow();
+                        } else {
+                            long remainMs = (deadlineNanos - System.nanoTime()) / 1_000_000L;
+                            nioReady = remainMs > 0 ? selector.select(remainMs) : selector.selectNow();
+                        }
+                    } else {
+                        nioReady = selector.selectNow();
+                    }
+                    if (nioReady > 0) {
+                        for (SelectionKey key : selector.selectedKeys()) {
+                            Integer fd = channelToFd.get(key.channel());
+                            if (fd == null) continue;
+                            int readyOps = key.readyOps();
+                            if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
+                                    && isBitSet(rdata, fd)) {
+                                setBit(rresult, fd);
+                                totalReady++;
+                            }
+                            if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0
+                                    && isBitSet(wdata, fd)) {
+                                setBit(wresult, fd);
+                                totalReady++;
+                            }
+                        }
+                        selector.selectedKeys().clear();
+                    }
+                }
+
+                firstIteration = false;
+
+                // If anything is ready, we're done
+                if (totalReady > 0) break;
+
+                // If timeout is 0 (poll mode), we're done
+                if (hasTimeout && timeoutSec <= 0) break;
+
+                // Check deadline
+                if (System.nanoTime() >= deadlineNanos) break;
+
+                // Sleep briefly before next poll
+                try {
+                    long remainMs = (deadlineNanos - System.nanoTime()) / 1_000_000L;
+                    Thread.sleep(Math.min(pollIntervalMs, Math.max(1, remainMs)));
+                } catch (InterruptedException e) {
+                    PerlSignalQueue.checkPendingSignals();
+                    Thread.interrupted();
+                    break;
                 }
             }
 

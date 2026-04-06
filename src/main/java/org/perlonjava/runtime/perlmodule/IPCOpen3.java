@@ -162,7 +162,7 @@ public class IPCOpen3 extends PerlModuleBase {
                 // Output redirection - pipe stdout to the named handle
                 handleOutputRedirection(rdrRef, process.getInputStream());
             } else {
-                setupReadHandle(rdrRef, process.getInputStream());
+                setupReadHandle(rdrRef, process.getInputStream(), process);
             }
 
             // Set up the error handle (from child's stderr) if not merged
@@ -170,7 +170,7 @@ public class IPCOpen3 extends PerlModuleBase {
                 if (isOutputRedirection(errRef)) {
                     handleOutputRedirection(errRef, process.getErrorStream());
                 } else {
-                    setupReadHandle(errRef, process.getErrorStream());
+                    setupReadHandle(errRef, process.getErrorStream(), process);
                 }
             }
 
@@ -366,7 +366,7 @@ public class IPCOpen3 extends PerlModuleBase {
             setupWriteHandle(wtrRef, process.getOutputStream());
 
             // Set up the read handle (from child's stdout)
-            setupReadHandle(rdrRef, process.getInputStream());
+            setupReadHandle(rdrRef, process.getInputStream(), process);
 
             return new RuntimeScalar(pid).getList();
 
@@ -402,9 +402,9 @@ public class IPCOpen3 extends PerlModuleBase {
     /**
      * Sets up a read handle from an InputStream.
      */
-    private static void setupReadHandle(RuntimeScalar handleRef, InputStream in) {
+    private static void setupReadHandle(RuntimeScalar handleRef, InputStream in, Process process) {
         RuntimeIO io = new RuntimeIO();
-        io.ioHandle = new ProcessInputHandle(in);
+        io.ioHandle = new ProcessInputHandle(in, process);
 
         // Create a new GLOB reference for the handle
         RuntimeGlob glob = new RuntimeGlob(null);

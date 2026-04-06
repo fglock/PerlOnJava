@@ -185,6 +185,26 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("fileno operation is not supported.");
     }
 
+    /**
+     * Checks whether this handle has data available for reading without blocking.
+     * <p>
+     * Used by the 4-arg {@code select()} implementation to determine readiness
+     * for non-socket handles (pipes, process streams) that cannot be registered
+     * with Java NIO's {@link java.nio.channels.Selector}.
+     * <p>
+     * The default implementation returns {@code true} (always ready), which is
+     * correct for regular files and handles where blocking isn't an issue.
+     * Subclasses that wrap blocking streams (e.g., {@code ProcessInputHandle}
+     * for subprocess pipes) should override this to check
+     * {@code InputStream.available()} or equivalent.
+     *
+     * @return true if data is available or the handle is at EOF/closed; false if
+     *         reading would block
+     */
+    default boolean isReadReady() {
+        return true; // Regular files, closed handles, etc. are always "ready"
+    }
+
     default RuntimeScalar eof() {
         return RuntimeIO.handleIOError("eof operation is not supported.");
     }

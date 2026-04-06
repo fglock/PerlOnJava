@@ -91,12 +91,18 @@ Get the exit status for this iterator's process.
 }
 
 sub _use_open3 {
-    return unless $Config{d_fork} || IS_WIN32;
     for my $module (qw( IPC::Open3 IO::Select )) {
         eval "use $module";
         return if $@;
     }
-    return 1;
+    # open3 works on fork platforms, Win32, and JVM (via ProcessBuilder)
+    return 1 if $Config{d_fork} || IS_WIN32;
+    # On other platforms (e.g., PerlOnJava), probe whether open3 actually works
+    eval {
+        my $pid = IPC::Open3::open3(my $wtr, my $rdr, my $err, $^X, '-e', '1');
+        waitpid($pid, 0);
+    };
+    return $@ ? undef : 1;
 }
 
 {
