@@ -11,13 +11,15 @@ our @EXPORT_OK = qw( clone );
 
 our $VERSION = '0.49';
 
-# PerlOnJava: Fall back to Clone::PP since we can't load XS
+# PerlOnJava: Fall back to Clone::PP since we can't load XS.
+# Note: XSLoader::load may return success via @ISA fallback without
+# actually providing clone(), so we also check defined(&clone).
 my $loaded = 0;
 
 eval {
     require XSLoader;
     XSLoader::load('Clone', $VERSION);
-    $loaded = 1;
+    $loaded = 1 if defined(&clone);
 };
 
 if (!$loaded) {

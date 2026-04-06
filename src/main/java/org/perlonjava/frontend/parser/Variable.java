@@ -359,10 +359,19 @@ public class Variable {
 
         // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
         // (via use vars or Exporter import), not if merely auto-vivified under 'no strict'.
+        // Exception: $A[...] accessing declared @A, or $A{...} accessing declared %A,
+        // should NOT be rejected — the variable refers to the container, not scalar $A.
         if (sigil.equals("$") && varName.length() == 1
                 && Character.isLetter(varName.charAt(0))
                 && !varName.equals("a") && !varName.equals("b")) {
-            if (!GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
+            boolean isContainerAccess = false;
+            int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            if (peekIdx < parser.tokens.size()) {
+                String nextText = parser.tokens.get(peekIdx).text;
+                if (nextText.equals("[") && GlobalVariable.existsGlobalArray(normalizedName)) isContainerAccess = true;
+                if (nextText.equals("{") && GlobalVariable.existsGlobalHash(normalizedName)) isContainerAccess = true;
+            }
+            if (!isContainerAccess && !GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
                 existsGlobally = false;
             }
         }
