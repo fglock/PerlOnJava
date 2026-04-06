@@ -21,6 +21,51 @@ import java.util.List;
 public class EmitStatement {
 
     /**
+     * Emits bytecode to null out JVM local variable slots for {@code my} variables
+     * going out of scope. This enables the JVM GC to collect objects (like anonymous
+     * filehandle globs from {@code open(my $fh, ...)}) that are no longer accessible
+     * from Perl code but would otherwise be held alive by the JVM stack frame.
+     * <p>
+     * Must be called BEFORE {@code exitScope()} so the symbol table still has
+     * the variable entries.
+     *
+     * @param ctx        The emitter context with the MethodVisitor and symbol table
+     * @param scopeIndex The scope boundary being exited
+     * @param closeIO    If true, also call scopeExitCleanup on scalar variables to
+     *                   deterministically close IO on anonymous globs. Only set this
+     *                   to true in LOOP bodies where the value is discarded (VOID
+     *                   context). Do NOT set true for blocks that return values
+     *                   (do blocks, subroutine bodies, if/else blocks) because the
+     *                   returned value might be a file handle still in use by the caller.
+     */
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean closeIO) {
+        if (closeIO) {
+            // For scalar variables in loop bodies, call cleanup to close IO
+            // on anonymous globs (deterministic DESTROY for lexical file handles).
+            java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
+            for (int idx : scalarIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "scopeExitCleanup",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
+        }
+        // Null all my variable slots to help GC collect associated objects
+        java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
+        for (int idx : allIndices) {
+            ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
+        }
+    }
+
+    /** Convenience overload: null stores only, no IO cleanup (safe for all contexts). */
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
+        emitScopeExitNullStores(ctx, scopeIndex, false);
+    }
+
+    /**
      * Emits bytecode to check for pending signals (like SIGALRM from alarm()).
      * This is a lightweight check - just a volatile boolean read if no signals are pending.
      * Should be called at safe execution points like loop entries.
@@ -69,6 +114,7 @@ public class EmitStatement {
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                 node.thenBranch.accept(emitterVisitor);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                 for (int i = 0; i < branchLabelsPushed; i++) {
@@ -83,6 +129,7 @@ public class EmitStatement {
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                     node.elseBranch.accept(emitterVisitor);
+                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                     for (int i = 0; i < branchLabelsPushed; i++) {
@@ -154,6 +201,7 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         for (int i = 0; i < branchLabelsPushed; i++) {
@@ -270,9 +318,9 @@ public class EmitStatement {
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
                 // A simple-block For3Node (isSimpleBlock=true) is used to model bare/labeled
                 // blocks like `{ ... }` and `LABEL: { ... }` (including `... } continue { ... }`).
-                // Unlabeled next/last/redo must be allowed for *bare* blocks (no label), but
-                // must *not* accidentally target pseudo-loops like `SKIP: { ... }`.
-                boolean isUnlabeledTarget = !node.isSimpleBlock || node.labelName == null;
+                // In Perl, blocks (labeled or not) are valid targets for unlabeled last/next/redo.
+                // They act as loops that execute once. SKIP: { last SKIP; } patterns use labeled
+                // last, so making labeled blocks targetable by unlabeled last is safe.
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,
@@ -280,7 +328,7 @@ public class EmitStatement {
                         endLabel,
                         RuntimeContextType.VOID,
                         true,
-                        isUnlabeledTarget);
+                        true);
 
                 // Visit the loop body
                 if (needsReturnValue) {
@@ -340,6 +388,7 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !node.isSimpleBlock);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
@@ -457,6 +506,7 @@ public class EmitStatement {
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Exit the scope in the symbol table
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // If the context is not VOID, push "undef" to the stack

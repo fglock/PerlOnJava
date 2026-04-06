@@ -1248,6 +1248,18 @@ public class BytecodeCompiler implements Visitor {
                 // Not a lexical variable - could be a global or a bareword
                 // Check for strict subs violation (bareword without sigil)
                 if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
+                    // Barewords ending with :: are package name constants, always allowed
+                    // e.g., Tie::RefHash:: is equivalent to "Tie::RefHash"
+                    if (varName.endsWith("::")) {
+                        String packageName = varName.substring(0, varName.length() - 2);
+                        int rd = allocateOutputRegister();
+                        emit(Opcodes.LOAD_STRING);
+                        emitReg(rd);
+                        int strIdx = addToStringPool(packageName);
+                        emit(strIdx);
+                        lastResultReg = rd;
+                        return;
+                    }
                     // This is a bareword (no sigil)
                     if (emitterContext != null && emitterContext.symbolTable != null &&
                             emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {

@@ -471,9 +471,8 @@ public class IOOperator {
                     RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
-                            // &= mode: non-owning wrapper — close won't close the original
-                            fh = new RuntimeIO();
-                            fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                            // &= mode: non-owning wrapper sharing the same fd
+                            fh = createBorrowedHandle(sourceHandle);
                         } else {
                             // & mode: create a new handle that duplicates the original
                             fh = duplicateFileHandle(sourceHandle);
@@ -500,9 +499,8 @@ public class IOOperator {
                                 System.err.flush();
                             }
                             if (isParsimonious) {
-                                // &= mode: non-owning wrapper — close won't close the original
-                                fh = new RuntimeIO();
-                                fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                                // &= mode: non-owning wrapper sharing the same fd
+                                fh = createBorrowedHandle(sourceHandle);
                             } else {
                                 // & mode: create a new handle that duplicates the original
                                 fh = duplicateFileHandle(sourceHandle);
@@ -524,8 +522,7 @@ public class IOOperator {
 
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
-                            fh = new RuntimeIO();
-                            fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                            fh = createBorrowedHandle(sourceHandle);
                         } else {
                             fh = duplicateFileHandle(sourceHandle);
                         }
@@ -539,8 +536,7 @@ public class IOOperator {
                                 sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
                                 if (sourceHandle != null && sourceHandle.ioHandle != null) {
                                     if (isParsimonious) {
-                                        fh = new RuntimeIO();
-                                        fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                                        fh = createBorrowedHandle(sourceHandle);
                                     } else {
                                         // & mode: create a new handle that duplicates the original
                                         fh = duplicateFileHandle(sourceHandle);
@@ -611,7 +607,10 @@ public class IOOperator {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            newGlob.value = anonGlob;
+            // Register for GC-based fd recycling (mimics Perl's DESTROY on scope exit)
+            RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             // Use set() to modify the lvalue in place
             fileHandle.set(newGlob);
         }
@@ -1312,7 +1311,9 @@ public class IOOperator {
         } else {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
+            newGlob.value = anonGlob;
+            RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             fileHandle.set(newGlob);
         }
         return scalarTrue;
@@ -1646,7 +1647,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(socketIO);
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(socketIO);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, socketIO);
                 socketHandle.set(newGlob);
             }
             return scalarTrue;
@@ -1877,7 +1880,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, clientRuntimeIO);
                 newSocketHandle.set(newGlob);
             }
 
@@ -1940,7 +1945,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(readerIO);
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(readerIO);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, readerIO);
                 readHandle.set(newGlob);
             }
 
@@ -1956,7 +1963,9 @@ public class IOOperator {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(writerIO);
+                RuntimeGlob anonGlob2 = new RuntimeGlob(null).setIO(writerIO);
+                newGlob.value = anonGlob2;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob2, writerIO);
                 writeHandle.set(newGlob);
             }
 
@@ -2490,10 +2499,10 @@ public class IOOperator {
             case 2: // STDERR
                 return RuntimeIO.stderr;
             default:
-                // Check the RuntimeIO fileno registry (dup'd handles, sockets, regular files)
-                RuntimeIO registeredHandle = RuntimeIO.getByFileno(fd);
-                if (registeredHandle != null) {
-                    return registeredHandle;
+                // Check the RuntimeIO fileno registry (used by all file/pipe/socket handles)
+                RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
+                if (fromRegistry != null) {
+                    return fromRegistry;
                 }
                 return null; // Unknown file descriptor
         }
@@ -2578,16 +2587,29 @@ public class IOOperator {
         }
 
         if (isParsimonious) {
-            // Parsimonious dup (>&=) shares the same underlying IOHandle but must not
-            // close it when the duplicate is closed. BorrowedIOHandle delegates all I/O
-            // but only flushes (never closes) the delegate on close().
-            RuntimeIO result = new RuntimeIO();
-            result.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
-            result.currentLineNumber = sourceHandle.currentLineNumber;
-            return result;
+            return createBorrowedHandle(sourceHandle);
         } else {
             return duplicateFileHandle(sourceHandle);
         }
+    }
+
+    /**
+     * Creates a borrowed (parsimonious dup) handle that shares the source's IOHandle and fileno.
+     * The borrowed handle delegates all I/O to the source but does NOT close the underlying
+     * resource when closed — only flushes. Both handles report the same fileno.
+     */
+    private static RuntimeIO createBorrowedHandle(RuntimeIO source) {
+        RuntimeIO borrowed = new RuntimeIO();
+        borrowed.ioHandle = new BorrowedIOHandle(source.ioHandle);
+        borrowed.currentLineNumber = source.currentLineNumber;
+        // Share the source's fileno (parsimonious dup = same fd)
+        int sourceFd = source.getAssignedFileno();
+        if (sourceFd < 0) {
+            RuntimeScalar nativeFd = source.ioHandle.fileno();
+            sourceFd = nativeFd.getDefinedBoolean() ? nativeFd.getInt() : source.assignFileno();
+        }
+        borrowed.registerExternalFd(sourceFd);
+        return borrowed;
     }
 
     private static RuntimeIO duplicateFileHandle(RuntimeIO original) {

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
 import java.util.function.Function;
 
@@ -392,7 +393,16 @@ public class OverloadContext {
                     
                     // The actual method name - find it using can() semantics
                     // (search in the object's class hierarchy)
-                    return InheritanceResolver.findMethodInHierarchy(actualMethodName, perlClassName, null, 0);
+                    RuntimeScalar resolved = InheritanceResolver.findMethodInHierarchy(actualMethodName, perlClassName, null, 0);
+                    // If AUTOLOAD was resolved instead of the actual method, set $AUTOLOAD
+                    if (resolved != null && resolved.value instanceof RuntimeCode) {
+                        RuntimeCode code = (RuntimeCode) resolved.value;
+                        if (code.autoloadVariableName != null) {
+                            String fullMethodName = NameNormalizer.normalizeVariableName(actualMethodName, perlClassName);
+                            GlobalVariable.getGlobalVariable(code.autoloadVariableName).set(fullMethodName);
+                        }
+                    }
+                    return resolved;
                 }
             }
         }

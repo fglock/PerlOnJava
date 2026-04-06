@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -725,6 +726,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Slow path for set(RuntimeScalar)
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
+            closeIOOnDrop();
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
             return this;
@@ -750,6 +752,39 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case READONLY_SCALAR ->
                     throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        // ──────────────────────────────────────────────────────────────────
+        // closeIOOnDrop() was REMOVED from this assignment path.
+        //
+        // ROOT CAUSE (Capture::Tiny failure):
+        //   Capture::Tiny's _copy_std() saves STDOUT/STDERR handles like this:
+        //     my $h;
+        //     $h = IO::Handle->new();  open($h, ">&STDOUT"); $old{stdout} = $h;
+        //     $h = IO::Handle->new();  open($h, ">&STDERR"); $old{stderr} = $h;
+        //
+        //   When $h is reassigned on the second iteration, setLarge() was called.
+        //   The old value of $h was a GLOBREFERENCE to a gensym'd glob (Symbol::GEN*)
+        //   whose IO slot held the dup'd STDOUT handle.
+        //
+        //   closeIOOnDrop() saw that the glob was no longer in any stash (gensym
+        //   deletes it) and closed the IO.  This set ioHandle = ClosedIOHandle on
+        //   the RuntimeIO.  But $old{stdout} STILL referenced the same glob/IO —
+        //   so fileno($old{stdout}) now returned undef, and the later restore
+        //   open(*STDOUT, ">&" . fileno($old{stdout})) failed with "Bad fd".
+        //
+        // WHY WE CAN'T FIX THIS WITH closeIOOnDrop:
+        //   Without reference counting we cannot know whether other variables
+        //   still hold a GLOBREFERENCE to the same RuntimeGlob.  The stash check
+        //   only catches named globs; anonymous (gensym'd) globs are invisible.
+        //
+        // TRADEOFF:
+        //   Removing this call means anonymous file handles that are overwritten
+        //   (not explicitly closed) will leak until JVM GC / program exit.
+        //   Explicit close($fh), undef $fh, and program exit still close handles.
+        //   This matches the pre-existing behavior of set(int/long/double/String)
+        //   which also never called closeIOOnDrop.
+        //
+        // See also: closeIOOnDrop() javadoc, dev/design/io_handle_lifecycle.md
+        // ──────────────────────────────────────────────────────────────────
         this.type = value.type;
         this.value = value.value;
         return this;
@@ -1660,10 +1695,94 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             InheritanceResolver.invalidateCache();
             return this;
         }
+        // Close IO handles when dropping a glob reference.
+        // This mimics Perl's internal sv_clear behavior where IO handles are closed
+        // when the glob's reference count drops to zero (independent of DESTROY).
+        closeIOOnDrop();
         // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
         return this;
+    }
+
+    /**
+     * Close any IO handle associated with a GLOBREFERENCE value being dropped.
+     * <p>
+     * In Perl 5, IO handles are closed by the interpreter's sv_clear/gp_free when
+     * the glob's reference count reaches zero. Since jperl doesn't implement
+     * reference counting or DESTROY, we close IO handles eagerly in specific cases.
+     * <p>
+     * <b>Where this is called:</b>
+     * <ul>
+     *   <li>{@code undefine()} — when {@code undef $fh} is called explicitly</li>
+     *   <li>{@code setLarge(null)} — when a variable is set to null/undef</li>
+     * </ul>
+     * <p>
+     * <b>Where this is NOT called (by design):</b>
+     * <ul>
+     *   <li>{@code setLarge(value)} for non-null values — removed because variable
+     *       reassignment (e.g. {@code $h = IO::Handle->new()}) cannot safely close
+     *       the old IO when other variables may still reference the same glob.
+     *       See the detailed comment in setLarge() for the Capture::Tiny failure
+     *       that motivated this change.</li>
+     *   <li>{@code set(int/long/double/String)} — these primitive-type setters
+     *       never called closeIOOnDrop (pre-existing behavior).</li>
+     * </ul>
+     * <p>
+     * <b>Safety heuristic:</b> We only close IO for globs that are NOT currently
+     * in any stash (symbol table). Named globs still in the stash (like *MYFILE)
+     * may have other references (including detached copies created by
+     * {@code \*MYFILE}) and should not be closed. Globs that have been removed
+     * from the stash (e.g., by gensym's delete) or that were never in a stash
+     * are candidates for closing — but even this is only safe from undefine()
+     * where the caller is explicitly requesting cleanup.
+     * <p>
+     * <b>Known limitation:</b> Without reference counting, anonymous file handles
+     * that are overwritten (not explicitly closed or undef'd) will leak their
+     * underlying IO until JVM garbage collection or program exit.
+     */
+    private void closeIOOnDrop() {
+        if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
+            // If the glob has a name and a stash entry still exists for that name,
+            // don't close — the IO may be shared with the stash glob or its copies.
+            // Note: \*MYFILE creates a detached copy (different Java object) that
+            // shares the IO slot, so identity checks don't work here.
+            if (glob.globName != null && GlobalVariable.existsGlobalIO(glob.globName)) {
+                return; // Glob name is still in the stash — don't close
+            }
+            RuntimeScalar ioSlot = glob.getIO();
+            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                    && !(io.ioHandle instanceof ClosedIOHandle)) {
+                io.close();
+            }
+        }
+    }
+
+    /**
+     * Called by JVM bytecode at scope exit to deterministically close IO handles
+     * on anonymous lexical filehandles ({@code open(my $fh, ...)}).
+     * <p>
+     * This is the JVM-backend equivalent of Perl 5's DESTROY: when a {@code my $fh}
+     * goes out of scope, its IO handle should be closed and its fd recycled.
+     * Since the JVM's tracing GC is non-deterministic, we call this explicitly
+     * from the emitted scope-exit bytecode to ensure timely fd recycling.
+     * <p>
+     * Only closes IO on anonymous globs (globName == null) — named globs like
+     * {@code *STDOUT} or gensym'd handles may be referenced by other variables
+     * (e.g., in Capture::Tiny's save/restore pattern).
+     *
+     * @param scalar the RuntimeScalar being cleaned up (may be null if slot was already nulled)
+     */
+    public static void scopeExitCleanup(RuntimeScalar scalar) {
+        if (scalar != null && scalar.type == GLOBREFERENCE
+                && scalar.value instanceof RuntimeGlob glob
+                && glob.globName == null) {
+            RuntimeScalar ioSlot = glob.getIO();
+            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                    && !(io.ioHandle instanceof ClosedIOHandle)) {
+                io.close();
+            }
+        }
     }
 
     public RuntimeScalar defined() {

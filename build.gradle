@@ -328,6 +328,7 @@ sourceSets {
             include '**/*.pm'
             include '**/*.pl'
             include '**/*.pod'
+            include '**/media.types'
             include 'lib/ExtUtils/xsubpp'
             include 'bin/**'
             include 'META-INF/services/**'
@@ -345,6 +346,7 @@ tasks.named('processResources', Copy) {
     from(sourceSets.main.resources.srcDirs) {
         include '**/*.pm'
         include '**/*.pod'
+        include '**/media.types'
         include 'bin/**'
         include 'META-INF/services/**'
     }

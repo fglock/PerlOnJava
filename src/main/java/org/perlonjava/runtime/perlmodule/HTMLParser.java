@@ -139,6 +139,7 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_eof", scalarFalse);
         pstate.put("_buf", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
+        pstate.put("_in_cdata", scalarFalse);
 
         // Store in self
         selfHash.put("_hparser_xs_state", pstate.createReference());
@@ -425,6 +426,11 @@ public class HTMLParser extends PerlModuleBase {
 
     /**
      * Fire a parser event by calling the registered handler.
+     * Supports three callback types:
+     * - String: method name to call on $self
+     * - Code ref: subroutine reference to call directly
+     * - Array ref: accumulator for PullParser/TokeParser (push event data)
+     *
      * @param self the original blessed parser object (for method dispatch)
      * @param selfHash the dereferenced hash of the parser
      * @param pstate the parser state hash
@@ -439,20 +445,34 @@ public class HTMLParser extends PerlModuleBase {
             return;
         }
 
-        RuntimeArray callArgs = new RuntimeArray();
-
         // Parse argspec to determine what arguments to pass
         RuntimeScalar argspecSv = handlers.get(eventName + "_argspec");
         String argspec = (argspecSv != null && argspecSv.getDefinedBoolean()) ?
                 argspecSv.toString() : "";
 
-        if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
+        if (cb.type == RuntimeScalarType.ARRAYREFERENCE) {
+            // Array ref accumulator - used by PullParser/TokeParser
+            // Build event data per argspec and push as array ref onto accumulator
+            RuntimeArray accum = (RuntimeArray) cb.value;
+            RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false, pstate);
+            RuntimeArray.push(accum, eventData.createReference());
+        } else if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
             // Method name - call as $self->method(...)
-            // Use the original blessed self for correct method dispatch
             String methodName = cb.toString();
+            RuntimeArray callArgs = new RuntimeArray();
             RuntimeArray.push(callArgs, self);
-            for (RuntimeScalar arg : eventArgs) {
-                RuntimeArray.push(callArgs, arg);
+            // Build args from argspec if available, otherwise pass raw eventArgs
+            // skipSelf=true: "self" in argspec specifies the invocant for method dispatch
+            // but should NOT be duplicated in the method arguments
+            if (!argspec.isEmpty()) {
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, true, pstate);
+                for (int idx = 0; idx < eventData.size(); idx++) {
+                    RuntimeArray.push(callArgs, eventData.get(idx));
+                }
+            } else {
+                for (RuntimeScalar arg : eventArgs) {
+                    RuntimeArray.push(callArgs, arg);
+                }
             }
             // Look up method in the object's class hierarchy using the blessed class
             int blessId = RuntimeScalarType.blessedId(self);
@@ -465,11 +485,221 @@ public class HTMLParser extends PerlModuleBase {
             }
         } else if (cb.type == RuntimeScalarType.REFERENCE || cb.type == RuntimeScalarType.CODE) {
             // Code reference - call directly
-            for (RuntimeScalar arg : eventArgs) {
-                RuntimeArray.push(callArgs, arg);
+            RuntimeArray callArgs = new RuntimeArray();
+            if (!argspec.isEmpty()) {
+                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false, pstate);
+                for (int idx = 0; idx < eventData.size(); idx++) {
+                    RuntimeArray.push(callArgs, eventData.get(idx));
+                }
+            } else {
+                for (RuntimeScalar arg : eventArgs) {
+                    RuntimeArray.push(callArgs, arg);
+                }
             }
             RuntimeCode.apply(cb, callArgs, RuntimeContextType.VOID);
         }
+    }
+
+    /**
+     * Build event data array from an argspec string.
+     * Argspec is a comma-separated list of tokens that specify what data to include.
+     *
+     * Supported argspec tokens:
+     * - Quoted literals: 'S', 'E', 'T', 'C', 'D', 'PI' etc.
+     * - tagname: the tag name
+     * - attr: hash ref of attributes (for start events)
+     * - attrseq: array ref of attribute names in order (for start events)
+     * - text: original HTML text
+     * - dtext: decoded text (entities decoded)
+     * - is_cdata: boolean - is this CDATA?
+     * - self: the parser object
+     * - event: the event name
+     * - tag: same as tagname (alias)
+     * - offset: byte offset in document
+     * - length: length of original text
+     * - offset_end: end offset
+     * - line: line number
+     * - column: column number
+     * - token0: first token (for PI)
+     * - skipped_text: text skipped by handler
+     *
+     * For start events, eventArgs = [tagname, attr_ref, attrseq_ref, origtext]
+     * For end events, eventArgs = [tagname, origtext]
+     * For text events, eventArgs = [text]
+     * For comment events, eventArgs = [comment]
+     * For declaration events, eventArgs = [decl_text]
+     * For process events, eventArgs = [pi_text]
+     */
+    private static RuntimeArray buildEventDataFromArgspec(String argspec, String eventName, RuntimeScalar[] eventArgs, RuntimeScalar self, boolean skipSelf, RuntimeHash pstate) {
+        RuntimeArray result = new RuntimeArray();
+        if (argspec.isEmpty()) {
+            // No argspec - pass raw event args
+            for (RuntimeScalar arg : eventArgs) {
+                RuntimeArray.push(result, arg);
+            }
+            return result;
+        }
+
+        // Parse comma-separated argspec tokens
+        String[] tokens = argspec.split(",");
+        for (String rawToken : tokens) {
+            String token = rawToken.trim();
+            if (token.isEmpty()) continue;
+
+            // Check for quoted literal: 'X' or "X"
+            if ((token.startsWith("'") && token.endsWith("'")) ||
+                    (token.startsWith("\"") && token.endsWith("\""))) {
+                String literal = token.substring(1, token.length() - 1);
+                RuntimeArray.push(result, new RuntimeScalar(literal));
+                continue;
+            }
+
+            switch (token) {
+                case "tagname":
+                case "tag":
+                    // First arg for start/end events is tagname
+                    if (eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else {
+                        RuntimeArray.push(result, scalarUndef);
+                    }
+                    break;
+
+                case "attr":
+                    // Second arg for start events is attr hash ref
+                    if ("start".equals(eventName) && eventArgs.length > 1) {
+                        RuntimeArray.push(result, eventArgs[1]);
+                    } else {
+                        // Return empty hash ref for non-start events
+                        RuntimeArray.push(result, new RuntimeHash().createReference());
+                    }
+                    break;
+
+                case "attrseq":
+                    // Third arg for start events is attrseq array ref
+                    if ("start".equals(eventName) && eventArgs.length > 2) {
+                        RuntimeArray.push(result, eventArgs[2]);
+                    } else {
+                        RuntimeArray.push(result, new RuntimeArray().createReference());
+                    }
+                    break;
+
+                case "text":
+                    // Original text: last arg for start/end, first arg for text
+                    if ("text".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if ("start".equals(eventName) && eventArgs.length > 3) {
+                        RuntimeArray.push(result, eventArgs[3]);
+                    } else if ("end".equals(eventName) && eventArgs.length > 1) {
+                        RuntimeArray.push(result, eventArgs[1]);
+                    } else if ("comment".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, new RuntimeScalar("<!--" + eventArgs[0].toString() + "-->"));
+                    } else if ("declaration".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if ("process".equals(eventName) && eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[0]);
+                    } else if (eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[eventArgs.length - 1]);
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
+                    break;
+
+                case "dtext":
+                    // Decoded text (entity-decoded) - for text events
+                    if ("text".equals(eventName) && eventArgs.length > 0) {
+                        // Decode entities in the text
+                        String rawText = eventArgs[0].toString();
+                        RuntimeHash entity2char = GlobalVariable.getGlobalHash("HTML::Entities::entity2char");
+                        String decoded = decodeEntitiesString(rawText, entity2char, false);
+                        RuntimeArray.push(result, new RuntimeScalar(decoded));
+                    } else if (eventArgs.length > 0) {
+                        RuntimeArray.push(result, eventArgs[eventArgs.length - 1]);
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
+                    break;
+
+                case "is_cdata":
+                    // Boolean: is this CDATA section?
+                    // Check the _in_cdata flag set by marked section parsing
+                    RuntimeScalar inCdata = pstate.get("_in_cdata");
+                    RuntimeArray.push(result, (inCdata != null && inCdata.getBoolean()) ? scalarTrue : scalarFalse);
+                    break;
+
+                case "self":
+                    // For method callbacks, "self" is already the invocant
+                    // and should not be duplicated in the args
+                    if (!skipSelf) {
+                        RuntimeArray.push(result, self);
+                    }
+                    break;
+
+                case "event":
+                    RuntimeArray.push(result, new RuntimeScalar(eventName));
+                    break;
+
+                case "offset":
+                case "offset_end":
+                    // Offset tracking not implemented yet
+                    RuntimeArray.push(result, new RuntimeScalar(0));
+                    break;
+
+                case "length":
+                    // Length of original text
+                    if (eventArgs.length > 0) {
+                        String lastArg;
+                        if ("start".equals(eventName) && eventArgs.length > 3) {
+                            lastArg = eventArgs[3].toString();
+                        } else if ("end".equals(eventName) && eventArgs.length > 1) {
+                            lastArg = eventArgs[1].toString();
+                        } else {
+                            lastArg = eventArgs[0].toString();
+                        }
+                        RuntimeArray.push(result, new RuntimeScalar(lastArg.length()));
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(0));
+                    }
+                    break;
+
+                case "line":
+                case "column":
+                    // Line/column tracking not implemented yet
+                    RuntimeArray.push(result, new RuntimeScalar(0));
+                    break;
+
+                case "token0":
+                    // First token for process instructions
+                    if ("process".equals(eventName) && eventArgs.length > 0) {
+                        String piText = eventArgs[0].toString();
+                        // Extract first token from <?token ...?>
+                        if (piText.startsWith("<?")) {
+                            piText = piText.substring(2);
+                            if (piText.endsWith("?>")) {
+                                piText = piText.substring(0, piText.length() - 2);
+                            }
+                            String[] parts = piText.trim().split("\\s+", 2);
+                            RuntimeArray.push(result, new RuntimeScalar(parts[0]));
+                        } else {
+                            RuntimeArray.push(result, new RuntimeScalar(""));
+                        }
+                    } else {
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
+                    break;
+
+                case "skipped_text":
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    break;
+
+                default:
+                    // Unknown argspec token - pass empty string
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    break;
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -492,6 +722,12 @@ public class HTMLParser extends PerlModuleBase {
                 int tagStart = i;
                 i++; // skip '<'
 
+                // If we're at end of input, buffer the '<' for next parse() call
+                if (i >= len) {
+                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                    return;
+                }
+
                 if (i < len && html.charAt(i) == '/') {
                     // End tag
                     i++;
@@ -501,6 +737,11 @@ public class HTMLParser extends PerlModuleBase {
                     }
                     String tagName = html.substring(nameStart, i).toLowerCase();
                     while (i < len && html.charAt(i) != '>') i++;
+                    if (i >= len) {
+                        // Incomplete end tag - buffer for next parse() call
+                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        return;
+                    }
                     if (i < len) i++; // skip '>'
 
                     fireEvent(self, selfHash, pstate, "end",
@@ -508,9 +749,82 @@ public class HTMLParser extends PerlModuleBase {
                             new RuntimeScalar(html.substring(tagStart, i)));
                     textStart = i;
                 } else if (i < len && html.charAt(i) == '!') {
-                    // Comment or declaration
+                    // Comment, marked section, or declaration
                     i++;
-                    if (i + 1 < len && html.charAt(i) == '-' && html.charAt(i + 1) == '-') {
+
+                    // Check for marked sections: <![KEYWORD[...]]>
+                    boolean markedSections = pstate.get("marked_sections").getBoolean()
+                            || pstate.get("xml_mode").getBoolean();
+                    if (i < len && html.charAt(i) == '[') {
+                        if (markedSections) {
+                            i++; // skip '['
+                            // Extract keyword (CDATA, INCLUDE, IGNORE, etc.)
+                            int kwStart = i;
+                            while (i < len && html.charAt(i) != '[' && html.charAt(i) != ']') i++;
+                            String keyword = html.substring(kwStart, i).trim().toUpperCase();
+
+                            if (i < len && html.charAt(i) == '[') {
+                                i++; // skip second '['
+                                int contentStart = i;
+                                int endIdx = html.indexOf("]]>", i);
+
+                                if (endIdx < 0) {
+                                    // Unterminated marked section - buffer
+                                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                    return;
+                                }
+
+                                String content = html.substring(contentStart, endIdx);
+                                i = endIdx + 3; // skip ]]>
+
+                                switch (keyword) {
+                                    case "CDATA":
+                                        // Emit as text with is_cdata=true
+                                        pstate.put("_in_cdata", scalarTrue);
+                                        fireEvent(self, selfHash, pstate, "text",
+                                                new RuntimeScalar(content));
+                                        pstate.put("_in_cdata", scalarFalse);
+                                        break;
+                                    case "IGNORE":
+                                        // Skip content entirely
+                                        break;
+                                    case "INCLUDE":
+                                    default:
+                                        // Recursively parse content as HTML
+                                        // Save and restore textStart since we recurse
+                                        RuntimeScalar savedBuf = pstate.get("_buf");
+                                        pstate.put("_buf", new RuntimeScalar(""));
+                                        parseHtml(self, selfHash, pstate, content);
+                                        pstate.put("_buf", savedBuf);
+                                        break;
+                                }
+                            } else {
+                                // Malformed <![...] without second [ - treat as declaration
+                                int endIdx = html.indexOf('>', i);
+                                if (endIdx >= 0) {
+                                    String decl = html.substring(tagStart, endIdx + 1);
+                                    i = endIdx + 1;
+                                    fireEvent(self, selfHash, pstate, "declaration",
+                                            new RuntimeScalar(decl));
+                                } else {
+                                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                    return;
+                                }
+                            }
+                        } else {
+                            // marked_sections disabled - treat as bogus comment (text up to >)
+                            int endIdx = html.indexOf('>', i);
+                            if (endIdx >= 0) {
+                                String comment = html.substring(i, endIdx);
+                                i = endIdx + 1;
+                                fireEvent(self, selfHash, pstate, "comment",
+                                        new RuntimeScalar(comment));
+                            } else {
+                                pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                return;
+                            }
+                        }
+                    } else if (i + 1 < len && html.charAt(i) == '-' && html.charAt(i + 1) == '-') {
                         // Comment
                         i += 2;
                         int commentStart = i;
@@ -612,9 +926,23 @@ public class HTMLParser extends PerlModuleBase {
                     boolean selfClosing = false;
                     if (i < len && html.charAt(i) == '/') {
                         selfClosing = true;
+                        // In non-XML mode, treat / as boolean attribute (matches Perl HTML::Parser)
+                        boolean xmlMode = pstate.get("xml_mode").getBoolean();
+                        if (!xmlMode) {
+                            attrs.put("/", new RuntimeScalar("/"));
+                            RuntimeArray.push(attrSeq, new RuntimeScalar("/"));
+                        }
                         i++;
                     }
-                    if (i < len && html.charAt(i) == '>') i++;
+
+                    // Check if tag is complete (found closing >)
+                    if (i < len && html.charAt(i) == '>') {
+                        i++;
+                    } else if (i >= len) {
+                        // Incomplete tag - buffer for next parse() call
+                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        return;
+                    }
 
                     String origText = html.substring(tagStart, i);
 
@@ -624,11 +952,58 @@ public class HTMLParser extends PerlModuleBase {
                             attrSeq.createReference(),
                             new RuntimeScalar(origText));
 
-                    if (selfClosing) {
+                    // In XML mode, self-closing tags emit an end event
+                    // In non-XML mode, self-closing / is just a boolean attribute
+                    if (selfClosing && pstate.get("xml_mode").getBoolean()) {
                         fireEvent(self, selfHash, pstate, "end",
                                 new RuntimeScalar(tagName),
                                 new RuntimeScalar("</" + tagName + ">"));
                     }
+
+                    // Raw text elements: <script>, <style>, <xmp>, <listing>, <plaintext>
+                    // Content inside these elements is not parsed for tags
+                    if (!selfClosing && (tagName.equals("script") || tagName.equals("style")
+                            || tagName.equals("xmp") || tagName.equals("listing")
+                            || tagName.equals("plaintext") || tagName.equals("textarea")
+                            || tagName.equals("title"))) {
+                        String endTag = "</" + tagName;
+                        // For script content, only marked_sections (not xml_mode) enables CDATA-skipping.
+                        // xml_mode alone doesn't change how script closing tags interact with CDATA sections.
+                        boolean msEnabled = pstate.get("marked_sections").getBoolean();
+                        int endIdx;
+                        if (msEnabled) {
+                            // With marked_sections, skip over <![CDATA[...]]> when looking for end tag
+                            endIdx = findEndTagSkippingCdata(html, endTag, i);
+                        } else {
+                            endIdx = findCaseInsensitive(html, endTag, i);
+                        }
+                        if (endIdx >= 0) {
+                            // Emit raw content as text
+                            if (endIdx > i) {
+                                fireEvent(self, selfHash, pstate, "text",
+                                        new RuntimeScalar(html.substring(i, endIdx)));
+                            }
+                            // Parse and emit the end tag
+                            int endTagEnd = html.indexOf('>', endIdx);
+                            if (endTagEnd >= 0) {
+                                endTagEnd++;
+                                fireEvent(self, selfHash, pstate, "end",
+                                        new RuntimeScalar(tagName),
+                                        new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+                                i = endTagEnd;
+                            } else {
+                                // Incomplete end tag - buffer for next parse()
+                                pstate.put("_buf", new RuntimeScalar(html.substring(endIdx)));
+                                return;
+                            }
+                        } else {
+                            // No closing tag found - buffer everything for next parse()
+                            pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                            // Re-emit the start tag on next parse when we have the full content
+                            return;
+                        }
+                    }
+
                     textStart = i;
                 }
             } else {
@@ -641,6 +1016,63 @@ public class HTMLParser extends PerlModuleBase {
             fireEvent(self, selfHash, pstate, "text",
                     new RuntimeScalar(html.substring(textStart)));
         }
+    }
+
+    /**
+     * Case-insensitive search for a substring in a string, starting at fromIndex.
+     * Used to find closing tags like </script> regardless of case.
+     */
+    private static int findCaseInsensitive(String haystack, String needle, int fromIndex) {
+        int needleLen = needle.length();
+        int limit = haystack.length() - needleLen;
+        for (int i = fromIndex; i <= limit; i++) {
+            if (haystack.regionMatches(true, i, needle, 0, needleLen)) {
+                // Make sure the next char after the tag name is > or whitespace or /
+                int afterName = i + needleLen;
+                if (afterName >= haystack.length() || haystack.charAt(afterName) == '>'
+                        || Character.isWhitespace(haystack.charAt(afterName))
+                        || haystack.charAt(afterName) == '/') {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Find end tag for raw text elements (like </script>) while skipping CDATA sections.
+     * When marked_sections is enabled, </script> inside <![CDATA[...]]> is not a real end tag.
+     */
+    private static int findEndTagSkippingCdata(String haystack, String endTag, int fromIndex) {
+        int pos = fromIndex;
+        int len = haystack.length();
+        while (pos < len) {
+            // Look for <![CDATA[ marker
+            int cdataStart = haystack.indexOf("<![CDATA[", pos);
+            // Look for end tag
+            int tagIdx = findCaseInsensitive(haystack, endTag, pos);
+
+            if (tagIdx < 0) {
+                // No end tag found at all
+                return -1;
+            }
+
+            if (cdataStart >= 0 && cdataStart < tagIdx) {
+                // CDATA section starts before the end tag - skip past ]]>
+                int cdataEnd = haystack.indexOf("]]>", cdataStart + 9);
+                if (cdataEnd >= 0) {
+                    pos = cdataEnd + 3;
+                    continue;
+                } else {
+                    // Unterminated CDATA section - no end tag found
+                    return -1;
+                }
+            }
+
+            // End tag is not inside a CDATA section
+            return tagIdx;
+        }
+        return -1;
     }
 
     // ================================================================

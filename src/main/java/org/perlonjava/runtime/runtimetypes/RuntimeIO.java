@@ -21,6 +21,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.lang.ref.PhantomReference;
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -29,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -136,9 +140,20 @@ public class RuntimeIO extends RuntimeScalar {
 
     /**
      * Fileno registry for select() support.
-     * Maps small sequential integers to RuntimeIO objects, allowing
-     * 4-arg select() to find handles from bit-vector fileno values.
-     * Standard fds 0-2 are reserved for stdin/stdout/stderr.
+     * <p>
+     * Maps small sequential integers ("virtual fds") to RuntimeIO objects,
+     * allowing 4-arg select() to find handles from bit-vector fileno values
+     * and dup-by-fd operations like {@code open(*STDOUT, ">&3")}.
+     * <p>
+     * Standard fds 0-2 are reserved for stdin/stdout/stderr and are handled
+     * natively by StandardIO (not through this registry).
+     * <p>
+     * <b>Fd recycling:</b> Freed fds are collected in a queue and reused by
+     * {@code assignFileno()} (lowest available first) to mimic OS fd allocation.
+     * This is safe because fds are only freed on explicit {@code close()} —
+     * the eager {@code closeIOOnDrop()} was removed from variable assignment
+     * (see RuntimeScalar.setLarge), so fds are never prematurely freed while
+     * other variables still reference the handle.
      */
     private static final AtomicInteger nextFileno = new AtomicInteger(3);
     private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
@@ -148,25 +163,126 @@ public class RuntimeIO extends RuntimeScalar {
     private static final ConcurrentLinkedQueue<Integer> recycledFds = new ConcurrentLinkedQueue<>();
 
     /**
+     * GC-based fd recycling for anonymous lexical filehandles.
+     * <p>
+     * In Perl 5, lexical filehandles ({@code my $fh}) are closed via DESTROY
+     * when the SV's refcount drops to zero at scope exit. PerlOnJava doesn't
+     * implement DESTROY or reference counting; the JVM uses tracing GC instead.
+     * <p>
+     * To reclaim fds from abandoned lexical handles, we register a
+     * {@link PhantomReference} on the anonymous {@link RuntimeGlob} created by
+     * {@code open(my $fh, ...)}. When the glob becomes phantom-reachable (all
+     * RuntimeScalars referencing it have been abandoned), the PhantomReference
+     * is enqueued. {@link #processAbandonedGlobs()} polls this queue, closes
+     * the associated RuntimeIO, and frees the fd for reuse.
+     * <p>
+     * {@code processAbandonedGlobs()} is called from {@link #assignFileno()}.
+     * If no recycled fds are available, {@code System.gc()} is called as a hint
+     * to encourage the JVM to enqueue phantom references sooner.
+     */
+    private static final ReferenceQueue<RuntimeGlob> globGCQueue = new ReferenceQueue<>();
+    private static final ConcurrentHashMap<PhantomReference<RuntimeGlob>, RuntimeIO> phantomToIO = new ConcurrentHashMap<>();
+
+    /**
+     * Registers an anonymous RuntimeGlob for GC-based fd recycling.
+     * When the glob becomes unreachable (all variables referencing it are
+     * reassigned or go out of scope), the associated RuntimeIO will be
+     * closed and its fd freed.
+     *
+     * @param glob the anonymous RuntimeGlob to track
+     * @param io   the RuntimeIO whose fd should be freed when the glob is collected
+     */
+    public static void registerGlobForFdRecycling(RuntimeGlob glob, RuntimeIO io) {
+        PhantomReference<RuntimeGlob> phantom = new PhantomReference<>(glob, globGCQueue);
+        phantomToIO.put(phantom, io);
+    }
+
+    /**
+     * Processes the GC reference queue: closes RuntimeIO handles whose
+     * parent RuntimeGlob has been collected, freeing their fds for reuse.
+     */
+    public static void processAbandonedGlobs() {
+        Reference<? extends RuntimeGlob> ref;
+        while ((ref = globGCQueue.poll()) != null) {
+            RuntimeIO io = phantomToIO.remove(ref);
+            if (io != null && !(io.ioHandle instanceof ClosedIOHandle)) {
+                io.close();
+            }
+        }
+    }
+
+    /**
      * Assigns a fileno to this RuntimeIO and registers it in the fd→IO maps.
      * Reuses released fd numbers when available (lowest first via the recycle pool),
      * otherwise allocates the next sequential fd. This matches POSIX semantics where
      * close() releases an fd and the next open() reuses the lowest available fd.
+     * <p>
+     * If this RuntimeIO already has an assigned fileno, returns it (idempotent).
+     * Called eagerly from {@code duplicateFileHandle()} for dup'd handles
+     * (so dup-by-fd like {@code open(*FH, ">&3")} can find them), and lazily
+     * from {@code fileno()} for regular file/pipe handles.
      *
-     * @return the assigned fileno
+     * @return the assigned fileno (always >= 3)
      */
     public int assignFileno() {
         Integer existing = ioToFileno.get(this);
         if (existing != null) {
             return existing;
         }
-        // Try to reuse a recycled fd first (POSIX: lowest available)
-        Integer recycled = recycledFds.poll();
-        int fd = (recycled != null) ? recycled : nextFileno.getAndIncrement();
+        // First, process any GC'd globs to free their fds
+        processAbandonedGlobs();
+        // Try to reuse the lowest freed fd
+        int fd = tryRecycleLowestFd();
+        if (fd >= 0) {
+            filenoToIO.put(fd, this);
+            ioToFileno.put(this, fd);
+            FileDescriptorTable.advancePast(fd);
+            return fd;
+        }
+        // No recycled fds — if there are tracked anonymous globs that might
+        // be collectible, hint the GC and retry a few times with short sleeps
+        // to give the ReferenceHandler thread time to process the queue.
+        if (!phantomToIO.isEmpty()) {
+            for (int attempt = 0; attempt < 5; attempt++) {
+                System.gc();
+                try { Thread.sleep(1); } catch (InterruptedException e) { break; }
+                processAbandonedGlobs();
+                fd = tryRecycleLowestFd();
+                if (fd >= 0) {
+                    filenoToIO.put(fd, this);
+                    ioToFileno.put(this, fd);
+                    FileDescriptorTable.advancePast(fd);
+                    return fd;
+                }
+            }
+        }
+        // Allocate a fresh fd
+        fd = nextFileno.getAndIncrement();
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
-        // Keep FileDescriptorTable in sync to prevent fd collisions with pipe()
         FileDescriptorTable.advancePast(fd);
+        return fd;
+    }
+
+    /**
+     * Tries to recycle the lowest available freed fd.
+     * Returns -1 if none available.
+     */
+    private static int tryRecycleLowestFd() {
+        List<Integer> candidates = new ArrayList<>();
+        Integer recycled;
+        while ((recycled = recycledFds.poll()) != null) {
+            candidates.add(recycled);
+        }
+        if (candidates.isEmpty()) {
+            return -1;
+        }
+        Collections.sort(candidates);
+        int fd = candidates.get(0);
+        // Put back the rest
+        for (int i = 1; i < candidates.size(); i++) {
+            recycledFds.add(candidates.get(i));
+        }
         return fd;
     }
 
@@ -488,6 +604,13 @@ public class RuntimeIO extends RuntimeScalar {
 
         // Handle special filenames
         if ("-".equals(actualFileName) || actualFileName.isEmpty()) {
+            if (mode.contains("&")) {
+                // Empty fd in dup mode (e.g., ">&" with no fd number) is an error.
+                // This happens when fileno() returns undef and the caller does
+                // open(*STDOUT, ">&" . fileno($fh)) — the undef concatenates to ">&".
+                handleIOError("Bad file descriptor");
+                return null;
+            }
             if (mode.equals(">") || mode.equals(">>")) {
                 // ">-" or just ">" means stdout
                 fh.ioHandle = new CustomOutputStreamHandle(System.out);
@@ -574,6 +697,8 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
+
+            // Fileno is assigned lazily when fileno() is called
 
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
@@ -773,6 +898,8 @@ public class RuntimeIO extends RuntimeScalar {
                 return null;
             }
 
+            // Fileno is assigned lazily when fileno() is called
+
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
 
@@ -969,7 +1096,7 @@ public class RuntimeIO extends RuntimeScalar {
                     System.err.println("[JPERL_IO_DEBUG] getRuntimeIO: fallback lookup for " + runtimeGlob.globName);
                     System.err.flush();
                 }
-                RuntimeGlob globalGlob = GlobalVariable.getGlobalIO(runtimeGlob.globName);
+                RuntimeGlob globalGlob = GlobalVariable.getExistingGlobalIO(runtimeGlob.globName);
                 if (globalGlob != null) {
                     RuntimeScalar globalIoScalar = globalGlob.getIO();
                     if (globalIoScalar != null) {
@@ -1228,17 +1355,18 @@ public class RuntimeIO extends RuntimeScalar {
     /**
      * Closes this I/O handle.
      * Removes from cache, flushes buffers, and releases resources.
+     * <p>
+     * For borrowed handles (parsimonious dup), only detaches from the ioHandle
+     * without flushing or closing it — the owning handle will handle cleanup.
      *
      * @return RuntimeScalar indicating success/failure
      */
     public RuntimeScalar close() {
         removeHandle(ioHandle);
+        unregisterFileno();
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
         ioHandle = new ClosedIOHandle();
-        // Release our fd back to the recycle pool so it can be reused by future opens.
-        // This must happen AFTER close so that the fd is still valid during the close.
-        unregisterFileno();
         return ret;
     }
 
@@ -1362,11 +1490,22 @@ public class RuntimeIO extends RuntimeScalar {
 
     /**
      * Gets the file descriptor number for this handle.
+     * <p>
+     * Resolution order:
+     * <ol>
+     *   <li>Check the fileno registry (for handles that already have an assigned fd)</li>
+     *   <li>Ask the ioHandle for its native fd (StandardIO returns 0/1/2)</li>
+     *   <li>For file channels and pipes, lazily assign a registry fd on first call —
+     *       this avoids consuming fd numbers for handles whose fileno is never queried</li>
+     * </ol>
+     * <p>
+     * The lazy assignment strategy is important for modules like Capture::Tiny
+     * that open many temporary file handles but only need fileno() on a few.
      *
      * @return RuntimeScalar with the file descriptor number, or undef if not available
      */
     public RuntimeScalar fileno() {
-        // Check registry first — socket handles get small sequential filenos
+        // Check registry first — already-assigned handles
         int fd = getAssignedFileno();
         if (fd >= 0) {
             return new RuntimeScalar(fd);
@@ -1374,7 +1513,21 @@ public class RuntimeIO extends RuntimeScalar {
         if (ioHandle == null) {
             return RuntimeScalarCache.scalarUndef;
         }
-        return ioHandle.fileno();
+        // Try the native fileno first (StandardIO returns 0/1/2)
+        RuntimeScalar nativeFd = ioHandle.fileno();
+        if (nativeFd.getDefinedBoolean()) {
+            return nativeFd;
+        }
+        // For file channels and pipes, lazily assign a registry fileno
+        if (ioHandle instanceof CustomFileChannel
+                || ioHandle instanceof PipeInputChannel
+                || ioHandle instanceof PipeOutputChannel
+                || ioHandle instanceof InternalPipeHandle
+                || ioHandle instanceof LayeredIOHandle) {
+            fd = assignFileno();
+            return new RuntimeScalar(fd);
+        }
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
