@@ -615,7 +615,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 String patternKey = regex.patternString;
                 if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
                     // Previous match was zero-length at this position - fail to break loop
-                    posScalar.set(scalarUndef);
+                    // Only reset pos if /c flag is not set (keepCurrentPosition)
+                    if (!regex.regexFlags.keepCurrentPosition()) {
+                        posScalar.set(scalarUndef);
+                    }
                     return RuntimeScalarCache.scalarFalse;
                 }
             }
