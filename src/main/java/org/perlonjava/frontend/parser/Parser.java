@@ -38,6 +38,8 @@ public class Parser {
     // Flags to indicate special parsing states.
     public boolean parsingForLoopVariable = false;
     public boolean parsingTakeReference = false;
+    // Are we parsing the class variable in indirect object syntax? (e.g. import $pkg ())
+    public boolean parsingIndirectObject = false;
     // Are we currently parsing a my/our/state declaration's variable list?
     // Used to suppress strict vars checking for the variable being declared.
     public boolean parsingDeclaration = false;

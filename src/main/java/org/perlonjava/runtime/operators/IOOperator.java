@@ -44,16 +44,11 @@ public class IOOperator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
-            // Keep references to originals so we can write results back.
-            // Perl's select() modifies bitvector arguments in place.
-            RuntimeScalar rbitsOrig = runtimeList.elements.get(0).scalar();
-            RuntimeScalar wbitsOrig = runtimeList.elements.get(1).scalar();
-            RuntimeScalar ebitsOrig = runtimeList.elements.get(2).scalar();
-
             // Snapshot arguments to avoid multiple FETCH calls on tied variables.
-            RuntimeScalar rbits = new RuntimeScalar().set(rbitsOrig);
-            RuntimeScalar wbits = new RuntimeScalar().set(wbitsOrig);
-            RuntimeScalar ebits = new RuntimeScalar().set(ebitsOrig);
+            // In Perl 5, arguments are evaluated once onto the stack before select runs.
+            RuntimeScalar rbits = new RuntimeScalar().set(runtimeList.elements.get(0).scalar());
+            RuntimeScalar wbits = new RuntimeScalar().set(runtimeList.elements.get(1).scalar());
+            RuntimeScalar ebits = new RuntimeScalar().set(runtimeList.elements.get(2).scalar());
             RuntimeScalar timeout = new RuntimeScalar().set(runtimeList.elements.get(3).scalar());
 
             // Special case: if all bit vectors are undef, just sleep
@@ -70,7 +65,6 @@ public class IOOperator {
                         Thread.interrupted();
                         return new RuntimeScalar(0);
                     }
-                    PerlSignalQueue.checkPendingSignals();
                 }
                 // Return 0 to indicate the sleep completed
                 return new RuntimeScalar(0);
@@ -78,13 +72,7 @@ public class IOOperator {
 
             // Implement 4-arg select() using NIO Selector
             try {
-                RuntimeScalar result = selectWithNIO(rbits, wbits, ebits, timeout);
-                // Write modified bitvectors back to the original variables.
-                // Skip undef args (read-only constants that can't be modified).
-                if (rbitsOrig.getDefinedBoolean()) rbitsOrig.set(rbits);
-                if (wbitsOrig.getDefinedBoolean()) wbitsOrig.set(wbits);
-                if (ebitsOrig.getDefinedBoolean()) ebitsOrig.set(ebits);
-                return result;
+                return selectWithNIO(rbits, wbits, ebits, timeout);
             } catch (Exception e) {
                 getGlobalVariable("main::!").set(e.getMessage());
                 return new RuntimeScalar(-1);
@@ -120,8 +108,7 @@ public class IOOperator {
 
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
-            // Track non-socket fds that need polling (pipes, files)
-            List<int[]> pollableFds = new ArrayList<>(); // [fd, wantRead, wantWrite]
+            int nonSocketReady = 0;
 
             for (int fd = 0; fd < maxFd; fd++) {
                 boolean wantRead = isBitSet(rdata, fd);
@@ -134,7 +121,7 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        pollableFds.add(new int[]{fd, wantRead ? 1 : 0, wantWrite ? 1 : 0});
+                        nonSocketReady++;
                         continue;
                     }
 
@@ -165,105 +152,68 @@ public class IOOperator {
                         channelToFd.put(ch, fd);
                     }
                 } else {
-                    // Non-socket handles (pipes, files) — need polling
-                    pollableFds.add(new int[]{fd, wantRead ? 1 : 0, wantWrite ? 1 : 0});
+                    // Non-socket handles (files, pipes) are always ready
+                    nonSocketReady++;
                 }
             }
 
-            // Determine timeout in millis
-            long deadlineNanos = Long.MAX_VALUE;
-            boolean hasTimeout = timeout.getDefinedBoolean();
-            if (hasTimeout) {
+            // Perform the select
+            if (!channelToFd.isEmpty()) {
+                if (!timeout.getDefinedBoolean()) {
+                    selector.select(); // block indefinitely
+                } else {
+                    double sec = timeout.getDouble();
+                    if (sec <= 0) {
+                        selector.selectNow(); // poll
+                    } else {
+                        selector.select((long) (sec * 1000));
+                    }
+                }
+            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
+                // No channels to monitor and no always-ready handles — sleep for timeout
                 double sec = timeout.getDouble();
-                deadlineNanos = System.nanoTime() + (long) (sec * 1_000_000_000L);
+                if (sec > 0) {
+                    long millis = (long) (sec * 1000);
+                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
+                    try {
+                        Thread.sleep(millis, nanos);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
 
-            // Poll loop: check pollable fds and NIO selector, respecting timeout
+            // Build result bit vectors (same size as input)
             byte[] rresult = new byte[rdata.length];
             byte[] wresult = new byte[wdata.length];
             byte[] eresult = new byte[edata.length];
             int totalReady = 0;
 
-            while (true) {
-                // Check pollable (non-socket) handles for readiness
-                totalReady = 0;
-                java.util.Arrays.fill(rresult, (byte) 0);
-                java.util.Arrays.fill(wresult, (byte) 0);
-                java.util.Arrays.fill(eresult, (byte) 0);
+            // Non-socket handles keep their bits set (always ready)
+            for (int fd = 0; fd < maxFd; fd++) {
+                RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                if (rio == null) continue;
+                if (rio.ioHandle instanceof SocketIO) continue;
+                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
+                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
+            }
 
-                for (int[] entry : pollableFds) {
-                    int fd = entry[0];
-                    boolean wantRead = entry[1] != 0;
-                    boolean wantWrite = entry[2] != 0;
+            // Process selected keys
+            for (SelectionKey key : selector.selectedKeys()) {
+                Integer fd = channelToFd.get(key.channel());
+                if (fd == null) continue;
+                int readyOps = key.readyOps();
 
-                    RuntimeIO rio = RuntimeIO.getByFileno(fd);
-                    if (rio == null) continue;
-
-                    if (wantRead) {
-                        boolean ready = false;
-                        if (rio.ioHandle instanceof InternalPipeHandle pipeHandle) {
-                            ready = pipeHandle.hasDataAvailable();
-                        } else {
-                            // Regular files are always read-ready
-                            ready = true;
-                        }
-                        if (ready) { setBit(rresult, fd); totalReady++; }
-                    }
-                    if (wantWrite) {
-                        boolean ready = false;
-                        if (rio.ioHandle instanceof InternalPipeHandle) {
-                            // Write end of pipe is generally always ready to accept writes
-                            ready = true;
-                        } else {
-                            // Regular files are always write-ready
-                            ready = true;
-                        }
-                        if (ready) { setBit(wresult, fd); totalReady++; }
-                    }
+                if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
+                        && isBitSet(rdata, fd)) {
+                    setBit(rresult, fd);
+                    totalReady++;
                 }
-
-                // Check NIO selector (non-blocking poll)
-                if (!channelToFd.isEmpty()) {
-                    selector.selectNow();
-                    for (SelectionKey key : selector.selectedKeys()) {
-                        Integer fd = channelToFd.get(key.channel());
-                        if (fd == null) continue;
-                        int readyOps = key.readyOps();
-
-                        if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0
-                                && isBitSet(rdata, fd)) {
-                            setBit(rresult, fd);
-                            totalReady++;
-                        }
-                        if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
-                            setBit(wresult, fd);
-                            totalReady++;
-                        }
-                    }
-                    selector.selectedKeys().clear();
+                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
+                if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
+                    setBit(wresult, fd);
+                    totalReady++;
                 }
-
-                // If anything is ready, return immediately
-                if (totalReady > 0) break;
-
-                // Check timeout
-                if (hasTimeout && System.nanoTime() >= deadlineNanos) break;
-
-                // Nothing ready — sleep briefly and retry (poll interval: 10ms)
-                try {
-                    long remainNanos = hasTimeout ? deadlineNanos - System.nanoTime() : 10_000_000L;
-                    if (remainNanos <= 0) break;
-                    long sleepMs = Math.min(remainNanos / 1_000_000L, 10);
-                    if (sleepMs <= 0) sleepMs = 1;
-                    Thread.sleep(sleepMs);
-                } catch (InterruptedException e) {
-                    PerlSignalQueue.checkPendingSignals();
-                    Thread.interrupted();
-                    break;
-                }
-
-                // Check for pending signals and process DESTROYs
-                PerlSignalQueue.checkPendingSignals();
             }
 
             // Modify the original scalars in place
@@ -947,11 +897,11 @@ public class IOOperator {
 
         // Check if fh is null (invalid filehandle)
         if (fh == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("sysread() on unopened filehandle"),
                     new RuntimeScalar("\n")
             );
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -966,11 +916,11 @@ public class IOOperator {
 
         // Check for closed handle
         if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("sysread() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1021,13 +971,13 @@ public class IOOperator {
         try {
             result = baseHandle.sysread(length);
         } catch (Exception e) {
+            // e.printStackTrace();
             // This might happen with write-only handles
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("Filehandle opened only for output"),
                     new RuntimeScalar("\n")
             );
-            // Set $! after warn() since warn() may clobber it (e.g., when STDERR is closed)
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1111,11 +1061,11 @@ public class IOOperator {
 
         // Check if fh is null (invalid filehandle)
         if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
                     new RuntimeScalar("syswrite() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
-            getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
             return new RuntimeScalar(); // undef
         }
 
@@ -1202,20 +1152,20 @@ public class IOOperator {
             if (e instanceof java.nio.channels.ClosedChannelException ||
                     (msg != null && msg.contains("closed"))) {
                 // Closed channel
+                getGlobalVariable("main::!").set("Bad file descriptor");
                 WarnDie.warn(
                         new RuntimeScalar("syswrite() on closed filehandle"),
                         new RuntimeScalar("\n")
                 );
-                getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
                 return new RuntimeScalar(); // undef
             } else if (e instanceof java.nio.channels.NonWritableChannelException ||
                     exceptionType.contains("NonWritableChannel")) {
                 // Read-only handle
+                getGlobalVariable("main::!").set("Bad file descriptor");
                 WarnDie.warn(
                         new RuntimeScalar("Filehandle opened only for input"),
                         new RuntimeScalar("\n")
                 );
-                getGlobalVariable("main::!").set(new RuntimeScalar(ErrnoVariable.EBADF()));
                 return new RuntimeScalar(); // undef
             } else {
                 // Other errors
@@ -1974,13 +1924,12 @@ public class IOOperator {
             }
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
-            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream(InternalPipeHandle.PIPE_BUFFER_SIZE);
+            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
-            // Create IOHandle implementations for the pipe ends with shared state
-            InternalPipeHandle[] pair = InternalPipeHandle.createPair(pipeIn, pipeOut);
-            InternalPipeHandle readerHandle = pair[0];
-            InternalPipeHandle writerHandle = pair[1];
+            // Create IOHandle implementations for the pipe ends
+            InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
+            InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
@@ -1988,11 +1937,6 @@ public class IOOperator {
 
             RuntimeIO writerIO = new RuntimeIO();
             writerIO.ioHandle = writerHandle;
-
-            // Register RuntimeIOs using the same fd numbers as FileDescriptorTable
-            // so that select() can find them via RuntimeIO.getByFileno()
-            readerIO.registerExternalFd(readerHandle.getFd());
-            writerIO.registerExternalFd(writerHandle.getFd());
 
             // Handle autovivification for read handle (like open() does)
             RuntimeGlob readGlob = null;
@@ -2767,63 +2711,37 @@ public class IOOperator {
             RuntimeBase type = args[3];
             RuntimeBase protocol = args[4];
 
-            // Create a local socket pair using ServerSocketChannel + SocketChannel
-            // so that select() works via NIO (plain Socket has no channel)
-            ServerSocketChannel serverChannel = ServerSocketChannel.open();
-            serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
-            int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
+            // Get the actual RuntimeGlob objects from the references
+            RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
+            RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
 
-            // Create the first socket channel and connect it
-            SocketChannel channel1 = SocketChannel.open();
-            channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+            // For simplicity, we'll create a local socket pair using ServerSocket and Socket
+            // This is similar to how socketpair works on Unix systems
 
-            // Accept the connection to get the second socket channel
-            SocketChannel channel2 = serverChannel.accept();
+            // Create a server socket on localhost with a random port
+            ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+            int port = serverSocket.getLocalPort();
 
-            // Close the server channel as we no longer need it
-            serverChannel.close();
+            // Create the first socket and connect it to the server
+            Socket socket1 = new Socket();
+            socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
 
-            // Create RuntimeIO objects for both sockets.
-            // Use the Socket constructor which initializes inputStream, outputStream,
-            // and preserves the socketChannel reference (via socket.getChannel()).
+            // Accept the connection on the server side to get the second socket
+            Socket socket2 = serverSocket.accept();
+
+            // Close the server socket as we no longer need it
+            serverSocket.close();
+
+            // Create RuntimeIO objects for both sockets
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(channel1.socket());
+            io1.ioHandle = new SocketIO(socket1);
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(channel2.socket());
+            io2.ioHandle = new SocketIO(socket2);
 
-            // Assign small sequential filenos for select() support
-            io1.assignFileno();
-            io2.assignFileno();
-
-            // Handle autovivification for both socket handles (like open() does)
-            RuntimeGlob glob1 = null;
-            if ((sock1Ref.type == RuntimeScalarType.GLOB || sock1Ref.type == RuntimeScalarType.GLOBREFERENCE)
-                    && sock1Ref.value instanceof RuntimeGlob g) {
-                glob1 = g;
-            }
-            if (glob1 != null) {
-                glob1.setIO(io1);
-            } else {
-                RuntimeScalar newGlob = new RuntimeScalar();
-                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(io1);
-                sock1Ref.set(newGlob);
-            }
-
-            RuntimeGlob glob2 = null;
-            if ((sock2Ref.type == RuntimeScalarType.GLOB || sock2Ref.type == RuntimeScalarType.GLOBREFERENCE)
-                    && sock2Ref.value instanceof RuntimeGlob g) {
-                glob2 = g;
-            }
-            if (glob2 != null) {
-                glob2.setIO(io2);
-            } else {
-                RuntimeScalar newGlob = new RuntimeScalar();
-                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                newGlob.value = new RuntimeGlob(null).setIO(io2);
-                sock2Ref.set(newGlob);
-            }
+            // Set the IO handles directly on the existing globs
+            glob1.setIO(io1);
+            glob2.setIO(io2);
 
             return scalarTrue;
 
@@ -2884,50 +2802,7 @@ public class IOOperator {
     }
 
     public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {
-        return sysseekImpl(args[0].scalar(), args[1].scalar().getLong(),
-                args.length > 2 ? args[2].scalar().getInt() : IOHandle.SEEK_SET);
-    }
-
-    /**
-     * sysseek for JVM backend (RuntimeScalar, RuntimeList) signature.
-     */
-    public static RuntimeScalar sysseek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        long position = runtimeList.getFirst().getLong();
-        int whence = IOHandle.SEEK_SET;
-        if (runtimeList.size() > 1) {
-            whence = runtimeList.elements.get(1).scalar().getInt();
-        }
-        return sysseekImpl(fileHandle, position, whence);
-    }
-
-    /**
-     * sysseek implementation: like seek but returns the new position
-     * (or "0 but true" if position is 0), or undef on failure.
-     */
-    private static RuntimeScalar sysseekImpl(RuntimeScalar fileHandle, long position, int whence) {
-        RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
-        if (runtimeIO != null && runtimeIO.ioHandle != null) {
-            if (runtimeIO instanceof TieHandle tieHandle) {
-                RuntimeList args = new RuntimeList();
-                args.add(new RuntimeScalar(position));
-                args.add(new RuntimeScalar(whence));
-                return TieHandle.tiedSeek(tieHandle, args);
-            }
-            RuntimeIO.lastAccesseddHandle = runtimeIO;
-            RuntimeScalar result = runtimeIO.ioHandle.seek(position, whence);
-            if (result.getBoolean()) {
-                // seek succeeded — return the new position
-                RuntimeScalar tellResult = runtimeIO.ioHandle.tell();
-                long newPos = tellResult.getLong();
-                if (newPos == 0) {
-                    return new RuntimeScalar("0 but true");
-                }
-                return new RuntimeScalar(newPos);
-            }
-            // seek failed
-            return new RuntimeScalar();
-        }
-        return new RuntimeScalar();
+        return seek(ctx, args);
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {

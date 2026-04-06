@@ -12,14 +12,29 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeSigHash extends RuntimeHash {
 
-    private static final Set<String> KNOWN_SIGNALS = Set.of(
-            "__WARN__", "__DIE__",
-            "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE",
-            "KILL", "USR1", "SEGV", "USR2", "PIPE", "ALRM", "TERM",
-            "STKFLT", "CHLD", "CLD", "CONT", "STOP", "TSTP", "TTIN",
-            "TTOU", "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH",
-            "IO", "PWR", "SYS", "EMT", "INFO", "ZERO", "NUM32", "NUM33"
-    );
+    private static final boolean IS_WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
+
+    private static final Set<String> KNOWN_SIGNALS;
+
+    static {
+        if (IS_WINDOWS) {
+            // Windows only supports a limited set of signals
+            KNOWN_SIGNALS = Set.of(
+                    "__WARN__", "__DIE__",
+                    "INT", "ILL", "ABRT", "FPE", "SEGV", "TERM", "BREAK",
+                    "ZERO"
+            );
+        } else {
+            KNOWN_SIGNALS = Set.of(
+                    "__WARN__", "__DIE__",
+                    "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE",
+                    "KILL", "USR1", "SEGV", "USR2", "PIPE", "ALRM", "TERM",
+                    "STKFLT", "CHLD", "CLD", "CONT", "STOP", "TSTP", "TTIN",
+                    "TTOU", "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH",
+                    "IO", "PWR", "SYS", "EMT", "INFO", "ZERO", "NUM32", "NUM33"
+            );
+        }
+    }
 
     /**
      * Get an element by key, auto-qualifying string handler values for known signals.

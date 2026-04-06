@@ -327,6 +327,7 @@ sourceSets {
             srcDir 'src/main/resources'
             include '**/*.pm'
             include '**/*.pl'
+            include '**/*.ph'
             include '**/*.pod'
             include '**/media.types'
             include 'lib/ExtUtils/xsubpp'
@@ -345,6 +346,7 @@ sourceSets {
 tasks.named('processResources', Copy) {
     from(sourceSets.main.resources.srcDirs) {
         include '**/*.pm'
+        include '**/*.ph'
         include '**/*.pod'
         include '**/media.types'
         include 'bin/**'

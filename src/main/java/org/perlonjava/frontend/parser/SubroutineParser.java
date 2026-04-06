@@ -280,7 +280,11 @@ public class SubroutineParser {
         if (!subExists && peek(parser).text.equals("$") && isValidIndirectMethod(subName) && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             // Parse the variable that holds the class name
+            // Set flag so Variable.parseVariable allows ( after the variable
+            boolean savedParsingIndirectObject = parser.parsingIndirectObject;
+            parser.parsingIndirectObject = true;
             Node classVar = ParsePrimary.parsePrimary(parser);
+            parser.parsingIndirectObject = savedParsingIndirectObject;
             if (classVar != null) {
                 LexerToken nextTok = peek(parser);
                 // Check this isn't actually a binary operator like $type + 1

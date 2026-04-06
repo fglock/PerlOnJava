@@ -71,6 +71,19 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class RuntimeIO extends RuntimeScalar {
 
+    // Platform-specific ENOTEMPTY (only errno that differs across platforms in handleIOException)
+    private static final int ENOTEMPTY;
+    static {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("mac") || os.contains("darwin")) {
+            ENOTEMPTY = 66;
+        } else if (os.contains("win")) {
+            ENOTEMPTY = 41;
+        } else {
+            ENOTEMPTY = 39; // Linux
+        }
+    }
+
     /**
      * Mapping of Perl file modes to their corresponding Java NIO StandardOpenOption sets.
      * This allows easy conversion from Perl-style mode strings to Java NIO options.
@@ -335,20 +348,6 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
-     * Registers this RuntimeIO at a specific fd number (e.g. one already assigned
-     * by FileDescriptorTable for pipes). Advances nextFileno past this fd to
-     * prevent future collisions with assignFileno().
-     *
-     * @param fd the file descriptor number to register at
-     */
-    public void registerExternalFd(int fd) {
-        filenoToIO.put(fd, this);
-        ioToFileno.put(this, fd);
-        // Advance nextFileno past this fd to avoid collisions
-        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
-    }
-
-    /**
      * Advances the nextFileno counter past the given fd value.
      * Called by FileDescriptorTable.register() to keep the two fd allocation
      * systems in sync and prevent fd collisions.
@@ -517,7 +516,7 @@ public class RuntimeIO extends RuntimeScalar {
         } else if (e instanceof java.nio.file.FileAlreadyExistsException) {
             errno = 17; // EEXIST
         } else if (e instanceof java.nio.file.DirectoryNotEmptyException) {
-            errno = 39; // ENOTEMPTY
+            errno = ENOTEMPTY;
         } else if (e instanceof java.io.FileNotFoundException) {
             errno = 2; // ENOENT
         } else if (e != null && e.getMessage() != null) {
@@ -531,7 +530,7 @@ public class RuntimeIO extends RuntimeScalar {
             } else if (msg.contains("file exists")) {
                 errno = 17; // EEXIST
             } else if (msg.contains("directory not empty")) {
-                errno = 39; // ENOTEMPTY
+                errno = ENOTEMPTY;
             } else if (msg.contains("invalid argument")) {
                 errno = 22; // EINVAL
             }
