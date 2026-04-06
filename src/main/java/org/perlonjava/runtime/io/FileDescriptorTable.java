@@ -152,6 +152,10 @@ public class FileDescriptorTable {
      * @return true if data is available or handle is at EOF/closed
      */
     public static boolean isReadReady(IOHandle handle) {
+        // Unwrap DupIOHandle to check the underlying delegate
+        if (handle instanceof DupIOHandle dupHandle) {
+            return isReadReady(dupHandle.getDelegate());
+        }
         if (handle instanceof InternalPipeHandle pipeHandle) {
             return pipeHandle.hasDataAvailable();
         }
