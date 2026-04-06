@@ -814,6 +814,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         //
         // See also: closeIOOnDrop() javadoc, dev/design/io_handle_lifecycle.md
         // ──────────────────────────────────────────────────────────────────
+
+        // Track ioHolderCount for anonymous glob IO lifecycle management.
+        // When a GLOBREFERENCE is copied to another variable, increment the glob's
+        // holder count so scopeExitCleanup won't close the IO prematurely.
+        // When a GLOBREFERENCE is overwritten, decrement the old glob's holder count.
+        if (value.type == GLOBREFERENCE && value.value instanceof RuntimeGlob newGlob
+                && newGlob.globName == null) {
+            newGlob.ioHolderCount++;
+        }
+        if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob oldGlob
+                && oldGlob.globName == null) {
+            oldGlob.ioHolderCount--;
+        }
+
         this.type = value.type;
         this.value = value.value;
         return this;
@@ -1814,10 +1828,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
-            RuntimeScalar ioSlot = glob.getIO();
-            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
-                    && !(io.ioHandle instanceof ClosedIOHandle)) {
-                io.close();
+            // Decrement the holder count. Only close IO when no more holders exist.
+            // This prevents closing IO that is still referenced by variables in outer scopes
+            // (e.g., `my $io = $fh` inside a for loop where $fh is from an outer scope).
+            glob.ioHolderCount--;
+            if (glob.ioHolderCount <= 0) {
+                RuntimeScalar ioSlot = glob.getIO();
+                if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                        && !(io.ioHandle instanceof ClosedIOHandle)) {
+                    io.close();
+                }
             }
         }
     }
