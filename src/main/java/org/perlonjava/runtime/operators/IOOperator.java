@@ -471,9 +471,8 @@ public class IOOperator {
                     RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
-                            // &= mode: non-owning wrapper — close won't close the original
-                            fh = new RuntimeIO();
-                            fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                            // &= mode: non-owning wrapper sharing the same fd
+                            fh = createBorrowedHandle(sourceHandle);
                         } else {
                             // & mode: create a new handle that duplicates the original
                             fh = duplicateFileHandle(sourceHandle);
@@ -500,9 +499,8 @@ public class IOOperator {
                                 System.err.flush();
                             }
                             if (isParsimonious) {
-                                // &= mode: non-owning wrapper — close won't close the original
-                                fh = new RuntimeIO();
-                                fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                                // &= mode: non-owning wrapper sharing the same fd
+                                fh = createBorrowedHandle(sourceHandle);
                             } else {
                                 // & mode: create a new handle that duplicates the original
                                 fh = duplicateFileHandle(sourceHandle);
@@ -524,8 +522,7 @@ public class IOOperator {
 
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
-                            fh = new RuntimeIO();
-                            fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                            fh = createBorrowedHandle(sourceHandle);
                         } else {
                             fh = duplicateFileHandle(sourceHandle);
                         }
@@ -539,8 +536,7 @@ public class IOOperator {
                                 sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
                                 if (sourceHandle != null && sourceHandle.ioHandle != null) {
                                     if (isParsimonious) {
-                                        fh = new RuntimeIO();
-                                        fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+                                        fh = createBorrowedHandle(sourceHandle);
                                     } else {
                                         // & mode: create a new handle that duplicates the original
                                         fh = duplicateFileHandle(sourceHandle);
@@ -2591,16 +2587,29 @@ public class IOOperator {
         }
 
         if (isParsimonious) {
-            // Parsimonious dup (>&=) shares the same underlying IOHandle but must not
-            // close it when the duplicate is closed. BorrowedIOHandle delegates all I/O
-            // but only flushes (never closes) the delegate on close().
-            RuntimeIO result = new RuntimeIO();
-            result.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
-            result.currentLineNumber = sourceHandle.currentLineNumber;
-            return result;
+            return createBorrowedHandle(sourceHandle);
         } else {
             return duplicateFileHandle(sourceHandle);
         }
+    }
+
+    /**
+     * Creates a borrowed (parsimonious dup) handle that shares the source's IOHandle and fileno.
+     * The borrowed handle delegates all I/O to the source but does NOT close the underlying
+     * resource when closed — only flushes. Both handles report the same fileno.
+     */
+    private static RuntimeIO createBorrowedHandle(RuntimeIO source) {
+        RuntimeIO borrowed = new RuntimeIO();
+        borrowed.ioHandle = new BorrowedIOHandle(source.ioHandle);
+        borrowed.currentLineNumber = source.currentLineNumber;
+        // Share the source's fileno (parsimonious dup = same fd)
+        int sourceFd = source.getAssignedFileno();
+        if (sourceFd < 0) {
+            RuntimeScalar nativeFd = source.ioHandle.fileno();
+            sourceFd = nativeFd.getDefinedBoolean() ? nativeFd.getInt() : source.assignFileno();
+        }
+        borrowed.registerExternalFd(sourceFd);
+        return borrowed;
     }
 
     private static RuntimeIO duplicateFileHandle(RuntimeIO original) {
