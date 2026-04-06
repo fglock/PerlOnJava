@@ -25,6 +25,7 @@ public class InternalPipeHandle implements IOHandle {
     private final boolean isReader;
     private boolean isClosed = false;
     private boolean isEOF = false;
+    private boolean blocking = true;
 
     private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream, boolean isReader) {
         this.inputStream = inputStream;
@@ -44,6 +45,20 @@ public class InternalPipeHandle implements IOHandle {
      */
     public static InternalPipeHandle createWriter(PipedOutputStream outputStream) {
         return new InternalPipeHandle(null, outputStream, false);
+    }
+
+    /**
+     * Returns whether this pipe handle is in blocking mode.
+     */
+    public boolean isBlocking() {
+        return blocking;
+    }
+
+    /**
+     * Sets the blocking mode for this pipe handle.
+     */
+    public void setBlocking(boolean blocking) {
+        this.blocking = blocking;
     }
 
     @Override
@@ -238,6 +253,13 @@ public class InternalPipeHandle implements IOHandle {
                         result.append((char) (buffer[i] & 0xFF));
                     }
                     return new RuntimeScalar(result.toString());
+                }
+
+                // Non-blocking mode: return undef with EAGAIN when no data available
+                if (!blocking) {
+                    getGlobalVariable("main::!").set(
+                            org.perlonjava.runtime.runtimetypes.ErrnoVariable.EAGAIN());
+                    return new RuntimeScalar(); // undef
                 }
 
                 try {

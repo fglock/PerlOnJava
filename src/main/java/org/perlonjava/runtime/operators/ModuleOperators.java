@@ -538,6 +538,16 @@ public class ModuleOperators {
                         // Try to find in jar at "src/main/perl/lib"
                         String resourcePath = "/lib/" + fileName;
                         URL resource = RuntimeScalar.class.getResource(resourcePath);
+                        // Case-variant fallback: macOS builds store Sys/ioctl.ph but
+                        // Perl code expects sys/ioctl.ph (lowercase). Try swapping
+                        // the case of the first letter of the first path component.
+                        if (resource == null && fileName.contains("/")) {
+                            String first = fileName.substring(0, 1);
+                            String alt = first.equals(first.toLowerCase())
+                                    ? first.toUpperCase() + fileName.substring(1)
+                                    : first.toLowerCase() + fileName.substring(1);
+                            resource = RuntimeScalar.class.getResource("/lib/" + alt);
+                        }
                         if (resource != null) {
                             // Use "jar:PERL5LIB/DBI.pm" format for %INC - matches catfile output
                             actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;

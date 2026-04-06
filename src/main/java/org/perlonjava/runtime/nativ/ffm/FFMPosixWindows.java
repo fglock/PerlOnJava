@@ -318,17 +318,79 @@ public class FFMPosixWindows implements FFMPosixInterface {
     
     @Override
     public String strerror(int errno) {
+        // MSVCRT errno values (compatible with POSIX for basic errors)
+        // Winsock errors (10000+) mapped to POSIX-like messages for Perl compatibility
         return switch (errno) {
             case 0 -> "Success";
             case 1 -> "Operation not permitted";
             case 2 -> "No such file or directory";
             case 3 -> "No such process";
-            case 5 -> "I/O error";
+            case 4 -> "Interrupted function call";
+            case 5 -> "Input/output error";
+            case 6 -> "No such device or address";
+            case 7 -> "Arg list too long";
+            case 8 -> "Exec format error";
+            case 9 -> "Bad file descriptor";
             case 10 -> "No child processes";
+            case 11 -> "Resource temporarily unavailable";
+            case 12 -> "Not enough space";
             case 13 -> "Permission denied";
+            case 14 -> "Bad address";
+            case 16 -> "Resource device";
             case 17 -> "File exists";
+            case 18 -> "Improper link";
+            case 19 -> "No such device";
+            case 20 -> "Not a directory";
+            case 21 -> "Is a directory";
             case 22 -> "Invalid argument";
-            case 38 -> "Function not implemented";
+            case 23 -> "Too many open files in system";
+            case 24 -> "Too many open files";
+            case 25 -> "Inappropriate I/O control operation";
+            case 27 -> "File too large";
+            case 28 -> "No space left on device";
+            case 29 -> "Invalid seek";
+            case 30 -> "Read-only file system";
+            case 31 -> "Too many links";
+            case 32 -> "Broken pipe";
+            case 33 -> "Domain error";
+            case 34 -> "Result too large";
+            case 36 -> "Resource deadlock avoided";
+            case 38 -> "Filename too long";
+            case 39 -> "No locks available";
+            case 40 -> "Function not implemented";
+            case 41 -> "Directory not empty";
+            case 42 -> "Illegal byte sequence";
+            // Winsock errno values mapped to POSIX-like messages
+            case 100 -> "Address already in use";
+            case 101 -> "Can't assign requested address";
+            case 102 -> "Address family not supported";
+            case 103 -> "Connection already in progress";
+            case 104 -> "Bad message";
+            case 105 -> "Operation canceled";
+            case 106 -> "Connection aborted";
+            case 107 -> "Connection refused";
+            case 108 -> "Connection reset";
+            case 109 -> "Destination address required";
+            case 110 -> "Host is unreachable";
+            case 111 -> "Identifier removed";
+            case 112 -> "Operation now in progress";
+            case 113 -> "Socket is connected";
+            case 114 -> "Too many levels of symbolic links";
+            case 115 -> "Message too long";
+            case 116 -> "Network is down";
+            case 117 -> "Connection aborted by network";
+            case 118 -> "Network is unreachable";
+            case 119 -> "No buffer space available";
+            case 121 -> "No message available";
+            case 122 -> "No protocol option";
+            case 124 -> "Not connected";
+            case 126 -> "Not a socket";
+            case 127 -> "Operation not supported";
+            case 130 -> "Protocol not available";
+            case 131 -> "Protocol not supported";
+            case 132 -> "Protocol wrong type for socket";
+            case 133 -> "Connection timed out";
+            case 138 -> "Operation would block";
             default -> "Unknown error " + errno;
         };
     }

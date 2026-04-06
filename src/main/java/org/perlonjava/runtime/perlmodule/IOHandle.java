@@ -147,6 +147,8 @@ public class IOHandle extends PerlModuleBase {
         boolean currentBlocking = true;
         if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
             currentBlocking = socketIO.isBlocking();
+        } else if (fh.ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
+            currentBlocking = pipeHandle.isBlocking();
         }
 
         if (args.size() == 2) {
@@ -154,8 +156,19 @@ public class IOHandle extends PerlModuleBase {
             if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
                 // For sockets, actually set blocking mode via NIO channel
                 socketIO.setBlocking(newBlocking);
+            } else if (fh.ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
+                // For internal pipes, set blocking mode
+                pipeHandle.setBlocking(newBlocking);
+            } else if (fh.ioHandle instanceof org.perlonjava.runtime.io.DupIOHandle dupHandle) {
+                // For dup'd handles, unwrap and set on the delegate
+                org.perlonjava.runtime.io.IOHandle delegate = dupHandle.getDelegate();
+                if (delegate instanceof org.perlonjava.runtime.io.InternalPipeHandle ph) {
+                    ph.setBlocking(newBlocking);
+                } else if (delegate instanceof org.perlonjava.runtime.io.SocketIO si) {
+                    si.setBlocking(newBlocking);
+                }
             } else if (!newBlocking) {
-                // Non-blocking I/O not supported for non-socket handles
+                // Non-blocking I/O not supported for other handle types
                 RuntimeIO.handleIOError("Non-blocking I/O not supported");
                 return new RuntimeList();
             }

@@ -49,7 +49,70 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_SEEK_SET", "const_SEEK_SET", null);
             module.registerMethod("_const_SEEK_CUR", "const_SEEK_CUR", null);
             module.registerMethod("_const_SEEK_END", "const_SEEK_END", null);
-            
+
+            // Signal constants
+            module.registerMethod("_const_SIGHUP", "const_SIGHUP", null);
+            module.registerMethod("_const_SIGINT", "const_SIGINT", null);
+            module.registerMethod("_const_SIGQUIT", "const_SIGQUIT", null);
+            module.registerMethod("_const_SIGILL", "const_SIGILL", null);
+            module.registerMethod("_const_SIGTRAP", "const_SIGTRAP", null);
+            module.registerMethod("_const_SIGABRT", "const_SIGABRT", null);
+            module.registerMethod("_const_SIGBUS", "const_SIGBUS", null);
+            module.registerMethod("_const_SIGFPE", "const_SIGFPE", null);
+            module.registerMethod("_const_SIGKILL", "const_SIGKILL", null);
+            module.registerMethod("_const_SIGUSR1", "const_SIGUSR1", null);
+            module.registerMethod("_const_SIGSEGV", "const_SIGSEGV", null);
+            module.registerMethod("_const_SIGUSR2", "const_SIGUSR2", null);
+            module.registerMethod("_const_SIGPIPE", "const_SIGPIPE", null);
+            module.registerMethod("_const_SIGALRM", "const_SIGALRM", null);
+            module.registerMethod("_const_SIGTERM", "const_SIGTERM", null);
+            module.registerMethod("_const_SIGCHLD", "const_SIGCHLD", null);
+            module.registerMethod("_const_SIGCONT", "const_SIGCONT", null);
+            module.registerMethod("_const_SIGSTOP", "const_SIGSTOP", null);
+            module.registerMethod("_const_SIGTSTP", "const_SIGTSTP", null);
+
+            // Errno constants
+            module.registerMethod("_const_EPERM", "const_EPERM", null);
+            module.registerMethod("_const_ENOENT", "const_ENOENT", null);
+            module.registerMethod("_const_ESRCH", "const_ESRCH", null);
+            module.registerMethod("_const_EINTR", "const_EINTR", null);
+            module.registerMethod("_const_EIO", "const_EIO", null);
+            module.registerMethod("_const_ENXIO", "const_ENXIO", null);
+            module.registerMethod("_const_E2BIG", "const_E2BIG", null);
+            module.registerMethod("_const_ENOEXEC", "const_ENOEXEC", null);
+            module.registerMethod("_const_EBADF", "const_EBADF", null);
+            module.registerMethod("_const_ECHILD", "const_ECHILD", null);
+            module.registerMethod("_const_EAGAIN", "const_EAGAIN", null);
+            module.registerMethod("_const_ENOMEM", "const_ENOMEM", null);
+            module.registerMethod("_const_EACCES", "const_EACCES", null);
+            module.registerMethod("_const_EFAULT", "const_EFAULT", null);
+            module.registerMethod("_const_ENOTBLK", "const_ENOTBLK", null);
+            module.registerMethod("_const_EBUSY", "const_EBUSY", null);
+            module.registerMethod("_const_EEXIST", "const_EEXIST", null);
+            module.registerMethod("_const_EXDEV", "const_EXDEV", null);
+            module.registerMethod("_const_ENODEV", "const_ENODEV", null);
+            module.registerMethod("_const_ENOTDIR", "const_ENOTDIR", null);
+            module.registerMethod("_const_EISDIR", "const_EISDIR", null);
+            module.registerMethod("_const_EINVAL", "const_EINVAL", null);
+            module.registerMethod("_const_ENFILE", "const_ENFILE", null);
+            module.registerMethod("_const_EMFILE", "const_EMFILE", null);
+            module.registerMethod("_const_ENOTTY", "const_ENOTTY", null);
+            module.registerMethod("_const_ETXTBSY", "const_ETXTBSY", null);
+            module.registerMethod("_const_EFBIG", "const_EFBIG", null);
+            module.registerMethod("_const_ENOSPC", "const_ENOSPC", null);
+            module.registerMethod("_const_ESPIPE", "const_ESPIPE", null);
+            module.registerMethod("_const_EROFS", "const_EROFS", null);
+            module.registerMethod("_const_EMLINK", "const_EMLINK", null);
+            module.registerMethod("_const_EPIPE", "const_EPIPE", null);
+            module.registerMethod("_const_EDOM", "const_EDOM", null);
+            module.registerMethod("_const_ERANGE", "const_ERANGE", null);
+
+            // uname
+            module.registerMethod("_uname", "uname", null);
+
+            // sigprocmask (stub)
+            module.registerMethod("_sigprocmask", "sigprocmask", null);
+
             // Wait status macros
             module.registerMethod("_WIFEXITED", "wifexited", null);
             module.registerMethod("_WEXITSTATUS", "wexitstatus", null);
@@ -490,5 +553,113 @@ public class POSIX extends PerlModuleBase {
         // WCOREDUMP: (status & 0x80) != 0
         boolean coreDumped = (status & 0x80) != 0;
         return new RuntimeScalar(coreDumped ? 1 : 0).getList();
+    }
+
+    // Platform detection for signal/errno constants
+    private static final boolean IS_MAC;
+    private static final boolean IS_WINDOWS;
+    static {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        IS_MAC = os.contains("mac") || os.contains("darwin");
+        IS_WINDOWS = os.contains("win");
+    }
+
+    // Signal constants (standard POSIX values for macOS/Linux; Windows has limited signals)
+    public static RuntimeList const_SIGHUP(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 1).getList(); }
+    public static RuntimeList const_SIGINT(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_SIGQUIT(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 3).getList(); }
+    public static RuntimeList const_SIGILL(RuntimeArray a, int c) { return new RuntimeScalar(4).getList(); }
+    public static RuntimeList const_SIGTRAP(RuntimeArray a, int c) { return new RuntimeScalar(5).getList(); }
+    public static RuntimeList const_SIGABRT(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 22 : 6).getList(); }
+    public static RuntimeList const_SIGBUS(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 10 : 7).getList();
+    }
+    public static RuntimeList const_SIGFPE(RuntimeArray a, int c) { return new RuntimeScalar(8).getList(); }
+    public static RuntimeList const_SIGKILL(RuntimeArray a, int c) { return new RuntimeScalar(9).getList(); }
+    public static RuntimeList const_SIGUSR1(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 30 : 10).getList();
+    }
+    public static RuntimeList const_SIGSEGV(RuntimeArray a, int c) { return new RuntimeScalar(11).getList(); }
+    public static RuntimeList const_SIGUSR2(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 31 : 12).getList();
+    }
+    public static RuntimeList const_SIGPIPE(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 13).getList(); }
+    public static RuntimeList const_SIGALRM(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 14).getList(); }
+    public static RuntimeList const_SIGTERM(RuntimeArray a, int c) { return new RuntimeScalar(15).getList(); }
+    public static RuntimeList const_SIGCHLD(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 20 : 17).getList();
+    }
+    public static RuntimeList const_SIGCONT(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 19 : 18).getList();
+    }
+    public static RuntimeList const_SIGSTOP(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 17 : 19).getList();
+    }
+    public static RuntimeList const_SIGTSTP(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : IS_MAC ? 18 : 20).getList();
+    }
+
+    // Errno constants (values 1-34 are the same on Linux and macOS; Windows MSVCRT matches for 1-34)
+    public static RuntimeList const_EPERM(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_ENOENT(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_ESRCH(RuntimeArray a, int c) { return new RuntimeScalar(3).getList(); }
+    public static RuntimeList const_EINTR(RuntimeArray a, int c) { return new RuntimeScalar(4).getList(); }
+    public static RuntimeList const_EIO(RuntimeArray a, int c) { return new RuntimeScalar(5).getList(); }
+    public static RuntimeList const_ENXIO(RuntimeArray a, int c) { return new RuntimeScalar(6).getList(); }
+    public static RuntimeList const_E2BIG(RuntimeArray a, int c) { return new RuntimeScalar(7).getList(); }
+    public static RuntimeList const_ENOEXEC(RuntimeArray a, int c) { return new RuntimeScalar(8).getList(); }
+    public static RuntimeList const_EBADF(RuntimeArray a, int c) { return new RuntimeScalar(9).getList(); }
+    public static RuntimeList const_ECHILD(RuntimeArray a, int c) { return new RuntimeScalar(10).getList(); }
+    public static RuntimeList const_EAGAIN(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_MAC ? 35 : 11).getList();
+    }
+    public static RuntimeList const_ENOMEM(RuntimeArray a, int c) { return new RuntimeScalar(12).getList(); }
+    public static RuntimeList const_EACCES(RuntimeArray a, int c) { return new RuntimeScalar(13).getList(); }
+    public static RuntimeList const_EFAULT(RuntimeArray a, int c) { return new RuntimeScalar(14).getList(); }
+    public static RuntimeList const_ENOTBLK(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 15).getList(); }
+    public static RuntimeList const_EBUSY(RuntimeArray a, int c) { return new RuntimeScalar(16).getList(); }
+    public static RuntimeList const_EEXIST(RuntimeArray a, int c) { return new RuntimeScalar(17).getList(); }
+    public static RuntimeList const_EXDEV(RuntimeArray a, int c) { return new RuntimeScalar(18).getList(); }
+    public static RuntimeList const_ENODEV(RuntimeArray a, int c) { return new RuntimeScalar(19).getList(); }
+    public static RuntimeList const_ENOTDIR(RuntimeArray a, int c) { return new RuntimeScalar(20).getList(); }
+    public static RuntimeList const_EISDIR(RuntimeArray a, int c) { return new RuntimeScalar(21).getList(); }
+    public static RuntimeList const_EINVAL(RuntimeArray a, int c) { return new RuntimeScalar(22).getList(); }
+    public static RuntimeList const_ENFILE(RuntimeArray a, int c) { return new RuntimeScalar(23).getList(); }
+    public static RuntimeList const_EMFILE(RuntimeArray a, int c) { return new RuntimeScalar(24).getList(); }
+    public static RuntimeList const_ENOTTY(RuntimeArray a, int c) { return new RuntimeScalar(25).getList(); }
+    public static RuntimeList const_ETXTBSY(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 26).getList(); }
+    public static RuntimeList const_EFBIG(RuntimeArray a, int c) { return new RuntimeScalar(IS_WINDOWS ? 0 : 27).getList(); }
+    public static RuntimeList const_ENOSPC(RuntimeArray a, int c) { return new RuntimeScalar(28).getList(); }
+    public static RuntimeList const_ESPIPE(RuntimeArray a, int c) { return new RuntimeScalar(29).getList(); }
+    public static RuntimeList const_EROFS(RuntimeArray a, int c) { return new RuntimeScalar(30).getList(); }
+    public static RuntimeList const_EMLINK(RuntimeArray a, int c) { return new RuntimeScalar(31).getList(); }
+    public static RuntimeList const_EPIPE(RuntimeArray a, int c) { return new RuntimeScalar(32).getList(); }
+    public static RuntimeList const_EDOM(RuntimeArray a, int c) { return new RuntimeScalar(33).getList(); }
+    public static RuntimeList const_ERANGE(RuntimeArray a, int c) { return new RuntimeScalar(34).getList(); }
+
+    /**
+     * POSIX::uname() - returns (sysname, nodename, release, version, machine)
+     */
+    public static RuntimeList uname(RuntimeArray args, int ctx) {
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(System.getProperty("os.name", "unknown")));
+        try {
+            result.add(new RuntimeScalar(java.net.InetAddress.getLocalHost().getHostName()));
+        } catch (Exception e) {
+            result.add(new RuntimeScalar("localhost"));
+        }
+        result.add(new RuntimeScalar(System.getProperty("os.version", "unknown")));
+        result.add(new RuntimeScalar(System.getProperty("java.version", "unknown")));
+        result.add(new RuntimeScalar(System.getProperty("os.arch", "unknown")));
+        return result;
+    }
+
+    /**
+     * POSIX::sigprocmask() - stub implementation
+     * On JVM, signal mask manipulation is not directly supported.
+     * Returns success (1) as a no-op.
+     */
+    public static RuntimeList sigprocmask(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
     }
 }

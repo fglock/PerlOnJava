@@ -73,7 +73,7 @@ public class ErrnoVariable extends RuntimeScalar {
         if (!messageMapPopulated) {
             synchronized (MESSAGE_TO_ERRNO) {
                 if (!messageMapPopulated) {
-                    for (int i = 1; i <= 200; i++) {
+                    for (int i = 1; i <= 250; i++) {
                         nativeStrerror(i);
                     }
                     messageMapPopulated = true;
@@ -110,7 +110,7 @@ public class ErrnoVariable extends RuntimeScalar {
             String pattern = ERRNO_MSG_PATTERNS.get(n);
             if (pattern == null) return 0;
             String lowerPattern = pattern.toLowerCase();
-            for (int i = 1; i <= 200; i++) {
+            for (int i = 1; i <= 250; i++) {
                 String msg = nativeStrerror(i);
                 if (msg.toLowerCase().contains(lowerPattern)) {
                     return i;

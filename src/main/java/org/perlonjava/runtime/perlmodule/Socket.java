@@ -17,31 +17,38 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class Socket extends PerlModuleBase {
 
-    // Socket constants
+    // Platform detection
+    private static final String OS = System.getProperty("os.name", "").toLowerCase();
+    private static final boolean IS_MAC = OS.contains("mac") || OS.contains("darwin");
+    private static final boolean IS_WINDOWS = OS.contains("win");
+
+    // Socket constants - platform-dependent values
     public static final int AF_INET = 2;
-    public static final int AF_INET6 = 10;
+    public static final int AF_INET6 = IS_MAC ? 30 : IS_WINDOWS ? 23 : 10;
     public static final int AF_UNIX = 1;
-    public static final int PF_INET = 2;  // Protocol family same as address family
-    public static final int PF_INET6 = 10;
+    public static final int PF_INET = 2;
+    public static final int PF_INET6 = AF_INET6;
     public static final int PF_UNIX = 1;
+    public static final int PF_UNSPEC = 0;
+    public static final int SOMAXCONN = IS_WINDOWS ? 0x7fffffff : 128;
     public static final int SOCK_STREAM = 1;
     public static final int SOCK_DGRAM = 2;
     public static final int SOCK_RAW = 3;
-    public static final int SOL_SOCKET = 1;
-    public static final int SO_REUSEADDR = 2;
-    public static final int SO_KEEPALIVE = 9;
-    public static final int SO_BROADCAST = 6;
-    public static final int SO_LINGER = 13;
-    public static final int SO_ERROR = 4;
-    public static final int SO_TYPE = 4104;
+    public static final int SOL_SOCKET = (IS_MAC || IS_WINDOWS) ? 0xFFFF : 1;
+    public static final int SO_REUSEADDR = (IS_MAC || IS_WINDOWS) ? 4 : 2;
+    public static final int SO_KEEPALIVE = (IS_MAC || IS_WINDOWS) ? 8 : 9;
+    public static final int SO_BROADCAST = (IS_MAC || IS_WINDOWS) ? 0x20 : 6;
+    public static final int SO_LINGER = (IS_MAC || IS_WINDOWS) ? 0x80 : 13;
+    public static final int SO_ERROR = (IS_MAC || IS_WINDOWS) ? 0x1007 : 4;
+    public static final int SO_TYPE = (IS_MAC || IS_WINDOWS) ? 0x1008 : 3;
     public static final int TCP_NODELAY = 1;
     public static final int IPPROTO_TCP = 6;
     public static final int IPPROTO_UDP = 17;
     public static final int IPPROTO_ICMP = 1;
     public static final int IPPROTO_IP = 0;
-    public static final int IPPROTO_IPV6 = 41;
-    public static final int IP_TOS = 1;
-    public static final int IP_TTL = 2;
+    public static final int IPPROTO_IPV6 = IS_MAC ? 41 : IS_WINDOWS ? 41 : 41;
+    public static final int IP_TOS = IS_MAC ? 3 : 1;
+    public static final int IP_TTL = IS_MAC ? 4 : 2;
     public static final int SHUT_RD = 0;
     public static final int SHUT_WR = 1;
     public static final int SHUT_RDWR = 2;
@@ -55,10 +62,10 @@ public class Socket extends PerlModuleBase {
     public static final int NI_DGRAM = 16;
     public static final int NIx_NOHOST = 1;
     public static final int NIx_NOSERV = 2;
-    public static final int EAI_NONAME = 8;
+    public static final int EAI_NONAME = IS_WINDOWS ? 11001 : 8;
     // IPV6 constants
-    public static final int IPV6_V6ONLY = 26;
-    public static final int SO_REUSEPORT = 15;
+    public static final int IPV6_V6ONLY = (IS_MAC || IS_WINDOWS) ? 27 : 26;
+    public static final int SO_REUSEPORT = IS_MAC ? 0x0200 : 15;  // not available on Windows
     // INADDR constants as 4-byte packed binary strings
     public static final String INADDR_ANY = "\0\0\0\0";           // 0.0.0.0
     public static final String INADDR_LOOPBACK = "\177\0\0\1";    // 127.0.0.1
@@ -89,6 +96,8 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("PF_INET", "");
             socket.registerMethod("PF_INET6", "");
             socket.registerMethod("PF_UNIX", "");
+            socket.registerMethod("PF_UNSPEC", "");
+            socket.registerMethod("SOMAXCONN", "");
             socket.registerMethod("SOCK_STREAM", "");
             socket.registerMethod("SOCK_DGRAM", "");
             socket.registerMethod("SOCK_RAW", "");
@@ -401,6 +410,14 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList PF_UNIX(RuntimeArray args, int ctx) {
         return new RuntimeScalar(PF_UNIX).getList();
+    }
+
+    public static RuntimeList PF_UNSPEC(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(PF_UNSPEC).getList();
+    }
+
+    public static RuntimeList SOMAXCONN(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SOMAXCONN).getList();
     }
 
     public static RuntimeList SOCK_RAW(RuntimeArray args, int ctx) {

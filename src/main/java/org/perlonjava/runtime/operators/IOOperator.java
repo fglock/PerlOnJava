@@ -108,6 +108,7 @@ public class IOOperator {
 
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
+            List<Integer> pollableFds = new ArrayList<>();
             int nonSocketReady = 0;
 
             for (int fd = 0; fd < maxFd; fd++) {
@@ -152,34 +153,85 @@ public class IOOperator {
                         channelToFd.put(ch, fd);
                     }
                 } else {
-                    // Non-socket handles (files, pipes) are always ready
-                    nonSocketReady++;
+                    // Non-socket handles (files, pipes): check actual readiness
+                    // using FileDescriptorTable.isReadReady/isWriteReady instead of
+                    // assuming always-ready (which causes POE's event loop to busy-loop).
+                    boolean ready = false;
+                    if (wantRead && FileDescriptorTable.isReadReady(rio.ioHandle)) {
+                        ready = true;
+                    }
+                    if (wantWrite && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                        ready = true;
+                    }
+                    if (ready) {
+                        nonSocketReady++;
+                    } else {
+                        // Track pollable fds that aren't ready yet
+                        pollableFds.add(fd);
+                    }
                 }
             }
 
-            // Perform the select
-            if (!channelToFd.isEmpty()) {
-                if (!timeout.getDefinedBoolean()) {
-                    selector.select(); // block indefinitely
-                } else {
-                    double sec = timeout.getDouble();
-                    if (sec <= 0) {
-                        selector.selectNow(); // poll
-                    } else {
-                        selector.select((long) (sec * 1000));
+            // Perform the select with polling for non-NIO handles
+            double timeoutSec = timeout.getDefinedBoolean() ? timeout.getDouble() : -1;
+
+            if (nonSocketReady > 0 && channelToFd.isEmpty()) {
+                // Some non-socket handles already ready, no NIO channels — return immediately
+            } else if (!channelToFd.isEmpty() || !pollableFds.isEmpty()) {
+                // Poll loop: check both NIO selector and pollable fds
+                long deadlineMs = (timeoutSec < 0) ? Long.MAX_VALUE
+                        : System.currentTimeMillis() + (long) (timeoutSec * 1000);
+                long pollIntervalMs = 10; // 10ms poll interval for pipes
+
+                while (true) {
+                    // Check NIO selector
+                    if (!channelToFd.isEmpty()) {
+                        long remainMs = Math.min(pollIntervalMs,
+                                Math.max(0, deadlineMs - System.currentTimeMillis()));
+                        if (timeoutSec < 0 && pollableFds.isEmpty()) {
+                            selector.select(pollIntervalMs); // block with poll interval
+                        } else {
+                            selector.select(Math.max(1, remainMs));
+                        }
+                        if (!selector.selectedKeys().isEmpty()) break;
+                    }
+
+                    // Check pollable (non-NIO) fds
+                    for (int fd : pollableFds) {
+                        RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                        if (rio == null) continue;
+                        boolean wantRead = isBitSet(rdata, fd);
+                        boolean wantWrite = isBitSet(wdata, fd);
+                        if (wantRead && FileDescriptorTable.isReadReady(rio.ioHandle)) {
+                            nonSocketReady++;
+                        }
+                        if (wantWrite && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                            nonSocketReady++;
+                        }
+                    }
+                    if (nonSocketReady > 0) break;
+
+                    // Check timeout
+                    if (timeoutSec >= 0 && System.currentTimeMillis() >= deadlineMs) break;
+
+                    // Sleep before next poll if no NIO channels to select on
+                    if (channelToFd.isEmpty()) {
+                        try {
+                            long sleepMs = Math.min(pollIntervalMs,
+                                    Math.max(1, deadlineMs - System.currentTimeMillis()));
+                            Thread.sleep(sleepMs);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
                 }
-            } else if (nonSocketReady == 0 && timeout.getDefinedBoolean()) {
-                // No channels to monitor and no always-ready handles — sleep for timeout
-                double sec = timeout.getDouble();
-                if (sec > 0) {
-                    long millis = (long) (sec * 1000);
-                    int nanos = (int) ((sec * 1000 - millis) * 1_000_000);
-                    try {
-                        Thread.sleep(millis, nanos);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
+            } else if (timeoutSec > 0) {
+                // Nothing to monitor — just sleep for timeout
+                try {
+                    Thread.sleep((long) (timeoutSec * 1000));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
             }
 
@@ -189,13 +241,17 @@ public class IOOperator {
             byte[] eresult = new byte[edata.length];
             int totalReady = 0;
 
-            // Non-socket handles keep their bits set (always ready)
+            // Non-socket handles: check actual readiness for result bits
             for (int fd = 0; fd < maxFd; fd++) {
                 RuntimeIO rio = RuntimeIO.getByFileno(fd);
                 if (rio == null) continue;
                 if (rio.ioHandle instanceof SocketIO) continue;
-                if (isBitSet(rdata, fd)) { setBit(rresult, fd); totalReady++; }
-                if (isBitSet(wdata, fd)) { setBit(wresult, fd); totalReady++; }
+                if (isBitSet(rdata, fd) && FileDescriptorTable.isReadReady(rio.ioHandle)) {
+                    setBit(rresult, fd); totalReady++;
+                }
+                if (isBitSet(wdata, fd) && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                    setBit(wresult, fd); totalReady++;
+                }
             }
 
             // Process selected keys

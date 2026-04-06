@@ -4,7 +4,7 @@
 
 **Module**: POE 1.370 (Perl Object Environment - event-driven multitasking framework)
 **Test command**: `./jcpan -t POE`
-**Status**: 38/53 unit+resource tests pass, ses_session.t 37/41, ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17, filehandles.t 131/132, 01_sysrw.t 17/17, 15_kernel_internal.t 12/12
+**Status**: 38/53 unit+resource tests pass, ses_nfa.t 39/39, k_alarms.t 37/37, k_aliases.t 20/20, k_selects.t 17/17, filehandles.t 131/132, 01_sysrw.t 17/17, 15_kernel_internal.t 12/12
 
 ## Dependency Tree
 
@@ -152,15 +152,15 @@ foreach my $session (@children) {
 | 04_drivers/01_sysrw.t | **PASS** (17/17) | Fixed by DupIOHandle + non-blocking pipe I/O |
 | 05_filters/01_block.t | **PASS** (42/42) | |
 | 05_filters/02_grep.t | **PASS** (48/48) | |
-| 05_filters/03_http.t | PARTIAL (79/137) | HTTP::Message bytes issue |
+| 05_filters/03_http.t | **PASS** (137/137) | All tests pass now |
 | 05_filters/04_line.t | **PASS** (50/50) | |
-| 05_filters/05_map.t | FAIL | Minor test failure |
+| 05_filters/05_map.t | PARTIAL (24/27) | 3 TODO failures |
 | 05_filters/06_recordblock.t | **PASS** (36/36) | |
-| 05_filters/07_reference.t | FAIL | Storable not available at test time |
+| 05_filters/07_reference.t | PARTIAL (32/34) | 2 failures: Compress::Zlib not available (XS) |
 | 05_filters/08_stream.t | **PASS** (24/24) | |
 | 05_filters/50_stackable.t | **PASS** (29/29) | |
-| 05_filters/51_reference_die.t | FAIL (0/5) | Storable not available at test time |
-| 05_filters/99_filterchange.t | FAIL | Filter::Reference compilation |
+| 05_filters/51_reference_die.t | PARTIAL (3/5) | 2 failures: YAML::PP doesn't die on terminated YAML |
+| 05_filters/99_filterchange.t | HANG | DESTROY-related hang |
 | 06_queues/01_array.t | **PASS** (2047/2047) | |
 | 07_exceptions/01_normal.t | **PASS** (7/7) | |
 | 07_exceptions/02_turn_off.t | **PASS** (4/4) | |
@@ -207,10 +207,8 @@ foreach my $session (@children) {
 
 | Issue | Impact | Difficulty |
 |-------|--------|------------|
-| DESTROY workaround (Phase 4.5) | 20-30+ tests across 5+ wheel test files | Medium-Hard |
-| Storable not found by POE test runner | 3 filter tests | Low (path issue?) |
-| HTTP::Message bytes handling | 03_http.t (58 tests) | Medium |
-| TIOCSWINSZ stub (Phase 4.6) | wheel_run, k_signals_rerun | Low |
+| DESTROY workaround (Phase 4.5) | 20-30+ tests across 5+ wheel test files + ses_session hang | Medium-Hard |
+| Compress::Zlib (XS) | 07_reference.t (2 tests) | Not fixable (XS module) |
 
 ### Event Loop Tests (t/30_loops/select/)
 
@@ -228,7 +226,7 @@ foreach my $session (@children) {
 | k_signals_rerun.t | FAIL | |
 | sbk_signal_init.t | **PASS** (1/1) | |
 | ses_nfa.t | **PASS** (39/39) | NFA state machine works |
-| ses_session.t | PARTIAL (37/41) | 4 failures from DESTROY count checks |
+| ses_session.t | HANG | Hangs at POE::Kernel->run() due to DESTROY not implemented (postback refcount never decremented) |
 | comp_tcp.t | FAIL (0/34) | TCP networking |
 | wheel_accept.t | PARTIAL (1/2) | Hangs after test 1 |
 | wheel_readwrite.t | PARTIAL (16/28) | I/O events don't fire, hangs |
@@ -247,7 +245,7 @@ foreach my $session (@children) {
 
 ## Fix Plan - Remaining Phases
 
-### Completed Phases (1-3, 4.1-4.4, 4.8, 4.11)
+### Completed Phases (1-3, 4.1-4.4, 4.6-4.8, 4.11)
 
 All phases through 4.4, Phase 4.8, and Phase 4.11 are complete. See Progress Tracking below for details.
 
@@ -296,68 +294,42 @@ correct 99% of the time. For safety, DESTROY should be made idempotent.
 - Option D: Full reference counting (correct but very complex)
 - Option F: POE::Kernel session GC (targeted but doesn't generalize)
 
-### Phase 4.6: Add TIOCSWINSZ stub — LOW EFFORT
+### Phase 4.6: Add TIOCSWINSZ stub — DONE
 
-**Status**: Not started
+**Status**: Complete (2026-04-06)
 **Difficulty**: Low
 **Expected impact**: k_signals_rerun (8 tests), some wheel_run child process tests
 
-**Problem**: Wheel::Run uses `require 'sys/ioctl.ph'` inside an eval to get TIOCSWINSZ for
-terminal window size. PerlOnJava doesn't have sys/ioctl.ph, causing bareword errors.
+Created `src/main/perl/lib/Sys/ioctl.ph` with TIOCSWINSZ, TIOCGWINSZ, FIONREAD constants.
+Platform-aware macOS vs Linux values.
 
-**Implementation plan**:
-1. Create `src/main/perl/lib/sys/ioctl.ph` with TIOCSWINSZ constant (0x5413 on Linux,
-   0x40087468 on macOS)
-2. OR: make the eval silently fail (already in an eval, just needs the require to not
-   blow up with a compilation error)
+### Phase 4.7: Windows platform support — DONE
 
-**Note**: Most wheel_run tests also need fork, so the real impact is limited to
-k_signals_rerun (8 of 9 failures are from TIOCSWINSZ in child processes).
-
-### Phase 4.7: Windows platform support — CI CRITICAL
-
-**Status**: Not started
+**Status**: Complete (2026-04-06)
 **Difficulty**: Low-Medium (mostly lookup tables)
 
-POE's core event loop uses Java NIO (cross-platform), and POE itself has `$^O eq 'MSWin32'`
-guards. But several PerlOnJava subsystems only have macOS/Linux branches.
+All sub-steps (4.7.1-4.7.6) completed:
+- FFMPosixWindows.java: 50+ Windows strerror messages
+- ErrnoHash.java + Errno.pm: Windows errno table (40+ values)
+- RuntimeSigHash.java: Windows-only signals (INT, TERM, ABRT, FPE, ILL, SEGV, BREAK)
+- POSIX.java: IS_WINDOWS flag, correct signal constants per platform
+- Socket.java: Platform-aware SOL_SOCKET, SO_REUSEADDR, SO_KEEPALIVE, SO_BROADCAST
+- Config.pm: Windows osname detection
+- RuntimeIO.java: Platform-specific ENOTEMPTY
 
-| Step | Target | Severity | Difficulty |
-|------|--------|----------|------------|
-| 4.7.1 | **Fix EAGAIN/errno on Windows** — `FFMPosixWindows.strerror()` is a 10-entry stub. `ErrnoVariable` probes strerror to discover EAGAIN/EINPROGRESS/etc., which all resolve to 0 on Windows. POE's non-blocking I/O depends on these. Fix: add Windows errno constants directly, bypassing strerror probing. | Critical | Medium |
-| 4.7.2 | **Add Windows errno table** — `ErrnoHash.java` and `Errno.pm` have macOS/Linux tables only, fall through to Linux on Windows. Fix: add `MSWin32` branch with MSVC CRT errno values. | High | Low |
-| 4.7.3 | **Add Windows branch to RuntimeSigHash** — `%SIG` is pre-populated with Unix signals (HUP, USR1, PIPE, etc.) that don't exist on Windows. POE iterates `keys %SIG` and tries to install handlers. Fix: Windows branch with only INT, TERM, ABRT, FPE, ILL, SEGV, BREAK. | High | Low |
-| 4.7.4 | **Add Windows branch to POSIX.java** — IS_MAC flag gives macOS vs "everything else" (Linux). Windows gets Linux signal/termios values. Fix: add IS_WINDOWS flag, return Windows-correct signal constants, skip termios. | Medium | Low |
-| 4.7.5 | **Fix Socket.java constants** — SOL_SOCKET=1 (Linux) vs 0xFFFF (Windows), SO_REUSEADDR=2 vs 4, etc. These matter if passed to native setsockopt. Java abstracts most of this, so impact depends on implementation path. Fix: platform-detect and use correct values. | Medium | Low |
-| 4.7.6 | **Fix sysconf for Windows** — Runs `ulimit -n` which doesn't exist on Windows. Already has catch block defaulting to 1024, but should use a cleaner approach (e.g., `_getmaxstdio()` or just return 2048). | Low | Low |
+### Phase 4.9: Storable path fix — RESOLVED (not a real issue)
 
-**What already works on Windows (no changes needed):**
-- `select()` via Java NIO Selector — cross-platform
-- Pipe handling via Java `PipedInputStream`/`PipedOutputStream` — cross-platform
-- POE::Loop::Select — has `$^O eq 'MSWin32'` guards
-- `socketpair` via loopback TCP — the standard Windows approach
-- `$^O` correctly set to `MSWin32` on Windows
+**Status**: Investigated (2026-04-06). Storable loads fine (`use Storable` works).
+The 07_reference.t and 51_reference_die.t failures are actually caused by:
+- Compress::Zlib not available (XS module, can't fix)
+- YAML::PP doesn't die on terminated YAML (behavior difference, not a bug)
+99_filterchange.t hangs due to DESTROY.
 
-### Phase 4.9: Storable path fix — LOW EFFORT
+### Phase 4.10: HTTP::Message bytes handling — DONE
 
-**Status**: Not started
-**Difficulty**: Low
-**Expected impact**: 3 filter tests (07_reference.t, 51_reference_die.t, 99_filterchange.t)
-
-**Problem**: POE's test runner can't find Storable at test time. Storable is available in
-PerlOnJava (XSLoader backend) but the test's @INC doesn't include the right path.
-
-**Implementation plan**: Investigate why `use Storable` fails inside POE's filter tests.
-Likely needs adding the correct lib path or fixing Storable's module resolution.
-
-### Phase 4.10: HTTP::Message bytes handling — MEDIUM EFFORT
-
-**Status**: Not started
-**Difficulty**: Medium
-**Expected impact**: 58 additional tests in 03_http.t (79/137 currently)
-
-**Problem**: HTTP::Message byte-string handling has issues when processing HTTP requests/responses
-through POE::Filter::HTTPD. The exact nature of the bytes vs. characters mismatch needs investigation.
+**Status**: Complete (2026-04-06)
+**Result**: 03_http.t now passes 137/137. The bytes handling issues were resolved by
+earlier fixes to join() BYTE_STRING type preservation and utf8::is_utf8() checks.
 
 ### Phase 4.12: fileno for regular file handles — BLOCKED BY DESTROY
 
@@ -389,7 +361,7 @@ pass in tests that compare fd numbers of handles that were supposed to have been
 
 ## Progress Tracking
 
-### Current Status: Phase 4.11 complete — DESTROY workaround (Phase 4.5) is next highest impact
+### Current Status: Phase 4.10 complete — DESTROY workaround (Phase 4.5) is next highest impact
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -501,6 +473,19 @@ pass in tests that compare fd numbers of handles that were supposed to have been
   - tie_fetch_count.t: 175/343 → 178/343 (+3 from warn double-FETCH fix)
   - perlio_leaks.t: 4/12 → 12/12 (fd recycling)
   - All other tests at baseline (no regressions)
+- [x] Phase 4.6: TIOCSWINSZ stub (2026-04-06, commit 951b80416)
+  - Created `src/main/perl/lib/Sys/ioctl.ph` with TIOCSWINSZ, TIOCGWINSZ, FIONREAD constants
+  - Platform-aware: macOS vs Linux values for ioctl codes
+  - Unblocks POE::Wheel::Run terminal size handling
+- [x] Phase 4.7: Windows platform support (2026-04-06, commit 951b80416)
+  - Added Windows errno table to ErrnoHash.java and Errno.pm (40+ Windows-specific errno values)
+  - Added Windows branch to FFMPosixWindows.java strerror() with 50+ error messages
+  - Added Windows branch to RuntimeSigHash.java — only INT, TERM, ABRT, FPE, ILL, SEGV, BREAK
+  - Added IS_WINDOWS flag to POSIX.java — Windows gets correct signal constants (0 for Unix-only signals)
+  - Fixed Socket.java constants: SOL_SOCKET, SO_REUSEADDR, SO_KEEPALIVE, SO_BROADCAST platform-aware
+  - Added Windows errno constants to ErrnoVariable.java (WSAE* socket errors)
+  - Updated Config.pm with Windows osname detection
+  - Fixed ENOTEMPTY platform-specific value in RuntimeIO.java (macOS=66, Windows=41, Linux=39)
 
 ### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
@@ -599,16 +584,11 @@ For safety, DESTROY could be made idempotent (track whether it's already been ca
    - Guard against double-DESTROY: track whether DESTROY already called (flag on blessed object)
    - DESTROY should be called in void context, catching any exceptions
    - This also unblocks Phase 4.12 (fileno for regular files + scope-exit cleanup)
-2. **Phase 4.6: TIOCSWINSZ stub** — low effort, unblocks k_signals_rerun (8 tests).
-   Create `src/main/perl/lib/sys/ioctl.ph` with TIOCSWINSZ constant.
-3. **Phase 4.9: Storable path fix** — low effort, 3 filter tests.
-   Investigate why `use Storable` fails inside POE's filter tests (likely @INC path issue).
-4. **Phase 4.10: HTTP::Message bytes** — medium effort, 58 tests in 03_http.t.
-   Investigate bytes vs characters mismatch in HTTP::Message processing.
-5. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
+   - **Note**: ses_session.t hangs because POE postbacks use DESTROY-based refcount cleanup.
+     Without DESTROY, sessions using postbacks/callbacks are never garbage collected.
+2. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
    Trivial implementation (add `assignFileno()` in RuntimeIO.open()) but requires DESTROY
    for fd recycling. Will gain +3 tests in require_37033.t and io/dup.t.
-6. **Phase 4.7: Windows platform support** — CI critical. See detailed sub-steps above.
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern

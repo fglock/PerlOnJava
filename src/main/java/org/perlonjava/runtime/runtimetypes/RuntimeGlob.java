@@ -29,6 +29,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar codeSlot;
 
     /**
+     * Tracks how many RuntimeScalar variables hold a GLOBREFERENCE to this glob.
+     * Used by scopeExitCleanup to avoid closing IO when other variables still
+     * reference the same glob. Starts at 0 (before any variable holds it).
+     * Incremented in RuntimeScalar.setLarge() when a GLOBREFERENCE is assigned,
+     * decremented in scopeExitCleanup(). IO is only closed when this reaches 0.
+     */
+    public int ioHolderCount = 0;
+
+    /**
      * Constructor for RuntimeGlob.
      * Initializes a new instance of the RuntimeGlob class with the specified glob name.
      *
