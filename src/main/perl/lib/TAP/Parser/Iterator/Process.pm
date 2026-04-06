@@ -258,7 +258,7 @@ sub _next {
                         if ( $got == 0 ) {
                             $sel->remove($fh);
                         }
-                        elsif ( $fh == $err ) {
+                        elsif ( ref $err && $fh == $err ) {
                             print STDERR $chunk;    # echo STDERR
                         }
                         else {
@@ -340,7 +340,8 @@ sub _finish {
 
     # If we have an IO::Select we also have an error handle to close.
     if ( $self->{sel} ) {
-        ( delete $self->{err} )->close;
+        my $err = delete $self->{err};
+        $err->close if ref $err;
         delete $self->{sel};
     }
     else {
